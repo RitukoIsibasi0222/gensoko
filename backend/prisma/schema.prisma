@@ -1,0 +1,143 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// 元素マスター
+model Element {
+  id           Int    @id
+  symbol       String @unique
+  nameJa       String
+  nameEn       String
+  category     String
+  period       Int
+  group        Int?
+  atomicWeight Float?
+
+  weakElements WeakElement[]
+  gameAnswers  GameAnswer[]
+
+  @@map("elements")
+}
+
+// ユーザー
+model User {
+  id             String    @id @default(cuid())
+  username       String    @unique
+  email          String    @unique
+  passwordHash   String
+  role           Role      @default(USER)
+  emailVerified  Boolean   @default(false)
+  isActive       Boolean   @default(true)
+  loginFailCount Int       @default(0)
+  lockedUntil    DateTime?
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  refreshTokens RefreshToken[]
+  weakElements  WeakElement[]
+  gameSessions  GameSession[]
+  stats         UserStats?
+
+  @@map("users")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+// リフレッシュトークン
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// 苦手リスト
+model WeakElement {
+  id             String   @id @default(cuid())
+  userId         String
+  elementId      Int
+  missCount      Int      @default(1)
+  consecutiveHit Int      @default(0)
+  addedAt        DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  element Element @relation(fields: [elementId], references: [id])
+
+  @@unique([userId, elementId])
+  @@map("weak_elements")
+}
+
+// ゲームセッション
+model GameSession {
+  id           String   @id @default(cuid())
+  userId       String
+  mode         GameMode
+  totalScore   Int
+  correctCount Int
+  totalCount   Int      @default(10)
+  maxStreak    Int      @default(0)
+  durationSec  Int
+  playedAt     DateTime @default(now())
+
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers GameAnswer[]
+
+  @@map("game_sessions")
+}
+
+enum GameMode {
+  SYMBOL_TO_NAME_LV1
+  SYMBOL_TO_NAME_LV2
+  NAME_TO_SYMBOL_LV1
+  NAME_TO_SYMBOL_LV2
+  WEAK_SYMBOL_TO_NAME
+  WEAK_NAME_TO_SYMBOL
+}
+
+// 各問の回答記録
+model GameAnswer {
+  id            String  @id @default(cuid())
+  sessionId     String
+  elementId     Int
+  isCorrect     Boolean
+  answerTimeSec Int
+
+  session GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  element Element     @relation(fields: [elementId], references: [id])
+
+  @@map("game_answers")
+}
+
+// ユーザー統計
+model UserStats {
+  userId         String    @id
+  totalGames     Int       @default(0)
+  totalCorrect   Int       @default(0)
+  totalAnswered  Int       @default(0)
+  masteredCount  Int       @default(0)
+  currentStreak  Int       @default(0)
+  lastActiveDate DateTime?
+  weeklyScore    Int       @default(0)
+  allTimeScore   Int       @default(0)
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_stats")
+}
