@@ -7,15 +7,15 @@
 
 ## フェーズ1: プロジェクトセットアップ
 
-- [ ] GitHubプライベートリポジトリ作成
-- [ ] Docker Compose セットアップ（hono / sveltekit / postgres / mailpit）
-- [ ] Honoプロジェクト作成（TypeScript + tsx）
-- [ ] Prismaセットアップ・DBスキーマ定義（`03_data_model.md`のスキーマをコピー）
-- [ ] マイグレーション実行（`npx prisma migrate dev`）
-- [ ] 元素データの初期シードデータ作成（118元素分）・投入
-- [ ] SvelteKitプロジェクト作成（TypeScript + Tailwind CSS）
+- [x] GitHubプライベートリポジトリ作成
+- [x] Docker Compose セットアップ（hono / sveltekit / postgres / mailpit）
+- [x] Honoプロジェクト作成（TypeScript + tsx）
+- [x] Prismaセットアップ・DBスキーマ定義（`03_data_model.md`のスキーマをコピー）
+- [x] マイグレーション実行（`npx prisma migrate dev`）
+- [x] 元素データの初期シードデータ作成（118元素分）・投入
+- [-] SvelteKitプロジェクト作成（TypeScript + Tailwind CSS）
 - [ ] 各プロジェクトにESLint / Prettier 設定
-- [ ] `.gitignore` 作成（`.env` が含まれていることを確認）
+- [x] `.gitignore` 作成（`.env` が含まれていることを確認）
 
 ## フェーズ2: 認証基盤（Hono + hono/jwt + bcryptjs）
 
