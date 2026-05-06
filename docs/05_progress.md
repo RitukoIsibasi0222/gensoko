@@ -22,6 +22,7 @@
 - [x] backend package.json・tsconfig.json 作成
 - [x] Prismaスキーマ定義・マイグレーション実行
 - [x] 元素シードデータ作成・投入（prisma/seed.ts・118元素）
+- [x] 元素モデルに由来フィールド追加（etymology）+ シードデータ更新
 - [x] src/index.ts 作成・Honoサーバー起動確認
 - [x] GameQuestionSet スキーマ追加・マイグレーション（設計決定2 対応）
 - [x] backend src/ ファイル構造作成（routes/ services/ middleware/ lib/ types/）
