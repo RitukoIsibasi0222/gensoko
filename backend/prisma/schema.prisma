@@ -40,10 +40,11 @@ model User {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  refreshTokens RefreshToken[]
-  weakElements  WeakElement[]
-  gameSessions  GameSession[]
-  stats         UserStats?
+  refreshTokens    RefreshToken[]
+  weakElements     WeakElement[]
+  gameSessions     GameSession[]
+  gameQuestionSets GameQuestionSet[]
+  stats            UserStats?
 
   @@map("users")
 }
@@ -122,6 +123,23 @@ model GameAnswer {
   element Element     @relation(fields: [elementId], references: [id])
 
   @@map("game_answers")
+}
+
+// 問題セット一時保持（設計決定2）
+// GET /game/questions で生成、30分で失効
+// POST /game/sessions で正誤判定後に削除
+model GameQuestionSet {
+  id        String   @id @default(cuid())
+  userId    String
+  mode      GameMode
+  // 正解情報JSON: [{elementId: number, correctElementId: number}]
+  questions Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("game_question_sets")
 }
 
 // ユーザー統計
