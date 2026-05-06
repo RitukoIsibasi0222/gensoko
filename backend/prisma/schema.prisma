@@ -46,6 +46,7 @@ model User {
   gameSessions     GameSession[]
   gameQuestionSets GameQuestionSet[]
   stats            UserStats?
+  emailVerifications EmailVerification[]
 
   @@map("users")
 }
@@ -56,8 +57,7 @@ enum Role {
 }
 
 // リフレッシュトークン
-model RefreshToken {
-  id        String   @id @default(cuid())
+model RefreshToken {  id        String   @id @default(cuid())
   tokenHash String   @unique
   userId    String
   expiresAt DateTime
@@ -66,6 +66,19 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("refresh_tokens")
+}
+
+// メール認証トークン
+model EmailVerification {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_verifications")
 }
 
 // 苦手リスト
