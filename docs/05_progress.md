@@ -35,7 +35,7 @@
 
 - [x] JWT認証ミドルウェア（middleware/auth.ts）
 - [x] Adminロールチェックミドルウェア（middleware/admin.ts）
-- [ ] POST /auth/register（Zod検証・bcrypt・メール認証tokenHash保存）
+- [x] POST /auth/register（Zod検証・bcrypt・メール認証tokenHash保存）
 - [ ] POST /auth/verify-email（tokenHash検証・有効期限・使用済削除）
 - [ ] POST /auth/login（JWT発行・ブルートフォースロック・UserStats streak更新）
 - [ ] POST /auth/refresh（HttpOnly Cookieリフレッシュトークン）
