@@ -46,6 +46,7 @@ model Element {
   period      Int                          // 周期（1〜7）
   group       Int?                         // 族（1〜18, null=ランタノイド等）
   atomicWeight Float?                      // 標準原子量
+  etymology    String?                      // 名前・記号の由来（日本語）
 
   // リレーション
   weakElements  WeakElement[]

@@ -18,6 +18,7 @@ model Element {
   period       Int
   group        Int?
   atomicWeight Float?
+  etymology    String?
 
   weakElements WeakElement[]
   gameAnswers  GameAnswer[]
