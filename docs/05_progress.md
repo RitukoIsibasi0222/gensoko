@@ -17,22 +17,22 @@
 ## フェーズ1: セットアップ
 
 - [x] GitHubリポジトリ作成・.gitignore・初回push
-- [x] Docker Compose起動（hono/sveltekit/postgres/mailpit）
+- [x] Docker Compose起動（hono/sveltekit/postgres/mailpit）※sveltekitはport 5174
 - [x] backend .env 作成（DATABASE_URL / JWT_SECRET / MAIL等）
 - [x] backend package.json・tsconfig.json 作成
 - [x] Prismaスキーマ定義・マイグレーション実行
 - [x] 元素シードデータ作成・投入（prisma/seed.ts・118元素）
 - [x] src/index.ts 作成・Honoサーバー起動確認
-- [ ] GameQuestionSet スキーマ追加・マイグレーション（設計決定2 対応）
-- [ ] backend src/ ファイル構造作成（routes/ services/ middleware/ lib/ types/）
-- [ ] lib/prisma.ts（シングルトン）+ lib/mail.ts 実装
-- [ ] .env.example 作成（backend・frontend両方）
-- [ ] SvelteKitプロジェクト作成（TypeScript + Tailwind CSS）
-- [ ] ESLint / Prettier 設定（backend・frontend両方）
+- [x] GameQuestionSet スキーマ追加・マイグレーション（設計決定2 対応）
+- [x] backend src/ ファイル構造作成（routes/ services/ middleware/ lib/ types/）
+- [x] lib/prisma.ts（シングルトン）+ lib/mail.ts 実装
+- [x] .env.example 作成（backend・frontend両方）
+- [x] SvelteKitプロジェクト作成（TypeScript + Tailwind CSS）
+- [x] ESLint / Prettier 設定（backend・frontend両方）
 
 ## フェーズ2: バックエンド認証
 
-- [ ] JWT認証ミドルウェア（middleware/auth.ts）
+- [x] JWT認証ミドルウェア（middleware/auth.ts）
 - [ ] Adminロールチェックミドルウェア（middleware/admin.ts）
 - [ ] POST /auth/register（Zod検証・bcrypt・メール認証tokenHash保存）
 - [ ] POST /auth/verify-email（tokenHash検証・有効期限・使用済削除）
