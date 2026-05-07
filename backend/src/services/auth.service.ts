@@ -60,3 +60,44 @@ export async function register(input: {
     });
   });
 }
+
+export async function verifyEmail(input: { token: string }): Promise<void> {
+  const { token } = input;
+
+  // 1. tokenをsha256ハッシュ化してDBと照合
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+
+  const record = await prisma.emailVerification.findUnique({
+    where: { tokenHash },
+  });
+
+  // 2. レコードなし
+  if (!record) {
+    throw new AuthError(404, "無効なトークンです");
+  }
+
+  // 3. 有効期限切れ → トークン削除して400
+  if (record.expiresAt < new Date()) {
+    await prisma.emailVerification.delete({ where: { tokenHash } });
+    throw new AuthError(400, "トークンの有効期限が切れています");
+  }
+
+  // 4. ユーザーの認証状態を確認
+  const user = await prisma.user.findUnique({
+    where: { id: record.userId },
+    select: { emailVerified: true },
+  });
+
+  if (user?.emailVerified) {
+    throw new AuthError(400, "既にメールアドレスは確認済みです");
+  }
+
+  // 5. トランザクションでトークン削除 + emailVerified を true に更新
+  await prisma.$transaction(async (tx) => {
+    await tx.emailVerification.delete({ where: { tokenHash } });
+    await tx.user.update({
+      where: { id: record.userId },
+      data: { emailVerified: true },
+    });
+  });
+}
