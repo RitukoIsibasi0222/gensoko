@@ -39,6 +39,10 @@ const ACTIVE_USER = {
   lockedUntil: null,
 };
 
+const VALID_RAW_TOKEN = "a".repeat(64); // randomBytes(32).toString("hex") と同形式
+const UNKNOWN_RAW_TOKEN = "b".repeat(64);
+const EXPIRED_RAW_TOKEN = "c".repeat(64);
+
 const VALID_TOKEN_RECORD = {
   id: "rt-1",
   tokenHash: "a".repeat(64), // sha256 結果は64文字の16進数
@@ -70,7 +74,7 @@ describe("POST /auth/refresh", () => {
     const res = await app.request("/auth/refresh", {
       method: "POST",
       headers: {
-        Cookie: "refreshToken=valid-raw-token",
+        Cookie: `refreshToken=${VALID_RAW_TOKEN}`,
       },
     });
 
@@ -88,7 +92,7 @@ describe("POST /auth/refresh", () => {
     const res = await app.request("/auth/refresh", {
       method: "POST",
       headers: {
-        Cookie: "refreshToken=valid-raw-token",
+        Cookie: `refreshToken=${VALID_RAW_TOKEN}`,
       },
     });
 
@@ -106,7 +110,7 @@ describe("POST /auth/refresh", () => {
     await app.request("/auth/refresh", {
       method: "POST",
       headers: {
-        Cookie: "refreshToken=valid-raw-token",
+        Cookie: `refreshToken=${VALID_RAW_TOKEN}`,
       },
     });
 
@@ -114,6 +118,21 @@ describe("POST /auth/refresh", () => {
     expect(vi.mocked(prisma.$transaction)).toHaveBeenCalledOnce();
     expect(vi.mocked(prisma.refreshToken.deleteMany)).toHaveBeenCalledOnce();
     expect(vi.mocked(prisma.refreshToken.create)).toHaveBeenCalledOnce();
+  });
+
+  it("異常系: Cookie のトークンが 64 文字 hex でない場合は 401 を返す", async () => {
+    const res = await app.request("/auth/refresh", {
+      method: "POST",
+      headers: {
+        Cookie: "refreshToken=invalid-short-token",
+      },
+    });
+
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBeDefined();
+    // DB への問い合わせなし
+    expect(vi.mocked(prisma.refreshToken.findUnique)).not.toHaveBeenCalled();
   });
 
   it("異常系: Cookie がない場合は 401 を返す", async () => {
@@ -132,7 +151,7 @@ describe("POST /auth/refresh", () => {
     const res = await app.request("/auth/refresh", {
       method: "POST",
       headers: {
-        Cookie: "refreshToken=unknown-token",
+        Cookie: `refreshToken=${UNKNOWN_RAW_TOKEN}`,
       },
     });
 
@@ -156,7 +175,7 @@ describe("POST /auth/refresh", () => {
     const res = await app.request("/auth/refresh", {
       method: "POST",
       headers: {
-        Cookie: "refreshToken=expired-token",
+        Cookie: `refreshToken=${EXPIRED_RAW_TOKEN}`,
       },
     });
 
@@ -164,6 +183,23 @@ describe("POST /auth/refresh", () => {
     expect(vi.mocked(prisma.refreshToken.deleteMany)).toHaveBeenCalledOnce();
     const setCookieHeader = res.headers.get("Set-Cookie");
     expect(setCookieHeader).toContain("Max-Age=0");
+  });
+
+  it("異常系: 並行リクエストで deleteMany count=0 の場合は 401 を返す（旧トークン単回使用担保）", async () => {
+    vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(VALID_TOKEN_RECORD as never);
+    // 並行リクエストで既に削除済みのケース
+    vi.mocked(prisma.refreshToken.deleteMany).mockResolvedValue({ count: 0 } as never);
+
+    const res = await app.request("/auth/refresh", {
+      method: "POST",
+      headers: {
+        Cookie: `refreshToken=${VALID_RAW_TOKEN}`,
+      },
+    });
+
+    expect(res.status).toBe(401);
+    // 新トークンが発行されていないことを確認
+    expect(vi.mocked(prisma.refreshToken.create)).not.toHaveBeenCalled();
   });
 
   it("異常系: ユーザーが停止されている場合は 403 を返す", async () => {
@@ -177,7 +213,7 @@ describe("POST /auth/refresh", () => {
     const res = await app.request("/auth/refresh", {
       method: "POST",
       headers: {
-        Cookie: "refreshToken=valid-raw-token",
+        Cookie: `refreshToken=${VALID_RAW_TOKEN}`,
       },
     });
 

@@ -28,12 +28,12 @@ const registerSchema = z.object({
 
 const REFRESH_TOKEN_COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7日（秒）
 
-function getRefreshCookieOptions(secure: boolean) {
+function getRefreshCookieOptions(secure: boolean, path: string) {
   return {
     httpOnly: true,
     secure,
     sameSite: "Strict" as const,
-    path: "/auth/refresh",
+    path,
     maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE,
   };
 }
@@ -106,7 +106,14 @@ authRouter.post(
     try {
       const result = await login({ email, password });
       const isProduction = process.env.NODE_ENV === "production";
-      setCookie(c, "refreshToken", result.refreshToken, getRefreshCookieOptions(isProduction));
+      // マウントパスに依存しないよう c.req.path から /refresh パスを動的生成
+      const refreshPath = c.req.path.replace(/[^/]+$/, "refresh");
+      setCookie(
+        c,
+        "refreshToken",
+        result.refreshToken,
+        getRefreshCookieOptions(isProduction, refreshPath),
+      );
       return c.json({ accessToken: result.accessToken, user: result.user }, 200);
     } catch (err) {
       if (err instanceof AuthError) {
@@ -123,14 +130,25 @@ authRouter.post("/refresh", async (c) => {
     return c.json({ error: "リフレッシュトークンがありません" }, 401);
   }
 
+  // randomBytes(32).toString("hex") は 64 文字の hex 文字列
+  if (!/^[0-9a-f]{64}$/.test(rawToken)) {
+    deleteCookie(c, "refreshToken", { path: c.req.path });
+    return c.json({ error: "リフレッシュトークンの形式が不正です" }, 401);
+  }
+
   const isProduction = process.env.NODE_ENV === "production";
   try {
     const result = await refreshAccessToken(rawToken);
-    setCookie(c, "refreshToken", result.newRefreshToken, getRefreshCookieOptions(isProduction));
+    setCookie(
+      c,
+      "refreshToken",
+      result.newRefreshToken,
+      getRefreshCookieOptions(isProduction, c.req.path),
+    );
     return c.json({ accessToken: result.accessToken }, 200);
   } catch (err) {
     // エラー時はクライアントの壊れた Cookie を削除する
-    deleteCookie(c, "refreshToken", { path: "/auth/refresh" });
+    deleteCookie(c, "refreshToken", { path: c.req.path });
     if (err instanceof AuthError) {
       return c.json({ error: err.message }, err.status);
     }

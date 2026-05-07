@@ -113,7 +113,11 @@ export async function refreshAccessToken(rawToken: string): Promise<{
   const newExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
 
   await prisma.$transaction(async (tx) => {
-    await tx.refreshToken.deleteMany({ where: { tokenHash } });
+    // count=0 の場合は並行リクエストで既に使用済み → 旧トークンの単回使用を担保
+    const { count } = await tx.refreshToken.deleteMany({ where: { tokenHash } });
+    if (count === 0) {
+      throw new AuthError(401, "無効なリフレッシュトークンです");
+    }
     await tx.refreshToken.create({
       data: { userId: record.user.id, tokenHash: newTokenHash, expiresAt: newExpiresAt },
     });
