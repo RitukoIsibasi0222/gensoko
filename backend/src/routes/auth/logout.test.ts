@@ -78,6 +78,24 @@ describe("POST /auth/logout", () => {
     expect(prisma.refreshToken.deleteMany).not.toHaveBeenCalled();
   });
 
+  it("正常系: 空文字の Cookie でも 204 を返し、Cookie 削除ヘッダーを付ける", async () => {
+    const res = await app.request("/auth/logout", {
+      method: "POST",
+      headers: {
+        Cookie: `refreshToken=`,
+      },
+    });
+
+    expect(res.status).toBe(204);
+    // 空文字は形式不正なので DB アクセスは不要
+    expect(prisma.refreshToken.deleteMany).not.toHaveBeenCalled();
+    // 壊れた Cookie は削除ヘッダーを返す
+    const setCookie = res.headers.get("Set-Cookie");
+    expect(setCookie).not.toBeNull();
+    expect(setCookie).toContain("refreshToken=");
+    expect(setCookie).toMatch(/Max-Age=0|Expires=/);
+  });
+
   it("正常系: レスポンスに refreshToken Cookie の削除ヘッダーが含まれる", async () => {
     vi.mocked(prisma.refreshToken.deleteMany).mockResolvedValue({ count: 1 } as never);
 

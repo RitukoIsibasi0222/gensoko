@@ -160,12 +160,13 @@ authRouter.post("/refresh", async (c) => {
 authRouter.post("/logout", async (c) => {
   const rawToken = getCookie(c, "refreshToken");
 
-  // Cookie がない場合は何もせずに 204 を返す（冪等）
-  if (!rawToken) {
+  // Cookie が存在しない（undefined）場合は何もせずに 204 を返す（冪等）
+  // 空文字（refreshToken=）は形式不正として後続の deleteCookie + 204 へ進む
+  if (rawToken == null) {
     return c.body(null, 204);
   }
 
-  // login で設定した Cookie パスと揃える（/auth/refresh）
+  // login で設定した Cookie の path と揃える（c.req.path から /.../refresh を動的生成）
   const refreshPath = c.req.path.replace(/[^/]+$/, "refresh");
   deleteCookie(c, "refreshToken", { path: refreshPath });
 
