@@ -107,10 +107,20 @@ export async function login(input: {
     throw new AuthError(401, "しばらく後に再試行してください");
   }
 
+  // ロック期限切れの場合は failCount をリセットしてから検証（再ロックを防ぐ）
+  let currentFailCount = user.loginFailCount;
+  if (user.lockedUntil && user.lockedUntil <= new Date()) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { loginFailCount: 0, lockedUntil: null },
+    });
+    currentFailCount = 0;
+  }
+
   // 5. パスワード検証
   const isValid = await bcrypt.compare(password, user.passwordHash);
   if (!isValid) {
-    const newFailCount = Math.min(user.loginFailCount + 1, MAX_LOGIN_FAIL);
+    const newFailCount = Math.min(currentFailCount + 1, MAX_LOGIN_FAIL);
     const updateData: { loginFailCount: number; lockedUntil?: Date } = {
       loginFailCount: newFailCount,
     };

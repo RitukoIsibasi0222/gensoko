@@ -179,6 +179,31 @@ describe("POST /auth/login", () => {
     expect(vi.mocked(bcrypt.compare)).not.toHaveBeenCalled();
   });
 
+  it("ブルートフォース: ロック期限切れの場合は failCount をリセットしてから検証する", async () => {
+    const expiredLockedUser = {
+      ...ACTIVE_USER,
+      loginFailCount: 5,
+      lockedUntil: new Date(Date.now() - 1000), // 期限切れ
+    };
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(expiredLockedUser as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "taro@example.com", password: "WrongPass1!" }),
+    });
+
+    // 1回目の update でロック解除リセット、2回目の update で failCount=1 になること
+    expect(res.status).toBe(401);
+    const updateCalls = vi.mocked(prisma.user.update).mock.calls;
+    // リセット呼び出し: loginFailCount=0, lockedUntil=null
+    expect(updateCalls[0][0].data).toEqual({ loginFailCount: 0, lockedUntil: null });
+    // パスワード失敗後の呼び出し: loginFailCount=1（上限 5 で再ロックされない）
+    expect(updateCalls[1][0].data).toEqual({ loginFailCount: 1 });
+  });
+
   it("異常系: メール未確認の場合は 403 を返す", async () => {
     const unverifiedUser = { ...ACTIVE_USER, emailVerified: false };
     vi.mocked(prisma.user.findUnique).mockResolvedValue(unverifiedUser as never);
