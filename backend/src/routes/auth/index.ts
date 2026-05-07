@@ -1,7 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { z } from "zod";
-import { AuthError, register, verifyEmail } from "../services/auth.service.js";
+import { AuthError, register, verifyEmail } from "../../services/auth.service.js";
 
 const registerSchema = z.object({
   username: z

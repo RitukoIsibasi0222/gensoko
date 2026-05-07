@@ -168,18 +168,34 @@ backend/src/
     prisma.ts           # PrismaClient シングルトン
     mail.ts             # nodemailer トランスポート
   middleware/
-    auth.ts             # JWT認証（authMiddleware, optionalAuthMiddleware）
-    admin.ts            # 管理者ロールチェック
-    security.ts         # セキュリティヘッダー
-    rateLimit.ts        # レート制限
+    auth/
+      index.ts          # JWT認証（authMiddleware, optionalAuthMiddleware）
+      auth.test.ts      # テスト
+    admin/
+      index.ts          # 管理者ロールチェック
+      admin.test.ts     # テスト
+    rateLimit/
+      index.ts          # レート制限
+    security/
+      index.ts          # セキュリティヘッダー
   routes/
-    auth.ts             # POST /auth/*
-    elements.ts         # GET /elements/*
-    game.ts             # GET/POST /game/*
-    weak.ts             # GET/DELETE /weak/*
-    users.ts            # GET/PATCH/DELETE /users/*
-    ranking.ts          # GET /ranking/*
-    admin.ts            # 管理者 API
+    auth/
+      index.ts          # POST /auth/*
+      register.test.ts  # POST /auth/register のテスト
+      verify-email.test.ts  # POST /auth/verify-email のテスト
+      login.test.ts     # POST /auth/login のテスト（追加予定）
+    elements/
+      index.ts          # GET /elements/*
+    game/
+      index.ts          # GET/POST /game/*
+    weak/
+      index.ts          # GET/DELETE /weak/*
+    users/
+      index.ts          # GET/PATCH/DELETE /users/*
+    ranking/
+      index.ts          # GET /ranking/*
+    admin/
+      index.ts          # 管理者 API
   services/
     auth.service.ts     # 認証ビジネスロジック
     game.service.ts     # ゲームビジネスロジック
@@ -192,7 +208,8 @@ backend/src/
 
 ```ts
 // Prisma のモック（DB 接続不要でテスト）
-vi.mock("../lib/prisma.js", () => ({
+// ※ パスはファイルの深さに合わせる（routes/auth/ なら ../../lib/prisma.js）
+vi.mock("../../lib/prisma.js", () => ({
   prisma: {
     user: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
     // 必要なモデルを追加
@@ -210,6 +227,29 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 ```
+
+---
+
+## テストファイルの命名規則
+
+テストファイルは **エンドポイント（機能）ごとに 1 ファイル** に分け、対応するソースファイルと **同じディレクトリ内** に配置する。
+
+```
+routes/
+  auth/
+    index.ts
+    register.test.ts        # POST /auth/register
+    verify-email.test.ts    # POST /auth/verify-email
+    login.test.ts           # POST /auth/login（追加時に作成）
+middleware/
+  auth/
+    index.ts
+    auth.test.ts
+```
+
+**ルール**:
+- 新しいエンドポイントを追加するたびに対応する `.test.ts` を必ず作成する
+- 既存テストファイルに `describe` を追加して済ませない
 
 ---
 
