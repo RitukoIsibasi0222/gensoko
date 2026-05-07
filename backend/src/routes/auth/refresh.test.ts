@@ -1,0 +1,173 @@
+import { Hono } from "hono";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { authRouter } from "./index.js";
+
+// Prisma モック
+vi.mock("../../lib/prisma.js", () => ({
+  prisma: {
+    user: {
+      findUnique: vi.fn(),
+    },
+    refreshToken: {
+      findUnique: vi.fn(),
+      delete: vi.fn(),
+      create: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+  },
+}));
+
+// hono/jwt モック
+vi.mock("hono/jwt", () => ({
+  sign: vi.fn().mockResolvedValue("mock-access-token"),
+  verify: vi.fn(),
+}));
+
+import { sign } from "hono/jwt";
+import { prisma } from "../../lib/prisma.js";
+
+const app = new Hono();
+app.route("/auth", authRouter);
+
+const ACTIVE_USER = {
+  id: "user-1",
+  username: "taro123",
+  role: "USER" as const,
+  isActive: true,
+  emailVerified: true,
+  lockedUntil: null,
+};
+
+const VALID_TOKEN_RECORD = {
+  id: "rt-1",
+  tokenHash: "a".repeat(64), // sha256 結果は64文字の16進数
+  userId: "user-1",
+  expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7日後
+  createdAt: new Date(),
+  user: ACTIVE_USER,
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.stubEnv("JWT_SECRET", "test-secret-32chars-long-enough!!");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+describe("POST /auth/refresh", () => {
+  it("正常系: 有効なリフレッシュトークンで 200 と新 accessToken を返す", async () => {
+    vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(VALID_TOKEN_RECORD as never);
+    vi.mocked(prisma.refreshToken.delete).mockResolvedValue({} as never);
+    vi.mocked(prisma.refreshToken.create).mockResolvedValue({} as never);
+
+    const res = await app.request("/auth/refresh", {
+      method: "POST",
+      headers: {
+        Cookie: "refreshToken=valid-raw-token",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.accessToken).toBe("mock-access-token");
+    expect(vi.mocked(sign)).toHaveBeenCalledOnce();
+  });
+
+  it("正常系: レスポンスに新しいリフレッシュトークンの Set-Cookie が含まれる", async () => {
+    vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(VALID_TOKEN_RECORD as never);
+    vi.mocked(prisma.refreshToken.delete).mockResolvedValue({} as never);
+    vi.mocked(prisma.refreshToken.create).mockResolvedValue({} as never);
+
+    const res = await app.request("/auth/refresh", {
+      method: "POST",
+      headers: {
+        Cookie: "refreshToken=valid-raw-token",
+      },
+    });
+
+    const setCookie = res.headers.get("Set-Cookie");
+    expect(setCookie).toBeTruthy();
+    expect(setCookie).toContain("refreshToken=");
+    expect(setCookie).toContain("HttpOnly");
+  });
+
+  it("正常系: 古いリフレッシュトークンが削除されて新しいものが作成される（ローテーション）", async () => {
+    vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(VALID_TOKEN_RECORD as never);
+    vi.mocked(prisma.refreshToken.delete).mockResolvedValue({} as never);
+    vi.mocked(prisma.refreshToken.create).mockResolvedValue({} as never);
+
+    await app.request("/auth/refresh", {
+      method: "POST",
+      headers: {
+        Cookie: "refreshToken=valid-raw-token",
+      },
+    });
+
+    expect(vi.mocked(prisma.refreshToken.delete)).toHaveBeenCalledOnce();
+    expect(vi.mocked(prisma.refreshToken.create)).toHaveBeenCalledOnce();
+  });
+
+  it("異常系: Cookie がない場合は 401 を返す", async () => {
+    const res = await app.request("/auth/refresh", {
+      method: "POST",
+    });
+
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBeDefined();
+  });
+
+  it("異常系: DBにトークンが存在しない場合は 401 を返す", async () => {
+    vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(null);
+
+    const res = await app.request("/auth/refresh", {
+      method: "POST",
+      headers: {
+        Cookie: "refreshToken=unknown-token",
+      },
+    });
+
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBeDefined();
+  });
+
+  it("異常系: トークンが期限切れの場合は 401 を返しトークンを削除する", async () => {
+    const expiredRecord = {
+      ...VALID_TOKEN_RECORD,
+      expiresAt: new Date(Date.now() - 1000), // 期限切れ
+    };
+    vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(expiredRecord as never);
+    vi.mocked(prisma.refreshToken.delete).mockResolvedValue({} as never);
+
+    const res = await app.request("/auth/refresh", {
+      method: "POST",
+      headers: {
+        Cookie: "refreshToken=expired-token",
+      },
+    });
+
+    expect(res.status).toBe(401);
+    expect(vi.mocked(prisma.refreshToken.delete)).toHaveBeenCalledOnce();
+  });
+
+  it("異常系: ユーザーが停止されている場合は 403 を返す", async () => {
+    const suspendedRecord = {
+      ...VALID_TOKEN_RECORD,
+      user: { ...ACTIVE_USER, isActive: false },
+    };
+    vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(suspendedRecord as never);
+    vi.mocked(prisma.refreshToken.delete).mockResolvedValue({} as never);
+
+    const res = await app.request("/auth/refresh", {
+      method: "POST",
+      headers: {
+        Cookie: "refreshToken=valid-raw-token",
+      },
+    });
+
+    expect(res.status).toBe(403);
+  });
+});

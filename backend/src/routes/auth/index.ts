@@ -1,7 +1,14 @@
 import { zValidator } from "@hono/zod-validator";
+import { getCookie, setCookie } from "hono/cookie";
 import { Hono } from "hono";
 import { z } from "zod";
-import { AuthError, login, register, verifyEmail } from "../../services/auth.service.js";
+import {
+  AuthError,
+  login,
+  refreshAccessToken,
+  register,
+  verifyEmail,
+} from "../../services/auth.service.js";
 
 const registerSchema = z.object({
   username: z
@@ -86,7 +93,15 @@ authRouter.post(
 
     try {
       const result = await login({ email, password });
-      return c.json(result, 200);
+      const isProduction = process.env.NODE_ENV === "production";
+      setCookie(c, "refreshToken", result.refreshToken, {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: "Strict",
+        path: "/auth/refresh",
+        maxAge: 7 * 24 * 60 * 60, // 7日（秒）
+      });
+      return c.json({ accessToken: result.accessToken, user: result.user }, 200);
     } catch (err) {
       if (err instanceof AuthError) {
         return c.json({ error: err.message }, err.status);
@@ -95,3 +110,28 @@ authRouter.post(
     }
   },
 );
+
+authRouter.post("/refresh", async (c) => {
+  const rawToken = getCookie(c, "refreshToken");
+  if (!rawToken) {
+    return c.json({ error: "リフレッシュトークンがありません" }, 401);
+  }
+
+  try {
+    const result = await refreshAccessToken(rawToken);
+    const isProduction = process.env.NODE_ENV === "production";
+    setCookie(c, "refreshToken", result.newRefreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: "Strict",
+      path: "/auth/refresh",
+      maxAge: 7 * 24 * 60 * 60, // 7日（秒）
+    });
+    return c.json({ accessToken: result.accessToken }, 200);
+  } catch (err) {
+    if (err instanceof AuthError) {
+      return c.json({ error: err.message }, err.status);
+    }
+    return c.json({ error: "サーバーエラーが発生しました" }, 500);
+  }
+});

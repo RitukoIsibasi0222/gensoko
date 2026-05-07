@@ -66,11 +66,68 @@ export async function register(input: {
 const MAX_LOGIN_FAIL = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15分
 const ACCESS_TOKEN_TTL_SEC = 15 * 60; // 15分
+const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7日
 
-export async function login(input: {
-  email: string;
-  password: string;
-}): Promise<{ accessToken: string; user: { id: string; username: string; role: Role } }> {
+export async function issueRefreshToken(userId: string): Promise<string> {
+  const rawToken = randomBytes(32).toString("hex");
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+
+  await prisma.refreshToken.create({
+    data: { userId, tokenHash, expiresAt },
+  });
+
+  return rawToken;
+}
+
+export async function refreshAccessToken(rawToken: string): Promise<{
+  accessToken: string;
+  newRefreshToken: string;
+  user: { id: string; role: Role };
+}> {
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+
+  const record = await prisma.refreshToken.findUnique({
+    where: { tokenHash },
+    include: { user: { select: { id: true, role: true, isActive: true } } },
+  });
+
+  if (!record) {
+    throw new AuthError(401, "無効なリフレッシュトークンです");
+  }
+
+  if (record.expiresAt < new Date()) {
+    await prisma.refreshToken.delete({ where: { tokenHash } });
+    throw new AuthError(401, "リフレッシュトークンの有効期限が切れています");
+  }
+
+  if (!record.user.isActive) {
+    await prisma.refreshToken.delete({ where: { tokenHash } });
+    throw new AuthError(403, "アカウントが停止されています");
+  }
+
+  // トークンローテーション: 古いトークンを削除して新しいものを発行
+  await prisma.refreshToken.delete({ where: { tokenHash } });
+  const newRefreshToken = await issueRefreshToken(record.user.id);
+
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error("JWT_SECRET is not set");
+
+  const now = Math.floor(Date.now() / 1000);
+  const accessToken = await sign(
+    { sub: record.user.id, role: record.user.role, iat: now, exp: now + ACCESS_TOKEN_TTL_SEC },
+    secret,
+    "HS256",
+  );
+
+  return { accessToken, newRefreshToken, user: { id: record.user.id, role: record.user.role } };
+}
+
+export async function login(input: { email: string; password: string }): Promise<{
+  accessToken: string;
+  refreshToken: string;
+  user: { id: string; username: string; role: Role };
+}> {
   const { email, password } = input;
 
   // 1. ユーザー取得
@@ -151,7 +208,14 @@ export async function login(input: {
   // 8. streak 更新
   await updateLoginStreak(user.id);
 
-  return { accessToken, user: { id: user.id, username: user.username, role: user.role } };
+  // 9. リフレッシュトークン発行
+  const refreshToken = await issueRefreshToken(user.id);
+
+  return {
+    accessToken,
+    refreshToken,
+    user: { id: user.id, username: user.username, role: user.role },
+  };
 }
 
 async function updateLoginStreak(userId: string): Promise<void> {
