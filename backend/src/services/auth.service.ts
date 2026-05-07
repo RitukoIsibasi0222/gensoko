@@ -104,13 +104,13 @@ export async function login(input: {
 
   // 4. ブルートフォースロックチェック
   if (user.lockedUntil && user.lockedUntil > new Date()) {
-    throw new AuthError(401, "アカウントがロックされています。しばらく後に再試行してください");
+    throw new AuthError(401, "しばらく後に再試行してください");
   }
 
   // 5. パスワード検証
   const isValid = await bcrypt.compare(password, user.passwordHash);
   if (!isValid) {
-    const newFailCount = user.loginFailCount + 1;
+    const newFailCount = Math.min(user.loginFailCount + 1, MAX_LOGIN_FAIL);
     const updateData: { loginFailCount: number; lockedUntil?: Date } = {
       loginFailCount: newFailCount,
     };

@@ -183,7 +183,7 @@ backend/src/
       index.ts          # POST /auth/*
       register.test.ts  # POST /auth/register のテスト
       verify-email.test.ts  # POST /auth/verify-email のテスト
-      login.test.ts     # POST /auth/login のテスト（追加予定）
+      login.test.ts     # POST /auth/login のテスト
     elements/
       index.ts          # GET /elements/*
     game/
