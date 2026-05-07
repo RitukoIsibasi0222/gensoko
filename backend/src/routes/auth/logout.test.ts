@@ -55,7 +55,7 @@ describe("POST /auth/logout", () => {
     expect(prisma.refreshToken.deleteMany).toHaveBeenCalledOnce();
   });
 
-  it("正常系: Cookieがない場合も 204 を返す（冪等）", async () => {
+  it("正常系: Cookieがない場合も 204 を返し、両 Path の削除ヘッダーを付ける（旧 Path 残存 Cookie も確実にクリア）", async () => {
     const res = await app.request("/auth/logout", {
       method: "POST",
     });
@@ -63,6 +63,10 @@ describe("POST /auth/logout", () => {
     expect(res.status).toBe(204);
     // Cookie がないので DB アクセスは不要
     expect(prisma.refreshToken.deleteMany).not.toHaveBeenCalled();
+    // Cookie がなくても削除ヘッダーは返す（旧 Path 残存 Cookie の確実なクリアのため）
+    const setCookie = res.headers.get("Set-Cookie");
+    expect(setCookie).not.toBeNull();
+    expect(setCookie).toMatch(/Max-Age=0|Expires=/);
   });
 
   it("正常系: 形式不正のトークンでも 204 を返す（冪等）", async () => {
