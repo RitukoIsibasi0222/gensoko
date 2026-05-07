@@ -107,13 +107,13 @@ authRouter.post(
     try {
       const result = await login({ email, password });
       const isProduction = process.env.NODE_ENV === "production";
-      // マウントパスに依存しないよう c.req.path から /refresh パスを動的生成
-      const refreshPath = c.req.path.replace(/[^/]+$/, "refresh");
+      // Path を /auth ベースにすることで /auth/logout でも Cookie が届くようにする
+      const authBase = c.req.path.replace(/\/[^/]+$/, "");
       setCookie(
         c,
         "refreshToken",
         result.refreshToken,
-        getRefreshCookieOptions(isProduction, refreshPath),
+        getRefreshCookieOptions(isProduction, authBase),
       );
       return c.json({ accessToken: result.accessToken, user: result.user }, 200);
     } catch (err) {
@@ -132,8 +132,9 @@ authRouter.post("/refresh", async (c) => {
   }
 
   // randomBytes(32).toString("hex") は 64 文字の hex 文字列
+  const authBase = c.req.path.replace(/\/[^/]+$/, "");
   if (!/^[0-9a-f]{64}$/.test(rawToken)) {
-    deleteCookie(c, "refreshToken", { path: c.req.path });
+    deleteCookie(c, "refreshToken", { path: authBase });
     return c.json({ error: "リフレッシュトークンの形式が不正です" }, 401);
   }
 
@@ -144,12 +145,12 @@ authRouter.post("/refresh", async (c) => {
       c,
       "refreshToken",
       result.newRefreshToken,
-      getRefreshCookieOptions(isProduction, c.req.path),
+      getRefreshCookieOptions(isProduction, authBase),
     );
     return c.json({ accessToken: result.accessToken }, 200);
   } catch (err) {
     // エラー時はクライアントの壊れた Cookie を削除する
-    deleteCookie(c, "refreshToken", { path: c.req.path });
+    deleteCookie(c, "refreshToken", { path: authBase });
     if (err instanceof AuthError) {
       return c.json({ error: err.message }, err.status);
     }
@@ -166,9 +167,9 @@ authRouter.post("/logout", async (c) => {
     return c.body(null, 204);
   }
 
-  // login で設定した Cookie の path と揃える（c.req.path から /.../refresh を動的生成）
-  const refreshPath = c.req.path.replace(/[^/]+$/, "refresh");
-  deleteCookie(c, "refreshToken", { path: refreshPath });
+  // refreshToken Cookie の Path は /auth ベースに設定されているため logout でも Cookie が届く
+  const authBase = c.req.path.replace(/\/[^/]+$/, "");
+  deleteCookie(c, "refreshToken", { path: authBase });
 
   // 形式チェック（randomBytes(32).toString("hex") は 64 文字の hex 文字列）
   if (!/^[0-9a-f]{64}$/.test(rawToken)) {

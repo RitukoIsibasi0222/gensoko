@@ -112,4 +112,20 @@ describe("POST /auth/logout", () => {
     expect(setCookie).toContain("refreshToken=");
     expect(setCookie).toMatch(/Max-Age=0|Expires=/);
   });
+
+  it("設計: Set-Cookie の Path が /auth ベースであり logout でも Cookie が届く設計になっている", async () => {
+    vi.mocked(prisma.refreshToken.deleteMany).mockResolvedValue({ count: 1 } as never);
+
+    const res = await app.request("/auth/logout", {
+      method: "POST",
+      headers: {
+        Cookie: `refreshToken=${VALID_RAW_TOKEN}`,
+      },
+    });
+
+    expect(res.status).toBe(204);
+    const setCookie = res.headers.get("Set-Cookie");
+    // Path=/auth であることで /auth/logout にも Cookie が送られる
+    expect(setCookie).toContain("Path=/auth");
+  });
 });
