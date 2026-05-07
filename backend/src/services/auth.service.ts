@@ -80,6 +80,12 @@ export async function issueRefreshToken(userId: string): Promise<string> {
   return rawToken;
 }
 
+export async function logout(rawToken: string): Promise<void> {
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+  // deleteMany で P2025 を回避（存在しないトークンでも正常終了）
+  await prisma.refreshToken.deleteMany({ where: { tokenHash } });
+}
+
 export async function refreshAccessToken(rawToken: string): Promise<{
   accessToken: string;
   newRefreshToken: string;

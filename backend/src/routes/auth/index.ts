@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   AuthError,
   login,
+  logout,
   refreshAccessToken,
   register,
   verifyEmail,
@@ -152,6 +153,31 @@ authRouter.post("/refresh", async (c) => {
     if (err instanceof AuthError) {
       return c.json({ error: err.message }, err.status);
     }
+    return c.json({ error: "サーバーエラーが発生しました" }, 500);
+  }
+});
+
+authRouter.post("/logout", async (c) => {
+  const rawToken = getCookie(c, "refreshToken");
+
+  // Cookie がない場合は何もせずに 204 を返す（冪等）
+  if (!rawToken) {
+    return c.body(null, 204);
+  }
+
+  // login で設定した Cookie パスと揃える（/auth/refresh）
+  const refreshPath = c.req.path.replace(/[^/]+$/, "refresh");
+  deleteCookie(c, "refreshToken", { path: refreshPath });
+
+  // 形式チェック（randomBytes(32).toString("hex") は 64 文字の hex 文字列）
+  if (!/^[0-9a-f]{64}$/.test(rawToken)) {
+    return c.body(null, 204);
+  }
+
+  try {
+    await logout(rawToken);
+    return c.body(null, 204);
+  } catch {
     return c.json({ error: "サーバーエラーが発生しました" }, 500);
   }
 });
