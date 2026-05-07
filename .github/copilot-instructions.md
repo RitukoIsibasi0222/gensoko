@@ -14,8 +14,8 @@
 - **Frontend**: SvelteKit v2 + Tailwind CSS v4（Docker port 5174）
 - **テスト**: Vitest（`backend/src/**/*.test.ts`）
 - **進捗管理**: `docs/05_progress.md`
-- **テスト開発フロー**: `docs/06_testing_flow.md`
-- **起動コマンド**: `docs/07_startup_commands.md`
+- **テスト開発フロー**: `docs/07_testing_flow.md`
+- **起動コマンド**: `docs/09_startup_commands.md`
 
 ---
 
