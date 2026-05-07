@@ -2,7 +2,7 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
-import { authRouter } from "./routes/auth.js";
+import { authRouter } from "./routes/auth/index.js";
 import type { AppVariables } from "./types/index.js";
 
 const app = new Hono<{ Variables: AppVariables }>();

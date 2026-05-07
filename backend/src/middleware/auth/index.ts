@@ -1,7 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 import { verify } from "hono/jwt";
-import { prisma } from "../lib/prisma.js";
-import type { AppVariables, JwtPayload } from "../types/index.js";
+import { prisma } from "../../lib/prisma.js";
+import type { AppVariables, JwtPayload } from "../../types/index.js";
 
 /** JWT_SECRET を取得（未設定は起動時にエラー） */
 const getJwtSecret = (): string => {

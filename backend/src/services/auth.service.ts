@@ -1,11 +1,13 @@
 import { createHash, randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
+import { sign } from "hono/jwt";
 import { prisma } from "../lib/prisma.js";
 import { mailer } from "../lib/mail.js";
+import type { Role } from "@prisma/client";
 
 export class AuthError extends Error {
   constructor(
-    public readonly status: 400 | 409 | 500,
+    public readonly status: 400 | 401 | 403 | 404 | 409 | 500,
     message: string,
   ) {
     super(message);
@@ -58,6 +60,132 @@ export async function register(input: {
       text: `以下のURLをクリックしてメールアドレスを確認してください（有効期限: 24時間）\n\n${verifyUrl}`,
       html: `<p>以下のURLをクリックしてメールアドレスを確認してください（有効期限: 24時間）</p><p><a href="${verifyUrl}">${verifyUrl}</a></p>`,
     });
+  });
+}
+
+const MAX_LOGIN_FAIL = 5;
+const LOCK_DURATION_MS = 15 * 60 * 1000; // 15分
+const ACCESS_TOKEN_TTL_SEC = 15 * 60; // 15分
+
+export async function login(input: {
+  email: string;
+  password: string;
+}): Promise<{ accessToken: string; user: { id: string; username: string; role: Role } }> {
+  const { email, password } = input;
+
+  // 1. ユーザー取得
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      username: true,
+      role: true,
+      passwordHash: true,
+      emailVerified: true,
+      isActive: true,
+      loginFailCount: true,
+      lockedUntil: true,
+    },
+  });
+
+  if (!user) {
+    throw new AuthError(401, "メールアドレスまたはパスワードが正しくありません");
+  }
+
+  // 2. アカウント停止チェック
+  if (!user.isActive) {
+    throw new AuthError(403, "アカウントが停止されています");
+  }
+
+  // 3. メール確認チェック
+  if (!user.emailVerified) {
+    throw new AuthError(403, "メールアドレスが確認されていません");
+  }
+
+  // 4. ブルートフォースロックチェック
+  if (user.lockedUntil && user.lockedUntil > new Date()) {
+    throw new AuthError(401, "しばらく後に再試行してください");
+  }
+
+  // ロック期限切れの場合は failCount をリセットしてから検証（再ロックを防ぐ）
+  let currentFailCount = user.loginFailCount;
+  if (user.lockedUntil && user.lockedUntil <= new Date()) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { loginFailCount: 0, lockedUntil: null },
+    });
+    currentFailCount = 0;
+  }
+
+  // 5. パスワード検証
+  const isValid = await bcrypt.compare(password, user.passwordHash);
+  if (!isValid) {
+    const newFailCount = Math.min(currentFailCount + 1, MAX_LOGIN_FAIL);
+    const updateData: { loginFailCount: number; lockedUntil?: Date } = {
+      loginFailCount: newFailCount,
+    };
+    if (newFailCount >= MAX_LOGIN_FAIL) {
+      updateData.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
+    }
+    await prisma.user.update({ where: { id: user.id }, data: updateData });
+    throw new AuthError(401, "メールアドレスまたはパスワードが正しくありません");
+  }
+
+  // 6. ログイン成功: failCount リセット・lastLoginAt 更新
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { loginFailCount: 0, lockedUntil: null, lastLoginAt: new Date() },
+  });
+
+  // 7. JWT 発行
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error("JWT_SECRET is not set");
+
+  const now = Math.floor(Date.now() / 1000);
+  const accessToken = await sign(
+    { sub: user.id, role: user.role, iat: now, exp: now + ACCESS_TOKEN_TTL_SEC },
+    secret,
+    "HS256",
+  );
+
+  // 8. streak 更新
+  await updateLoginStreak(user.id);
+
+  return { accessToken, user: { id: user.id, username: user.username, role: user.role } };
+}
+
+async function updateLoginStreak(userId: string): Promise<void> {
+  const todayUTC = new Date();
+  todayUTC.setUTCHours(0, 0, 0, 0);
+
+  const stats = await prisma.userStats.findUnique({
+    where: { userId },
+    select: { currentStreak: true, lastActiveDate: true },
+  });
+
+  // 今日すでにログイン済みの場合はスキップ
+  if (stats?.lastActiveDate) {
+    const lastUTC = new Date(stats.lastActiveDate);
+    lastUTC.setUTCHours(0, 0, 0, 0);
+    if (lastUTC.getTime() === todayUTC.getTime()) {
+      return;
+    }
+  }
+
+  let newStreak: number;
+  if (!stats?.lastActiveDate) {
+    newStreak = 1;
+  } else {
+    const lastUTC = new Date(stats.lastActiveDate);
+    lastUTC.setUTCHours(0, 0, 0, 0);
+    const diffDays = Math.round((todayUTC.getTime() - lastUTC.getTime()) / (24 * 60 * 60 * 1000));
+    newStreak = diffDays === 1 ? stats.currentStreak + 1 : 1;
+  }
+
+  await prisma.userStats.upsert({
+    where: { userId },
+    create: { userId, currentStreak: newStreak, lastActiveDate: new Date() },
+    update: { currentStreak: newStreak, lastActiveDate: new Date() },
   });
 }
 

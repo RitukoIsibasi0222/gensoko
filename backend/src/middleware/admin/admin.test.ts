@@ -7,8 +7,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Hono } from "hono";
-import type { AppVariables } from "../types/index.js";
-import { adminMiddleware } from "./admin.js";
+import type { AppVariables } from "../../types/index.js";
+import { adminMiddleware } from "./index.js";
 
 // -----------------------------------------------------------------
 // テスト用 Hono アプリを作成するヘルパー

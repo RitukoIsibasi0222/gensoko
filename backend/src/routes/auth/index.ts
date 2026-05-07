@@ -1,7 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { z } from "zod";
-import { AuthError, register, verifyEmail } from "../services/auth.service.js";
+import { AuthError, login, register, verifyEmail } from "../../services/auth.service.js";
 
 const registerSchema = z.object({
   username: z
@@ -60,6 +60,33 @@ authRouter.post(
     try {
       await verifyEmail({ token });
       return c.json({ message: "メールアドレスを確認しました" }, 200);
+    } catch (err) {
+      if (err instanceof AuthError) {
+        return c.json({ error: err.message }, err.status);
+      }
+      return c.json({ error: "サーバーエラーが発生しました" }, 500);
+    }
+  },
+);
+
+const loginSchema = z.object({
+  email: z.string().email("有効なメールアドレスを入力してください"),
+  password: z.string().min(1, "パスワードを入力してください"),
+});
+
+authRouter.post(
+  "/login",
+  zValidator("json", loginSchema, (result, c) => {
+    if (!result.success) {
+      return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
+    }
+  }),
+  async (c) => {
+    const { email, password } = c.req.valid("json");
+
+    try {
+      const result = await login({ email, password });
+      return c.json(result, 200);
     } catch (err) {
       if (err instanceof AuthError) {
         return c.json({ error: err.message }, err.status);

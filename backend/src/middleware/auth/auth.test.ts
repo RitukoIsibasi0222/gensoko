@@ -7,13 +7,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Hono } from "hono";
 import { sign } from "hono/jwt";
-import type { AppVariables } from "../types/index.js";
+import type { AppVariables } from "../../types/index.js";
 
 // -----------------------------------------------------------------
 // Prisma をモック化
 // → 実際の DB に接続せず、テストの中で戻り値を自由に設定できる
 // -----------------------------------------------------------------
-vi.mock("../lib/prisma.js", () => ({
+vi.mock("../../lib/prisma.js", () => ({
   prisma: {
     user: {
       findUnique: vi.fn(),
@@ -22,8 +22,8 @@ vi.mock("../lib/prisma.js", () => ({
 }));
 
 // モック化した後にインポート（順序が重要）
-import { authMiddleware, optionalAuthMiddleware } from "./auth.js";
-import { prisma } from "../lib/prisma.js";
+import { authMiddleware, optionalAuthMiddleware } from "./index.js";
+import { prisma } from "../../lib/prisma.js";
 
 // -----------------------------------------------------------------
 // テスト用の定数・ヘルパー
