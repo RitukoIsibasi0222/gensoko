@@ -1,7 +1,14 @@
 import { zValidator } from "@hono/zod-validator";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { Hono } from "hono";
 import { z } from "zod";
-import { AuthError, login, register, verifyEmail } from "../../services/auth.service.js";
+import {
+  AuthError,
+  login,
+  refreshAccessToken,
+  register,
+  verifyEmail,
+} from "../../services/auth.service.js";
 
 const registerSchema = z.object({
   username: z
@@ -18,6 +25,18 @@ const registerSchema = z.object({
     .regex(/[0-9]/, "パスワードには数字を1文字以上含めてください")
     .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "パスワードには記号を1文字以上含めてください"),
 });
+
+const REFRESH_TOKEN_COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7日（秒）
+
+function getRefreshCookieOptions(secure: boolean, path: string) {
+  return {
+    httpOnly: true,
+    secure,
+    sameSite: "Strict" as const,
+    path,
+    maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE,
+  };
+}
 
 export const authRouter = new Hono();
 
@@ -86,7 +105,16 @@ authRouter.post(
 
     try {
       const result = await login({ email, password });
-      return c.json(result, 200);
+      const isProduction = process.env.NODE_ENV === "production";
+      // マウントパスに依存しないよう c.req.path から /refresh パスを動的生成
+      const refreshPath = c.req.path.replace(/[^/]+$/, "refresh");
+      setCookie(
+        c,
+        "refreshToken",
+        result.refreshToken,
+        getRefreshCookieOptions(isProduction, refreshPath),
+      );
+      return c.json({ accessToken: result.accessToken, user: result.user }, 200);
     } catch (err) {
       if (err instanceof AuthError) {
         return c.json({ error: err.message }, err.status);
@@ -95,3 +123,35 @@ authRouter.post(
     }
   },
 );
+
+authRouter.post("/refresh", async (c) => {
+  const rawToken = getCookie(c, "refreshToken");
+  if (!rawToken) {
+    return c.json({ error: "リフレッシュトークンがありません" }, 401);
+  }
+
+  // randomBytes(32).toString("hex") は 64 文字の hex 文字列
+  if (!/^[0-9a-f]{64}$/.test(rawToken)) {
+    deleteCookie(c, "refreshToken", { path: c.req.path });
+    return c.json({ error: "リフレッシュトークンの形式が不正です" }, 401);
+  }
+
+  const isProduction = process.env.NODE_ENV === "production";
+  try {
+    const result = await refreshAccessToken(rawToken);
+    setCookie(
+      c,
+      "refreshToken",
+      result.newRefreshToken,
+      getRefreshCookieOptions(isProduction, c.req.path),
+    );
+    return c.json({ accessToken: result.accessToken }, 200);
+  } catch (err) {
+    // エラー時はクライアントの壊れた Cookie を削除する
+    deleteCookie(c, "refreshToken", { path: c.req.path });
+    if (err instanceof AuthError) {
+      return c.json({ error: err.message }, err.status);
+    }
+    return c.json({ error: "サーバーエラーが発生しました" }, 500);
+  }
+});

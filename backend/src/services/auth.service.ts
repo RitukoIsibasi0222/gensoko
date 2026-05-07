@@ -66,11 +66,85 @@ export async function register(input: {
 const MAX_LOGIN_FAIL = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15分
 const ACCESS_TOKEN_TTL_SEC = 15 * 60; // 15分
+const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7日
 
-export async function login(input: {
-  email: string;
-  password: string;
-}): Promise<{ accessToken: string; user: { id: string; username: string; role: Role } }> {
+export async function issueRefreshToken(userId: string): Promise<string> {
+  const rawToken = randomBytes(32).toString("hex");
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+
+  await prisma.refreshToken.create({
+    data: { userId, tokenHash, expiresAt },
+  });
+
+  return rawToken;
+}
+
+export async function refreshAccessToken(rawToken: string): Promise<{
+  accessToken: string;
+  newRefreshToken: string;
+  user: { id: string; role: Role };
+}> {
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+
+  const record = await prisma.refreshToken.findUnique({
+    where: { tokenHash },
+    include: { user: { select: { id: true, role: true, isActive: true } } },
+  });
+
+  if (!record) {
+    throw new AuthError(401, "無効なリフレッシュトークンです");
+  }
+
+  if (record.expiresAt < new Date()) {
+    // deleteMany で P2025 を回避（並行リクエストで既に削除済みの場合も安全）
+    await prisma.refreshToken.deleteMany({ where: { tokenHash } });
+    throw new AuthError(401, "リフレッシュトークンの有効期限が切れています");
+  }
+
+  if (!record.user.isActive) {
+    await prisma.refreshToken.deleteMany({ where: { tokenHash } });
+    throw new AuthError(403, "アカウントが停止されています");
+  }
+
+  // トークンローテーション: トランザクションで旧トークン削除と新トークン作成を原子的に実行
+  const newRawToken = randomBytes(32).toString("hex");
+  const newTokenHash = createHash("sha256").update(newRawToken).digest("hex");
+  const newExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+
+  await prisma.$transaction(async (tx) => {
+    // count=0 の場合は並行リクエストで既に使用済み → 旧トークンの単回使用を担保
+    const { count } = await tx.refreshToken.deleteMany({ where: { tokenHash } });
+    if (count === 0) {
+      throw new AuthError(401, "無効なリフレッシュトークンです");
+    }
+    await tx.refreshToken.create({
+      data: { userId: record.user.id, tokenHash: newTokenHash, expiresAt: newExpiresAt },
+    });
+  });
+
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error("JWT_SECRET is not set");
+
+  const now = Math.floor(Date.now() / 1000);
+  const accessToken = await sign(
+    { sub: record.user.id, role: record.user.role, iat: now, exp: now + ACCESS_TOKEN_TTL_SEC },
+    secret,
+    "HS256",
+  );
+
+  return {
+    accessToken,
+    newRefreshToken: newRawToken,
+    user: { id: record.user.id, role: record.user.role },
+  };
+}
+
+export async function login(input: { email: string; password: string }): Promise<{
+  accessToken: string;
+  refreshToken: string;
+  user: { id: string; username: string; role: Role };
+}> {
   const { email, password } = input;
 
   // 1. ユーザー取得
@@ -151,7 +225,14 @@ export async function login(input: {
   // 8. streak 更新
   await updateLoginStreak(user.id);
 
-  return { accessToken, user: { id: user.id, username: user.username, role: user.role } };
+  // 9. リフレッシュトークン発行
+  const refreshToken = await issueRefreshToken(user.id);
+
+  return {
+    accessToken,
+    refreshToken,
+    user: { id: user.id, username: user.username, role: user.role },
+  };
 }
 
 async function updateLoginStreak(userId: string): Promise<void> {

@@ -13,6 +13,9 @@ vi.mock("../../lib/prisma.js", () => ({
       findUnique: vi.fn(),
       upsert: vi.fn(),
     },
+    refreshToken: {
+      create: vi.fn(),
+    },
   },
 }));
 
@@ -63,6 +66,7 @@ describe("POST /auth/login", () => {
     vi.mocked(prisma.user.update).mockResolvedValue({} as never);
     vi.mocked(prisma.userStats.findUnique).mockResolvedValue(null);
     vi.mocked(prisma.userStats.upsert).mockResolvedValue({} as never);
+    vi.mocked(prisma.refreshToken.create).mockResolvedValue({} as never);
 
     const res = await app.request("/auth/login", {
       method: "POST",
@@ -74,6 +78,27 @@ describe("POST /auth/login", () => {
     const body = await res.json();
     expect(body.accessToken).toBe("mock-access-token");
     expect(body.user).toEqual({ id: "user-1", username: "taro123", role: "USER" });
+  });
+
+  it("正常系: レスポンスに HttpOnly Cookie の Set-Cookie ヘッダーが含まれる", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(ACTIVE_USER as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.userStats.upsert).mockResolvedValue({} as never);
+    vi.mocked(prisma.refreshToken.create).mockResolvedValue({} as never);
+
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "taro@example.com", password: "Pass1234!" }),
+    });
+
+    expect(res.status).toBe(200);
+    const setCookie = res.headers.get("Set-Cookie");
+    expect(setCookie).toBeTruthy();
+    expect(setCookie).toContain("refreshToken=");
+    expect(setCookie).toContain("HttpOnly");
   });
 
   it("バリデーション: email が不正な場合は 400 を返す", async () => {
