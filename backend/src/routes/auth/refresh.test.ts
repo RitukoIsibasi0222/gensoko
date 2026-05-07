@@ -14,6 +14,7 @@ vi.mock("../../lib/prisma.js", () => ({
       create: vi.fn(),
       deleteMany: vi.fn(),
     },
+    $transaction: vi.fn(),
   },
 }));
 
@@ -50,6 +51,10 @@ const VALID_TOKEN_RECORD = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("JWT_SECRET", "test-secret-32chars-long-enough!!");
+  // $transaction はコールバックを prisma 自身で実行する
+  vi.mocked(prisma.$transaction).mockImplementation(
+    async (fn: (tx: typeof prisma) => Promise<unknown>) => fn(prisma),
+  );
 });
 
 afterEach(() => {
@@ -59,7 +64,7 @@ afterEach(() => {
 describe("POST /auth/refresh", () => {
   it("正常系: 有効なリフレッシュトークンで 200 と新 accessToken を返す", async () => {
     vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(VALID_TOKEN_RECORD as never);
-    vi.mocked(prisma.refreshToken.delete).mockResolvedValue({} as never);
+    vi.mocked(prisma.refreshToken.deleteMany).mockResolvedValue({ count: 1 } as never);
     vi.mocked(prisma.refreshToken.create).mockResolvedValue({} as never);
 
     const res = await app.request("/auth/refresh", {
@@ -77,7 +82,7 @@ describe("POST /auth/refresh", () => {
 
   it("正常系: レスポンスに新しいリフレッシュトークンの Set-Cookie が含まれる", async () => {
     vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(VALID_TOKEN_RECORD as never);
-    vi.mocked(prisma.refreshToken.delete).mockResolvedValue({} as never);
+    vi.mocked(prisma.refreshToken.deleteMany).mockResolvedValue({ count: 1 } as never);
     vi.mocked(prisma.refreshToken.create).mockResolvedValue({} as never);
 
     const res = await app.request("/auth/refresh", {
@@ -95,7 +100,7 @@ describe("POST /auth/refresh", () => {
 
   it("正常系: 古いリフレッシュトークンが削除されて新しいものが作成される（ローテーション）", async () => {
     vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(VALID_TOKEN_RECORD as never);
-    vi.mocked(prisma.refreshToken.delete).mockResolvedValue({} as never);
+    vi.mocked(prisma.refreshToken.deleteMany).mockResolvedValue({ count: 1 } as never);
     vi.mocked(prisma.refreshToken.create).mockResolvedValue({} as never);
 
     await app.request("/auth/refresh", {
@@ -105,7 +110,9 @@ describe("POST /auth/refresh", () => {
       },
     });
 
-    expect(vi.mocked(prisma.refreshToken.delete)).toHaveBeenCalledOnce();
+    // トランザクション内で deleteMany + create が呼ばれることを確認
+    expect(vi.mocked(prisma.$transaction)).toHaveBeenCalledOnce();
+    expect(vi.mocked(prisma.refreshToken.deleteMany)).toHaveBeenCalledOnce();
     expect(vi.mocked(prisma.refreshToken.create)).toHaveBeenCalledOnce();
   });
 
@@ -119,7 +126,7 @@ describe("POST /auth/refresh", () => {
     expect(body.error).toBeDefined();
   });
 
-  it("異常系: DBにトークンが存在しない場合は 401 を返す", async () => {
+  it("異常系: DBにトークンが存在しない場合は 401 を返し Cookie を削除する", async () => {
     vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(null);
 
     const res = await app.request("/auth/refresh", {
@@ -132,15 +139,19 @@ describe("POST /auth/refresh", () => {
     expect(res.status).toBe(401);
     const body = await res.json();
     expect(body.error).toBeDefined();
+    // クライアントの壊れた Cookie を削除する
+    const setCookieHeader = res.headers.get("Set-Cookie");
+    expect(setCookieHeader).toContain("refreshToken=");
+    expect(setCookieHeader).toContain("Max-Age=0");
   });
 
-  it("異常系: トークンが期限切れの場合は 401 を返しトークンを削除する", async () => {
+  it("異常系: トークンが期限切れの場合は 401 を返しトークンを削除・Cookie をクリアする", async () => {
     const expiredRecord = {
       ...VALID_TOKEN_RECORD,
       expiresAt: new Date(Date.now() - 1000), // 期限切れ
     };
     vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(expiredRecord as never);
-    vi.mocked(prisma.refreshToken.delete).mockResolvedValue({} as never);
+    vi.mocked(prisma.refreshToken.deleteMany).mockResolvedValue({ count: 1 } as never);
 
     const res = await app.request("/auth/refresh", {
       method: "POST",
@@ -150,7 +161,9 @@ describe("POST /auth/refresh", () => {
     });
 
     expect(res.status).toBe(401);
-    expect(vi.mocked(prisma.refreshToken.delete)).toHaveBeenCalledOnce();
+    expect(vi.mocked(prisma.refreshToken.deleteMany)).toHaveBeenCalledOnce();
+    const setCookieHeader = res.headers.get("Set-Cookie");
+    expect(setCookieHeader).toContain("Max-Age=0");
   });
 
   it("異常系: ユーザーが停止されている場合は 403 を返す", async () => {
@@ -159,7 +172,7 @@ describe("POST /auth/refresh", () => {
       user: { ...ACTIVE_USER, isActive: false },
     };
     vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(suspendedRecord as never);
-    vi.mocked(prisma.refreshToken.delete).mockResolvedValue({} as never);
+    vi.mocked(prisma.refreshToken.deleteMany).mockResolvedValue({ count: 1 } as never);
 
     const res = await app.request("/auth/refresh", {
       method: "POST",

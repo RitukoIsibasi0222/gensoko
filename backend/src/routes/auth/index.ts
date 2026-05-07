@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { getCookie, setCookie } from "hono/cookie";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
@@ -25,6 +25,18 @@ const registerSchema = z.object({
     .regex(/[0-9]/, "パスワードには数字を1文字以上含めてください")
     .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "パスワードには記号を1文字以上含めてください"),
 });
+
+const REFRESH_TOKEN_COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7日（秒）
+
+function getRefreshCookieOptions(secure: boolean) {
+  return {
+    httpOnly: true,
+    secure,
+    sameSite: "Strict" as const,
+    path: "/auth/refresh",
+    maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE,
+  };
+}
 
 export const authRouter = new Hono();
 
@@ -94,13 +106,7 @@ authRouter.post(
     try {
       const result = await login({ email, password });
       const isProduction = process.env.NODE_ENV === "production";
-      setCookie(c, "refreshToken", result.refreshToken, {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: "Strict",
-        path: "/auth/refresh",
-        maxAge: 7 * 24 * 60 * 60, // 7日（秒）
-      });
+      setCookie(c, "refreshToken", result.refreshToken, getRefreshCookieOptions(isProduction));
       return c.json({ accessToken: result.accessToken, user: result.user }, 200);
     } catch (err) {
       if (err instanceof AuthError) {
@@ -117,18 +123,14 @@ authRouter.post("/refresh", async (c) => {
     return c.json({ error: "リフレッシュトークンがありません" }, 401);
   }
 
+  const isProduction = process.env.NODE_ENV === "production";
   try {
     const result = await refreshAccessToken(rawToken);
-    const isProduction = process.env.NODE_ENV === "production";
-    setCookie(c, "refreshToken", result.newRefreshToken, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: "Strict",
-      path: "/auth/refresh",
-      maxAge: 7 * 24 * 60 * 60, // 7日（秒）
-    });
+    setCookie(c, "refreshToken", result.newRefreshToken, getRefreshCookieOptions(isProduction));
     return c.json({ accessToken: result.accessToken }, 200);
   } catch (err) {
+    // エラー時はクライアントの壊れた Cookie を削除する
+    deleteCookie(c, "refreshToken", { path: "/auth/refresh" });
     if (err instanceof AuthError) {
       return c.json({ error: err.message }, err.status);
     }

@@ -97,18 +97,27 @@ export async function refreshAccessToken(rawToken: string): Promise<{
   }
 
   if (record.expiresAt < new Date()) {
-    await prisma.refreshToken.delete({ where: { tokenHash } });
+    // deleteMany で P2025 を回避（並行リクエストで既に削除済みの場合も安全）
+    await prisma.refreshToken.deleteMany({ where: { tokenHash } });
     throw new AuthError(401, "リフレッシュトークンの有効期限が切れています");
   }
 
   if (!record.user.isActive) {
-    await prisma.refreshToken.delete({ where: { tokenHash } });
+    await prisma.refreshToken.deleteMany({ where: { tokenHash } });
     throw new AuthError(403, "アカウントが停止されています");
   }
 
-  // トークンローテーション: 古いトークンを削除して新しいものを発行
-  await prisma.refreshToken.delete({ where: { tokenHash } });
-  const newRefreshToken = await issueRefreshToken(record.user.id);
+  // トークンローテーション: トランザクションで旧トークン削除と新トークン作成を原子的に実行
+  const newRawToken = randomBytes(32).toString("hex");
+  const newTokenHash = createHash("sha256").update(newRawToken).digest("hex");
+  const newExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.refreshToken.deleteMany({ where: { tokenHash } });
+    await tx.refreshToken.create({
+      data: { userId: record.user.id, tokenHash: newTokenHash, expiresAt: newExpiresAt },
+    });
+  });
 
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET is not set");
@@ -120,7 +129,11 @@ export async function refreshAccessToken(rawToken: string): Promise<{
     "HS256",
   );
 
-  return { accessToken, newRefreshToken, user: { id: record.user.id, role: record.user.role } };
+  return {
+    accessToken,
+    newRefreshToken: newRawToken,
+    user: { id: record.user.id, role: record.user.role },
+  };
 }
 
 export async function login(input: { email: string; password: string }): Promise<{
