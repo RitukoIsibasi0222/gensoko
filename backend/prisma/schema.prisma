@@ -85,7 +85,7 @@ model EmailVerification {
 // パスワードリセットトークン（有効期限: 1時間）
 model PasswordResetToken {
   id        String   @id @default(cuid())
-  userId    String
+  userId    String   @unique
   tokenHash String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
