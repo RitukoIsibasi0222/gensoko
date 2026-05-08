@@ -2,11 +2,6 @@ import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authRouter } from "./index.js";
 
-// rateLimit ミドルウェアをテスト環境でスルーにする
-vi.mock("../../middleware/rateLimit/index.js", () => ({
-  rateLimit: () => async (_c: unknown, next: () => Promise<void>) => next(),
-}));
-
 // Prisma モック
 vi.mock("../../lib/prisma.js", () => ({
   prisma: {

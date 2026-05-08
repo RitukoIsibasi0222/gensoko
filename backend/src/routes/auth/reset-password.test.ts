@@ -2,11 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Hono } from "hono";
 import { authRouter } from "./index.js";
 
-// rateLimit ミドルウェアをテスト環境でスルーにする
-vi.mock("../../middleware/rateLimit/index.js", () => ({
-  rateLimit: () => async (_c: unknown, next: () => Promise<void>) => next(),
-}));
-
 // Prisma のモック
 vi.mock("../../lib/prisma.js", () => ({
   prisma: {
@@ -131,5 +126,32 @@ describe("POST /auth/reset-password", () => {
     });
 
     expect(res.status).toBe(400);
+  });
+
+  it("二重使用: $transaction内でcount=0の場合は404を返す", async () => {
+    vi.mocked(prisma.passwordResetToken.findUnique).mockResolvedValue({
+      id: "prt-1",
+      userId: "user-1",
+      tokenHash: "hashed",
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      createdAt: new Date(),
+    });
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+      return fn({
+        user: { update: vi.fn() },
+        refreshToken: { deleteMany: vi.fn() },
+        // count=0 → 並行リクエストによりトークンが既に削除済み
+        passwordResetToken: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      } as never);
+    });
+
+    const res = await app.request("/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: VALID_TOKEN, password: "NewPass1!" }),
+    });
+
+    expect(res.status).toBe(404);
   });
 });

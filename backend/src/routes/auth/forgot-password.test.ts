@@ -2,11 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Hono } from "hono";
 import { authRouter } from "./index.js";
 
-// rateLimit ミドルウェアをテスト環境でスルーにする
-vi.mock("../../middleware/rateLimit/index.js", () => ({
-  rateLimit: () => async (_c: unknown, next: () => Promise<void>) => next(),
-}));
-
 // Prisma のモック
 vi.mock("../../lib/prisma.js", () => ({
   prisma: {
@@ -84,5 +79,20 @@ describe("POST /auth/forgot-password", () => {
     });
 
     expect(res.status).toBe(400);
+  });
+
+  it("列挙攻撃対策: サービス内部エラー（DBエラー等）でも200を返す", async () => {
+    vi.mocked(prisma.user.findUnique).mockRejectedValue(new Error("DB connection error"));
+
+    const res = await app.request("/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "taro@example.com" }),
+    });
+
+    // 内部エラー時も列挙攻撃対策として200を返す
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ message: "パスワードリセットメールを送信しました" });
   });
 });
