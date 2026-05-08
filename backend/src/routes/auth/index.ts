@@ -34,7 +34,12 @@ const registerSchema = z.object({
 });
 
 // 認証系エンドポイント向けレート制限（10分間で10リクエストまで）
-const authRateLimit = rateLimit({ windowMs: 10 * 60 * 1000, max: 10 });
+// TRUST_PROXY=true の場合のみ x-forwarded-for / x-real-ip を信頼する（リバースプロキシ配下）
+const authRateLimit = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  trustProxy: process.env.TRUST_PROXY === "true",
+});
 
 const REFRESH_TOKEN_COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7日（秒）
 
