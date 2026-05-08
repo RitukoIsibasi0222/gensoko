@@ -29,6 +29,11 @@ const registerSchema = z.object({
 
 const REFRESH_TOKEN_COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7日（秒）
 
+/** リクエストパスからマウントベース（例: /auth/login → /auth）を取得する */
+function getAuthBasePath(path: string): string {
+  return path.replace(/\/[^/]+$/, "");
+}
+
 function getRefreshCookieOptions(secure: boolean, path: string) {
   return {
     httpOnly: true,
@@ -108,7 +113,7 @@ authRouter.post(
       const result = await login({ email, password });
       const isProduction = process.env.NODE_ENV === "production";
       // Path を /auth ベースにすることで /auth/logout でも Cookie が届くようにする
-      const authBase = c.req.path.replace(/\/[^/]+$/, "");
+      const authBase = getAuthBasePath(c.req.path);
       setCookie(
         c,
         "refreshToken",
@@ -136,7 +141,7 @@ authRouter.post("/refresh", async (c) => {
   }
 
   // randomBytes(32).toString("hex") は 64 文字の hex 文字列
-  const authBase = c.req.path.replace(/\/[^/]+$/, "");
+  const authBase = getAuthBasePath(c.req.path);
   if (!/^[0-9a-f]{64}$/.test(rawToken)) {
     deleteCookie(c, "refreshToken", { path: authBase });
     deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
@@ -169,7 +174,7 @@ authRouter.post("/refresh", async (c) => {
 authRouter.post("/logout", async (c) => {
   const rawToken = getCookie(c, "refreshToken");
 
-  const authBase = c.req.path.replace(/\/[^/]+$/, "");
+  const authBase = getAuthBasePath(c.req.path);
 
   // Cookie が来ない場合（旧 Path 残存を含む）でも両 Path の削除ヘッダーを返す（冪等）
   // 空文字（refreshToken=）は形式不正として後続処理へ進む
