@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   AuthError,
   login,
+  logout,
   refreshAccessToken,
   register,
   verifyEmail,
@@ -27,6 +28,11 @@ const registerSchema = z.object({
 });
 
 const REFRESH_TOKEN_COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7日（秒）
+
+/** リクエストパスからマウントベース（例: /auth/login → /auth）を取得する */
+function getAuthBasePath(path: string): string {
+  return path.replace(/\/[^/]+$/, "");
+}
 
 function getRefreshCookieOptions(secure: boolean, path: string) {
   return {
@@ -106,14 +112,16 @@ authRouter.post(
     try {
       const result = await login({ email, password });
       const isProduction = process.env.NODE_ENV === "production";
-      // マウントパスに依存しないよう c.req.path から /refresh パスを動的生成
-      const refreshPath = c.req.path.replace(/[^/]+$/, "refresh");
+      // Path を /auth ベースにすることで /auth/logout でも Cookie が届くようにする
+      const authBase = getAuthBasePath(c.req.path);
       setCookie(
         c,
         "refreshToken",
         result.refreshToken,
-        getRefreshCookieOptions(isProduction, refreshPath),
+        getRefreshCookieOptions(isProduction, authBase),
       );
+      // 旧 Path（authBase/refresh）に残存する Cookie も削除して 1 本に収束させる
+      deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
       return c.json({ accessToken: result.accessToken, user: result.user }, 200);
     } catch (err) {
       if (err instanceof AuthError) {
@@ -126,13 +134,17 @@ authRouter.post(
 
 authRouter.post("/refresh", async (c) => {
   const rawToken = getCookie(c, "refreshToken");
-  if (!rawToken) {
+  // Cookie が存在しない（null/undefined）場合のみ早期 return
+  // 空文字（refreshToken=）は後続の形式チェックで deleteCookie を実行する
+  if (rawToken == null) {
     return c.json({ error: "リフレッシュトークンがありません" }, 401);
   }
 
   // randomBytes(32).toString("hex") は 64 文字の hex 文字列
+  const authBase = getAuthBasePath(c.req.path);
   if (!/^[0-9a-f]{64}$/.test(rawToken)) {
-    deleteCookie(c, "refreshToken", { path: c.req.path });
+    deleteCookie(c, "refreshToken", { path: authBase });
+    deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
     return c.json({ error: "リフレッシュトークンの形式が不正です" }, 401);
   }
 
@@ -143,15 +155,49 @@ authRouter.post("/refresh", async (c) => {
       c,
       "refreshToken",
       result.newRefreshToken,
-      getRefreshCookieOptions(isProduction, c.req.path),
+      getRefreshCookieOptions(isProduction, authBase),
     );
+    // 旧 Path（authBase/refresh）に残存する Cookie も削除して 1 本に収束させる
+    deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
     return c.json({ accessToken: result.accessToken }, 200);
   } catch (err) {
-    // エラー時はクライアントの壊れた Cookie を削除する
-    deleteCookie(c, "refreshToken", { path: c.req.path });
+    // エラー時はクライアントの壊れた Cookie を削除する（両 Path）
+    deleteCookie(c, "refreshToken", { path: authBase });
+    deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
     if (err instanceof AuthError) {
       return c.json({ error: err.message }, err.status);
     }
+    return c.json({ error: "サーバーエラーが発生しました" }, 500);
+  }
+});
+
+authRouter.post("/logout", async (c) => {
+  const rawToken = getCookie(c, "refreshToken");
+
+  const authBase = getAuthBasePath(c.req.path);
+
+  // Cookie が来ない場合（旧 Path 残存を含む）でも両 Path の削除ヘッダーを返す（冪等）
+  // 空文字（refreshToken=）は形式不正として後続処理へ進む
+  if (rawToken == null) {
+    deleteCookie(c, "refreshToken", { path: authBase });
+    deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
+    return c.body(null, 204);
+  }
+
+  // refreshToken Cookie の Path は /auth ベースに設定されているため logout でも Cookie が届く
+  // 旧 Path（authBase/refresh）に残存する Cookie も同時に削除して収束させる
+  deleteCookie(c, "refreshToken", { path: authBase });
+  deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
+
+  // 形式チェック（randomBytes(32).toString("hex") は 64 文字の hex 文字列）
+  if (!/^[0-9a-f]{64}$/.test(rawToken)) {
+    return c.body(null, 204);
+  }
+
+  try {
+    await logout(rawToken);
+    return c.body(null, 204);
+  } catch {
     return c.json({ error: "サーバーエラーが発生しました" }, 500);
   }
 });

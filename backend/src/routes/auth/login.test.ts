@@ -95,10 +95,16 @@ describe("POST /auth/login", () => {
     });
 
     expect(res.status).toBe(200);
-    const setCookie = res.headers.get("Set-Cookie");
-    expect(setCookie).toBeTruthy();
-    expect(setCookie).toContain("refreshToken=");
-    expect(setCookie).toContain("HttpOnly");
+    // login は deleteCookie(旧 Path) も呼ぶため Set-Cookie が複数になる場合がある
+    // getSetCookie() で全件取得し、発行 Cookie（Max-Age=0 でない）を選んで検証する
+    const setCookies = res.headers.getSetCookie();
+    const issuedCookie = setCookies.find(
+      (c) => c.startsWith("refreshToken=") && !c.includes("Max-Age=0"),
+    );
+    expect(issuedCookie).toBeTruthy();
+    expect(issuedCookie).toContain("HttpOnly");
+    // Path=/auth ベースであることを確認（/auth/logout でも Cookie が届く設計）
+    expect(issuedCookie).toContain("Path=/auth;");
   });
 
   it("バリデーション: email が不正な場合は 400 を返す", async () => {

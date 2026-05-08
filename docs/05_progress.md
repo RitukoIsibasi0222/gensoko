@@ -39,7 +39,7 @@
 - [x] POST /auth/verify-email（tokenHash検証・有効期限・使用済削除）
 - [x] POST /auth/login（JWT発行・ブルートフォースロック・UserStats streak更新）
 - [x] POST /auth/refresh（HttpOnly Cookieリフレッシュトークン）
-- [ ] POST /auth/logout（DBからRefreshToken削除）
+- [x] POST /auth/logout（DBからRefreshToken削除）
 - [ ] POST /auth/forgot-password + /auth/reset-password（1時間有効・全token無効化）
 
 ## フェーズ3: 元素・ゲーム・苦手 API
