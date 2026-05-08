@@ -129,7 +129,9 @@ authRouter.post(
 
 authRouter.post("/refresh", async (c) => {
   const rawToken = getCookie(c, "refreshToken");
-  if (!rawToken) {
+  // Cookie が存在しない（null/undefined）場合のみ早期 return
+  // 空文字（refreshToken=）は後続の形式チェックで deleteCookie を実行する
+  if (rawToken == null) {
     return c.json({ error: "リフレッシュトークンがありません" }, 401);
   }
 

@@ -96,10 +96,16 @@ describe("POST /auth/refresh", () => {
       },
     });
 
-    const setCookie = res.headers.get("Set-Cookie");
-    expect(setCookie).toBeTruthy();
-    expect(setCookie).toContain("refreshToken=");
-    expect(setCookie).toContain("HttpOnly");
+    const setCookies = res.headers.getSetCookie();
+    expect(setCookies.length).toBeGreaterThanOrEqual(1);
+    // 新しいトークンの Set-Cookie が含まれる
+    const newTokenCookie = setCookies.find(
+      (c) => c.startsWith("refreshToken=") && !c.includes("Max-Age=0"),
+    );
+    expect(newTokenCookie).toBeTruthy();
+    expect(newTokenCookie).toContain("HttpOnly");
+    // Path=/auth ベースであることを確認（/auth/logout でも Cookie が届く設計）
+    expect(newTokenCookie).toContain("Path=/auth;");
   });
 
   it("正常系: 古いリフレッシュトークンが削除されて新しいものが作成される（ローテーション）", async () => {

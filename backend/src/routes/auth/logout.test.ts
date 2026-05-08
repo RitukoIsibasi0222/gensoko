@@ -64,9 +64,13 @@ describe("POST /auth/logout", () => {
     // Cookie がないので DB アクセスは不要
     expect(prisma.refreshToken.deleteMany).not.toHaveBeenCalled();
     // Cookie がなくても削除ヘッダーは返す（旧 Path 残存 Cookie の確実なクリアのため）
-    const setCookie = res.headers.get("Set-Cookie");
-    expect(setCookie).not.toBeNull();
-    expect(setCookie).toMatch(/Max-Age=0|Expires=/);
+    const setCookies = res.headers.getSetCookie();
+    expect(
+      setCookies.some((c) => /Path=\/auth(?!\/)/.test(c) && /Max-Age=0|Expires=/.test(c)),
+    ).toBe(true);
+    expect(
+      setCookies.some((c) => c.includes("Path=/auth/refresh") && /Max-Age=0|Expires=/.test(c)),
+    ).toBe(true);
   });
 
   it("正常系: 形式不正のトークンでも 204 を返す（冪等）", async () => {
@@ -93,11 +97,14 @@ describe("POST /auth/logout", () => {
     expect(res.status).toBe(204);
     // 空文字は形式不正なので DB アクセスは不要
     expect(prisma.refreshToken.deleteMany).not.toHaveBeenCalled();
-    // 壊れた Cookie は削除ヘッダーを返す
-    const setCookie = res.headers.get("Set-Cookie");
-    expect(setCookie).not.toBeNull();
-    expect(setCookie).toContain("refreshToken=");
-    expect(setCookie).toMatch(/Max-Age=0|Expires=/);
+    // 壊れた Cookie は削除ヘッダーを返す（両 Path）
+    const setCookies = res.headers.getSetCookie();
+    expect(
+      setCookies.some((c) => /Path=\/auth(?!\/)/.test(c) && /Max-Age=0|Expires=/.test(c)),
+    ).toBe(true);
+    expect(
+      setCookies.some((c) => c.includes("Path=/auth/refresh") && /Max-Age=0|Expires=/.test(c)),
+    ).toBe(true);
   });
 
   it("正常系: レスポンスに refreshToken Cookie の削除ヘッダーが含まれる", async () => {
@@ -111,10 +118,14 @@ describe("POST /auth/logout", () => {
     });
 
     expect(res.status).toBe(204);
-    const setCookie = res.headers.get("Set-Cookie");
-    expect(setCookie).not.toBeNull();
-    expect(setCookie).toContain("refreshToken=");
-    expect(setCookie).toMatch(/Max-Age=0|Expires=/);
+    // 両 Path（/auth と /auth/refresh）の削除 Cookie が含まれることを個別に確認
+    const setCookies = res.headers.getSetCookie();
+    expect(
+      setCookies.some((c) => /Path=\/auth(?!\/)/.test(c) && /Max-Age=0|Expires=/.test(c)),
+    ).toBe(true);
+    expect(
+      setCookies.some((c) => c.includes("Path=/auth/refresh") && /Max-Age=0|Expires=/.test(c)),
+    ).toBe(true);
   });
 
   it("設計: Set-Cookie の Path が /auth ベースであり logout でも Cookie が届く設計になっている", async () => {
@@ -128,8 +139,8 @@ describe("POST /auth/logout", () => {
     });
 
     expect(res.status).toBe(204);
-    const setCookie = res.headers.get("Set-Cookie");
-    // Path=/auth であることで /auth/logout にも Cookie が送られる
-    expect(setCookie).toContain("Path=/auth");
+    const setCookies = res.headers.getSetCookie();
+    // /Path=\/auth(?!\/)/ により Path=/auth/refresh の部分一致では通らないことを保証
+    expect(setCookies.some((c) => /Path=\/auth(?!\/)/.test(c))).toBe(true);
   });
 });
