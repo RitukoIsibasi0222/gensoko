@@ -5,6 +5,11 @@ import { prisma } from "../lib/prisma.js";
 import { mailer } from "../lib/mail.js";
 import type { Role } from "@prisma/client";
 
+/** フロントエンドのベース URL を返す。環境変数が未設定の場合は開発用デフォルトを使用する */
+function getFrontendBaseUrl(): string {
+  return process.env.FRONTEND_URL ?? "http://localhost:5174";
+}
+
 export class AuthError extends Error {
   constructor(
     public readonly status: 400 | 401 | 403 | 404 | 409 | 500,
@@ -51,7 +56,7 @@ export async function register(input: {
     });
 
     // tx 内でメール送信（失敗時はロールバック）
-    const verifyUrl = `${process.env.FRONTEND_URL ?? "http://localhost:5174"}/verify-email?token=${token}`;
+    const verifyUrl = `${getFrontendBaseUrl()}/verify-email?token=${token}`;
 
     await mailer.sendMail({
       from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
@@ -346,7 +351,7 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
   });
 
   // 5. リセットURLをメールで送信
-  const resetUrl = `${process.env.FRONTEND_URL ?? "http://localhost:5174"}/reset-password?token=${token}`;
+  const resetUrl = `${getFrontendBaseUrl()}/reset-password?token=${token}`;
 
   await mailer.sendMail({
     from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
