@@ -28,9 +28,10 @@ export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
     const socketIp = (c.env as NodeEnv)?.incoming?.socket?.remoteAddress ?? "unknown";
 
     const ip = trustProxy
-      ? (c.req.header("x-forwarded-for")?.split(",")[0].trim() ??
-        c.req.header("x-real-ip") ??
-        socketIp)
+      ? // 空文字 ("") は有効な IP でないため || でフォールバックする
+        c.req.header("x-forwarded-for")?.split(",")[0].trim() ||
+        c.req.header("x-real-ip") ||
+        socketIp
       : socketIp;
 
     const now = Date.now();
