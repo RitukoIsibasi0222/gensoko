@@ -333,16 +333,16 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
     return;
   }
 
-  // 3. 既存リセットトークンを削除（1ユーザー1トークン保証）
-  await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
-
-  // 4. トークン生成（平文はメール送信用に保持、ハッシュはDB保存）
+  // 3. トークン生成（平文はメール送信用に保持、ハッシュはDB保存）
   const token = randomBytes(32).toString("hex");
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
 
-  await prisma.passwordResetToken.create({
-    data: { userId: user.id, tokenHash, expiresAt },
+  // 4. upsert で原子的にトークンを置き換え（1ユーザー1トークン保証・並行リクエスト対策）
+  await prisma.passwordResetToken.upsert({
+    where: { userId: user.id },
+    create: { userId: user.id, tokenHash, expiresAt },
+    update: { tokenHash, expiresAt },
   });
 
   // 5. リセットURLをメールで送信
@@ -382,6 +382,11 @@ export async function resetPassword(input: { token: string; password: string }):
   const passwordHash = await bcrypt.hash(password, 12);
 
   await prisma.$transaction(async (tx) => {
+    // c. リセットトークン削除（単回使用保証: count=0なら並行リクエストで使用済み）
+    const { count } = await tx.passwordResetToken.deleteMany({ where: { tokenHash } });
+    if (count === 0) {
+      throw new AuthError(404, "無効なトークンです");
+    }
     // a. パスワード更新
     await tx.user.update({
       where: { id: record.userId },
@@ -389,7 +394,5 @@ export async function resetPassword(input: { token: string; password: string }):
     });
     // b. 全リフレッシュトークン削除（全デバイスからログアウト）
     await tx.refreshToken.deleteMany({ where: { userId: record.userId } });
-    // c. リセットトークン削除
-    await tx.passwordResetToken.deleteMany({ where: { tokenHash } });
   });
 }

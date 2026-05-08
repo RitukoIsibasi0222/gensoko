@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Hono } from "hono";
 import { authRouter } from "./index.js";
 
+// rateLimit ミドルウェアをテスト環境でスルーにする
+vi.mock("../../middleware/rateLimit/index.js", () => ({
+  rateLimit: () => async (_c: unknown, next: () => Promise<void>) => next(),
+}));
+
 // Prisma のモック
 vi.mock("../../lib/prisma.js", () => ({
   prisma: {
@@ -9,8 +14,7 @@ vi.mock("../../lib/prisma.js", () => ({
       findUnique: vi.fn(),
     },
     passwordResetToken: {
-      deleteMany: vi.fn(),
-      create: vi.fn(),
+      upsert: vi.fn(),
     },
   },
 }));
@@ -40,8 +44,7 @@ describe("POST /auth/forgot-password", () => {
       id: "user-1",
       email: "taro@example.com",
     } as never);
-    vi.mocked(prisma.passwordResetToken.deleteMany).mockResolvedValue({ count: 0 });
-    vi.mocked(prisma.passwordResetToken.create).mockResolvedValue({} as never);
+    vi.mocked(prisma.passwordResetToken.upsert).mockResolvedValue({} as never);
     vi.mocked(mailer.sendMail).mockResolvedValue({} as never);
 
     vi.stubEnv("FRONTEND_URL", "http://localhost:5174");

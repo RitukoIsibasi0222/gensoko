@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Hono } from "hono";
 import { authRouter } from "./index.js";
 
+// rateLimit ミドルウェアをテスト環境でスルーにする
+vi.mock("../../middleware/rateLimit/index.js", () => ({
+  rateLimit: () => async (_c: unknown, next: () => Promise<void>) => next(),
+}));
+
 // Prisma のモック
 vi.mock("../../lib/prisma.js", () => ({
   prisma: {
@@ -16,6 +21,14 @@ vi.mock("../../lib/prisma.js", () => ({
       deleteMany: vi.fn(),
     },
     $transaction: vi.fn(),
+  },
+}));
+
+// bcryptjs モック（hash は遅い処理なのでテストを高速化）
+vi.mock("bcryptjs", () => ({
+  default: {
+    hash: vi.fn().mockResolvedValue("$2b$12$mockedhashedpassword"),
+    compare: vi.fn(),
   },
 }));
 

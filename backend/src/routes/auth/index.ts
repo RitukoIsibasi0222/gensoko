@@ -12,6 +12,16 @@ import {
   forgotPassword,
   resetPassword,
 } from "../../services/auth.service.js";
+import { rateLimit } from "../../middleware/rateLimit/index.js";
+
+// パスワード強度チェック（register・reset-password 共通）
+const strongPasswordSchema = z
+  .string()
+  .min(8, "パスワードは8文字以上にしてください")
+  .regex(/[A-Z]/, "パスワードには英大文字を1文字以上含めてください")
+  .regex(/[a-z]/, "パスワードには英小文字を1文字以上含めてください")
+  .regex(/[0-9]/, "パスワードには数字を1文字以上含めてください")
+  .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "パスワードには記号を1文字以上含めてください");
 
 const registerSchema = z.object({
   username: z
@@ -20,14 +30,11 @@ const registerSchema = z.object({
     .max(20, "ユーザー名は20文字以内にしてください")
     .regex(/^[a-zA-Z0-9_]+$/, "ユーザー名は英数字とアンダースコアのみ使用できます"),
   email: z.string().email("有効なメールアドレスを入力してください"),
-  password: z
-    .string()
-    .min(8, "パスワードは8文字以上にしてください")
-    .regex(/[A-Z]/, "パスワードには英大文字を1文字以上含めてください")
-    .regex(/[a-z]/, "パスワードには英小文字を1文字以上含めてください")
-    .regex(/[0-9]/, "パスワードには数字を1文字以上含めてください")
-    .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "パスワードには記号を1文字以上含めてください"),
+  password: strongPasswordSchema,
 });
+
+// 認証系エンドポイント向けレート制限（10分間で10リクエストまで）
+const authRateLimit = rateLimit({ windowMs: 10 * 60 * 1000, max: 10 });
 
 const REFRESH_TOKEN_COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7日（秒）
 
@@ -210,6 +217,7 @@ const forgotPasswordSchema = z.object({
 
 authRouter.post(
   "/forgot-password",
+  authRateLimit,
   zValidator("json", forgotPasswordSchema, (result, c) => {
     if (!result.success) {
       return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
@@ -228,17 +236,12 @@ authRouter.post(
 
 const resetPasswordSchema = z.object({
   token: z.string().length(64, "トークンが不正です"),
-  password: z
-    .string()
-    .min(8, "パスワードは8文字以上にしてください")
-    .regex(/[A-Z]/, "パスワードには英大文字を1文字以上含めてください")
-    .regex(/[a-z]/, "パスワードには英小文字を1文字以上含めてください")
-    .regex(/[0-9]/, "パスワードには数字を1文字以上含めてください")
-    .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "パスワードには記号を1文字以上含めてください"),
+  password: strongPasswordSchema,
 });
 
 authRouter.post(
   "/reset-password",
+  authRateLimit,
   zValidator("json", resetPasswordSchema, (result, c) => {
     if (!result.success) {
       return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
