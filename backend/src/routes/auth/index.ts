@@ -57,6 +57,7 @@ export const authRouter = new Hono();
 
 authRouter.post(
   "/register",
+  authRateLimit,
   zValidator("json", registerSchema, (result, c) => {
     if (!result.success) {
       return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
@@ -110,6 +111,7 @@ const loginSchema = z.object({
 
 authRouter.post(
   "/login",
+  authRateLimit,
   zValidator("json", loginSchema, (result, c) => {
     if (!result.success) {
       return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
@@ -227,10 +229,11 @@ authRouter.post(
     const { email } = c.req.valid("json");
     try {
       await forgotPassword({ email });
-      return c.json({ message: "パスワードリセットメールを送信しました" }, 200);
-    } catch {
-      return c.json({ error: "サーバーエラーが発生しました" }, 500);
+    } catch (err) {
+      // 列挙攻撃対策: 内部エラー時も常に 200 を返す。エラーはサーバーログで検知する
+      console.error("[forgot-password] internal error:", err);
     }
+    return c.json({ message: "パスワードリセットメールを送信しました" }, 200);
   },
 );
 
