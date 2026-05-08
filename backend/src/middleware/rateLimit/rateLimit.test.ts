@@ -1,0 +1,105 @@
+import { Hono } from "hono";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { rateLimit } from "./index.js";
+
+// test-setup.ts のグローバルモックを解除してリアル実装でテストする
+vi.unmock("./index.js");
+
+describe("rateLimit middleware", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("max 以下のリクエストは通過する", async () => {
+    const app = new Hono();
+    app.use(rateLimit({ windowMs: 60_000, max: 3 }));
+    app.get("/", (c) => c.json({ ok: true }));
+
+    for (let i = 0; i < 3; i++) {
+      const res = await app.request("/", {
+        headers: { "x-forwarded-for": "1.2.3.4" },
+      });
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("max を超えると 429 を返す", async () => {
+    const app = new Hono();
+    app.use(rateLimit({ windowMs: 60_000, max: 2 }));
+    app.get("/", (c) => c.json({ ok: true }));
+
+    const headers = { "x-forwarded-for": "1.2.3.4" };
+    await app.request("/", { headers });
+    await app.request("/", { headers });
+
+    const res = await app.request("/", { headers });
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body).toHaveProperty("error");
+  });
+
+  it("ウィンドウが経過するとカウントがリセットされる", async () => {
+    vi.useFakeTimers();
+    const app = new Hono();
+    app.use(rateLimit({ windowMs: 10_000, max: 2 }));
+    app.get("/", (c) => c.json({ ok: true }));
+
+    const headers = { "x-forwarded-for": "1.2.3.4" };
+    await app.request("/", { headers });
+    await app.request("/", { headers });
+
+    // max 超過
+    const res1 = await app.request("/", { headers });
+    expect(res1.status).toBe(429);
+
+    // ウィンドウ経過
+    vi.advanceTimersByTime(10_001);
+
+    const res2 = await app.request("/", { headers });
+    expect(res2.status).toBe(200);
+  });
+
+  it("異なる IP は独立してカウントされる", async () => {
+    const app = new Hono();
+    app.use(rateLimit({ windowMs: 60_000, max: 1 }));
+    app.get("/", (c) => c.json({ ok: true }));
+
+    // IP1 が max に達する
+    await app.request("/", { headers: { "x-forwarded-for": "1.2.3.4" } });
+    const res1 = await app.request("/", { headers: { "x-forwarded-for": "1.2.3.4" } });
+    expect(res1.status).toBe(429);
+
+    // IP2 は別カウント → 通過する
+    const res2 = await app.request("/", { headers: { "x-forwarded-for": "5.6.7.8" } });
+    expect(res2.status).toBe(200);
+  });
+
+  it("x-real-ip ヘッダーも IP として使用する", async () => {
+    const app = new Hono();
+    app.use(rateLimit({ windowMs: 60_000, max: 1 }));
+    app.get("/", (c) => c.json({ ok: true }));
+
+    await app.request("/", { headers: { "x-real-ip": "10.0.0.1" } });
+    const res = await app.request("/", { headers: { "x-real-ip": "10.0.0.1" } });
+    expect(res.status).toBe(429);
+  });
+
+  it("store が上限を超えたとき期限切れエントリを削除する", async () => {
+    vi.useFakeTimers();
+    const app = new Hono();
+    // maxStoreSize を 3 に設定して上限テストを行う
+    app.use(rateLimit({ windowMs: 10_000, max: 100, maxStoreSize: 3 }));
+    app.get("/", (c) => c.json({ ok: true }));
+
+    // 3 つの IP でリクエスト（ウィンドウ内）
+    await app.request("/", { headers: { "x-forwarded-for": "1.1.1.1" } });
+    await app.request("/", { headers: { "x-forwarded-for": "2.2.2.2" } });
+    await app.request("/", { headers: { "x-forwarded-for": "3.3.3.3" } });
+
+    // ウィンドウを経過させてから 4 つ目の IP でリクエスト → 期限切れ 3 件が削除される
+    vi.advanceTimersByTime(10_001);
+
+    const res = await app.request("/", { headers: { "x-forwarded-for": "4.4.4.4" } });
+    expect(res.status).toBe(200);
+  });
+});
