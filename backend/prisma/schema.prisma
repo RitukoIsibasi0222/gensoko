@@ -47,7 +47,7 @@ model User {
   gameQuestionSets    GameQuestionSet[]
   stats               UserStats?
   emailVerifications  EmailVerification[]
-  passwordResetTokens PasswordResetToken[]
+  passwordResetToken  PasswordResetToken?
 
   @@map("users")
 }
