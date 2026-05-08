@@ -9,6 +9,8 @@ import {
   refreshAccessToken,
   register,
   verifyEmail,
+  forgotPassword,
+  resetPassword,
 } from "../../services/auth.service.js";
 
 const registerSchema = z.object({
@@ -201,3 +203,57 @@ authRouter.post("/logout", async (c) => {
     return c.json({ error: "サーバーエラーが発生しました" }, 500);
   }
 });
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email("有効なメールアドレスを入力してください"),
+});
+
+authRouter.post(
+  "/forgot-password",
+  zValidator("json", forgotPasswordSchema, (result, c) => {
+    if (!result.success) {
+      return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
+    }
+  }),
+  async (c) => {
+    const { email } = c.req.valid("json");
+    try {
+      await forgotPassword({ email });
+      return c.json({ message: "パスワードリセットメールを送信しました" }, 200);
+    } catch {
+      return c.json({ error: "サーバーエラーが発生しました" }, 500);
+    }
+  },
+);
+
+const resetPasswordSchema = z.object({
+  token: z.string().length(64, "トークンが不正です"),
+  password: z
+    .string()
+    .min(8, "パスワードは8文字以上にしてください")
+    .regex(/[A-Z]/, "パスワードには英大文字を1文字以上含めてください")
+    .regex(/[a-z]/, "パスワードには英小文字を1文字以上含めてください")
+    .regex(/[0-9]/, "パスワードには数字を1文字以上含めてください")
+    .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "パスワードには記号を1文字以上含めてください"),
+});
+
+authRouter.post(
+  "/reset-password",
+  zValidator("json", resetPasswordSchema, (result, c) => {
+    if (!result.success) {
+      return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
+    }
+  }),
+  async (c) => {
+    const { token, password } = c.req.valid("json");
+    try {
+      await resetPassword({ token, password });
+      return c.json({ message: "パスワードをリセットしました" }, 200);
+    } catch (err) {
+      if (err instanceof AuthError) {
+        return c.json({ error: err.message }, err.status);
+      }
+      return c.json({ error: "サーバーエラーが発生しました" }, 500);
+    }
+  },
+);

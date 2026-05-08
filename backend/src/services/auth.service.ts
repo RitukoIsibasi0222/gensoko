@@ -316,3 +316,80 @@ export async function verifyEmail(input: { token: string }): Promise<void> {
     });
   });
 }
+
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1時間
+
+export async function forgotPassword(input: { email: string }): Promise<void> {
+  const { email } = input;
+
+  // 1. ユーザー検索
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true },
+  });
+
+  // 2. ユーザーが存在しない場合は何もしない（列挙攻撃対策: エラーを返さない）
+  if (!user) {
+    return;
+  }
+
+  // 3. 既存リセットトークンを削除（1ユーザー1トークン保証）
+  await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+
+  // 4. トークン生成（平文はメール送信用に保持、ハッシュはDB保存）
+  const token = randomBytes(32).toString("hex");
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+
+  await prisma.passwordResetToken.create({
+    data: { userId: user.id, tokenHash, expiresAt },
+  });
+
+  // 5. リセットURLをメールで送信
+  const resetUrl = `${process.env.FRONTEND_URL ?? "http://localhost:5174"}/reset-password?token=${token}`;
+
+  await mailer.sendMail({
+    from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
+    to: email,
+    subject: "【元素庫】パスワードリセット",
+    text: `以下のURLをクリックしてパスワードをリセットしてください（有効期限: 1時間）\n\n${resetUrl}`,
+    html: `<p>以下のURLをクリックしてパスワードをリセットしてください（有効期限: 1時間）</p><p><a href="${resetUrl}">${resetUrl}</a></p>`,
+  });
+}
+
+export async function resetPassword(input: { token: string; password: string }): Promise<void> {
+  const { token, password } = input;
+
+  // 1. tokenをsha256ハッシュ化してDBと照合
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+
+  const record = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash },
+  });
+
+  // 2. レコードなし
+  if (!record) {
+    throw new AuthError(404, "無効なトークンです");
+  }
+
+  // 3. 有効期限切れ → トークン削除して400
+  if (record.expiresAt < new Date()) {
+    await prisma.passwordResetToken.deleteMany({ where: { tokenHash } });
+    throw new AuthError(400, "トークンの有効期限が切れています");
+  }
+
+  // 4. トランザクション: パスワード更新・全RT削除・リセットトークン削除
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  await prisma.$transaction(async (tx) => {
+    // a. パスワード更新
+    await tx.user.update({
+      where: { id: record.userId },
+      data: { passwordHash },
+    });
+    // b. 全リフレッシュトークン削除（全デバイスからログアウト）
+    await tx.refreshToken.deleteMany({ where: { userId: record.userId } });
+    // c. リセットトークン削除
+    await tx.passwordResetToken.deleteMany({ where: { tokenHash } });
+  });
+}
