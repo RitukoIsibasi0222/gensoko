@@ -464,7 +464,7 @@ backend/src/middleware/rateLimit/index.ts  ← 実装（既存ファイルを編
 
 | 対象 | 制限 |
 |---|---|
-| 認証系（login/register/forgot-password） | 10分間に10リクエスト |
+| 認証系（login/register/forgot-password/reset-password） | 10分間に10リクエスト |
 | 一般API | 1分間に60リクエスト |
 
 **実装の選択肢**

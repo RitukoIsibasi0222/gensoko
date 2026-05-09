@@ -5,6 +5,11 @@ import { prisma } from "../lib/prisma.js";
 import { mailer } from "../lib/mail.js";
 import type { Role } from "@prisma/client";
 
+/** フロントエンドのベース URL を返す。環境変数が未設定の場合は開発用デフォルトを使用する */
+function getFrontendBaseUrl(): string {
+  return process.env.FRONTEND_URL ?? "http://localhost:5174";
+}
+
 export class AuthError extends Error {
   constructor(
     public readonly status: 400 | 401 | 403 | 404 | 409 | 500,
@@ -23,7 +28,7 @@ export async function register(input: {
   const { username, email, password } = input;
 
   // 1. DB にメールまたはユーザー名の重複チェック + ユーザー作成をトランザクションで実行
-  await prisma.$transaction(async (tx) => {
+  const { token, userId } = await prisma.$transaction(async (tx) => {
     const existing = await tx.user.findFirst({
       where: { OR: [{ email }, { username }] },
       select: { id: true },
@@ -50,9 +55,13 @@ export async function register(input: {
       data: { userId: user.id, tokenHash, expiresAt },
     });
 
-    // tx 内でメール送信（失敗時はロールバック）
-    const verifyUrl = `${process.env.FRONTEND_URL ?? "http://localhost:5174"}/verify-email?token=${token}`;
+    return { token, userId: user.id };
+  });
 
+  // 5. メール送信（DB 確定後に実行。DB トランザクション内で外部 I/O を待たないよう分離）
+  // 送信失敗時はユーザーを補償的に削除する（EmailVerification は onDelete: Cascade で自動削除）
+  const verifyUrl = `${getFrontendBaseUrl()}/verify-email?token=${token}`;
+  try {
     await mailer.sendMail({
       from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
       to: email,
@@ -60,7 +69,11 @@ export async function register(input: {
       text: `以下のURLをクリックしてメールアドレスを確認してください（有効期限: 24時間）\n\n${verifyUrl}`,
       html: `<p>以下のURLをクリックしてメールアドレスを確認してください（有効期限: 24時間）</p><p><a href="${verifyUrl}">${verifyUrl}</a></p>`,
     });
-  });
+  } catch (err) {
+    // 送信失敗時は作成済みユーザーを削除して再登録可能な状態に戻す
+    await prisma.user.delete({ where: { id: userId } });
+    throw err;
+  }
 }
 
 const MAX_LOGIN_FAIL = 5;
@@ -314,5 +327,98 @@ export async function verifyEmail(input: { token: string }): Promise<void> {
       where: { id: record.userId },
       data: { emailVerified: true },
     });
+  });
+}
+
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1時間
+
+export async function forgotPassword(input: { email: string }): Promise<void> {
+  const { email } = input;
+
+  // 1. ユーザー検索
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true },
+  });
+
+  // 2. ユーザーが存在しない場合は何もしない（列挙攻撃対策: エラーを返さない）
+  // タイミング攻撃対策: ダミーのハッシュ計算で存在するユーザーとの処理時間差を縮める
+  // cost=4 にして CPU 負荷を抑える（cost=12 は DoS の踏み台になり得る）
+  if (!user) {
+    await bcrypt.hash("timing-safe-dummy", 4);
+    return;
+  }
+
+  // 3. トークン生成（平文はメール送信用に保持、ハッシュはDB保存）
+  const token = randomBytes(32).toString("hex");
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+  const resetUrl = `${getFrontendBaseUrl()}/reset-password?token=${token}`;
+
+  // 4. トークンをDBに確定（upsert で原子的に置き換え）
+  await prisma.passwordResetToken.upsert({
+    where: { userId: user.id },
+    create: { userId: user.id, tokenHash, expiresAt },
+    update: { tokenHash, expiresAt },
+  });
+
+  // 5. メール送信（失敗時はトークンを削除して無効化する）
+  // ※ DB トランザクション内で外部 I/O（SMTP）を待たないよう分離する
+  try {
+    await mailer.sendMail({
+      from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
+      to: email,
+      subject: "【元素庫】パスワードリセット",
+      text: `以下のURLをクリックしてパスワードをリセットしてください（有効期限: 1時間）\n\n${resetUrl}`,
+      html: `<p>以下のURLをクリックしてパスワードをリセットしてください（有効期限: 1時間）</p><p><a href="${resetUrl}">${resetUrl}</a></p>`,
+    });
+  } catch (err) {
+    // メール送信失敗: DB確定済みトークンを削除して無効化する（次回リクエストで再試行できる）
+    await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+    throw err;
+  }
+}
+
+export async function resetPassword(input: { token: string; password: string }): Promise<void> {
+  const { token, password } = input;
+
+  // 1. tokenをsha256ハッシュ化してDBと照合
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+
+  const record = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash },
+  });
+
+  // 2. レコードなし
+  if (!record) {
+    throw new AuthError(404, "無効なトークンです");
+  }
+
+  // 3. 有効期限切れ → トークン削除して400
+  if (record.expiresAt < new Date()) {
+    await prisma.passwordResetToken.deleteMany({ where: { tokenHash } });
+    throw new AuthError(400, "トークンの有効期限が切れています");
+  }
+
+  // 4. トランザクション: パスワード更新・全RT削除・リセットトークン削除
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  await prisma.$transaction(async (tx) => {
+    const now = new Date();
+    // 1. リセットトークン削除（有効期限をトランザクション内で再検証し、単回使用を保証）
+    //    count=0 は「期限切れ」または「並行リクエストで使用済み」のいずれか
+    const { count } = await tx.passwordResetToken.deleteMany({
+      where: { tokenHash, expiresAt: { gte: now } },
+    });
+    if (count === 0) {
+      throw new AuthError(400, "無効または期限切れのトークンです");
+    }
+    // 2. パスワード更新
+    await tx.user.update({
+      where: { id: record.userId },
+      data: { passwordHash },
+    });
+    // 3. 全リフレッシュトークン削除（全デバイスからログアウト）
+    await tx.refreshToken.deleteMany({ where: { userId: record.userId } });
   });
 }

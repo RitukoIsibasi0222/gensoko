@@ -139,9 +139,26 @@ npm run test -- --run # 全テスト
 
 ### Step 6: コミット・push
 
+変更の種類ごとに **コミットを分ける**。1コミットに全変更をまとめない。
+
+| 変更の種類 | コミットメッセージ例 |
+|---|---|
+| スキーマ追加・マイグレーション | `feat: XxxToken モデル追加・マイグレーション実行` |
+| サービス・ルート・テスト（機能実装） | `feat: POST /auth/xxx 実装（TDD・Nテスト全通過）` |
+| ドキュメント・進捗更新 | `docs: xxx 完了マーク更新` |
+| リファクタリング | `refactor: xxx をヘルパー関数に切り出し` |
+
 ```bash
-git add -A
-git commit -m "feat: タスク名の実装（TDD・Nテスト全通過）"
+# 例: DBの変更、機能実装、ドキュメントを3コミットに分ける
+git add backend/prisma/
+git commit -m "feat: XxxToken モデル追加・マイグレーション実行"
+
+git add backend/src/
+git commit -m "feat: POST /auth/xxx 実装（TDD・Nテスト全通過）"
+
+git add docs/
+git commit -m "docs: xxx 完了マーク更新"
+
 git push origin feature/xxx
 ```
 

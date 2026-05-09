@@ -41,12 +41,13 @@ model User {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  refreshTokens    RefreshToken[]
-  weakElements     WeakElement[]
-  gameSessions     GameSession[]
-  gameQuestionSets GameQuestionSet[]
-  stats            UserStats?
-  emailVerifications EmailVerification[]
+  refreshTokens       RefreshToken[]
+  weakElements        WeakElement[]
+  gameSessions        GameSession[]
+  gameQuestionSets    GameQuestionSet[]
+  stats               UserStats?
+  emailVerifications  EmailVerification[]
+  passwordResetToken  PasswordResetToken?
 
   @@map("users")
 }
@@ -57,7 +58,8 @@ enum Role {
 }
 
 // リフレッシュトークン
-model RefreshToken {  id        String   @id @default(cuid())
+model RefreshToken {
+  id        String   @id @default(cuid())
   tokenHash String   @unique
   userId    String
   expiresAt DateTime
@@ -79,6 +81,19 @@ model EmailVerification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("email_verifications")
+}
+
+// パスワードリセットトークン（有効期限: 1時間）
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
 }
 
 // 苦手リスト

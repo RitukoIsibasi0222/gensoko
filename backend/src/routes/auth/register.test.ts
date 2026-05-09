@@ -8,6 +8,7 @@ vi.mock("../../lib/prisma.js", () => ({
     user: {
       findFirst: vi.fn(),
       create: vi.fn(),
+      delete: vi.fn(),
     },
     emailVerification: {
       create: vi.fn(),
@@ -173,7 +174,7 @@ describe("POST /auth/register", () => {
     expect(body.error).toBeDefined();
   });
 
-  it("メール送信失敗: sendMail が throw した場合は 500 を返す", async () => {
+  it("メール送信失敗: sendMail が throw した場合は user を削除して 500 を返す", async () => {
     vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
       return fn({
         user: {
@@ -184,6 +185,7 @@ describe("POST /auth/register", () => {
       } as never);
     });
     vi.mocked(mailer.sendMail).mockRejectedValue(new Error("SMTP error"));
+    vi.mocked(prisma.user.delete).mockResolvedValue({} as never);
 
     const res = await app.request("/auth/register", {
       method: "POST",
@@ -196,5 +198,6 @@ describe("POST /auth/register", () => {
     });
 
     expect(res.status).toBe(500);
+    expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: "user-1" } });
   });
 });
