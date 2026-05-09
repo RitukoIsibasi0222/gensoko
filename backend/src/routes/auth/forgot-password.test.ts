@@ -10,8 +10,8 @@ vi.mock("../../lib/prisma.js", () => ({
     },
     passwordResetToken: {
       upsert: vi.fn(),
+      deleteMany: vi.fn(),
     },
-    $transaction: vi.fn(),
   },
 }));
 
@@ -48,12 +48,7 @@ describe("POST /auth/forgot-password", () => {
       id: "user-1",
       email: "taro@example.com",
     } as never);
-    // $transaction 内で upsert と sendMail が実行される
-    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
-      return fn({
-        passwordResetToken: { upsert: vi.fn().mockResolvedValue({}) },
-      } as never);
-    });
+    vi.mocked(prisma.passwordResetToken.upsert).mockResolvedValue({} as never);
     vi.mocked(mailer.sendMail).mockResolvedValue({} as never);
 
     vi.stubEnv("FRONTEND_URL", "http://localhost:5174");
@@ -68,6 +63,27 @@ describe("POST /auth/forgot-password", () => {
     const body = await res.json();
     expect(body).toEqual({ message: "パスワードリセットメールを送信しました" });
     expect(mailer.sendMail).toHaveBeenCalledOnce();
+  });
+
+  it("メール送信失敗時: deleteMany でトークンを削除して200を返す", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      email: "taro@example.com",
+    } as never);
+    vi.mocked(prisma.passwordResetToken.upsert).mockResolvedValue({} as never);
+    vi.mocked(prisma.passwordResetToken.deleteMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(mailer.sendMail).mockRejectedValue(new Error("SMTP error"));
+
+    const res = await app.request("/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "taro@example.com" }),
+    });
+
+    // 列挙攻撃対策: メール失敗時も200を返す
+    expect(res.status).toBe(200);
+    // upsert したトークンが削除されることを検証
+    expect(prisma.passwordResetToken.deleteMany).toHaveBeenCalledOnce();
   });
 
   it("列挙攻撃対策: 存在しないメールでも200を返す（メールは送信しない）", async () => {

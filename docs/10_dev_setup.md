@@ -156,6 +156,7 @@ services:
       - MAIL_HOST=mailpit
       - MAIL_PORT=1025
       - FRONTEND_URL=http://localhost:5174
+      - TRUST_PROXY=false
     command: sh -c "npm install && npm run dev"
     depends_on:
       - postgres

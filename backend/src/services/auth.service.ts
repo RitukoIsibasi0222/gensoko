@@ -28,7 +28,7 @@ export async function register(input: {
   const { username, email, password } = input;
 
   // 1. DB にメールまたはユーザー名の重複チェック + ユーザー作成をトランザクションで実行
-  await prisma.$transaction(async (tx) => {
+  const { token } = await prisma.$transaction(async (tx) => {
     const existing = await tx.user.findFirst({
       where: { OR: [{ email }, { username }] },
       select: { id: true },
@@ -55,16 +55,19 @@ export async function register(input: {
       data: { userId: user.id, tokenHash, expiresAt },
     });
 
-    // tx 内でメール送信（失敗時はロールバック）
-    const verifyUrl = `${getFrontendBaseUrl()}/verify-email?token=${token}`;
+    return { token };
+  });
 
-    await mailer.sendMail({
-      from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
-      to: email,
-      subject: "【元素庫】メールアドレスの確認",
-      text: `以下のURLをクリックしてメールアドレスを確認してください（有効期限: 24時間）\n\n${verifyUrl}`,
-      html: `<p>以下のURLをクリックしてメールアドレスを確認してください（有効期限: 24時間）</p><p><a href="${verifyUrl}">${verifyUrl}</a></p>`,
-    });
+  // 5. メール送信（DB 確定後に実行。DB トランザクション内で外部 I/O を待たないよう分離）
+  // 送信失敗時はユーザーが emailVerified: false のまま残る（再送信フローで対応可能）
+  const verifyUrl = `${getFrontendBaseUrl()}/verify-email?token=${token}`;
+
+  await mailer.sendMail({
+    from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
+    to: email,
+    subject: "【元素庫】メールアドレスの確認",
+    text: `以下のURLをクリックしてメールアドレスを確認してください（有効期限: 24時間）\n\n${verifyUrl}`,
+    html: `<p>以下のURLをクリックしてメールアドレスを確認してください（有効期限: 24時間）</p><p><a href="${verifyUrl}">${verifyUrl}</a></p>`,
   });
 }
 
@@ -347,15 +350,16 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
   const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
   const resetUrl = `${getFrontendBaseUrl()}/reset-password?token=${token}`;
 
-  // 4. $transaction でトークン更新とメール送信を原子的に実行
-  // メール送信失敗時はロールバックして既存トークンを保持する（register と同じパターン）
-  await prisma.$transaction(async (tx) => {
-    await tx.passwordResetToken.upsert({
-      where: { userId: user.id },
-      create: { userId: user.id, tokenHash, expiresAt },
-      update: { tokenHash, expiresAt },
-    });
+  // 4. トークンをDBに確定（upsert で原子的に置き換え）
+  await prisma.passwordResetToken.upsert({
+    where: { userId: user.id },
+    create: { userId: user.id, tokenHash, expiresAt },
+    update: { tokenHash, expiresAt },
+  });
 
+  // 5. メール送信（失敗時はトークンを削除して無効化する）
+  // ※ DB トランザクション内で外部 I/O（SMTP）を待たないよう分離する
+  try {
     await mailer.sendMail({
       from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
       to: email,
@@ -363,7 +367,11 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
       text: `以下のURLをクリックしてパスワードをリセットしてください（有効期限: 1時間）\n\n${resetUrl}`,
       html: `<p>以下のURLをクリックしてパスワードをリセットしてください（有効期限: 1時間）</p><p><a href="${resetUrl}">${resetUrl}</a></p>`,
     });
-  });
+  } catch (err) {
+    // メール送信失敗: DB確定済みトークンを削除して無効化する（次回リクエストで再試行できる）
+    await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+    throw err;
+  }
 }
 
 export async function resetPassword(input: { token: string; password: string }): Promise<void> {
