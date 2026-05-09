@@ -1,5 +1,8 @@
 <script lang="ts">
-  const year = new Date().getFullYear();
+  // SSR/クライアント間でタイムゾーン差による hydration mismatch を防ぐため Asia/Tokyo で統一
+  const year = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric' }).format(
+    new Date()
+  );
 </script>
 
 <footer class="border-t border-gray-200 bg-white">
