@@ -4,7 +4,7 @@
     <a href="/" class="text-brand text-xl font-bold">Gensoko</a>
 
     <!-- メインナビ -->
-    <ul class="flex gap-6 text-sm font-medium text-ink">
+    <ul class="text-ink flex gap-6 text-sm font-medium">
       <li><a href="/elements" class="hover:text-brand">元素一覧</a></li>
       <li><a href="/game" class="hover:text-brand">ゲーム</a></li>
       <li><a href="/ranking" class="hover:text-brand">ランキング</a></li>
@@ -12,7 +12,7 @@
 
     <!-- 認証ボタン（認証 Store 実装まで固定表示） -->
     <div class="flex gap-2 text-sm">
-      <a href="/login" class="hover:text-brand rounded px-3 py-1.5 text-gray-600"> ログイン </a>
+      <a href="/login" class="hover:text-brand rounded px-3 py-1.5 text-gray-600">ログイン</a>
       <a href="/register" class="bg-brand hover:bg-brand-hover rounded px-3 py-1.5 text-white">
         新規登録
       </a>
