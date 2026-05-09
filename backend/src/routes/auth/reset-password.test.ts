@@ -140,7 +140,7 @@ describe("POST /auth/reset-password", () => {
     expect(res.status).toBe(400);
   });
 
-  it("二重使用: $transaction内でcount=0の場合は404を返す", async () => {
+  it("二重使用: $transaction内でcount=0の場合は400を返す", async () => {
     vi.mocked(prisma.passwordResetToken.findUnique).mockResolvedValue({
       id: "prt-1",
       userId: "user-1",
@@ -153,7 +153,7 @@ describe("POST /auth/reset-password", () => {
       return fn({
         user: { update: vi.fn() },
         refreshToken: { deleteMany: vi.fn() },
-        // count=0 → 並行リクエストによりトークンが既に削除済み
+        // count=0 → 並行リクエストによりトークンが既に削除済み、または期限切れ
         passwordResetToken: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
       } as never);
     });
@@ -164,6 +164,6 @@ describe("POST /auth/reset-password", () => {
       body: JSON.stringify({ token: VALID_TOKEN, password: "NewPass1!" }),
     });
 
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
   });
 });

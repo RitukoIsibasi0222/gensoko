@@ -404,10 +404,14 @@ export async function resetPassword(input: { token: string; password: string }):
   const passwordHash = await bcrypt.hash(password, 12);
 
   await prisma.$transaction(async (tx) => {
-    // 1. リセットトークン削除（単回使用保証: count=0なら並行リクエストで使用済み）
-    const { count } = await tx.passwordResetToken.deleteMany({ where: { tokenHash } });
+    const now = new Date();
+    // 1. リセットトークン削除（有効期限をトランザクション内で再検証し、単回使用を保証）
+    //    count=0 は「期限切れ」または「並行リクエストで使用済み」のいずれか
+    const { count } = await tx.passwordResetToken.deleteMany({
+      where: { tokenHash, expiresAt: { gte: now } },
+    });
     if (count === 0) {
-      throw new AuthError(404, "無効なトークンです");
+      throw new AuthError(400, "無効または期限切れのトークンです");
     }
     // 2. パスワード更新
     await tx.user.update({
