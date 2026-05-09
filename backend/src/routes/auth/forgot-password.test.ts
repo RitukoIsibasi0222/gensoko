@@ -21,6 +21,14 @@ vi.mock("../../lib/mail.js", () => ({
   },
 }));
 
+// bcryptjs モック（ユーザー未存在時のタイミング対策 bcrypt.hash を高速化）
+vi.mock("bcryptjs", () => ({
+  default: {
+    hash: vi.fn().mockResolvedValue("$2b$12$mockedhashedpassword"),
+    compare: vi.fn(),
+  },
+}));
+
 import { prisma } from "../../lib/prisma.js";
 import { mailer } from "../../lib/mail.js";
 
