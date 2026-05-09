@@ -11,6 +11,7 @@ vi.mock("../../lib/prisma.js", () => ({
     passwordResetToken: {
       upsert: vi.fn(),
     },
+    $transaction: vi.fn(),
   },
 }));
 
@@ -47,7 +48,12 @@ describe("POST /auth/forgot-password", () => {
       id: "user-1",
       email: "taro@example.com",
     } as never);
-    vi.mocked(prisma.passwordResetToken.upsert).mockResolvedValue({} as never);
+    // $transaction 内で upsert と sendMail が実行される
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+      return fn({
+        passwordResetToken: { upsert: vi.fn().mockResolvedValue({}) },
+      } as never);
+    });
     vi.mocked(mailer.sendMail).mockResolvedValue({} as never);
 
     vi.stubEnv("FRONTEND_URL", "http://localhost:5174");

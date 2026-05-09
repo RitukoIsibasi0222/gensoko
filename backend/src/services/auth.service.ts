@@ -345,23 +345,24 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
   const token = randomBytes(32).toString("hex");
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
-
-  // 4. upsert で原子的にトークンを置き換え（1ユーザー1トークン保証・並行リクエスト対策）
-  await prisma.passwordResetToken.upsert({
-    where: { userId: user.id },
-    create: { userId: user.id, tokenHash, expiresAt },
-    update: { tokenHash, expiresAt },
-  });
-
-  // 5. リセットURLをメールで送信
   const resetUrl = `${getFrontendBaseUrl()}/reset-password?token=${token}`;
 
-  await mailer.sendMail({
-    from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
-    to: email,
-    subject: "【元素庫】パスワードリセット",
-    text: `以下のURLをクリックしてパスワードをリセットしてください（有効期限: 1時間）\n\n${resetUrl}`,
-    html: `<p>以下のURLをクリックしてパスワードをリセットしてください（有効期限: 1時間）</p><p><a href="${resetUrl}">${resetUrl}</a></p>`,
+  // 4. $transaction でトークン更新とメール送信を原子的に実行
+  // メール送信失敗時はロールバックして既存トークンを保持する（register と同じパターン）
+  await prisma.$transaction(async (tx) => {
+    await tx.passwordResetToken.upsert({
+      where: { userId: user.id },
+      create: { userId: user.id, tokenHash, expiresAt },
+      update: { tokenHash, expiresAt },
+    });
+
+    await mailer.sendMail({
+      from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
+      to: email,
+      subject: "【元素庫】パスワードリセット",
+      text: `以下のURLをクリックしてパスワードをリセットしてください（有効期限: 1時間）\n\n${resetUrl}`,
+      html: `<p>以下のURLをクリックしてパスワードをリセットしてください（有効期限: 1時間）</p><p><a href="${resetUrl}">${resetUrl}</a></p>`,
+    });
   });
 }
 
