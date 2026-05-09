@@ -69,6 +69,18 @@ describe("POST /auth/verify-email", () => {
     expect(res.status).toBe(400);
   });
 
+  it("バリデーション: 64文字でも非hex文字列の場合は 400 を返す", async () => {
+    // 'x' は hex 文字ではないため /^[0-9a-f]{64}$/ に不一致
+    const nonHexToken = "x".repeat(64);
+    const res = await app.request("/auth/verify-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: nonHexToken }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
   it("異常系: 存在しないトークンの場合は 404 を返す", async () => {
     vi.mocked(prisma.emailVerification.findUnique).mockResolvedValue(null);
 
