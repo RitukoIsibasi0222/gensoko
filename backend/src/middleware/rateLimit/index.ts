@@ -41,10 +41,11 @@ export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
       for (const [key, val] of store) {
         if (now > val.resetAt) store.delete(key);
       }
-      // 期限切れ削除後も上限を超えている場合は最も古いエントリを強制削除する
-      if (store.size > maxStoreSize) {
+      // 期限切れ削除後も上限を超えている場合は上限以下になるまで最古エントリを強制削除する
+      while (store.size > maxStoreSize) {
         const oldestKey = store.keys().next().value;
         if (oldestKey !== undefined) store.delete(oldestKey);
+        else break;
       }
     }
 

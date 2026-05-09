@@ -1,9 +1,17 @@
 import { Hono } from "hono";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { rateLimit } from "./index.js";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-// test-setup.ts のグローバルモックを解除してリアル実装でテストする
-vi.unmock("./index.js");
+// test-setup.ts のグローバルモックを解除する（vi.doUnmock はホイストされないため、
+// vi.resetModules + dynamic import と組み合わせてリアル実装を確実にロードする）
+vi.doUnmock("./index.js");
+
+type RateLimitFn = typeof import("./index.js").rateLimit;
+let rateLimit: RateLimitFn;
+
+beforeAll(async () => {
+  vi.resetModules();
+  ({ rateLimit } = await import("./index.js"));
+});
 
 describe("rateLimit middleware", () => {
   afterEach(() => {
