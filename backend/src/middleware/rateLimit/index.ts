@@ -27,11 +27,11 @@ export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
   return async (c, next) => {
     const socketIp = (c.env as NodeEnv)?.incoming?.socket?.remoteAddress ?? "unknown";
 
+    // XFF ヘッダーを変数に受けてから安全に取得する（?.split 後の [0] も ?.trim() で保護）
+    const xffHeader = c.req.header("x-forwarded-for");
     const ip = trustProxy
       ? // 空文字 ("") は有効な IP でないため || でフォールバックする
-        c.req.header("x-forwarded-for")?.split(",")[0].trim() ||
-        c.req.header("x-real-ip") ||
-        socketIp
+        xffHeader?.split(",")[0]?.trim() || c.req.header("x-real-ip") || socketIp
       : socketIp;
 
     const now = Date.now();

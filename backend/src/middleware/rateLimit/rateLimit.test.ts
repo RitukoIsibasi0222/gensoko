@@ -92,23 +92,50 @@ describe("rateLimit middleware", () => {
     expect(res.status).toBe(429);
   });
 
-  it("store が上限を超えたとき期限切れエントリを削除し、それでも上限超なら最古エントリを強制削除する", async () => {
+  it("store がエントリ上限を超えたとき期限切れエントリを削除し、それでも上限超なら最古エントリを強制削除する", async () => {
     vi.useFakeTimers();
     const app = new Hono();
     // maxStoreSize を 3 に設定して上限テストを行う
     app.use(rateLimit({ windowMs: 10_000, max: 100, maxStoreSize: 3, trustProxy: true }));
     app.get("/", (c) => c.json({ ok: true }));
 
-    // 3 つの IP でリクエスト（ウィンドウ内）
+    // 4 つの IP でリクエスト → store.size = 4（maxStoreSize=3 を超える）
+    // ※ クリーンアップは store.size > maxStoreSize のときのみ走るため、
+    //   3件目追加時点では走らず、4件目追加後に size=4 になる
     await app.request("/", { headers: { "x-forwarded-for": "1.1.1.1" } });
     await app.request("/", { headers: { "x-forwarded-for": "2.2.2.2" } });
     await app.request("/", { headers: { "x-forwarded-for": "3.3.3.3" } });
+    await app.request("/", { headers: { "x-forwarded-for": "4.4.4.4" } });
 
-    // ウィンドウを経過させてから 4 つ目の IP でリクエスト → 期限切れ 3 件が削除される
+    // ウィンドウを経過させてから 5 つ目の IP でリクエスト
+    // → store.size(4) > maxStoreSize(3) → 期限切れ 4 件を一括削除 → size=0 → 5件目追加
     vi.advanceTimersByTime(10_001);
 
-    const res = await app.request("/", { headers: { "x-forwarded-for": "4.4.4.4" } });
+    const res = await app.request("/", { headers: { "x-forwarded-for": "5.5.5.5" } });
     expect(res.status).toBe(200);
+  });
+
+  it("trustProxy: true のとき XFF がなければ x-real-ip にフォールバックする", async () => {
+    const app = new Hono();
+    app.use(rateLimit({ windowMs: 60_000, max: 1, trustProxy: true }));
+    app.get("/", (c) => c.json({ ok: true }));
+
+    // XFF なし、x-real-ip だけ送信 → x-real-ip がバケットキーになる
+    await app.request("/", { headers: { "x-real-ip": "10.0.0.2" } });
+    const res = await app.request("/", { headers: { "x-real-ip": "10.0.0.2" } });
+    expect(res.status).toBe(429);
+  });
+
+  it("trustProxy: true のとき XFF も x-real-ip もなければ 'unknown' にフォールバックする", async () => {
+    const app = new Hono();
+    // trustProxy: true だが両ヘッダー未設定 → socketIp（テスト環境: "unknown"）
+    app.use(rateLimit({ windowMs: 60_000, max: 1, trustProxy: true }));
+    app.get("/", (c) => c.json({ ok: true }));
+
+    // ヘッダーなしで 2 回リクエスト → 同じ "unknown" バケットで 429
+    await app.request("/");
+    const res = await app.request("/");
+    expect(res.status).toBe(429);
   });
 
   it("trustProxy: false のとき x-forwarded-for を無視して 'unknown' を IP として使用する", async () => {
