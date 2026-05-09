@@ -90,20 +90,20 @@
 
 `backend/src/index.ts`:
 ```typescript
-import { Hono } from 'hono';
-import { cors } from 'hono/cors';
+import { Hono } from "hono";
+import { cors } from "hono/cors";
 
 const app = new Hono();
 
-app.use('*', cors({
-  origin: [
-    'https://gensoko.vercel.app',  // 本番フロントエンド
-    'http://localhost:5174',        // 開発フロントエンド
-  ],
-  allowMethods: ['GET', 'POST', 'PATCH', 'DELETE'],
-  allowHeaders: ['Content-Type', 'Authorization'],
-  credentials: false,
-}));
+app.use(
+  "*",
+  cors({
+    origin: process.env.FRONTEND_URL ?? "http://localhost:5174",
+    allowHeaders: ["Content-Type", "Authorization"],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    credentials: true,
+  }),
+);
 
 export default app;
 ```
