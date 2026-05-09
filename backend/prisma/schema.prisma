@@ -58,7 +58,8 @@ enum Role {
 }
 
 // リフレッシュトークン
-model RefreshToken {  id        String   @id @default(cuid())
+model RefreshToken {
+  id        String   @id @default(cuid())
   tokenHash String   @unique
   userId    String
   expiresAt DateTime
