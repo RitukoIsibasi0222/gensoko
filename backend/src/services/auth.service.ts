@@ -28,7 +28,7 @@ export async function register(input: {
   const { username, email, password } = input;
 
   // 1. DB にメールまたはユーザー名の重複チェック + ユーザー作成をトランザクションで実行
-  const { token } = await prisma.$transaction(async (tx) => {
+  const { token, userId } = await prisma.$transaction(async (tx) => {
     const existing = await tx.user.findFirst({
       where: { OR: [{ email }, { username }] },
       select: { id: true },
@@ -55,20 +55,25 @@ export async function register(input: {
       data: { userId: user.id, tokenHash, expiresAt },
     });
 
-    return { token };
+    return { token, userId: user.id };
   });
 
   // 5. メール送信（DB 確定後に実行。DB トランザクション内で外部 I/O を待たないよう分離）
-  // 送信失敗時はユーザーが emailVerified: false のまま残る（再送信フローで対応可能）
+  // 送信失敗時はユーザーを補償的に削除する（EmailVerification は onDelete: Cascade で自動削除）
   const verifyUrl = `${getFrontendBaseUrl()}/verify-email?token=${token}`;
-
-  await mailer.sendMail({
-    from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
-    to: email,
-    subject: "【元素庫】メールアドレスの確認",
-    text: `以下のURLをクリックしてメールアドレスを確認してください（有効期限: 24時間）\n\n${verifyUrl}`,
-    html: `<p>以下のURLをクリックしてメールアドレスを確認してください（有効期限: 24時間）</p><p><a href="${verifyUrl}">${verifyUrl}</a></p>`,
-  });
+  try {
+    await mailer.sendMail({
+      from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
+      to: email,
+      subject: "【元素庫】メールアドレスの確認",
+      text: `以下のURLをクリックしてメールアドレスを確認してください（有効期限: 24時間）\n\n${verifyUrl}`,
+      html: `<p>以下のURLをクリックしてメールアドレスを確認してください（有効期限: 24時間）</p><p><a href="${verifyUrl}">${verifyUrl}</a></p>`,
+    });
+  } catch (err) {
+    // 送信失敗時は作成済みユーザーを削除して再登録可能な状態に戻す
+    await prisma.user.delete({ where: { id: userId } });
+    throw err;
+  }
 }
 
 const MAX_LOGIN_FAIL = 5;
