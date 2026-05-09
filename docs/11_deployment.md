@@ -65,7 +65,7 @@
 
 | サービス | URL |
 |---------|-----|
-| SvelteKit | `http://localhost:5173` |
+| SvelteKit | `http://localhost:5174` |
 | Hono API | `http://localhost:3000` |
 | DB（Prisma Studio） | `http://localhost:5555` |
 | メール確認 | `http://localhost:8025` |
@@ -98,7 +98,7 @@ const app = new Hono();
 app.use('*', cors({
   origin: [
     'https://gensoko.vercel.app',  // 本番フロントエンド
-    'http://localhost:5173',        // 開発フロントエンド
+    'http://localhost:5174',        // 開発フロントエンド
   ],
   allowMethods: ['GET', 'POST', 'PATCH', 'DELETE'],
   allowHeaders: ['Content-Type', 'Authorization'],

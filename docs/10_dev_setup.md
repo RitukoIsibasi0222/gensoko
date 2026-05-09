@@ -80,7 +80,7 @@ GitHub（プライベートリポジトリ）
   └── ローカルPC（クローン）
         └── Docker Compose
               ├── hono（Node.js 22 / バックエンドAPI：ポート3000）
-              ├── sveltekit（Node.js 22 / フロントエンド：ポート5173）
+              ├── sveltekit（Node.js 22 / フロントエンド：ポート5174）
               ├── postgres（データベース：ポート5432）
               └── mailpit（テスト用メール確認画面：ポート8025）
 ```
@@ -155,7 +155,7 @@ services:
       - JWT_SECRET=your-super-secret-key-change-this
       - MAIL_HOST=mailpit
       - MAIL_PORT=1025
-      - FRONTEND_URL=http://localhost:5173
+      - FRONTEND_URL=http://localhost:5174
     command: sh -c "npm install && npm run dev"
     depends_on:
       - postgres
@@ -164,7 +164,7 @@ services:
     image: node:22-alpine
     working_dir: /app
     ports:
-      - "5173:5173"
+      - "5174:5173"
     volumes:
       - ./frontend:/app
     environment:
@@ -271,7 +271,7 @@ JWT_SECRET="開発用の適当な文字列（本番では必ず変更するこ�
 MAIL_HOST="mailpit"
 MAIL_PORT="1025"
 MAIL_FROM="noreply@gensoko.local"
-FRONTEND_URL="http://localhost:5173"
+FRONTEND_URL="http://localhost:5174"
 ```
 
 `backend/prisma/schema.prisma` に [docs/03_data_model.md](03_data_model.md) のスキーマをコピー後：
@@ -308,7 +308,7 @@ VITE_API_URL=http://localhost:3000
 | URL | 内容 |
 |-----|------|
 | http://localhost:3000 | Hono APIサーバー |
-| http://localhost:5173 | SvelteKitのフロントエンド |
+| http://localhost:5174 | SvelteKitのフロントエンド |
 | http://localhost:8025 | Mailpit（送信したメールを確認） |
 
 ---
