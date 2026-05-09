@@ -84,7 +84,8 @@ authRouter.post(
 );
 
 const verifyEmailSchema = z.object({
-  token: z.string().length(64, "トークンが不正です"),
+  // randomBytes(32).toString("hex") は 64 文字の hex 文字列
+  token: z.string().regex(/^[0-9a-f]{64}$/, "トークンが不正です"),
 });
 
 authRouter.post(
@@ -243,7 +244,8 @@ authRouter.post(
 );
 
 const resetPasswordSchema = z.object({
-  token: z.string().length(64, "トークンが不正です"),
+  // randomBytes(32).toString("hex") は 64 文字の hex 文字列
+  token: z.string().regex(/^[0-9a-f]{64}$/, "トークンが不正です"),
   password: strongPasswordSchema,
 });
 

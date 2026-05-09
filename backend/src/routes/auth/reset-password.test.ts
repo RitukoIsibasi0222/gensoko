@@ -118,6 +118,18 @@ describe("POST /auth/reset-password", () => {
     expect(res.status).toBe(400);
   });
 
+  it("バリデーション: 64文字でも非hex文字列の場合は400を返す", async () => {
+    // 'x' は hex 文字ではないため /^[0-9a-f]{64}$/ に不一致
+    const nonHexToken = "x".repeat(64);
+    const res = await app.request("/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: nonHexToken, password: "NewPass1!" }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
   it("バリデーション: パスワードが強度不足の場合は400を返す", async () => {
     const res = await app.request("/auth/reset-password", {
       method: "POST",

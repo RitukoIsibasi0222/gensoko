@@ -335,8 +335,9 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
 
   // 2. ユーザーが存在しない場合は何もしない（列挙攻撃対策: エラーを返さない）
   // タイミング攻撃対策: ダミーのハッシュ計算で存在するユーザーとの処理時間差を縮める
+  // cost=4 にして CPU 負荷を抑える（cost=12 は DoS の踏み台になり得る）
   if (!user) {
-    await bcrypt.hash("timing-safe-dummy", 12);
+    await bcrypt.hash("timing-safe-dummy", 4);
     return;
   }
 
