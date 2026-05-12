@@ -8,8 +8,9 @@
 
   // ブラウザ起動時にセッションを復元する。
   // onMount はブラウザ側でのみ実行されるため、sessionStorage に安全にアクセスできる。
-  onMount(() => {
-    authStore.initialize();
+  // await して初期化完了（status が確定）してからレンダリングされるようにする。
+  onMount(async () => {
+    await authStore.initialize();
   });
 </script>
 

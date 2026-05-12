@@ -13,16 +13,29 @@ export type AuthUser = {
 };
 
 /**
+ * Auth Store の初期化・認証状態を表すステータス。
+ *
+ * initializing → アプリ起動直後（sessionStorage 読込＋refresh 検証中）
+ * authenticated → ログイン済み（refresh 成功 or login() 呼び出し後）
+ * anonymous     → 未ログイン（refresh 失敗 or logout 後）
+ *
+ * UI は initializing 中は認証エリアを非表示にしてフリッカーを防ぐ。
+ */
+export type AuthStatus = 'initializing' | 'authenticated' | 'anonymous';
+
+/**
  * Auth Store が持つ状態全体の形。
  *
  * user        → ログイン中: AuthUser オブジェクト / 未ログイン: null
  * accessToken → ログイン中: "eyJhb..." という文字列 / 未ログイン: null
+ * status      → 初期化中 / 認証済み / 未ログインを区別する
  *
  * どちらも null のときが「未ログイン状態」。
  */
 export type AuthState = {
   user: AuthUser | null;
   accessToken: string | null;
+  status: AuthStatus;
 };
 
 const STORAGE_KEY_TOKEN = 'auth_token';
@@ -42,7 +55,8 @@ if (!import.meta.env.VITE_API_BASE_URL) {
 class AuthStore {
   state = $state<AuthState>({
     user: null,
-    accessToken: null
+    accessToken: null,
+    status: 'anonymous'
   });
 
   get user() {
@@ -53,8 +67,14 @@ class AuthStore {
     return this.state.accessToken;
   }
 
+  /** refresh 検証完了後にのみ true になる。sessionStorage 読込直後はまだ false。 */
   get isLoggedIn() {
-    return this.state.user !== null;
+    return this.state.status === 'authenticated';
+  }
+
+  /** アプリ起動時の初期化中（sessionStorage 読込＋refresh 検証中）は true。 */
+  get isInitializing() {
+    return this.state.status === 'initializing';
   }
 
   /**
@@ -72,15 +92,29 @@ class AuthStore {
 
   /**
    * sessionStorage から状態を読み込んで state に反映する。
-   * トークンまたはユーザー情報が存在しない場合は何もしない。
+   * トークンまたはユーザー情報が存在しない・不正な場合は何もしない。
    */
   #loadFromStorage() {
     try {
       const token = sessionStorage.getItem(STORAGE_KEY_TOKEN);
       const userRaw = sessionStorage.getItem(STORAGE_KEY_USER);
       if (token && userRaw) {
-        this.state.accessToken = token;
-        this.state.user = JSON.parse(userRaw) as AuthUser;
+        const parsed = JSON.parse(userRaw) as unknown;
+        // 不正なデータ（フィールド欠損・型違い）を読み込まないよう最低限検証する
+        if (
+          parsed !== null &&
+          typeof parsed === 'object' &&
+          'id' in parsed &&
+          typeof (parsed as Record<string, unknown>).id === 'string' &&
+          'username' in parsed &&
+          typeof (parsed as Record<string, unknown>).username === 'string' &&
+          'role' in parsed &&
+          ((parsed as Record<string, unknown>).role === 'USER' ||
+            (parsed as Record<string, unknown>).role === 'ADMIN')
+        ) {
+          this.state.accessToken = token;
+          this.state.user = parsed as AuthUser;
+        }
       }
     } catch {
       // 読み込みに失敗した場合は未ログイン状態のまま
@@ -106,6 +140,7 @@ class AuthStore {
   #clearAuthState() {
     this.state.user = null;
     this.state.accessToken = null;
+    this.state.status = 'anonymous';
     this.#clearStorage();
   }
 
@@ -116,6 +151,7 @@ class AuthStore {
   login(user: AuthUser, accessToken: string) {
     this.state.user = user;
     this.state.accessToken = accessToken;
+    this.state.status = 'authenticated';
     this.#saveToStorage();
   }
 
@@ -155,6 +191,7 @@ class AuthStore {
       }
       const data = (await res.json()) as { accessToken: string };
       this.state.accessToken = data.accessToken;
+      this.state.status = 'authenticated';
       this.#saveToStorage();
       return true;
     } catch {
@@ -165,13 +202,18 @@ class AuthStore {
 
   /**
    * アプリ起動時に呼ぶ。
-   * sessionStorage から状態を読み込み、リフレッシュトークンでセッションの有効性を確認する。
-   * sessionStorage に情報がなければ未ログイン状態のまま何もしない。
+   * 1. status を 'initializing' にして初期化中であることを示す（フリッカー防止）
+   * 2. sessionStorage から状態を読み込む
+   * 3. sessionStorage にユーザー情報があればリフレッシュトークンで有効性を確認する
+   * 4. sessionStorage に情報がなければ 'anonymous' にして終了する
    */
   async initialize() {
+    this.state.status = 'initializing';
     this.#loadFromStorage();
     if (this.state.user !== null) {
-      await this.refresh();
+      await this.refresh(); // 成功→status='authenticated'、失敗→status='anonymous'
+    } else {
+      this.state.status = 'anonymous';
     }
   }
 }

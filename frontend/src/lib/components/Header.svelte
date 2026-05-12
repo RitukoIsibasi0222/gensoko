@@ -14,9 +14,11 @@
       <li><a href="/ranking" class="hover:text-brand">ランキング</a></li>
     </ul>
 
-    <!-- 認証エリア：ログイン状態に応じて切り替え -->
+    <!-- 認証エリア：初期化完了後にログイン状態に応じて切り替え -->
     <div class="flex items-center gap-2 text-sm">
-      {#if authStore.isLoggedIn}
+      {#if authStore.isInitializing}
+        <!-- 初期化中は非表示（refresh 結果が出る前にフリッカーするのを防ぐ） -->
+      {:else if authStore.isLoggedIn}
         <span class="text-gray-600">こんにちは、{authStore.user?.username} さん</span>
         <a href="/settings" class="hover:text-brand rounded px-3 py-1.5 text-gray-600">設定</a>
         <button
