@@ -186,26 +186,28 @@ class AuthStore {
 
   /**
    * ログアウトする。
-   * POST /auth/logout で DB のリフレッシュトークンを削除した後、
-   * API の成否にかかわらず state と sessionStorage を必ずクリアする。
+   * state と sessionStorage を先にクリアしてから POST /auth/logout を送信する。
+   * fetch がネットワークハング等で完了しなくても、クリアは確実に実行される。
    *
    * 【前提】credentials: 'include' で HttpOnly Cookie（refreshToken）を送信する。
    * このコールが成功するには、バックエンド側の Cookie が
    * SameSite=None; Secure またはフロントと同一 site 内の構成である必要がある。
-   * 別ドメイン構成で SameSite=Strict/Lax の場合、Cookie は送信されず常に失敗する。
+   * クロスサイト（eTLD+1 が異なる）構成では Cookie は送信されず logout API は失敗する
+   * が、クライアント側のクリアは先に行うため認証状態は必ず消える。
    */
   async logout() {
     // 実行中の refresh があればキャンセルして logout 後に状態が復元されるのを防ぐ
     this.#refreshAbortController?.abort();
+    // fetch より先にクリアする。ネットワークがハングしても state/sessionStorage が
+    // 残り続けるリスクをなくす（API 失敗・タイムアウトでもクライアント側は必ずログアウト）。
+    this.#clearAuthState();
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
         credentials: 'include'
       });
     } catch {
-      // ネットワークエラー等は無視してクリアへ進む
-    } finally {
-      this.#clearAuthState();
+      // ネットワークエラー等は無視する（既にクリア済み）
     }
   }
 
@@ -226,7 +228,8 @@ class AuthStore {
         method: 'POST',
         // HttpOnly Cookie（refreshToken）を自動送信する。
         // 【前提】バックエンド Cookie が SameSite=None; Secure または
-        // フロントと同一 site 構成でなければ Cookie は送信されず、常に失敗する。
+        // フロントと同一 site（同一 eTLD+1）構成でなければ Cookie は送信されず常に失敗する。
+        // クロスサイト（eTLD+1 が異なる）構成では SameSite=Strict/Lax の Cookie は送信されない。
         credentials: 'include',
         signal: controller.signal
       });
