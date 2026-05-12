@@ -27,6 +27,7 @@ export type AuthState = {
 
 const STORAGE_KEY_TOKEN = 'auth_token';
 const STORAGE_KEY_USER = 'auth_user';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 class AuthStore {
   state = $state<AuthState>({
@@ -89,6 +90,16 @@ class AuthStore {
   }
 
   /**
+   * state を未ログイン状態にリセットし、sessionStorage もクリアする。
+   * logout / refresh 失敗時の共通処理。
+   */
+  #clearAuthState() {
+    this.state.user = null;
+    this.state.accessToken = null;
+    this.#clearStorage();
+  }
+
+  /**
    * ログイン成功時に呼ぶ。
    * state を更新し、sessionStorage にも保存する。
    */
@@ -104,18 +115,15 @@ class AuthStore {
    * API の成否にかかわらず state と sessionStorage を必ずクリアする。
    */
   async logout() {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL as string;
     try {
-      await fetch(`${baseUrl}/auth/logout`, {
+      await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
         credentials: 'include'
       });
     } catch {
       // ネットワークエラー等は無視してクリアへ進む
     } finally {
-      this.state.user = null;
-      this.state.accessToken = null;
-      this.#clearStorage();
+      this.#clearAuthState();
     }
   }
 
@@ -126,16 +134,13 @@ class AuthStore {
    * 戻り値: 更新に成功したか否かの boolean。
    */
   async refresh(): Promise<boolean> {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL as string;
     try {
-      const res = await fetch(`${baseUrl}/auth/refresh`, {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: 'POST',
         credentials: 'include' // HttpOnly Cookie を自動送信
       });
       if (!res.ok) {
-        this.state.user = null;
-        this.state.accessToken = null;
-        this.#clearStorage();
+        this.#clearAuthState();
         return false;
       }
       const data = (await res.json()) as { accessToken: string };
@@ -143,9 +148,7 @@ class AuthStore {
       this.#saveToStorage();
       return true;
     } catch {
-      this.state.user = null;
-      this.state.accessToken = null;
-      this.#clearStorage();
+      this.#clearAuthState();
       return false;
     }
   }
