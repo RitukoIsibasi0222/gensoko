@@ -191,6 +191,13 @@ class AuthStore {
       }
       const data = (await res.json()) as { accessToken: string };
       this.state.accessToken = data.accessToken;
+      // user が null のまま authenticated にすると isLoggedIn が true なのに
+      // ユーザー名が表示できない等の状態不整合が起きるため、user がない場合はクリアする。
+      // （refresh() は initialize() 以外から単独で呼ばれる可能性もあるため）
+      if (this.state.user === null) {
+        this.#clearAuthState();
+        return false;
+      }
       this.state.status = 'authenticated';
       this.#saveToStorage();
       return true;
