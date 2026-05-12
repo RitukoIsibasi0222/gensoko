@@ -52,7 +52,9 @@ function getRefreshCookieOptions(secure: boolean, path: string) {
   return {
     httpOnly: true,
     secure,
-    sameSite: "Strict" as const,
+    // 本番 HTTPS（secure=true）では別ドメイン構成に対応するため SameSite=None を使用する。
+    // SameSite=None は Secure フラグが必須のため、開発（HTTP）では Lax にフォールバックする。
+    sameSite: (secure ? "None" : "Lax") as "None" | "Lax",
     path,
     maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE,
   };
