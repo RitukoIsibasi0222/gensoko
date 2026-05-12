@@ -29,6 +29,16 @@ const STORAGE_KEY_TOKEN = 'auth_token';
 const STORAGE_KEY_USER = 'auth_user';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
+// 開発時に VITE_API_BASE_URL 未設定を早期検知する。
+// 未設定のまま fetch すると `/auth/*` が同一オリジンに飛んで 404 になり原因が追いにくい。
+if (!import.meta.env.VITE_API_BASE_URL) {
+  console.warn(
+    '[AuthStore] VITE_API_BASE_URL が設定されていません。' +
+      'API リクエストが同一オリジンに飛んで 404 になる可能性があります。' +
+      '.env ファイルに VITE_API_BASE_URL を設定してください。'
+  );
+}
+
 class AuthStore {
   state = $state<AuthState>({
     user: null,
