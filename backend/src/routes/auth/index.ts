@@ -52,6 +52,12 @@ function getRefreshCookieOptions(secure: boolean, path: string) {
   return {
     httpOnly: true,
     secure,
+    // SEC-006: SameSite=Strict で CSRF 対策を行う（仕様 docs/02_security.md 参照）。
+    // SameSite=Strict はクロスサイトリクエストで Cookie が送信されないため、
+    // フロントエンドと API は同一 eTLD+1 配下にデプロイする必要がある。
+    // （例: gensoko.example.com と api.gensoko.example.com は同一 eTLD+1）
+    // SameSite=None に変更すると任意クロスオリジンから Cookie が送れるようになり
+    // CSRF 脆弱性が生じるため使用しない。
     sameSite: "Strict" as const,
     path,
     maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE,
