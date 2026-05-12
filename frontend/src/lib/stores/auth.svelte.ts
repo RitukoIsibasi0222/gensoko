@@ -137,6 +137,10 @@ class AuthStore {
           // 形が不正なデータが残り続けると次回起動でも失敗を繰り返すため、即座にクリアする
           this.#clearStorage();
         }
+      } else if (token || userRaw) {
+        // 片方だけ残っている場合（古い実装の残骸・手動削除・書き込み途中等）は
+        // XSS リスク軽減のため両方クリアして整合性を保つ
+        this.#clearStorage();
       }
     } catch {
       // JSON.parse に失敗した場合も壊れたデータが残るのを防ぐためクリアする
