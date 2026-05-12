@@ -75,7 +75,10 @@ class AuthStore {
   state = $state<AuthState>({
     user: null,
     accessToken: null,
-    status: 'anonymous'
+    // 初期値を 'initializing' にすることで、SSR 時の出力（認証エリア非表示）と
+    // hydration 初期状態を一致させ、hydration mismatch / ちらつきを防ぐ。
+    // browser 環境では initialize() が同期的に status を上書きするため影響なし。
+    status: 'initializing'
   });
 
   get user() {
