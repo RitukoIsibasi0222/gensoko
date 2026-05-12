@@ -52,6 +52,25 @@ if (import.meta.env.DEV && !import.meta.env.VITE_API_BASE_URL) {
   );
 }
 
+/**
+ * 値が AuthUser の形を満たすかチェックする型ガード。
+ * sessionStorage からの復元時など、型が不明な値の検証に使う。
+ * フィールドを追加・変更する際はここだけ修正すれば済む。
+ */
+function isAuthUser(value: unknown): value is AuthUser {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'id' in value &&
+    typeof (value as Record<string, unknown>).id === 'string' &&
+    'username' in value &&
+    typeof (value as Record<string, unknown>).username === 'string' &&
+    'role' in value &&
+    ((value as Record<string, unknown>).role === 'USER' ||
+      (value as Record<string, unknown>).role === 'ADMIN')
+  );
+}
+
 class AuthStore {
   state = $state<AuthState>({
     user: null,
@@ -78,6 +97,13 @@ class AuthStore {
   }
 
   /**
+   * 実行中の refresh() を追跡する AbortController。
+   * login() / logout() が呼ばれたとき、または新しい refresh() が始まるときにキャンセルし、
+   * 遅延完了した古い refresh() が最新の認証状態を上書きするレースコンディションを防ぐ。
+   */
+  #refreshAbortController: AbortController | null = null;
+
+  /**
    * 現在の state を sessionStorage に保存する。
    * タブを閉じると自動で消えるため、localStorage より安全。
    */
@@ -99,21 +125,11 @@ class AuthStore {
       const token = sessionStorage.getItem(STORAGE_KEY_TOKEN);
       const userRaw = sessionStorage.getItem(STORAGE_KEY_USER);
       if (token && userRaw) {
-        const parsed = JSON.parse(userRaw) as unknown;
-        // 不正なデータ（フィールド欠損・型違い）を読み込まないよう最低限検証する
-        if (
-          parsed !== null &&
-          typeof parsed === 'object' &&
-          'id' in parsed &&
-          typeof (parsed as Record<string, unknown>).id === 'string' &&
-          'username' in parsed &&
-          typeof (parsed as Record<string, unknown>).username === 'string' &&
-          'role' in parsed &&
-          ((parsed as Record<string, unknown>).role === 'USER' ||
-            (parsed as Record<string, unknown>).role === 'ADMIN')
-        ) {
+        const parsed: unknown = JSON.parse(userRaw);
+        // isAuthUser 型ガードで検証してから state に反映する（フィールド検証は1箇所に集約）
+        if (isAuthUser(parsed)) {
           this.state.accessToken = token;
-          this.state.user = parsed as AuthUser;
+          this.state.user = parsed;
         }
       }
     } catch {
@@ -149,6 +165,8 @@ class AuthStore {
    * state を更新し、sessionStorage にも保存する。
    */
   login(user: AuthUser, accessToken: string) {
+    // 実行中の refresh があればキャンセルして最新のログイン状態が上書きされるのを防ぐ
+    this.#refreshAbortController?.abort();
     this.state.user = user;
     this.state.accessToken = accessToken;
     this.state.status = 'authenticated';
@@ -166,6 +184,8 @@ class AuthStore {
    * 別ドメイン構成で SameSite=Strict/Lax の場合、Cookie は送信されず常に失敗する。
    */
   async logout() {
+    // 実行中の refresh があればキャンセルして logout 後に状態が復元されるのを防ぐ
+    this.#refreshAbortController?.abort();
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
@@ -185,19 +205,29 @@ class AuthStore {
    * 戻り値: 更新に成功したか否かの boolean。
    */
   async refresh(): Promise<boolean> {
+    // 前の refresh があればキャンセルし、最新の呼び出しだけが state を更新できるようにする
+    this.#refreshAbortController?.abort();
+    const controller = new AbortController();
+    this.#refreshAbortController = controller;
+
     try {
       const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: 'POST',
         // HttpOnly Cookie（refreshToken）を自動送信する。
         // 【前提】バックエンド Cookie が SameSite=None; Secure または
         // フロントと同一 site 構成でなければ Cookie は送信されず、常に失敗する。
-        credentials: 'include'
+        credentials: 'include',
+        signal: controller.signal
       });
+      // fetch 完了後にキャンセルされていたら state を変更しない
+      if (controller.signal.aborted) return false;
       if (!res.ok) {
         this.#clearAuthState();
         return false;
       }
       const data = (await res.json()) as { accessToken?: unknown };
+      // JSON パース後にもキャンセルを確認する
+      if (controller.signal.aborted) return false;
       // バックエンドが 200 を返しつつ accessToken が欠損・非文字列の場合を弾く。
       // 型キャストだけでは実行時に undefined が混入するため、ランタイム検証を行う。
       if (typeof data.accessToken !== 'string' || data.accessToken.length === 0) {
@@ -215,7 +245,11 @@ class AuthStore {
       this.state.status = 'authenticated';
       this.#saveToStorage();
       return true;
-    } catch {
+    } catch (err) {
+      // AbortError はキャンセルによる中断なので state をクリアしない
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return false;
+      }
       this.#clearAuthState();
       return false;
     }
