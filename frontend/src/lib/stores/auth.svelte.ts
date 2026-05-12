@@ -130,10 +130,14 @@ class AuthStore {
         if (isAuthUser(parsed)) {
           this.state.accessToken = token;
           this.state.user = parsed;
+        } else {
+          // 形が不正なデータが残り続けると次回起動でも失敗を繰り返すため、即座にクリアする
+          this.#clearStorage();
         }
       }
     } catch {
-      // 読み込みに失敗した場合は未ログイン状態のまま
+      // JSON.parse に失敗した場合も壊れたデータが残るのを防ぐためクリアする
+      this.#clearStorage();
     }
   }
 
