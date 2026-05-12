@@ -159,6 +159,11 @@ class AuthStore {
    * ログアウトする。
    * POST /auth/logout で DB のリフレッシュトークンを削除した後、
    * API の成否にかかわらず state と sessionStorage を必ずクリアする。
+   *
+   * 【前提】credentials: 'include' で HttpOnly Cookie（refreshToken）を送信する。
+   * このコールが成功するには、バックエンド側の Cookie が
+   * SameSite=None; Secure またはフロントと同一 site 内の構成である必要がある。
+   * 別ドメイン構成で SameSite=Strict/Lax の場合、Cookie は送信されず常に失敗する。
    */
   async logout() {
     try {
@@ -183,13 +188,22 @@ class AuthStore {
     try {
       const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: 'POST',
-        credentials: 'include' // HttpOnly Cookie を自動送信
+        // HttpOnly Cookie（refreshToken）を自動送信する。
+        // 【前提】バックエンド Cookie が SameSite=None; Secure または
+        // フロントと同一 site 構成でなければ Cookie は送信されず、常に失敗する。
+        credentials: 'include'
       });
       if (!res.ok) {
         this.#clearAuthState();
         return false;
       }
-      const data = (await res.json()) as { accessToken: string };
+      const data = (await res.json()) as { accessToken?: unknown };
+      // バックエンドが 200 を返しつつ accessToken が欠損・非文字列の場合を弾く。
+      // 型キャストだけでは実行時に undefined が混入するため、ランタイム検証を行う。
+      if (typeof data.accessToken !== 'string' || data.accessToken.length === 0) {
+        this.#clearAuthState();
+        return false;
+      }
       this.state.accessToken = data.accessToken;
       // user が null のまま authenticated にすると isLoggedIn が true なのに
       // ユーザー名が表示できない等の状態不整合が起きるため、user がない場合はクリアする。
