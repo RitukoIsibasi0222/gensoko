@@ -31,7 +31,7 @@ export class ApiError extends Error {
     this.status = status;
     this.body = body;
 
-    // Error サブクラスのプロトタイプチェーンを正しく設定（TypeScript の問題回避）
-    Object.setPrototypeOf(this, ApiError.prototype);
+    // Error サブクラスのプロトタイプチェーンを正しく設定（サブクラス化にも対応）
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
