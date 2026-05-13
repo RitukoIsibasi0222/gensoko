@@ -73,7 +73,7 @@ git checkout -b docs/plan-{機能名}
 
 > セクションは適宜追加・削除してよい。不要なセクションはコメントごと消す。
 
-```markdown
+````markdown
 # {機能名} 実装計画
 
 <!-- 設計者の視点・役割（例: シニアフロントエンドエンジニア / バックエンドエンジニア） -->
@@ -104,9 +104,9 @@ git checkout -b docs/plan-{機能名}
 <!-- バックエンド API のうち、このタスクで使うものだけ記載 -->
 
 ### エラーレスポンス共通形式
-```json
-{ "error": "メッセージ文字列" }
-```
+
+    { "error": "メッセージ文字列" }
+
 ステータスコード: 400 / 401 / 403 / 404 / 409 / 429 / 500
 
 ### エンドポイント一覧
@@ -128,15 +128,13 @@ git checkout -b docs/plan-{機能名}
 ## 公開インターフェース案
 <!-- 実装コードは書かない。型シグネチャと役割説明のみ -->
 
-```ts
-// {説明}
-export function {関数名}<T>({引数}: {型}): Promise<T>
+    // {説明}
+    export function {関数名}<T>({引数}: {型}): Promise<T>
 
-// {説明}
-export class {クラス名} extends Error {
-  constructor(public status: number, public message: string)
-}
-```
+    // {説明}
+    export class {クラス名} extends Error {
+      constructor(public status: number, public message: string)
+    }
 
 ## タスクリスト（進捗管理）
 <!-- タブ区切りで記載すると実装指示として Copilot に渡しやすい -->
@@ -159,7 +157,7 @@ export class {クラス名} extends Error {
 |---|---|
 | 正常系: 〇〇 | 200 OK |
 | 異常系: 〇〇 | 400 Bad Request |
-```
+````
 
 ### Step 2: 05_progress.md を更新
 
