@@ -5,7 +5,7 @@
 export class ApiError extends Error {
   /**
    * HTTP ステータスコード。
-   * - 200-599: HTTP ステータス
+   * - 400-599: HTTP エラーステータス
    * - 0: ネットワークエラー（fetch 自体が失敗した場合）
    */
   readonly status: number;
@@ -16,7 +16,7 @@ export class ApiError extends Error {
    * - パース失敗時は null
    * - ネットワークエラー時は null
    */
-  readonly body: unknown;
+  readonly body: unknown | null;
 
   /**
    * ApiError を生成する。
