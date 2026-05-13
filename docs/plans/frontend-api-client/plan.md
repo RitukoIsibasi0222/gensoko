@@ -4,13 +4,13 @@
 
 ## 概要
 
-全画面（ログイン・登録・ゲーム・苦手リスト等）から呼ばれる共通の fetch ラッパー `frontend/src/lib/api/client.ts` を実装する。native fetch の薄いラッパーとして、Bearer トークン自動注入・401 自動リトライ（単一フライト）・統一エラー型 `ApiError`・型安全なレスポンスを提供する。
+全画面（ログイン・登録・ゲーム・苦手リスト等）から呼ばれる共通の fetch ラッパー `src/lib/api/client.ts` を実装する。native fetch の薄いラッパーとして、Bearer トークン自動注入・401 自動リトライ（単一フライト）・統一エラー型 `ApiError`・型安全なレスポンスを提供する。
 
 ## 前提条件・依存関係
 
 ### 既存の実装（公開インターフェース）
 
-**frontend/src/lib/stores/auth.svelte.ts**
+**src/lib/stores/auth.svelte.ts**
 
 - `user: AuthUser | null` — ログイン中ユーザー
 - `accessToken: string | null` — Bearer トークン
