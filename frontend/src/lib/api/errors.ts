@@ -5,8 +5,8 @@
 export class ApiError extends Error {
   /**
    * HTTP ステータスコード。
-   * - 400-599: HTTP エラーステータス
-   * - 0: ネットワークエラー（fetch 自体が失敗した場合）
+   * - 通常は 400-599（HTTP エラー）または 0（ネットワークエラー）を想定
+   * - ただし実装では範囲チェックをしていないため、任意の number が設定可能
    */
   readonly status: number;
 
@@ -21,11 +21,11 @@ export class ApiError extends Error {
   /**
    * ApiError を生成する。
    *
-   * @param status - HTTP ステータスコード（0 = ネットワークエラー）
+   * @param status - HTTP ステータスコード（通常は 400-599 または 0）
    * @param message - エラーメッセージ（バックエンドの `error` フィールドまたは HTTP ステータス文言）
    * @param body - バックエンドが返した JSON body（省略可、デフォルト null）
    */
-  constructor(status: number, message: string, body: unknown = null) {
+  constructor(status: number, message: string, body: unknown | null = null) {
     super(message);
     this.name = new.target.name;
     this.status = status;
