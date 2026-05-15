@@ -190,13 +190,13 @@ class ToastStore {
    * すべてのトーストを削除する（タイマーも全 clearTimeout する）。
    */
   clear(): void {
-    // 配列を変更しながら走査すると添字がずれるため、コピーしてからループ
-    const toastsCopy = [...this.#toasts];
-    for (const toast of toastsCopy) {
+    // すべてのタイマーをクリア
+    for (const toast of this.#toasts) {
       if (toast.timerId !== null) {
         clearTimeout(toast.timerId);
       }
     }
+    // 配列を空にする
     this.#toasts = [];
   }
 }
