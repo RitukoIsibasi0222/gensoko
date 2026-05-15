@@ -79,7 +79,7 @@ class ToastStore {
       id,
       variant,
       message,
-      duration,
+      duration
     }));
   }
 
@@ -88,12 +88,19 @@ class ToastStore {
    *
    * @param variant - トーストの種類
    * @param message - 表示するメッセージ
-   * @param options - 表示オプション（duration 等）
+   * @param options - 表示オプション（duration: 0 以上の有限値、負数は 0、NaN/Infinity はデフォルト値にフォールバック）
    * @returns 追加されたトーストの id
    */
   show(variant: ToastVariant, message: string, options?: ToastOptions): string {
     const id = crypto.randomUUID();
-    const duration = options?.duration ?? DEFAULT_DURATION[variant];
+    let duration = options?.duration ?? DEFAULT_DURATION[variant];
+
+    // duration のバリデーション: 負数は 0 に、NaN/Infinity はデフォルトに
+    if (typeof duration !== 'number' || !isFinite(duration)) {
+      duration = DEFAULT_DURATION[variant];
+    } else if (duration < 0) {
+      duration = 0;
+    }
 
     const toast: InternalToast = {
       id,

@@ -12,6 +12,7 @@ describe('ToastStore', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   describe('基本機能', () => {
@@ -195,6 +196,33 @@ describe('ToastStore', () => {
     it('error() は variant="error" で追加', () => {
       toastStore.error('Error message');
       expect(toastStore.toasts[0].variant).toBe('error');
+    });
+  });
+
+  describe('duration バリデーション', () => {
+    it('負数の duration は 0 に丸められる', () => {
+      toastStore.show('success', 'Test', { duration: -100 });
+      expect(toastStore.toasts[0].duration).toBe(0);
+      // duration: 0 なので自動消去されない
+      vi.advanceTimersByTime(10000);
+      expect(toastStore.toasts).toHaveLength(1);
+    });
+
+    it('NaN の duration はデフォルトにフォールバック', () => {
+      toastStore.show('success', 'Test', { duration: NaN });
+      expect(toastStore.toasts[0].duration).toBe(4000); // success のデフォルト
+    });
+
+    it('Infinity の duration はデフォルトにフォールバック', () => {
+      toastStore.show('error', 'Test', { duration: Infinity });
+      expect(toastStore.toasts[0].duration).toBe(6000); // error のデフォルト
+    });
+
+    it('duration: 0 は有効（自動消去なし）', () => {
+      toastStore.show('info', 'Test', { duration: 0 });
+      expect(toastStore.toasts[0].duration).toBe(0);
+      vi.advanceTimersByTime(10000);
+      expect(toastStore.toasts).toHaveLength(1); // 手動 dismiss 専用
     });
   });
 });
