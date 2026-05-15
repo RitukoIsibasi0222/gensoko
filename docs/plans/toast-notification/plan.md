@@ -210,7 +210,7 @@ export const toastStore: ToastStore;
 
 - **完了日**: 2026-05-15
 - **実装ブランチ**: feature/toast-notification
-- **テスト結果**: 20 テスト全通過
+- **テスト結果**: 24 テスト全通過（初期実装 20 + duration バリデーション 4）
 - **変更ファイル**:
   - `frontend/src/lib/stores/toast.svelte.ts` （新規）
   - `frontend/src/lib/stores/toast.svelte.test.ts` （新規）
