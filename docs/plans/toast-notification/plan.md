@@ -193,18 +193,32 @@ export const toastStore: ToastStore;
 | T11 | ルート `+layout.svelte` に `Toaster` 追加 | `src/routes/+layout.svelte` | 高 | `{@render children()}` の隣 |
 | T12 | アクセシビリティ確認（`role` / `aria-live` / フォーカス順序） | `Toast.svelte` | 中 | error/warning=alert、他=status |
 
-- [ ] T1: 型定義（`src/lib/stores/toast.svelte.ts`）
-- [ ] T2: `ToastStore` クラス骨組み（`src/lib/stores/toast.svelte.ts`）
-- [ ] T3: `show()` 実装（`src/lib/stores/toast.svelte.ts`）
-- [ ] T4: 4 種ショートカット（`src/lib/stores/toast.svelte.ts`）
-- [ ] T5: `fromApiError()` 実装（`src/lib/stores/toast.svelte.ts`）
-- [ ] T6: `dismiss()` / `clear()` 実装（`src/lib/stores/toast.svelte.ts`）
-- [ ] T7: store ユニットテスト（`src/lib/stores/toast.svelte.test.ts`）
-- [ ] T8: `Toast.svelte` 実装
-- [ ] T9: `Toaster.svelte` 実装
-- [ ] T10: variant 別 Tailwind スタイル
-- [ ] T11: ルートレイアウトに `Toaster` 追加（`src/routes/+layout.svelte`）
-- [ ] T12: アクセシビリティ確認
+- [x] T1: 型定義（`src/lib/stores/toast.svelte.ts`）
+- [x] T2: `ToastStore` クラス骨組み（`src/lib/stores/toast.svelte.ts`）
+- [x] T3: `show()` 実装（`src/lib/stores/toast.svelte.ts`）
+- [x] T4: 4 種ショートカット（`src/lib/stores/toast.svelte.ts`）
+- [x] T5: `fromApiError()` 実装（`src/lib/stores/toast.svelte.ts`）
+- [x] T6: `dismiss()` / `clear()` 実装（`src/lib/stores/toast.svelte.ts`）
+- [x] T7: store ユニットテスト（`src/lib/stores/toast.svelte.test.ts`）
+- [x] T8: `Toast.svelte` 実装
+- [x] T9: `Toaster.svelte` 実装
+- [x] T10: variant 別 Tailwind スタイル
+- [x] T11: ルートレイアウトに `Toaster` 追加（`src/routes/+layout.svelte`）
+- [x] T12: アクセシビリティ確認
+
+## 実装完了
+
+- **完了日**: 2026-05-15
+- **実装ブランチ**: feature/toast-notification
+- **テスト結果**: 20 テスト全通過
+- **変更ファイル**:
+  - `frontend/src/lib/stores/toast.svelte.ts` （新規）
+  - `frontend/src/lib/stores/toast.svelte.test.ts` （新規）
+  - `frontend/src/lib/components/toast/Toast.svelte` （新規）
+  - `frontend/src/lib/components/toast/Toaster.svelte` （新規）
+  - `frontend/src/routes/+layout.svelte` （変更）
+  - `frontend/vitest.config.ts` （新規）
+  - `frontend/package.json` （test スクリプト追加）
 
 ## 技術的注意点
 
