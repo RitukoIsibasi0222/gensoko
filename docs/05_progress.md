@@ -57,7 +57,7 @@
 - [x] SvelteKit ルーティング・共通レイアウト（ヘッダー/フッター/ナビ）
 - [x] 認証 Store（Svelte ストア・Bearer トークン管理・リフレッシュ自動実行）
 - [-] API クライアント基盤（`lib/api/client.ts`・共通エラーハンドリング） — 計画書: [`docs/plans/frontend-api-client/plan.md`](plans/frontend-api-client/plan.md)
-- [ ] トースト通知コンポーネント（成功/エラー表示）
+- [x] トースト通知コンポーネント（成功/エラー表示）
 
 ### アカウント系画面
 - [ ] ログイン画面 `/login`（フォーム・エラー表示・「パスワードを忘れた」リンク）

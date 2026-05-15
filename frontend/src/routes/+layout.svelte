@@ -3,6 +3,7 @@
   import '../app.css';
   import favicon from '$lib/assets/favicon.svg';
   import { authStore } from '$lib/stores/auth.svelte';
+  import Toaster from '$lib/components/toast/Toaster.svelte';
 
   let { children } = $props();
 
@@ -22,3 +23,6 @@
 </svelte:head>
 
 {@render children()}
+
+<!-- トースト通知コンテナ -->
+<Toaster />
