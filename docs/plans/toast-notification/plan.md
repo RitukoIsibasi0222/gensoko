@@ -217,7 +217,7 @@ export const toastStore: ToastStore;
   - `frontend/src/lib/components/toast/Toast.svelte` （新規）
   - `frontend/src/lib/components/toast/Toaster.svelte` （新規）
   - `frontend/src/routes/+layout.svelte` （変更）
-  - `frontend/vitest.config.ts` （新規）
+  - `frontend/vite.config.ts` （test 設定追加）
   - `frontend/package.json` （test スクリプト追加）
 
 ## 技術的注意点

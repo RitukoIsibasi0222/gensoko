@@ -75,7 +75,12 @@ class ToastStore {
    * 外部には timerId を含まない読み取り専用の Toast[] として公開する。
    */
   get toasts(): readonly Toast[] {
-    return this.#toasts;
+    return this.#toasts.map(({ id, variant, message, duration }) => ({
+      id,
+      variant,
+      message,
+      duration,
+    }));
   }
 
   /**
