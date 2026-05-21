@@ -43,11 +43,19 @@
 
   /**
    * HTTP ステータスコードを日本語エラーメッセージに変換
+   * バックエンドからの具体的なエラーメッセージ（fallback）がある場合は優先する。
    * @param status - HTTP ステータスコード
-   * @param fallback - API が返したエラーメッセージ（デフォルトメッセージとして使用）
+   * @param fallback - API が返したエラーメッセージ（具体的な理由）
    * @returns 日本語エラーメッセージ
    */
   function toJpMessage(status: number, fallback: string): string {
+    // バックエンドが具体的なメッセージを返している場合は優先する
+    // （例: 「メールアドレスが確認されていません」「アカウントがロックされています（30分後に再試行）」）
+    if (fallback) {
+      return fallback;
+    }
+
+    // fallback がない場合のみ、ステータスコードに基づいたデフォルトメッセージを返す
     switch (status) {
       case 400:
         return '入力内容に誤りがあります';
@@ -56,11 +64,11 @@
       case 403:
         return 'アカウントが停止されています。管理者にお問い合わせください';
       case 423:
-        return 'アカウントがロックされています。30分後に再試行してください';
+        return 'アカウントがロックされています。しばらく経ってから再試行してください';
       case 429:
         return 'リクエストが多すぎます。しばらく経ってから再試行してください';
       default:
-        return fallback || 'ログインに失敗しました。しばらく経ってから再試行してください';
+        return 'ログインに失敗しました。しばらく経ってから再試行してください';
     }
   }
 
@@ -83,7 +91,8 @@
 
     try {
       // ログイン API 呼び出し
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/v1/auth/login`, {
+      // VITE_API_BASE_URL には既に /api/v1 が含まれているので、エンドポイントのパスだけを追加する
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
