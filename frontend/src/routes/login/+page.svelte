@@ -4,6 +4,18 @@
   import { goto } from '$app/navigation';
   import { ApiError } from '$lib/api/errors';
 
+  // API ベース URL（authStore パターンに倣う）
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
+  // 開発時のみ VITE_API_BASE_URL 未設定を早期検知する
+  if (import.meta.env.DEV && !import.meta.env.VITE_API_BASE_URL) {
+    console.warn(
+      '[LoginPage] VITE_API_BASE_URL が設定されていません。' +
+        'API リクエストが失敗する可能性があります。' +
+        '.env ファイルに VITE_API_BASE_URL を設定してください。'
+    );
+  }
+
   // フォーム入力値
   let email = $state('');
   let password = $state('');
@@ -50,7 +62,7 @@
    */
   function toJpMessage(status: number, fallback: string): string {
     // バックエンドが具体的なメッセージを返している場合は優先する
-    // （例: 「メールアドレスが確認されていません」「アカウントがロックされています（30分後に再試行）」）
+    // （例: 「メールアドレスが確認されていません」「しばらく後に再試行してください」（ロック中））
     if (fallback) {
       return fallback;
     }
@@ -63,8 +75,6 @@
         return 'メールアドレスまたはパスワードが正しくありません';
       case 403:
         return 'アカウントが停止されています。管理者にお問い合わせください';
-      case 423:
-        return 'アカウントがロックされています。しばらく経ってから再試行してください';
       case 429:
         return 'リクエストが多すぎます。しばらく経ってから再試行してください';
       default:
@@ -90,9 +100,9 @@
     isSubmitting = true;
 
     try {
-      // ログイン API 呼び出し
-      // VITE_API_BASE_URL には既に /api/v1 が含まれているので、エンドポイントのパスだけを追加する
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/login`, {
+      // ログイン API 呼び出し（authStore パターンに倣う）
+      // API_BASE_URL には既に /api/v1 が含まれているので、エンドポイントのパスだけを追加する
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -101,19 +111,27 @@
         credentials: 'include' // HttpOnly Cookie 用
       });
 
-      // レスポンスボディを取得
-      const data = await response.json();
-
-      // エラーレスポンスの場合
+      // authStore パターンに倣い、response.ok チェックを先に行う
+      // （JSON パース前に HTTP ステータスを確認し、非 JSON レスポンス時のエラーを防ぐ）
       if (!response.ok) {
-        const message = toJpMessage(response.status, data.error || '');
-        throw new ApiError(response.status, message, data);
+        // エラーレスポンスの場合は JSON パースを試みる
+        let errorBody: { error?: string } = {};
+        try {
+          errorBody = await response.json();
+        } catch {
+          // JSON パース失敗時（502/504 等で HTML が返る場合）は空オブジェクトのまま
+        }
+        const message = toJpMessage(response.status, errorBody.error || '');
+        throw new ApiError(response.status, message, errorBody);
       }
 
-      // ログイン成功
+      // 成功レスポンスの場合は JSON をパース
+      const data = await response.json();
+
+      // ログイン成功: authStore.login() を呼ぶと state が変化し、
+      // $effect が自動的にリダイレクトするため、ここでは goto() を呼ばない
       authStore.login(data.user, data.accessToken);
       toastStore.success('ログインしました');
-      goto('/');
     } catch (error) {
       // ApiError の場合
       if (error instanceof ApiError) {
