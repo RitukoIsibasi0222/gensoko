@@ -1,3 +1,5 @@
+import { API_BASE_URL } from '$lib/api/config';
+
 /**
  * ログイン中のユーザー情報。
  * POST /auth/login のレスポンス内 user オブジェクトの形に合わせている。
@@ -37,8 +39,6 @@ export type AuthState = {
   accessToken: string | null;
   status: AuthStatus;
 };
-
-import { API_BASE_URL } from '$lib/api/config';
 
 const STORAGE_KEY_TOKEN = 'auth_token';
 const STORAGE_KEY_USER = 'auth_user';

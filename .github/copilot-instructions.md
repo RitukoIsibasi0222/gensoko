@@ -248,12 +248,15 @@ git checkout -b feature/xxx
 
 実装前に必ず以下を読む:
 0. `docs/plans/{機能名}/plan.md` — 実装計画書が存在する場合は **最初に必ず読む**（同ディレクトリの補足資料も確認する）
-1. `docs/05_progress.md` — タスクの位置づけ・依存関係を確認
-2. `backend/prisma/schema.prisma` — 関連するモデルの全フィールドを確認
-3. 実装対象ファイル（routes・services・middleware）の現在の内容
-4. **既に実装済みの類似ファイル**（コードのブレを防ぐため）
+1. `docs/08_conventions.md` — **コード規約・命名ルール・Prettier・ESLint**（import配置、インデント、共通化ルールなど）
+2. `docs/05_progress.md` — タスクの位置づけ・依存関係を確認
+3. `docs/07_testing_flow.md` — テスト実装時は必ず読む（TDDフロー）
+4. `docs/04_api.md` — API呼び出し実装時は必ず読む（エンドポイント仕様）
+5. `backend/prisma/schema.prisma` — 関連するモデルの全フィールドを確認
+6. 実装対象ファイル（routes・services・middleware）の現在の内容
+7. **既に実装済みの類似ファイル**（コードのブレを防ぐため）
    - 例: `auth.ts` を実装するなら既存の `middleware/auth.ts` を読む
-5. `backend/src/types/index.ts` — 型定義の確認
+8. `backend/src/types/index.ts` または `frontend/src/types/index.ts` — 型定義の確認
 
 #### 整合性チェック（必須）
 
@@ -322,14 +325,29 @@ T3	テスト: 正常系	src/routes/auth.test.ts	高
 #### Refactor フェーズ
 1. コードの整理（重複削除・可読性向上）
 2. テストが引き続き通ることを確認する
+3. **Prettier でフォーマットを適用**
+   ```bash
+   # バックエンド
+   cd backend && npm run format
+   
+   # フロントエンド
+   cd frontend && npm run format
+   ```
 
 ### Step 5: 品質チェック
 
 ```bash
+# バックエンドの場合
 cd backend
 npm run lint          # ESLint
-npm run format:check  # Prettier
+npm run format:check  # Prettier チェック
 npm run test -- --run # 全テスト
+
+# フロントエンドの場合
+cd frontend
+npm run lint          # ESLint
+npm run format:check  # Prettier チェック
+npm run test -- --run # 全テスト（存在する場合）
 ```
 
 ### Step 6: コミット・push

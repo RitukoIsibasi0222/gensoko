@@ -22,10 +22,10 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
  * 各ファイルで個別に警告を出すのではなく、この設定ファイル読み込み時に一度だけ警告する。
  */
 if (import.meta.env.DEV && !import.meta.env.VITE_API_BASE_URL) {
-    console.warn(
-        '[API Config] VITE_API_BASE_URL が設定されていません。\n' +
-        'API リクエストが失敗する可能性があります。\n' +
-        '.env ファイルに VITE_API_BASE_URL を設定してください。\n' +
-        '例: VITE_API_BASE_URL="http://localhost:3000/api/v1"'
-    );
+  console.warn(
+    '[API Config] VITE_API_BASE_URL が設定されていません。\n' +
+      'API リクエストが失敗する可能性があります。\n' +
+      '.env ファイルに VITE_API_BASE_URL を設定してください。\n' +
+      '例: VITE_API_BASE_URL="http://localhost:3000/api/v1"'
+  );
 }

@@ -31,7 +31,7 @@
     if (!email.trim()) {
       return 'メールアドレスを入力してください';
     }
-    if (!password) {
+    if (!password.trim()) {
       return 'パスワードを入力してください';
     }
     // 簡易的なメール形式チェック（@と.があるか）
@@ -104,13 +104,13 @@
       // （JSON パース前に HTTP ステータスを確認し、非 JSON レスポンス時のエラーを防ぐ）
       if (!response.ok) {
         // エラーレスポンスの場合は JSON パースを試みる
-        let errorBody: { error?: string } = {};
+        let errorBody: { error?: string } | null = null;
         try {
           errorBody = await response.json();
         } catch {
-          // JSON パース失敗時（502/504 等で HTML が返る場合）は空オブジェクトのまま
+          // JSON パース失敗時（502/504 等で HTML が返る場合）は null のまま
         }
-        const message = toJpMessage(response.status, errorBody.error || '');
+        const message = toJpMessage(response.status, errorBody?.error || '');
         throw new ApiError(response.status, message, errorBody);
       }
 
