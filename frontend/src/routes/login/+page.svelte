@@ -25,12 +25,11 @@
 
   /**
    * クライアント側バリデーション
+   * @param normalizedEmail - trim 済みメールアドレス
+   * @param normalizedPassword - trim 済みパスワード
    * @returns エラーメッセージ（エラーがない場合は null）
    */
-  function validate(): string | null {
-    const normalizedEmail = email.trim();
-    const normalizedPassword = password.trim();
-
+  function validate(normalizedEmail: string, normalizedPassword: string): string | null {
     if (!normalizedEmail) {
       return 'メールアドレスを入力してください';
     }
@@ -93,8 +92,12 @@
       return;
     }
 
+    // 正規化値を一度だけ計算し、バリデーションと送信の両方で共用する
+    const normalizedEmail = email.trim();
+    const normalizedPassword = password.trim();
+
     // クライアント側バリデーション
-    const validationError = validate();
+    const validationError = validate(normalizedEmail, normalizedPassword);
     if (validationError) {
       errorMessage = validationError;
       return;
@@ -107,14 +110,13 @@
     try {
       // ログイン API 呼び出し（authStore パターンに倣う）
       // API_BASE_URL には既に /api/v1 が含まれているので、エンドポイントのパスだけを追加する
-      // email・password ともに trim した値を送信（バックエンド側も同様に trim して正規化）
-      // プロジェクト方針: パスワードの先頭/末尾のスペースは許容しない
+      // normalizedEmail/normalizedPassword は上で一度計算済みの値を利用する
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ email: email.trim(), password: password.trim() }),
+        body: JSON.stringify({ email: normalizedEmail, password: normalizedPassword }),
         credentials: 'include' // HttpOnly Cookie 用
       });
 

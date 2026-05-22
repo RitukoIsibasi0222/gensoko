@@ -16,11 +16,11 @@ export const adminMiddleware: MiddlewareHandler<{
   const user = c.get("user");
 
   if (!user) {
-    return c.json({ error: "Unauthorized" }, 401);
+    return c.json({ error: "認証が必要です" }, 401);
   }
 
   if (user.role !== "ADMIN") {
-    return c.json({ error: "Forbidden" }, 403);
+    return c.json({ error: "管理者権限が必要です" }, 403);
   }
 
   await next();

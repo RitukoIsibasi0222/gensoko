@@ -132,7 +132,7 @@ describe("authMiddleware", () => {
 
     expect(res.status).toBe(401);
     const body = await res.json();
-    expect(body.error).toBe("Unauthorized");
+    expect(body.error).toBe("認証が必要です");
   });
 
   // -------------------------------------------------------------------
@@ -146,7 +146,7 @@ describe("authMiddleware", () => {
 
     expect(res.status).toBe(401);
     const body = await res.json();
-    expect(body.error).toBe("Invalid token");
+    expect(body.error).toBe("トークンが無効です");
   });
 
   // -------------------------------------------------------------------
@@ -171,7 +171,7 @@ describe("authMiddleware", () => {
 
     expect(res.status).toBe(401);
     const body = await res.json();
-    expect(body.error).toBe("Invalid token");
+    expect(body.error).toBe("トークンが無効です");
   });
 
   // -------------------------------------------------------------------
@@ -192,7 +192,7 @@ describe("authMiddleware", () => {
 
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error).toBe("Account suspended");
+    expect(body.error).toBe("アカウントが停止されています");
   });
 
   // -------------------------------------------------------------------
@@ -213,7 +213,7 @@ describe("authMiddleware", () => {
 
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error).toBe("Email not verified");
+    expect(body.error).toBe("メールアドレスが確認されていません");
   });
 });
 

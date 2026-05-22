@@ -208,7 +208,7 @@ Response 200:
 **基本形式**:
 ```json
 {
-  "error": "エラーメッセージ（日本語）"
+  "error": "エラーメッセージ（文字列）"
 }
 ```
 
@@ -271,7 +271,7 @@ async function callApi() {
     try {
       errorBody = await response.json();
     } catch {
-      // JSON パース失敗 = HTML レスポンス（502/504 等）
+      // JSON パース失敗 = 非 JSON レスポンス（HTML、プレーンテキスト等）
       // null を使う（空オブジェクト {} は使わない）
     }
     
