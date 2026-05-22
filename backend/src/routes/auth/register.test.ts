@@ -236,6 +236,8 @@ describe("POST /auth/register", () => {
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error).toBe("バリデーションエラー");
-    // スペース禁止エラーが含まれる
+    // details にスペース禁止エラーが含まれることを確認
+    expect(json.details).toBeDefined();
+    expect(JSON.stringify(json.details)).toContain("スペース");
   });
 });

@@ -390,7 +390,7 @@ async function callApi() {
 async function badExample() {
   const response = await fetch(url);
   
-  // NG: JSON パースを先にすると、502/504 の HTML で例外が発生
+  // NG: JSON パースを先にすると、502/504 等の非 JSON で例外が発生
   const data = await response.json();
   
   // NG: response.ok チェックが遅すぎる

@@ -38,7 +38,7 @@
       return 'パスワードを入力してください';
     }
     // バックエンド側は register/reset でスペースを禁止しているため、
-    // スペースを含むパスワードは必ず認証失敗する。
+    // trim 後に残るスペース（内部スペース）を含むパスワードは必ず認証失敗する。
     // 送信前にバリデーションエラーとして扱い、不要な loginFailCount 増加を防ぐ。
     if (/ /.test(normalizedPassword)) {
       return 'パスワードにスペースは使用できません';
@@ -126,7 +126,7 @@
         try {
           errorBody = await response.json();
         } catch {
-          // JSON パース失敗時（502/504 等で HTML が返る場合）は null のまま
+          // JSON パース失敗時（502/504 等の非 JSON レスポンス）は null のまま
         }
         const message = toJpMessage(response.status, errorBody?.error || '');
         throw new ApiError(response.status, message, errorBody);
