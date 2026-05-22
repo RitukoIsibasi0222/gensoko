@@ -81,6 +81,12 @@
   async function handleSubmit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
 
+    // 多重送信防止: 送信中は早期リターン
+    // （連打やEnterキー連続押下でログインAPIが複数回叩かれるのを防ぐ）
+    if (isSubmitting) {
+      return;
+    }
+
     // クライアント側バリデーション
     const validationError = validate();
     if (validationError) {

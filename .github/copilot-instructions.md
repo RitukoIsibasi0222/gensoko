@@ -249,6 +249,7 @@ git checkout -b feature/xxx
 実装前に必ず以下を読む:
 0. `docs/plans/{機能名}/plan.md` — 実装計画書が存在する場合は **最初に必ず読む**（同ディレクトリの補足資料も確認する）
 1. `docs/08_conventions.md` — **コード規約・命名ルール・Prettier・ESLint**（import配置、インデント、共通化ルールなど）
+   - **特に重要**: 「実装前の基本チェックリスト（必須）」セクションを確認する
 2. `docs/05_progress.md` — タスクの位置づけ・依存関係を確認
 3. `docs/07_testing_flow.md` — テスト実装時は必ず読む（TDDフロー）
 4. `docs/04_api.md` — API呼び出し実装時は必ず読む（エンドポイント仕様）
