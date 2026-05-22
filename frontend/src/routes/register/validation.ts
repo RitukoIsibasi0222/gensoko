@@ -61,7 +61,7 @@ export function validateEmail(value: string): string | null {
 /**
  * パスワードのバリデーション
  *
- * 制約（バックエンドの strongPasswordSchema と一致）:
+ * 制約（バックエンドの strongPasswordSchema に準拠）:
  * - 必須
  * - スペース禁止
  * - 8文字以上
