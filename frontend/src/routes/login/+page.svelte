@@ -28,15 +28,19 @@
    * @returns エラーメッセージ（エラーがない場合は null）
    */
   function validate(): string | null {
-    if (!email.trim()) {
+    const normalizedEmail = email.trim();
+    const normalizedPassword = password.trim();
+
+    if (!normalizedEmail) {
       return 'メールアドレスを入力してください';
     }
-    if (!password.trim()) {
+    if (!normalizedPassword) {
       return 'パスワードを入力してください';
     }
     // 簡易的なメール形式チェック（@と.があるか）
+    // trim 済みの値でチェックすることで、空白混入による形式不正を防ぐ
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(email)) {
+    if (!emailPattern.test(normalizedEmail)) {
       return 'メールアドレスの形式が正しくありません';
     }
     return null;
@@ -91,12 +95,13 @@
     try {
       // ログイン API 呼び出し（authStore パターンに倣う）
       // API_BASE_URL には既に /api/v1 が含まれているので、エンドポイントのパスだけを追加する
+      // バリデーションと同様に trim した値を送信（空白混入による認証失敗を防ぐ）
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim(), password: password.trim() }),
         credentials: 'include' // HttpOnly Cookie 用
       });
 
