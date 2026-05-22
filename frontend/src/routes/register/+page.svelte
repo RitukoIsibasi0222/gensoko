@@ -194,5 +194,10 @@
       </p>
     </div>
   {/if}
-  <!-- T7: ログイン画面への導線リンク -->
+
+  <!-- ログインページへの導線 -->
+  <div class="mt-4 text-center text-sm">
+    <span class="text-gray-600">すでにアカウントをお持ちの方は</span>
+    <a href="/login" class="text-blue-600 hover:underline">ログイン</a>
+  </div>
 </div>

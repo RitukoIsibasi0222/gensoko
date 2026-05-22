@@ -112,7 +112,7 @@ export function validatePassword(value: string): string | null
 - [x] T4: フォーム UI 実装（`routes/register/+page.svelte`）
 - [x] T5: 成功画面 UI 実装（`routes/register/+page.svelte`）
 - [x] T6: 既ログイン時のリダイレクト処理（`routes/register/+page.svelte`）
-- [ ] T7: ログイン画面への導線リンク追加（`routes/register/+page.svelte`）
+- [x] T7: ログイン画面への導線リンク追加（`routes/register/+page.svelte`）
 - [ ] T8: 動作確認（lint・format・型チェック・手動疎通）
 
 ---
