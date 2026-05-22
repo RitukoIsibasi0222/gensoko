@@ -375,7 +375,7 @@ async function callApi() {
   const response = await fetch(`${API_BASE_URL}/endpoint`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email.trim(), password: password.trim() })
+    body: JSON.stringify({ email: email.trim(), password }) // パスワードは trim しない（スペース禁止ルールが先行/末尾スペースも検知できるようにする）
   });
 
   // 1. 最初に response.ok をチェック（JSON パース前）
@@ -426,7 +426,7 @@ async function badExample() {
 // ✅ 正しいパターン: 正規化した値を一貫使用
 function validate(): string | null {
   const normalizedEmail = email.trim();
-  const normalizedPassword = password.trim();
+  const normalizedPassword = password; // パスワードは trim しない（スペース禁止ルールが先行/末尾スペースも検知できるようにする）
 
   // 空欄チェック
   if (!normalizedEmail) return 'メールアドレスを入力してください';
@@ -442,11 +442,11 @@ function validate(): string | null {
 }
 
 async function handleSubmit() {
-  // 送信時も同じように trim した値を使う
+  // 送信時も同じ正規化値を使う
   const response = await fetch(url, {
     body: JSON.stringify({
       email: email.trim(),
-      password: password.trim()
+      password // パスワードは trim しない
     })
   });
 }
@@ -461,8 +461,9 @@ function badValidate() {
 }
 
 async function badSubmit() {
-  // NG: 送信時は trim しない → サーバー側で認証失敗する可能性
-  body: JSON.stringify({ email, password })
+  // NG: email を trim しないと前後の空白がサーバーに送られ認証失敗する
+  // （password は trim しないのが正しいが、email は trim が必要）
+  body: JSON.stringify({ email, password }) // email は email.trim() にすること
 }
 ```
 

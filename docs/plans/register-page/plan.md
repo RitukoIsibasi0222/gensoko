@@ -87,7 +87,7 @@ export function validateUsername(value: string): string | null
 // メールアドレスバリデーション（trim 済みの値を受け取る）
 export function validateEmail(value: string): string | null
 
-// パスワードバリデーション（trim 済みの値を受け取る）
+// パスワードバリデーション（trim しない。スペースを含む入力はそのまま渡す）
 export function validatePassword(value: string): string | null
 ```
 
@@ -97,7 +97,7 @@ export function validatePassword(value: string): string | null
 
 | タスクID | 内容 | ファイル | 優先度 | 備考 |
 |---|---|---|---|---|
-| T1 | バリデーションヘルパー関数の作成 | `routes/register/validation.ts` | 高 | 純粋関数・バックエンドの strongPasswordSchema と一致させる |
+| T1 | バリデーションヘルパー関数の作成 | `routes/register/validation.ts` | 高 | 純粋関数・バックエンドの strongPasswordSchema に準拠 |
 | T2 | ページコンポーネントの骨組み（import・state 定義） | `routes/register/+page.svelte` | 高 | |
 | T3 | `handleSubmit` 実装（正規化・バリデーション・fetch・エラー処理） | `routes/register/+page.svelte` | 高 | fetch パターンは login ページに倣う |
 | T4 | フォーム UI（入力欄・aria・Tailwind） | `routes/register/+page.svelte` | 高 | |
@@ -119,7 +119,7 @@ export function validatePassword(value: string): string | null
 
 ## 技術的注意点
 
-### バリデーション制約（バックエンドの `strongPasswordSchema` と一致させること）
+### バリデーション制約（バックエンドの `strongPasswordSchema` に準拠）
 
 | フィールド | 制約 |
 |---|---|
