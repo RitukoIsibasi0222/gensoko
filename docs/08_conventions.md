@@ -443,7 +443,7 @@ function validate(normalizedEmail: string, normalizedPassword: string): string |
 async function handleSubmit() {
   // ① 正規化値を一度だけ計算（バリデーションと送信の両方で共用）
   const normalizedEmail = email.trim();
-  const normalizedPassword = password.trim(); // login 等: バックエンドと同じく trim 正規化（登録系でスペース禁止を検知したい場合は trim しない）
+  const normalizedPassword = password.trim(); // バックエンドの normalizePassword と同じく先頭/末尾スペースを除去する（内部スペースは validate で弾く）
 
   // ② 正規化済みの値でバリデーション
   const error = validate(normalizedEmail, normalizedPassword);
@@ -469,8 +469,8 @@ function badValidate() {
 
 async function badSubmit() {
   // NG: email を trim しないと前後の空白がサーバーに送られ認証失敗する
-  // （password は trim しないのが正しいが、email は trim が必要）
-  body: JSON.stringify({ email, password }) // email は email.trim() にすること
+  // （email は trim が必要。password もバックエンドの normalizePassword に合わせて trim する）
+  body: JSON.stringify({ email, password }) // email は email.trim()、password は password.trim() にすること
 }
 ```
 

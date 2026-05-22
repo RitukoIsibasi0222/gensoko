@@ -42,8 +42,14 @@ SvelteKit + Svelte 5 + Tailwind CSS v4 を使用して、新規ユーザー登�
 
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
+| `frontend/src/lib/validation/email.ts` | 新規 | 共通メールアドレス形式チェック関数（login/register で共用） |
 | `frontend/src/routes/register/validation.ts` | 新規 | フィールドごとのバリデーション純粋関数 |
+| `frontend/src/routes/register/validation.test.ts` | 新規 | バリデーション関数の自動テスト（Vitest） |
 | `frontend/src/routes/register/+page.svelte` | 新規 | 登録フォーム・成功画面 |
+| `frontend/src/routes/login/+page.svelte` | 修正 | password trim 修正（normalizePassword と整合）・コメント整合 |
+| `docs/08_conventions.md` | 修正 | fetch パターン・trim 方針・バリデーション一貫性チェックリスト更新 |
+| `docs/04_api.md` | 修正 | fetch パターンの記述を統一 |
+| `.github/copilot-instructions.md` | 修正 | fetch パターン例を更新 |
 
 ---
 
@@ -87,7 +93,7 @@ export function validateUsername(value: string): string | null
 // メールアドレスバリデーション（trim 済みの値を受け取る）
 export function validateEmail(value: string): string | null
 
-// パスワードバリデーション（trim しない。スペースを含む入力はそのまま渡す）
+// パスワードバリデーション（trim 済みの値を受け取る。内部スペースのみ検知して弾く）
 export function validatePassword(value: string): string | null
 ```
 
