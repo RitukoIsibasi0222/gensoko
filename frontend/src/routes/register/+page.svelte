@@ -90,7 +90,9 @@
         throw new ApiError(response.status, errorBody?.error || 'エラーが発生しました', errorBody);
       }
 
-      // 登録成功: 成功フラグを立てて完了トーストを表示
+      // 登録成功: パスワードをクリアしてから成功フラグを立てる（メモリ上に残さない）
+      password = '';
+      showPassword = false;
       isSuccess = true;
       toastStore.success('確認メールを送信しました');
     } catch (error) {
