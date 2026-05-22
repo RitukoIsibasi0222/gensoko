@@ -174,7 +174,17 @@
       </button>
     </form>
   {:else}
-    <!-- T5: 成功画面 UI -->
+    <!-- 登録完了画面 -->
+    <div
+      role="status"
+      class="mt-6 rounded-md border border-green-200 bg-green-50 px-6 py-8 text-center"
+    >
+      <p class="text-lg font-semibold text-green-800">確認メールを送信しました</p>
+      <p class="mt-2 text-sm text-green-700">
+        ご登録のメールアドレスに確認メールをお送りしました。<br />
+        メール内のリンクをクリックして登録を完了してください。
+      </p>
+    </div>
   {/if}
   <!-- T7: ログイン画面への導線リンク -->
 </div>
