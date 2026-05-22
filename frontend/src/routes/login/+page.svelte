@@ -37,6 +37,12 @@
     if (!normalizedPassword) {
       return 'パスワードを入力してください';
     }
+    // バックエンド側は register/reset で空白を禁止しているため、
+    // 内部空白を含むパスワードは必ず認証失敗する。
+    // 送信前にバリデーションエラーとして扱い、不要な loginFailCount 増加を防ぐ。
+    if (/\s/.test(normalizedPassword)) {
+      return 'パスワードにスペースは使用できません';
+    }
     // 簡易的なメール形式チェック（@と.があるか）
     // trim 済みの値でチェックすることで、空白混入による形式不正を防ぐ
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
