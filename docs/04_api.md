@@ -267,7 +267,7 @@ async function callApi() {
   // ステップ 1: response.ok を最初にチェック
   if (!response.ok) {
     // ステップ 2: JSON パースを try-catch で囲む（502/504 対策）
-    let errorBody: { error?: string } | null = null;
+    let errorBody: { error?: string; details?: { message: string }[] } | null = null;
     try {
       errorBody = await response.json();
     } catch {
@@ -275,9 +275,9 @@ async function callApi() {
       // null を使う（空オブジェクト {} は使わない）
     }
     
-    // ステップ 3: バックエンドのメッセージを優先
-    const message = errorBody?.error || 'エラーが発生しました';
-    throw new ApiError(response.status, message);
+    // ステップ 3: details[0].message を優先（400 バリデーションエラー時の具体的な Zod メッセージを使用）
+    const message = errorBody?.details?.[0]?.message ?? errorBody?.error ?? 'エラーが発生しました';
+    throw new ApiError(response.status, message, errorBody);
   }
 
   // 正常系: response.ok が true なら JSON が返る

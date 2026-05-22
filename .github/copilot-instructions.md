@@ -303,14 +303,14 @@ git checkout -b feature/xxx
     const response = await fetch(url, options);
     
     if (!response.ok) {
-      let errorBody: { error?: string } | null = null;
+      let errorBody: { error?: string; details?: { message: string }[] } | null = null;
       try {
         errorBody = await response.json();
       } catch {
         // JSON パース失敗時は null（非 JSON レスポンス）
       }
-      const message = errorBody?.error || 'エラーが発生しました';
-      throw new ApiError(response.status, message);
+      const message = errorBody?.details?.[0]?.message ?? errorBody?.error ?? 'エラーが発生しました';
+      throw new ApiError(response.status, message, errorBody);
     }
     
     return await response.json();
