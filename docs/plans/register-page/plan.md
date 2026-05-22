@@ -106,7 +106,7 @@ export function validatePassword(value: string): string | null
 | T7 | ログイン画面への導線リンク追加 | `routes/register/+page.svelte` | 中 | |
 | T8 | 動作確認（lint・format・型チェック・手動疎通） | - | 高 | |
 
-- [ ] T1: バリデーションヘルパー関数の作成（`routes/register/validation.ts`）
+- [x] T1: バリデーションヘルパー関数の作成（`routes/register/validation.ts`）
 - [ ] T2: ページコンポーネントの骨組み（`routes/register/+page.svelte`）
 - [ ] T3: `handleSubmit` 実装（`routes/register/+page.svelte`）
 - [ ] T4: フォーム UI 実装（`routes/register/+page.svelte`）
