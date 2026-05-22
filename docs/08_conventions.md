@@ -369,7 +369,7 @@ async function callApi() {
 
   // 1. 最初に response.ok をチェック（JSON パース前）
   if (!response.ok) {
-    // 2. JSON パースを try-catch で囲む（502/504 等の HTML レスポンス対策）
+    // 2. JSON パースを try-catch で囲む（非 JSON レスポンス対策）
     let errorBody: { error?: string } | null = null;
     try {
       errorBody = await response.json();
