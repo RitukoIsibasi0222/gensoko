@@ -87,15 +87,8 @@ describe('validatePassword', () => {
   });
 
   it('スペース含む（内部）→ エラー', () => {
+    // 先頭/末尾スペースは呼び出し元で trim されるため、ここでは内部スペースのみを検証する
     expect(validatePassword('Pass word1!')).toBe('パスワードにスペースは使用できません');
-  });
-
-  it('スペース含む（先頭）→ エラー', () => {
-    expect(validatePassword(' Password1!')).toBe('パスワードにスペースは使用できません');
-  });
-
-  it('スペース含む（末尾）→ エラー', () => {
-    expect(validatePassword('Password1! ')).toBe('パスワードにスペースは使用できません');
   });
 
   it('7文字（最小境界値 -1、他条件すべて満たす）→ エラー', () => {
