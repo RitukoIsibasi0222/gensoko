@@ -257,7 +257,9 @@ git checkout -b feature/xxx
 6. 実装対象ファイル（routes・services・middleware）の現在の内容
 7. **既に実装済みの類似ファイル**（コードのブレを防ぐため）
    - 例: `auth.ts` を実装するなら既存の `middleware/auth.ts` を読む
-8. `backend/src/types/index.ts` または `frontend/src/types/index.ts` — 型定義の確認
+8. 型定義ファイルの確認
+   - バックエンド: `backend/src/types/index.ts`
+   - フロントエンド: 既存の型定義（`$lib/api/errors.ts` 等）を参照
 
 #### 整合性チェック（必須）
 
@@ -394,7 +396,7 @@ npm run test -- --run # 全テスト
 # フロントエンドの場合
 cd frontend
 npm run lint          # ESLint
-npm run format:check  # Prettier チェック
+npm run format        # Prettier 適用
 npm run test -- --run # 全テスト（存在する場合）
 ```
 

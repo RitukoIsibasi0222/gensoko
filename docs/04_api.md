@@ -438,23 +438,4 @@ Response 200:
 
 ---
 
-## 共通エラーレスポンス形式
-
-```json
-{
-  "error": {
-    "code": "UNAUTHORIZED",
-    "message": "ログインが必要です"
-  }
-}
-```
-
-| コード | HTTPステータス | 意味 |
-|--------|---------------|------|
-| `BAD_REQUEST` | 400 | 入力値エラー |
-| `UNAUTHORIZED` | 401 | 未認証 |
-| `FORBIDDEN` | 403 | 権限なし |
-| `NOT_FOUND` | 404 | リソースが存在しない |
-| `CONFLICT` | 409 | 重複エラー |
-| `RATE_LIMITED` | 429 | リクエスト過多 |
-| `INTERNAL_ERROR` | 500 | サーバーエラー |
+## ランキング `/api/v1/ranking`
