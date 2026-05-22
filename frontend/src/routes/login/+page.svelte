@@ -149,7 +149,8 @@
 <div class="mx-auto max-w-md px-4 py-8">
   <h1 class="text-2xl font-bold text-gray-800">ログイン</h1>
 
-  <form class="mt-6 space-y-4" onsubmit={handleSubmit}>
+  <!-- novalidate でネイティブバリデーションを無効化し、カスタムバリデーションの日本語メッセージを優先する -->
+  <form class="mt-6 space-y-4" novalidate onsubmit={handleSubmit}>
     <!-- エラーメッセージ表示 -->
     {#if errorMessage}
       <div
