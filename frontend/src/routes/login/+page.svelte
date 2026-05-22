@@ -37,10 +37,10 @@
     if (!normalizedPassword) {
       return 'パスワードを入力してください';
     }
-    // バックエンド側は register/reset で空白を禁止しているため、
-    // 内部空白を含むパスワードは必ず認証失敗する。
+    // バックエンド側は register/reset でスペースを禁止しているため、
+    // スペースを含むパスワードは必ず認証失敗する。
     // 送信前にバリデーションエラーとして扱い、不要な loginFailCount 増加を防ぐ。
-    if (/\s/.test(normalizedPassword)) {
+    if (/ /.test(normalizedPassword)) {
       return 'パスワードにスペースは使用できません';
     }
     // 簡易的なメール形式チェック（@と.があるか）
