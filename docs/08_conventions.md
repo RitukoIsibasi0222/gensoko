@@ -424,17 +424,13 @@ async function badExample() {
 
 ```typescript
 // ✅ 正しいパターン: 正規化した値を一貫使用
-function validate(): string | null {
-  const normalizedEmail = email.trim();
-  const normalizedPassword = password; // パスワードは trim しない（スペース禁止ルールが先行/末尾スペースも検知できるようにする）
-
-  // 空欄チェック
+function validate(normalizedEmail: string, normalizedPassword: string): string | null {
+  // 正規化済みの値を受け取る（この関数内で trim しない）
   if (!normalizedEmail) return 'メールアドレスを入力してください';
   if (!normalizedPassword) return 'パスワードを入力してください';
 
   // 形式チェック（正規化済みの値を使う）
-  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailPattern.test(normalizedEmail)) {
+  if (!isValidEmailFormat(normalizedEmail)) {
     return 'メールアドレスの形式が正しくありません';
   }
 
@@ -442,11 +438,19 @@ function validate(): string | null {
 }
 
 async function handleSubmit() {
-  // 送信時も同じ正規化値を使う
+  // ① 正規化値を一度だけ計算（バリデーションと送信の両方で共用）
+  const normalizedEmail = email.trim();
+  const normalizedPassword = password; // パスワードは trim しない
+
+  // ② 正規化済みの値でバリデーション
+  const error = validate(normalizedEmail, normalizedPassword);
+  if (error) return;
+
+  // ③ 送信時も同じ正規化変数を使う（ここで email.trim() を再計算しない）
   const response = await fetch(url, {
     body: JSON.stringify({
-      email: email.trim(),
-      password // パスワードは trim しない
+      email: normalizedEmail,
+      password: normalizedPassword
     })
   });
 }
@@ -455,7 +459,7 @@ async function handleSubmit() {
 function badValidate() {
   // NG: 空欄チェックは trim するのに...
   if (!email.trim()) return 'メールアドレスを入力してください';
-  
+
   // NG: 形式チェックは trim しない → 前後に空白があると形式エラーになる
   if (!emailPattern.test(email)) return '形式が正しくありません';
 }
