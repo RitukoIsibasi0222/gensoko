@@ -23,11 +23,15 @@ describe('validateUsername', () => {
   });
 
   it('ハイフン含む → エラー', () => {
-    expect(validateUsername('user-name')).toBe('ユーザー名は英数字とアンダースコアのみ使用できます');
+    expect(validateUsername('user-name')).toBe(
+      'ユーザー名は英数字とアンダースコアのみ使用できます'
+    );
   });
 
   it('スペース含む → エラー', () => {
-    expect(validateUsername('user name')).toBe('ユーザー名は英数字とアンダースコアのみ使用できます');
+    expect(validateUsername('user name')).toBe(
+      'ユーザー名は英数字とアンダースコアのみ使用できます'
+    );
   });
 
   it('日本語含む → エラー', () => {

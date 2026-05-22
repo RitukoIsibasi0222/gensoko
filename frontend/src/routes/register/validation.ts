@@ -1,8 +1,11 @@
+import { isValidEmailFormat } from '$lib/validation/email';
+
 /**
  * ユーザー登録フォームのバリデーション関数
  *
  * すべての関数は trim 済みの値を受け取る前提（関数内で trim しない）。
- * バックエンドの registerSchema / strongPasswordSchema と一致させること。
+ * ユーザー名・パスワードの制約はバックエンドの registerSchema / strongPasswordSchema と一致させること。
+ * メールアドレスは $lib/validation/email.ts の簡易チェックを使用する（バックエンドは z.string().email() でより厳密に検証）。
  * （backend/src/routes/auth/index.ts 参照）
  */
 
@@ -36,9 +39,9 @@ export function validateUsername(value: string): string | null {
 /**
  * メールアドレスのバリデーション
  *
- * 制約:
  * - 必須
- * - メール形式（/^[^\s@]+@[^\s@]+\.[^\s@]+$/）
+ * - 簡易形式チェック（`$lib/validation/email.ts` の `isValidEmailFormat` を使用）
+ *   - バックエンドは `z.string().email()` でより厳密に検証するため、こちらは「明らかな入力ミスの早期検知」が目的
  *
  * @param value - trim 済みのメールアドレス
  * @returns エラーメッセージ（エラーがない場合は null）
@@ -47,7 +50,7 @@ export function validateEmail(value: string): string | null {
   if (!value) {
     return 'メールアドレスを入力してください';
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+  if (!isValidEmailFormat(value)) {
     return '有効なメールアドレスを入力してください';
   }
   return null;

@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { ApiError } from '$lib/api/errors';
   import { API_BASE_URL } from '$lib/api/config';
+  import { isValidEmailFormat } from '$lib/validation/email';
 
   // フォーム入力値
   let email = $state('');
@@ -44,8 +45,7 @@
     }
     // 簡易的なメール形式チェック（@と.があるか）
     // trim 済みの値でチェックすることで、空白混入による形式不正を防ぐ
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(normalizedEmail)) {
+    if (!isValidEmailFormat(normalizedEmail)) {
       return 'メールアドレスの形式が正しくありません';
     }
     return null;
