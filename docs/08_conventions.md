@@ -375,7 +375,7 @@ async function callApi() {
   const response = await fetch(`${API_BASE_URL}/endpoint`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email.trim(), password }) // パスワードは trim しない（スペース禁止ルールが先行/末尾スペースも検知できるようにする）
+    body: JSON.stringify({ email: email.trim(), password }) // password の trim 方针は API 側の正規化に合わせる（例: login は trim、register は trim しない）
   });
 
   // 1. 最初に response.ok をチェック（JSON パース前）
@@ -441,7 +441,7 @@ function validate(normalizedEmail: string, normalizedPassword: string): string |
 async function handleSubmit() {
   // ① 正規化値を一度だけ計算（バリデーションと送信の両方で共用）
   const normalizedEmail = email.trim();
-  const normalizedPassword = password; // パスワードは trim しない
+  const normalizedPassword = password.trim(); // login 等: バックエンドと同じく trim 正規化（登録系でスペース禁止を検知したい場合は trim しない）
 
   // ② 正規化済みの値でバリデーション
   const error = validate(normalizedEmail, normalizedPassword);
