@@ -81,13 +81,16 @@
 
       // response.ok チェックを先に行う（JSON パース前に HTTP ステータスを確認）
       if (!response.ok) {
-        let errorBody: { error?: string } | null = null;
+        let errorBody: { error?: string; details?: { message: string }[] } | null = null;
         try {
           errorBody = await response.json();
         } catch {
           // JSON パース失敗時（502/504 等の非 JSON レスポンス）は null のまま
         }
-        throw new ApiError(response.status, errorBody?.error || 'エラーが発生しました', errorBody);
+        // details[0].message を優先（バリデーションエラー時の具体的なメッセージを使用）
+        const message =
+          errorBody?.details?.[0]?.message ?? errorBody?.error ?? 'エラーが発生しました';
+        throw new ApiError(response.status, message, errorBody);
       }
 
       // 登録成功: パスワードをクリアしてから成功フラグを立てる（メモリ上に残さない）
