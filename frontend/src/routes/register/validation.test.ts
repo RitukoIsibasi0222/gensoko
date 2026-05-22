@@ -90,6 +90,14 @@ describe('validatePassword', () => {
     expect(validatePassword('Pass word1!')).toBe('パスワードにスペースは使用できません');
   });
 
+  it('スペース含む（先頭）→ エラー', () => {
+    expect(validatePassword(' Password1!')).toBe('パスワードにスペースは使用できません');
+  });
+
+  it('スペース含む（末尾）→ エラー', () => {
+    expect(validatePassword('Password1! ')).toBe('パスワードにスペースは使用できません');
+  });
+
   it('7文字（最小境界値 -1、他条件すべて満たす）→ エラー', () => {
     // P(大) a(小) s(小) s(小) 1(数) !(記号) a(小) = 7文字
     expect(validatePassword('Pass1!a')).toBe('パスワードは8文字以上にしてください');
