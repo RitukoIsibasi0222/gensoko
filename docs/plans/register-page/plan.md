@@ -146,11 +146,12 @@ let formError = $state<string | null>(null);
 ```typescript
 // response.ok チェック → エラー時のみ JSON パース（try-catch）→ ApiError スロー
 if (!response.ok) {
-  let errorBody: { error?: string } | null = null;
+  let errorBody: { error?: string; details?: { message: string }[] } | null = null;
   try {
     errorBody = await response.json();
   } catch { /* 非 JSON レスポンスは null のまま */ }
-  throw new ApiError(response.status, errorBody?.error || 'エラーが発生しました', errorBody);
+  const message = errorBody?.details?.[0]?.message ?? errorBody?.error ?? 'エラーが発生しました';
+  throw new ApiError(response.status, message, errorBody);
 }
 ```
 

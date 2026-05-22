@@ -392,7 +392,7 @@ async function callApi() {
     //    バックエンドが { error: "バリデーションエラー", details: ZodIssue[] } を返す場合に有効
     const message =
       errorBody?.details?.[0]?.message ?? errorBody?.error ?? 'エラーが発生しました';
-    throw new ApiError(response.status, message);
+    throw new ApiError(response.status, message, errorBody);
   }
 
   // 正常系: response.ok が true なら通常 JSON が返る
@@ -423,6 +423,8 @@ async function badExample() {
 ### バリデーションと送信の一貫性
 
 ```typescript
+import { isValidEmailFormat } from '$lib/validation/email';
+
 // ✅ 正しいパターン: 正規化した値を一貫使用
 function validate(normalizedEmail: string, normalizedPassword: string): string | null {
   // 正規化済みの値を受け取る（この関数内で trim しない）
