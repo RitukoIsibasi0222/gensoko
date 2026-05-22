@@ -27,7 +27,7 @@
   /**
    * クライアント側バリデーション
    * @param normalizedEmail - trim 済みメールアドレス
-   * @param normalizedPassword - パスワード（trim しない。スペースを含む入力はそのまま渡す）
+   * @param normalizedPassword - trim 済みパスワード（先頭/末尾スペースを除去した値）
    * @returns エラーメッセージ（エラーがない場合は null）
    */
   function validate(normalizedEmail: string, normalizedPassword: string): string | null {
@@ -37,7 +37,7 @@
     if (!normalizedPassword) {
       return 'パスワードを入力してください';
     }
-    // スペースを含むパスワードは登録時に拒否されるため、ログインも必ず失敗する。
+    // パスワードは登録時にスペース禁止のため、trim 後に残る内部スペースを含む入力は必ず失敗する。
     // 送信前にクライアント側でバリデーションエラーとして弾き、不要な loginFailCount 増加を防ぐ。
     if (/ /.test(normalizedPassword)) {
       return 'パスワードにスペースは使用できません';
@@ -93,7 +93,7 @@
 
     // 正規化値を一度だけ計算し、バリデーションと送信の両方で共用する
     const normalizedEmail = email.trim();
-    const normalizedPassword = password; // パスワードは trim しない（スペースを含む入力をそのままバリデーション・送信する）
+    const normalizedPassword = password.trim(); // バックエンドと同じく先頭/末尾スペースを除去する（内部スペースは validate で弾く）
 
     // クライアント側バリデーション
     const validationError = validate(normalizedEmail, normalizedPassword);
