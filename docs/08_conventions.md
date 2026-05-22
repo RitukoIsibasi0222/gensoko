@@ -350,6 +350,15 @@ export default [
 - [ ] 同じ責務のコードを重複して書いていないか
 - [ ] バックエンドのエラーレスポンス（サービス層・ミドルウェア含む）が日本語になっているか（`"Unauthorized"` 等の英語は不可）
 
+### 10. コメントと実装の精度確認
+- [ ] コメントで「○○と一致」と書いたとき、**本当に完全一致しているか**確認したか
+  - ルールは同じでも**エラーメッセージが違う**場合は「準拠」と書く
+  - 例: バックエンドは `min(3)` エラーで「3文字以上」だが、フロントは空欄で「入力してください」→「準拠」
+- [ ] 外部スキーマ（`registerSchema` 等）を参照するコメントに**例外・相違点**を明記したか
+  - 例: `* ユーザー名・パスワードは registerSchema に準拠。※ 空欄時のメッセージはフロント独自文言`
+- [ ] 「簡易チェック」「フロント独自」など、**意図的に完全一致させていない箇所**に理由を書いたか
+- [ ] 実装を変更したとき、**そのファイル内の関連コメントをすべて更新**したか（見落とし防止）
+
 ---
 
 ## フロントエンド（SvelteKit）のベストプラクティス
@@ -372,15 +381,17 @@ async function callApi() {
   // 1. 最初に response.ok をチェック（JSON パース前）
   if (!response.ok) {
     // 2. JSON パースを try-catch で囲む（非 JSON レスポンス対策）
-    let errorBody: { error?: string } | null = null;
+    let errorBody: { error?: string; details?: { message: string }[] } | null = null;
     try {
       errorBody = await response.json();
     } catch {
       // JSON パース失敗時は null（空オブジェクト {} は使わない）
     }
     
-    // 3. バックエンドのエラーメッセージを優先（上書きしない）
-    const message = errorBody?.error || 'エラーが発生しました';
+    // 3. details[0].message を優先（バリデーションエラー時の具体的な Zod メッセージを使用）
+    //    バックエンドが { error: "バリデーションエラー", details: ZodIssue[] } を返す場合に有効
+    const message =
+      errorBody?.details?.[0]?.message ?? errorBody?.error ?? 'エラーが発生しました';
     throw new ApiError(response.status, message);
   }
 

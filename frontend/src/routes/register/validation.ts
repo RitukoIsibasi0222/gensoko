@@ -4,7 +4,9 @@ import { isValidEmailFormat } from '$lib/validation/email';
  * ユーザー登録フォームのバリデーション関数
  *
  * すべての関数は trim 済みの値を受け取る前提（関数内で trim しない）。
- * ユーザー名・パスワードの制約はバックエンドの registerSchema / strongPasswordSchema と一致させること。
+ * ユーザー名・パスワードの制約はバックエンドの registerSchema / strongPasswordSchema に準拠させること。
+ * ※「準拠」であり「完全一致」ではない: 空欄時のエラーメッセージ等、フロント独自の文言を持つ場合がある。
+ *   バックエンドと異なる部分は各関数の JSDoc に「フロント独自」として明記すること。
  * メールアドレスは $lib/validation/email.ts の簡易チェックを使用する（バックエンドは z.string().email() でより厳密に検証）。
  * （backend/src/routes/auth/index.ts 参照）
  */
