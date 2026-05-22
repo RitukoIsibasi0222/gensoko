@@ -462,7 +462,7 @@ function badValidate() {
   if (!email.trim()) return 'メールアドレスを入力してください';
 
   // NG: 形式チェックは trim しない → 前後に空白があると形式エラーになる
-  if (!emailPattern.test(email)) return '形式が正しくありません';
+  if (!isValidEmailFormat(email)) return '形式が正しくありません'; // isValidEmailFormat は $lib/validation/email.ts の共通関数
 }
 
 async function badSubmit() {
