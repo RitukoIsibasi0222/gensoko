@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { ApiError } from '$lib/api/errors';
   import { API_BASE_URL } from '$lib/api/config';
+  import { isValidEmailFormat } from '$lib/validation/email';
 
   // フォーム入力値
   let email = $state('');
@@ -26,7 +27,7 @@
   /**
    * クライアント側バリデーション
    * @param normalizedEmail - trim 済みメールアドレス
-   * @param normalizedPassword - trim 済みパスワード
+   * @param normalizedPassword - trim 済みパスワード（先頭/末尾スペースを除去した値）
    * @returns エラーメッセージ（エラーがない場合は null）
    */
   function validate(normalizedEmail: string, normalizedPassword: string): string | null {
@@ -36,16 +37,14 @@
     if (!normalizedPassword) {
       return 'パスワードを入力してください';
     }
-    // バックエンド側は register/reset でスペースを禁止しているため、
-    // trim 後に残るスペース（内部スペース）を含むパスワードは必ず認証失敗する。
-    // 送信前にバリデーションエラーとして扱い、不要な loginFailCount 増加を防ぐ。
+    // パスワードは登録時にスペース禁止のため、trim 後に残る内部スペースを含む入力は必ず失敗する。
+    // 送信前にクライアント側でバリデーションエラーとして弾き、不要な loginFailCount 増加を防ぐ。
     if (/ /.test(normalizedPassword)) {
       return 'パスワードにスペースは使用できません';
     }
     // 簡易的なメール形式チェック（@と.があるか）
     // trim 済みの値でチェックすることで、空白混入による形式不正を防ぐ
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(normalizedEmail)) {
+    if (!isValidEmailFormat(normalizedEmail)) {
       return 'メールアドレスの形式が正しくありません';
     }
     return null;
@@ -94,7 +93,7 @@
 
     // 正規化値を一度だけ計算し、バリデーションと送信の両方で共用する
     const normalizedEmail = email.trim();
-    const normalizedPassword = password.trim();
+    const normalizedPassword = password.trim(); // バックエンドと同じく先頭/末尾スペースを除去する（内部スペースは validate で弾く）
 
     // クライアント側バリデーション
     const validationError = validate(normalizedEmail, normalizedPassword);
@@ -124,13 +123,17 @@
       // （JSON パース前に HTTP ステータスを確認し、非 JSON レスポンス時のエラーを防ぐ）
       if (!response.ok) {
         // エラーレスポンスの場合は JSON パースを試みる
-        let errorBody: { error?: string } | null = null;
+        let errorBody: { error?: string; details?: { message: string }[] } | null = null;
         try {
           errorBody = await response.json();
         } catch {
           // JSON パース失敗時（502/504 等の非 JSON レスポンス）は null のまま
         }
-        const message = toJpMessage(response.status, errorBody?.error || '');
+        // details[0].message を優先（400 バリデーションエラー時の具体的なメッセージを使用）
+        const message = toJpMessage(
+          response.status,
+          errorBody?.details?.[0]?.message ?? errorBody?.error ?? ''
+        );
         throw new ApiError(response.status, message, errorBody);
       }
 

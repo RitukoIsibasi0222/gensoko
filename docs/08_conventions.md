@@ -350,6 +350,15 @@ export default [
 - [ ] 同じ責務のコードを重複して書いていないか
 - [ ] バックエンドのエラーレスポンス（サービス層・ミドルウェア含む）が日本語になっているか（`"Unauthorized"` 等の英語は不可）
 
+### 10. コメントと実装の精度確認
+- [ ] コメントで「○○と一致」と書いたとき、**本当に完全一致しているか**確認したか
+  - ルールは同じでも**エラーメッセージが違う**場合は「準拠」と書く
+  - 例: バックエンドは `min(3)` エラーで「3文字以上」だが、フロントは空欄で「入力してください」→「準拠」
+- [ ] 外部スキーマ（`registerSchema` 等）を参照するコメントに**例外・相違点**を明記したか
+  - 例: `* ユーザー名・パスワードは registerSchema に準拠。※ 空欄時のメッセージはフロント独自文言`
+- [ ] 「簡易チェック」「フロント独自」など、**意図的に完全一致させていない箇所**に理由を書いたか
+- [ ] 実装を変更したとき、**そのファイル内の関連コメントをすべて更新**したか（見落とし防止）
+
 ---
 
 ## フロントエンド（SvelteKit）のベストプラクティス
@@ -366,22 +375,24 @@ async function callApi() {
   const response = await fetch(`${API_BASE_URL}/endpoint`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email.trim(), password: password.trim() })
+    body: JSON.stringify({ email: email.trim(), password: password.trim() }) // password はバックエンドの normalizePassword と同様に trim して送信する
   });
 
   // 1. 最初に response.ok をチェック（JSON パース前）
   if (!response.ok) {
     // 2. JSON パースを try-catch で囲む（非 JSON レスポンス対策）
-    let errorBody: { error?: string } | null = null;
+    let errorBody: { error?: string; details?: { message: string }[] } | null = null;
     try {
       errorBody = await response.json();
     } catch {
       // JSON パース失敗時は null（空オブジェクト {} は使わない）
     }
     
-    // 3. バックエンドのエラーメッセージを優先（上書きしない）
-    const message = errorBody?.error || 'エラーが発生しました';
-    throw new ApiError(response.status, message);
+    // 3. details[0].message を優先（バリデーションエラー時の具体的な Zod メッセージを使用）
+    //    バックエンドが { error: "バリデーションエラー", details: ZodIssue[] } を返す場合に有効
+    const message =
+      errorBody?.details?.[0]?.message ?? errorBody?.error ?? 'エラーが発生しました';
+    throw new ApiError(response.status, message, errorBody);
   }
 
   // 正常系: response.ok が true なら通常 JSON が返る
@@ -412,18 +423,17 @@ async function badExample() {
 ### バリデーションと送信の一貫性
 
 ```typescript
-// ✅ 正しいパターン: 正規化した値を一貫使用
-function validate(): string | null {
-  const normalizedEmail = email.trim();
-  const normalizedPassword = password.trim();
+import { isValidEmailFormat } from '$lib/validation/email';
 
-  // 空欄チェック
+// ✅ 正しいパターン: 正規化した値を一貫使用
+function validate(normalizedEmail: string, normalizedPassword: string): string | null {
+  // 正規化済みの値を受け取る（この関数内で trim しない）
   if (!normalizedEmail) return 'メールアドレスを入力してください';
   if (!normalizedPassword) return 'パスワードを入力してください';
 
   // 形式チェック（正規化済みの値を使う）
-  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailPattern.test(normalizedEmail)) {
+  // isValidEmailFormat は $lib/validation/email.ts の共通関数
+  if (!isValidEmailFormat(normalizedEmail)) {
     return 'メールアドレスの形式が正しくありません';
   }
 
@@ -431,11 +441,19 @@ function validate(): string | null {
 }
 
 async function handleSubmit() {
-  // 送信時も同じように trim した値を使う
+  // ① 正規化値を一度だけ計算（バリデーションと送信の両方で共用）
+  const normalizedEmail = email.trim();
+  const normalizedPassword = password.trim(); // バックエンドの normalizePassword と同じく先頭/末尾スペースを除去する（内部スペースは validate で弾く）
+
+  // ② 正規化済みの値でバリデーション
+  const error = validate(normalizedEmail, normalizedPassword);
+  if (error) return;
+
+  // ③ 送信時も同じ正規化変数を使う（ここで email.trim() を再計算しない）
   const response = await fetch(url, {
     body: JSON.stringify({
-      email: email.trim(),
-      password: password.trim()
+      email: normalizedEmail,
+      password: normalizedPassword
     })
   });
 }
@@ -444,14 +462,15 @@ async function handleSubmit() {
 function badValidate() {
   // NG: 空欄チェックは trim するのに...
   if (!email.trim()) return 'メールアドレスを入力してください';
-  
+
   // NG: 形式チェックは trim しない → 前後に空白があると形式エラーになる
-  if (!emailPattern.test(email)) return '形式が正しくありません';
+  if (!isValidEmailFormat(email)) return '形式が正しくありません'; // isValidEmailFormat は $lib/validation/email.ts の共通関数
 }
 
 async function badSubmit() {
-  // NG: 送信時は trim しない → サーバー側で認証失敗する可能性
-  body: JSON.stringify({ email, password })
+  // NG: email を trim しないと前後の空白がサーバーに送られ認証失敗する
+  // （email は trim が必要。password もバックエンドの normalizePassword に合わせて trim する）
+  body: JSON.stringify({ email, password }) // email は email.trim()、password は password.trim() にすること
 }
 ```
 
