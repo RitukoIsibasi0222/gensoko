@@ -181,7 +181,7 @@
             type="button"
             onclick={() => (showPassword = !showPassword)}
             aria-label={showPassword ? 'パスワードを隠す' : 'パスワードを表示する'}
-            class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 focus:outline-none"
+            class="absolute inset-y-0 right-0 flex items-center rounded-md pr-3 text-gray-400 hover:text-gray-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
           >
             {#if showPassword}
               <!-- eye-off: 表示中 → クリックで隠す -->
