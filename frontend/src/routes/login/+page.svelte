@@ -101,7 +101,8 @@
     try {
       // ログイン API 呼び出し（authStore パターンに倣う）
       // API_BASE_URL には既に /api/v1 が含まれているので、エンドポイントのパスだけを追加する
-      // バリデーションと同様に trim した値を送信（空白混入による認証失敗を防ぐ）
+      // email・password ともに trim した値を送信（バックエンド側も同様に trim して正規化）
+      // プロジェクト方針: パスワードの先頭/末尾のスペースは許容しない
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {

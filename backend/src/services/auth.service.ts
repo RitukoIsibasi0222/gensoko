@@ -25,7 +25,9 @@ export async function register(input: {
   email: string;
   password: string;
 }): Promise<void> {
-  const { username, email, password } = input;
+  const { username, email, password: rawPassword } = input;
+  // パスワードの先頭/末尾のスペースを除去（フロントエンドと同じ正規化）
+  const password = rawPassword.trim();
 
   // 1. DB にメールまたはユーザー名の重複チェック + ユーザー作成をトランザクションで実行
   const { token, userId } = await prisma.$transaction(async (tx) => {
@@ -164,7 +166,9 @@ export async function login(input: { email: string; password: string }): Promise
   refreshToken: string;
   user: { id: string; username: string; role: Role };
 }> {
-  const { email, password } = input;
+  const { email, password: rawPassword } = input;
+  // パスワードの先頭/末尾のスペースを除去（フロントエンドと同じ正規化）
+  const password = rawPassword.trim();
 
   // 1. ユーザー取得
   const user = await prisma.user.findUnique({
@@ -380,7 +384,9 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
 }
 
 export async function resetPassword(input: { token: string; password: string }): Promise<void> {
-  const { token, password } = input;
+  const { token, password: rawPassword } = input;
+  // パスワードの先頭/末尾のスペースを除去（フロントエンドと同じ正規化）
+  const password = rawPassword.trim();
 
   // 1. tokenをsha256ハッシュ化してDBと照合
   const tokenHash = createHash("sha256").update(token).digest("hex");
