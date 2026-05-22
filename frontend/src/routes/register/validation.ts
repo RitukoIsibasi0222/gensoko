@@ -3,8 +3,8 @@ import { isValidEmailFormat } from '$lib/validation/email';
 /**
  * ユーザー登録フォームのバリデーション関数
  *
- * validateUsername / validateEmail は trim 済みの値を受け取る前提（関数内で trim しない）。
- * validatePassword は trim しない（スペースを含む入力を検知して弾くため）。
+ * すべての関数は trim 済みの値を受け取る前提（関数内で trim しない）。
+ * validatePassword も trim 済みの値を受け取る（先頭/末尾スペースは呼び出し元で除去済み。内部スペースのみ検知して弾く）。
  * ユーザー名・パスワードの制約はバックエンドの registerSchema / strongPasswordSchema に準拠させること。
  * ※「準拠」であり「完全一致」ではない: 空欄時のエラーメッセージ等、フロント独自の文言を持つ場合がある。
  *   バックエンドと異なる部分は各関数の JSDoc に「フロント独自」として明記すること。
@@ -71,7 +71,7 @@ export function validateEmail(value: string): string | null {
  * - 数字を1文字以上含む
  * - 記号（!@#$%^&*()_+-=[]{}など）を1文字以上含む
  *
- * @param value - パスワード（trim しないこと。スペースを含む入力はそのまま渡す）
+ * @param value - trim 済みのパスワード（先頭/末尾スペースは呼び出し元で除去済み。内部スペースのみ検知対象）
  * @returns エラーメッセージ（エラーがない場合は null）
  */
 export function validatePassword(value: string): string | null {

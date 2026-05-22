@@ -50,7 +50,7 @@
     // 正規化値を一度だけ計算し、バリデーションと送信の両方で共用する
     const normalizedUsername = username.trim();
     const normalizedEmail = email.trim();
-    const normalizedPassword = password; // パスワードは trim しない（スペースを含む入力をそのままバリデーション・送信する）
+    const normalizedPassword = password.trim(); // バックエンドの normalizePassword と同じく先頭/末尾スペースを除去する（内部スペースは validatePassword で弾く）
 
     // フォーム共通エラーをクリア（前回の API エラーをバリデーション途中でも残さない）
     formError = null;
