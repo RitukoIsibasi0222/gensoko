@@ -375,7 +375,7 @@ async function callApi() {
   const response = await fetch(`${API_BASE_URL}/endpoint`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email.trim(), password }) // password の trim 方针は API 側の正規化に合わせる（例: login は trim、register は trim しない）
+    body: JSON.stringify({ email: email.trim(), password: password.trim() }) // password はバックエンドの normalizePassword と同様に trim して送信する
   });
 
   // 1. 最初に response.ok をチェック（JSON パース前）
