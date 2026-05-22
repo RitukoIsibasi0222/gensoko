@@ -52,6 +52,9 @@
     const normalizedEmail = email.trim();
     const normalizedPassword = password.trim();
 
+    // フォーム共通エラーをクリア（前回の API エラーをバリデーション途中でも残さない）
+    formError = null;
+
     // フィールドごとにバリデーションを実行し、エラーを state にセットする
     usernameError = validateUsername(normalizedUsername);
     emailError = validateEmail(normalizedEmail);
@@ -61,8 +64,6 @@
       return;
     }
 
-    // フォーム共通エラーをクリアして送信開始
-    formError = null;
     isSubmitting = true;
 
     try {
