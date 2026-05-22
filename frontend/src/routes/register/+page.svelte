@@ -3,6 +3,8 @@
   import { ApiError } from '$lib/api/errors';
   import { toastStore } from '$lib/stores/toast.svelte';
   import { validateUsername, validateEmail, validatePassword } from './validation';
+  import { goto } from '$app/navigation';
+  import { authStore } from '$lib/stores/auth.svelte';
 
   // フォーム入力値
   let username = $state('');
@@ -23,7 +25,13 @@
   // フォーム共通エラー（API エラー・ネットワークエラー用）
   let formError = $state<string | null>(null);
 
-  // T6: $effect 実装・import 追加（goto, authStore）
+  // 既にログイン済みならトップページにリダイレクト
+  // 初期化中（refresh トークン検証中）は判定しない
+  $effect(() => {
+    if (!authStore.isInitializing && authStore.isLoggedIn) {
+      goto('/');
+    }
+  });
 
   /**
    * フォーム送信ハンドラー（ユーザー登録処理）
