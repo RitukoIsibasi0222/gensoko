@@ -220,7 +220,7 @@ describe("POST /auth/register", () => {
     expect(JSON.stringify(json.details)).toContain("スペース");
   });
 
-  it("正常系: パスワードの前後にスペースがある場合は Zod バリデーションで 400 を返す", async () => {
+  it("バリデーション: パスワードの前後にスペースがある場合は Zod バリデーションで 400 を返す", async () => {
     // Zod のバリデーションはサービス層より前に実行されるため、
     // 前後のスペースもスペース禁止ルールに引っかかる
     const res = await app.request("/auth/register", {

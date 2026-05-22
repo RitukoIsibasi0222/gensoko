@@ -410,4 +410,57 @@ describe("POST /auth/login", () => {
       data: { loginFailCount: 1 },
     });
   });
+
+  it("ブルートフォース対策: フォールバック時（2回試行）に失敗した場合は failCount を2回分加算", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(ACTIVE_USER as never);
+    // 両方のパスワード（trim後・raw）で失敗
+    vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "taro@example.com",
+        password: "  Pass1234!  ", // 前後にスペース（trim後・raw両方で試行される）
+      }),
+    });
+
+    expect(res.status).toBe(401);
+    const json = await res.json();
+    expect(json.error).toBe("メールアドレスまたはパスワードが正しくありません");
+    // bcrypt.compare が2回呼ばれることを確認
+    expect(bcrypt.compare).toHaveBeenCalledTimes(2);
+    expect(bcrypt.compare).toHaveBeenNthCalledWith(1, "Pass1234!", ACTIVE_USER.passwordHash);
+    expect(bcrypt.compare).toHaveBeenNthCalledWith(2, "  Pass1234!  ", ACTIVE_USER.passwordHash);
+    // loginFailCount が2回分加算されることを確認
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: ACTIVE_USER.id },
+      data: { loginFailCount: 2 }, // 2回分加算
+    });
+  });
+
+  it("ブルートフォース対策: trim前後が同じ場合（フォールバックなし）は failCount を1回分のみ加算", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(ACTIVE_USER as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "taro@example.com",
+        password: "WrongPassword", // 前後にスペースなし（1回のみ試行）
+      }),
+    });
+
+    expect(res.status).toBe(401);
+    // bcrypt.compare が1回のみ呼ばれることを確認
+    expect(bcrypt.compare).toHaveBeenCalledTimes(1);
+    // loginFailCount が1回分のみ加算されることを確認
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: ACTIVE_USER.id },
+      data: { loginFailCount: 1 }, // 1回分のみ
+    });
+  });
 });

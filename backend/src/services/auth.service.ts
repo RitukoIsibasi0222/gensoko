@@ -218,14 +218,19 @@ export async function login(input: { email: string; password: string }): Promise
 
   // 5. パスワード検証
   // まず trim 後のパスワードで検証し、失敗したら trim 前でも試行する（既存ユーザー対応）
+  // ※ フォールバック時は bcrypt.compare を2回実行するため、ブルートフォース対策として
+  //    両方失敗した場合は loginFailCount を2回分加算する
   let isValid = await bcrypt.compare(password, user.passwordHash);
-  if (!isValid && password !== rawPassword) {
+  const didTryFallback = !isValid && password !== rawPassword;
+  if (didTryFallback) {
     // trim 前後で異なる場合のみ、trim 前のパスワードでも検証
     isValid = await bcrypt.compare(rawPassword, user.passwordHash);
   }
 
   if (!isValid) {
-    const newFailCount = Math.min(currentFailCount + 1, MAX_LOGIN_FAIL);
+    // フォールバックで2回試した場合は failCount を2回分加算（ブルートフォース対策）
+    const increment = didTryFallback ? 2 : 1;
+    const newFailCount = Math.min(currentFailCount + increment, MAX_LOGIN_FAIL);
     const updateData: { loginFailCount: number; lockedUntil?: Date } = {
       loginFailCount: newFailCount,
     };
