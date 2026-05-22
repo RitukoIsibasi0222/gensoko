@@ -46,6 +46,15 @@
   - 例: `c.req.path.replace(/\/[^/]+$/, "")` が複数ルートで重複 → `getAuthBasePath(path)` として切り出す
   - 修正漏れやズレを防ぐためにも、同じコードの複製は作らない
 
+- **共通設定は1箇所で管理する**: 環境変数の読み込み・フォールバック・警告メッセージなど、同じ責務のコードを複数ファイルに重複して書かない
+  - フロントエンド: `frontend/src/lib/api/config.ts` で API_BASE_URL を一元管理し、各ファイルから import する
+  - バックエンド: 共通の定数・設定は `backend/src/lib/config.ts` など専用ファイルで管理する
+  - **禁止**: 各コンポーネント・ストア・ページで個別に `const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''` を定義する
+  - **理由**: フォールバック方針や警告メッセージが複数箇所でズレるリスクを防ぎ、変更時の修正漏れを避ける
+- **エラーメッセージは日本語に統一する**: バックエンドのエラーレスポンスは、サービス層・ミドルウェアを含めて全て日本語で返す
+  - **禁止**: `"Unauthorized"` `"Forbidden"` `"Invalid token"` 等の英語文字列を `error` フィールドに入れる
+  - **正しい例**: `"認証が必要です"` `"管理者権限が必要です"` `"トークンが無効です"`
+  - **理由**: フロントエンドでそのままユーザーに表示される可能性があり、英語で表示されると不一致なユーザー体験になる
 ---
 
 ## 実装計画のワークフロー
@@ -242,25 +251,84 @@ git checkout -b feature/xxx
 
 実装前に必ず以下を読む:
 0. `docs/plans/{機能名}/plan.md` — 実装計画書が存在する場合は **最初に必ず読む**（同ディレクトリの補足資料も確認する）
-1. `docs/05_progress.md` — タスクの位置づけ・依存関係を確認
-2. `backend/prisma/schema.prisma` — 関連するモデルの全フィールドを確認
-3. 実装対象ファイル（routes・services・middleware）の現在の内容
-4. **既に実装済みの類似ファイル**（コードのブレを防ぐため）
+1. `docs/08_conventions.md` — **コード規約・命名ルール・Prettier・ESLint**（import配置、インデント、共通化ルールなど）
+   - **特に重要**: 「実装前の基本チェックリスト（必須）」セクションを確認する
+2. `docs/05_progress.md` — タスクの位置づけ・依存関係を確認
+3. `docs/07_testing_flow.md` — テスト実装時は必ず読む（TDDフロー）
+4. `docs/04_api.md` — API呼び出し実装時は必ず読む（エンドポイント仕様）
+5. `backend/prisma/schema.prisma` — 関連するモデルの全フィールドを確認
+6. 実装対象ファイル（routes・services・middleware）の現在の内容
+7. **既に実装済みの類似ファイル**（コードのブレを防ぐため）
    - 例: `auth.ts` を実装するなら既存の `middleware/auth.ts` を読む
-5. `backend/src/types/index.ts` — 型定義の確認
+8. 型定義ファイルの確認
+   - バックエンド: `backend/src/types/index.ts`
+   - フロントエンド: 既存の型定義（`$lib/api/errors.ts` 等）を参照
 
 #### 整合性チェック（必須）
 
 実装時は以下の整合性を **必ず確保** すること:
+
+**型定義とドキュメントの整合性**:
 - **JSDoc と型定義の整合性**: JSDoc のコメントで「null になり得る」と書いたら型定義にも `| null` を含める
 - **JSDoc と実装の整合性**: JSDoc で説明した値の範囲（例: 「400-599」）が実装・コメントと一致すること
 - **型定義とデフォルト値の整合性**: デフォルト値が `null` なら型に `| null` を含める
 - **説明文と実際の用途の整合性**: クラス・関数の説明が「エラー（4xx/5xx）」なら、値の範囲説明も「400-599」のように合わせる
 - **計画書と実装の整合性**: 計画書で定義した仕様・制約を実装が正確に反映していること
 
+**フロントエンド・バックエンド間の整合性**:
+- **ステータスコードの整合性**: フロントエンドでハンドリングするステータスコードは、バックエンドが実際に返すものと一致すること
+  - 例: バックエンドが `401` を返すのに、フロントエンドで `423` をハンドリングしている → 到達不能コード
+- **エラーメッセージの整合性**: バックエンドが返す具体的なエラーメッセージを上書きしないこと
+  - 例: バックエンドが `401 + "しばらく後に再試行してください"` を返すのに、フロントエンドで固定文言に上書き → 情報が失われる
+- **API エンドポイントの整合性**: フロントエンドが呼び出す URL は、バックエンドの実装と一致すること
+
+**同一ファイル内の一貫性**:
+- **バリデーションと送信の一貫性**: バリデーションで `trim()` した値をチェックするなら、送信時も `trim()` した値を送る
+  - 例: `email.trim()` で空欄チェックするのに、`JSON.stringify({ email })` で trim 前の値を送る → サーバー側で認証失敗
+- **正規化値は一度だけ計算して再利用する**: `trim()` 等の変換を複数箇所で再計算しない
+  - 例: `handleSubmit` の先頭で `normalizedEmail = email.trim()` を一度計算し、`validate(normalizedEmail, ...)` と `fetch(..., body: JSON.stringify({ email: normalizedEmail }))` の両方で同じ変数を使う
+  - **禁止**: `validate()` 内で `email.trim()` し、その後 `fetch` 内でも `email.trim()` する（同じ値を二度計算する）
+  - **理由**: 正規化方针を変更する際に片方だけ修正する事故を防ぐ
+- **バリデーション処理の一貫性**: 同じ種類のチェック（空欄チェック・形式チェック）は同じ値に対して行う
+  - 例: `email.trim()` で空欄チェックするのに、`emailPattern.test(email)` で trim 前の値をチェック → 空白混入時に形式不正になる
+- **エラーハンドリングの一貫性（Fetch API ベストプラクティス）**:
+  - **必須パターン**: 同じエンドポイントを呼び出す箇所では、同じパターンでエラーハンドリングする
+  - **ステップ 1**: `response.ok` を **必ず** JSON パースの前にチェックする
+  - **ステップ 2**: JSON パースは **必ず** try-catch で囲む（502/504 等の非 JSON レスポンスに対応）
+  - **ステップ 3**: エラーボディの取得に失敗した場合は `null` を使う（空オブジェクト `{}` は使わない）
+  - **理由**: サーバーダウン時（502/504 等）は非 JSON（HTML、プレーンテキスト等）が返る可能性があり、JSON パースが例外を投げる
+  - 悪い例: `authStore` では `response.ok` チェック → JSON パースだが、ログインページでは JSON パース → `response.ok` チェック → 非 JSON レスポンスで例外
+  - 良い例:
+    ```typescript
+    const response = await fetch(url, options);
+    
+    if (!response.ok) {
+      let errorBody: { error?: string } | null = null;
+      try {
+        errorBody = await response.json();
+      } catch {
+        // JSON パース失敗時は null（非 JSON レスポンス）
+      }
+      const message = errorBody?.error || 'エラーが発生しました';
+      throw new ApiError(response.status, message);
+    }
+    
+    return await response.json();
+    ```
+
+**既存コードとの一貫性**:
+- **命名規則の一貫性**: 既存ファイルと同じ命名規則を使う（camelCase / PascalCase / kebab-case）
+- **import 配置の一貫性**: 既存ファイルと同じ位置に import を配置する（ファイル先頭）
+- **フォーマットの一貫性**: Prettier の設定（tabWidth=2）に従う
+
 **レビューで指摘が多い箇所**:
 - 型定義が `unknown` だが JSDoc で「null の場合あり」と書いている → `unknown | null` にする
 - 説明文が「エラー」だが値の範囲が「200-599」（200系はエラーではない） → 「400-599」に修正
+- バリデーションで `trim()` するのに送信時は `trim()` しない → 両方 `trim()` する
+- バリデーションと送信で `email.trim()` をそれぞれ再計算している → `handleSubmit` 先頭で一度計算して `normalizedEmail` を両方で共用する
+- バックエンドが返さないステータスコードをハンドリングしている → 実際に返すコードのみハンドリングする
+- import 文が型定義の後に配置されている → ファイル先頭に移動する
+- バックエンドのエラーレスポンスが英語（`"Unauthorized"` 等）になっている → 日本語に統一する
 
 ### Step 2: 05_progress.md に実装中マークをつける
 
@@ -316,14 +384,29 @@ T3	テスト: 正常系	src/routes/auth.test.ts	高
 #### Refactor フェーズ
 1. コードの整理（重複削除・可読性向上）
 2. テストが引き続き通ることを確認する
+3. **Prettier でフォーマットを適用**
+   ```bash
+   # バックエンド
+   cd backend && npm run format
+   
+   # フロントエンド
+   cd frontend && npm run format
+   ```
 
 ### Step 5: 品質チェック
 
 ```bash
+# バックエンドの場合
 cd backend
 npm run lint          # ESLint
-npm run format:check  # Prettier
+npm run format:check  # Prettier チェック
 npm run test -- --run # 全テスト
+
+# フロントエンドの場合
+cd frontend
+npm run lint          # ESLint
+npm run format        # Prettier 適用
+npm run test -- --run # 全テスト（存在する場合）
 ```
 
 ### Step 6: コミット・push

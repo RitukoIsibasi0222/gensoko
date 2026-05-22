@@ -253,4 +253,319 @@ export default [
   if (answers.length >= 10) { ... }
   ```
 
+- **共通設定は 1 箇所で管理する**（重複コードを避ける）
+  ```typescript
+  // ✅ 良い: 共通設定ファイルで一元管理
+  // frontend/src/lib/api/config.ts
+  export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+  
+  // frontend/src/lib/stores/auth.svelte.ts
+  import { API_BASE_URL } from '$lib/api/config';
+  
+  // frontend/src/routes/login/+page.svelte
+  import { API_BASE_URL } from '$lib/api/config';
+
+  // ❌ 悪い: 各ファイルで同じ定義を繰り返す
+  // auth.svelte.ts
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+  
+  // login/+page.svelte
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+  
+  // register/+page.svelte
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+  // ↑ 3箇所に同じコード → メッセージやフォールバック方針がズレやすい
+  ```
+  
+  **なぜ重要か**:
+  - 1箇所で管理すれば、変更が必要なときも1箇所を修正するだけで済む
+  - フォールバック方針や警告メッセージが複数箇所でズレるリスクを防ぐ
+  - コードレビューで「これは共通化すべき」という指摘を減らせる
+  
+  **共通化すべきもの**:
+  - API ベース URL
+  - 環境変数の読み込みとフォールバック
+  - エラーハンドリングのパターン
+  - バリデーション関数
+  - 定数（タイムアウト値、リトライ回数など）
+
 - **関数は1つのことだけ行う**（長くなったら分割を検討する）
+
+---
+
+## 実装前の基本チェックリスト（必須）
+
+> **「パスの確認は当然のこと」** — 実装前に以下の基本項目を必ずチェックしてください。
+> これらを怠ると、レビューで指摘される前に自分で気づける問題が多発します。
+
+### 1. 環境変数の確認
+- [ ] 環境変数名が正しいか（例: `VITE_API_BASE_URL`）
+- [ ] `.env` ファイルが存在し、値が設定されているか
+- [ ] フォールバック値（`|| ''`）が設定されているか
+- [ ] DEV モードで未設定時の警告が表示されるか
+
+### 2. import パスの確認
+- [ ] import するファイルが実際に存在するか
+- [ ] パスのスペルミスがないか（大文字小文字含む）
+- [ ] SvelteKit のエイリアス（`$lib`, `$app`）を正しく使っているか
+- [ ] import 文がファイルの先頭に配置されているか
+
+### 3. 型定義の確認
+- [ ] 使用する型が正しく import されているか
+- [ ] 型定義が実際の使用方法と一致しているか
+- [ ] JSDoc コメントと型定義が一致しているか
+- [ ] `any` を使っていないか（使う場合は理由をコメント）
+
+### 4. API エンドポイントの確認
+- [ ] バックエンドのエンドポイントパスが正しいか
+- [ ] メソッド（GET/POST/PUT/DELETE）が正しいか
+- [ ] リクエスト/レスポンスの型が API 仕様と一致しているか
+- [ ] バックエンドが実際に返すステータスコードのみハンドリングしているか
+
+### 5. バリデーションと送信の一貫性
+- [ ] バリデーションで `trim()` した値を使っているなら、送信時も `trim()` しているか
+- [ ] 正規化値（`trim()` 等）を一度だけ計算して変数に入れ、validate と fetch の両方で同じ変数を使っているか（その場で再計算しない）
+- [ ] 同じ値に対するチェック（空欄・形式）が一貫しているか
+- [ ] バリデーション通過後に送信する値が変わっていないか
+
+### 6. エラーハンドリングの確認
+- [ ] `response.ok` を JSON パース前にチェックしているか
+- [ ] JSON パースを try-catch で囲んでいるか（502/504 対策）
+- [ ] バックエンドのエラーメッセージを上書きしていないか
+- [ ] 存在しないステータスコードをハンドリングしていないか
+
+### 7. 多重実行の防止
+- [ ] フォーム送信時に多重送信防止のガードがあるか（`if (isSubmitting) return;`）
+- [ ] ボタンが送信中に無効化されているか（`disabled={isSubmitting}`）
+- [ ] API 呼び出しが完了するまで再実行されないようになっているか
+
+### 8. フォーマット・Lint
+- [ ] Prettier でフォーマットを適用したか（`npm run format`）
+- [ ] ESLint でエラーがないか（`npm run lint`）
+- [ ] インデントが 2 スペースになっているか（tabWidth=2）
+
+### 9. 既存コードとの整合性
+- [ ] 既存の類似実装（authStore 等）のパターンに従っているか
+- [ ] 命名規則が統一されているか（camelCase/PascalCase）
+- [ ] 同じ責務のコードを重複して書いていないか
+- [ ] バックエンドのエラーレスポンス（サービス層・ミドルウェア含む）が日本語になっているか（`"Unauthorized"` 等の英語は不可）
+
+---
+
+## フロントエンド（SvelteKit）のベストプラクティス
+
+> レビューで指摘が多い項目をまとめています。実装前に必ず確認してください。
+
+### Fetch API のエラーハンドリング（必須パターン）
+
+**必ず守るべき順序**:
+
+```typescript
+// ✅ 正しいパターン
+async function callApi() {
+  const response = await fetch(`${API_BASE_URL}/endpoint`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim(), password: password.trim() })
+  });
+
+  // 1. 最初に response.ok をチェック（JSON パース前）
+  if (!response.ok) {
+    // 2. JSON パースを try-catch で囲む（非 JSON レスポンス対策）
+    let errorBody: { error?: string } | null = null;
+    try {
+      errorBody = await response.json();
+    } catch {
+      // JSON パース失敗時は null（空オブジェクト {} は使わない）
+    }
+    
+    // 3. バックエンドのエラーメッセージを優先（上書きしない）
+    const message = errorBody?.error || 'エラーが発生しました';
+    throw new ApiError(response.status, message);
+  }
+
+  // 正常系: response.ok が true なら通常 JSON が返る
+  return await response.json();
+}
+
+// ❌ 間違ったパターン（よくあるミス）
+async function badExample() {
+  const response = await fetch(url);
+  
+  // NG: JSON パースを先にすると、502/504 等の非 JSON で例外が発生
+  const data = await response.json();
+  
+  // NG: response.ok チェックが遅すぎる
+  if (!response.ok) {
+    throw new Error(data.error);
+  }
+}
+```
+
+**なぜこの順序が重要か**:
+- サーバーダウン時（502/504 等）は非 JSON（HTML、プレーンテキスト等）が返る可能性がある → JSON パースで例外
+- `response.ok` を先にチェックすれば、エラー時も安全に JSON パースできる
+- JSON パースに失敗しても catch で拾えるので、ユーザーに適切なエラーメッセージを表示できる
+
+---
+
+### バリデーションと送信の一貫性
+
+```typescript
+// ✅ 正しいパターン: 正規化した値を一貫使用
+function validate(): string | null {
+  const normalizedEmail = email.trim();
+  const normalizedPassword = password.trim();
+
+  // 空欄チェック
+  if (!normalizedEmail) return 'メールアドレスを入力してください';
+  if (!normalizedPassword) return 'パスワードを入力してください';
+
+  // 形式チェック（正規化済みの値を使う）
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailPattern.test(normalizedEmail)) {
+    return 'メールアドレスの形式が正しくありません';
+  }
+
+  return null;
+}
+
+async function handleSubmit() {
+  // 送信時も同じように trim した値を使う
+  const response = await fetch(url, {
+    body: JSON.stringify({
+      email: email.trim(),
+      password: password.trim()
+    })
+  });
+}
+
+// ❌ 間違ったパターン
+function badValidate() {
+  // NG: 空欄チェックは trim するのに...
+  if (!email.trim()) return 'メールアドレスを入力してください';
+  
+  // NG: 形式チェックは trim しない → 前後に空白があると形式エラーになる
+  if (!emailPattern.test(email)) return '形式が正しくありません';
+}
+
+async function badSubmit() {
+  // NG: 送信時は trim しない → サーバー側で認証失敗する可能性
+  body: JSON.stringify({ email, password })
+}
+```
+
+**なぜ重要か**:
+- バリデーションで OK でも、送信時の値が異なるとサーバー側でエラーになる
+- 空白混入時の挙動が一貫しないとユーザーが混乱する
+- 「入力できたのにログインできない」といったバグの原因になる
+
+---
+
+### 環境変数の管理パターン
+
+```typescript
+// ✅ 正しいパターン: 共通ファイルで一元管理
+// frontend/src/lib/api/config.ts
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
+if (import.meta.env.DEV && !import.meta.env.VITE_API_BASE_URL) {
+  console.warn(
+    '[警告] VITE_API_BASE_URL が設定されていません。\n' +
+    'frontend/.env に以下を追加してください:\n' +
+    'VITE_API_BASE_URL=http://localhost:3000/api/v1'
+  );
+}
+
+// 他のファイルから import して使う
+// frontend/src/lib/stores/auth.svelte.ts
+import { API_BASE_URL } from '$lib/api/config';
+
+// frontend/src/routes/login/+page.svelte
+import { API_BASE_URL } from '$lib/api/config';
+
+// ❌ 間違ったパターン: 各ファイルで重複定義
+// auth.svelte.ts
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
+// login/+page.svelte
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
+// register/+page.svelte
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+// ↑ 3箇所に同じコード → 警告メッセージやフォールバック方針がズレやすい
+```
+
+**なぜ重要か**:
+- 環境変数の読み込み方針を1箇所で管理できる
+- 警告メッセージや開発時のヘルプを統一できる
+- 変更時に1箇所を修正するだけで全体に反映される
+- コードレビューで「重複」の指摘を受けなくなる
+
+---
+
+### ステータスコードとバックエンドの整合性
+
+```typescript
+// ✅ 正しいパターン: バックエンドが実際に返すコードのみハンドリング
+function toJpMessage(status: number, fallback: string): string {
+  switch (status) {
+    case 400:
+      return '入力内容を確認してください';
+    case 401:
+      return fallback; // バックエンドの具体的なメッセージを優先
+    case 403:
+      return fallback; // 「メール未確認」等の具体的な理由はバックエンドから
+    case 404:
+      return 'リソースが見つかりません';
+    case 429:
+      return 'しばらく待ってから再試行してください';
+    case 500:
+      return 'サーバーエラーが発生しました';
+    default:
+      return fallback || 'エラーが発生しました';
+  }
+}
+
+// ❌ 間違ったパターン
+function badExample(status: number) {
+  switch (status) {
+    case 423: // NG: バックエンドは 423 を返さない（実際は 401）
+      return 'アカウントがロックされています';
+    case 401:
+      return '認証に失敗しました'; // NG: バックエンドの具体的なメッセージを上書き
+  }
+}
+```
+
+**確認方法**:
+1. `backend/src/services/auth.service.ts` の `AuthError` クラスを確認
+2. 実際に返されるステータスコードのみハンドリングする
+3. バックエンドの具体的なエラーメッセージ（`fallback`）を優先する
+
+---
+
+### import 文の配置ルール
+
+```typescript
+// ✅ 正しいパターン: ファイルの先頭に配置
+import { goto } from '$app/navigation';
+import { API_BASE_URL } from '$lib/api/config';
+import { authStore } from '$lib/stores/auth.svelte';
+import { toastStore } from '$lib/stores/toast.svelte';
+
+// 型定義
+let email = $state('');
+let password = $state('');
+
+// ❌ 間違ったパターン: 型定義の後に import
+let email = $state('');
+let password = $state('');
+
+import { API_BASE_URL } from '$lib/api/config'; // NG: 遅すぎる
+```
+
+**なぜ重要か**:
+- TypeScript / JavaScript の慣例に従う
+- ファイルの依存関係が一目でわかる
+- ESLint で警告が出る場合がある

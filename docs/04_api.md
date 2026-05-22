@@ -196,6 +196,202 @@ Response 200:
 
 ---
 
+## クライアント実装ガイドライン
+
+> このセクションはフロントエンド開発者向けのガイドラインです。
+> バックエンド API を呼び出す際のベストプラクティスをまとめています。
+
+### エラーレスポンスの共通仕様
+
+**すべてのエラーレスポンス**は `error` フィールドを必ず含みます：
+
+**基本形式**:
+```json
+{
+  "error": "エラーメッセージ（文字列）"
+}
+```
+
+**バリデーションエラー時** (400):
+```json
+{
+  "error": "バリデーションエラー",
+  "details": [
+    {
+      "code": "too_small",
+      "minimum": 8,
+      "message": "パスワードは8文字以上にしてください",
+      "path": ["password"]
+    }
+  ]
+}
+```
+
+> **注意**: `details` フィールドはバリデーションエラー時にのみ追加されます（Zod の Issue 配列）。
+> その他のエラー（401/403/404等）は基本形式のみです。
+
+**ステータスコード一覧**:
+
+| コード | 意味 | 使用例 |
+|--------|------|--------|
+| 400 | Bad Request | バリデーションエラー・リクエスト形式不正 |
+| 401 | Unauthorized | 認証失敗・トークン無効・アカウントロック |
+| 403 | Forbidden | 権限不足・メール未確認 |
+| 404 | Not Found | リソースが存在しない |
+| 409 | Conflict | メールアドレス重複・ユーザー名重複 |
+| 429 | Too Many Requests | レート制限超過 |
+| 500 | Internal Server Error | サーバー内部エラー |
+| 502 | Bad Gateway | サーバーダウン（リバースプロキシ） |
+| 504 | Gateway Timeout | サーバータイムアウト |
+
+**重要**: 502/504 を含むエラー時は **非 JSON**（HTML、プレーンテキスト等）が返る可能性があります。
+
+---
+
+### Fetch API のベストプラクティス
+
+#### パターン 1: 基本的なエラーハンドリング
+
+```typescript
+import { API_BASE_URL } from '$lib/api/config';
+import { ApiError } from '$lib/api/errors';
+
+async function callApi() {
+  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim(), password: password.trim() }),
+    credentials: 'include' // HttpOnly Cookie 用
+  });
+
+  // ステップ 1: response.ok を最初にチェック
+  if (!response.ok) {
+    // ステップ 2: JSON パースを try-catch で囲む（502/504 対策）
+    let errorBody: { error?: string } | null = null;
+    try {
+      errorBody = await response.json();
+    } catch {
+      // JSON パース失敗 = 非 JSON レスポンス（HTML、プレーンテキスト等）
+      // null を使う（空オブジェクト {} は使わない）
+    }
+    
+    // ステップ 3: バックエンドのメッセージを優先
+    const message = errorBody?.error || 'エラーが発生しました';
+    throw new ApiError(response.status, message);
+  }
+
+  // 正常系: response.ok が true なら JSON が返る
+  return await response.json();
+}
+```
+
+**なぜこの順序が重要か**:
+- **502/504 等サーバーダウン時は非 JSON（HTML、プレーンテキスト等）が返る可能性がある** → JSON パースで例外が発生
+- `response.ok` を先にチェックすれば、エラー時も安全に JSON パースできる
+- バックエンドが返す具体的なエラーメッセージ（例: 「メールアドレスが確認されていません」）を上書きしない
+
+---
+
+#### パターン 2: ステータスコード別の処理
+
+```typescript
+function toJpMessage(status: number, fallback: string): string {
+  switch (status) {
+    case 400:
+      return '入力内容を確認してください';
+    case 401:
+      // バックエンドが具体的な理由を返す場合は fallback を優先
+      // 例: "メールアドレスまたはパスワードが正しくありません"
+      //      "アカウントがロックされています。しばらく後に再試行してください"
+      return fallback;
+    case 403:
+      // 例: "メールアドレスが確認されていません"
+      return fallback;
+    case 404:
+      return 'リソースが見つかりません';
+    case 409:
+      // 例: "メールアドレスは既に使用されています"
+      return fallback;
+    case 429:
+      return 'しばらく待ってから再試行してください';
+    case 500:
+      return 'サーバーエラーが発生しました';
+    default:
+      return fallback || 'エラーが発生しました';
+  }
+}
+
+// 使用例
+try {
+  await callApi();
+} catch (error) {
+  if (error instanceof ApiError) {
+    const message = toJpMessage(error.status, error.message);
+    toastStore.error(message);
+  }
+}
+```
+
+---
+
+#### パターン 3: バリデーションと送信の一貫性
+
+```typescript
+function validate(): string | null {
+  // 正規化した値を作成
+  const normalizedEmail = email.trim();
+  const normalizedPassword = password.trim();
+
+  // 空欄チェック
+  if (!normalizedEmail) return 'メールアドレスを入力してください';
+  if (!normalizedPassword) return 'パスワードを入力してください';
+
+  // 形式チェック（正規化済みの値を使う）
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailPattern.test(normalizedEmail)) {
+    return 'メールアドレスの形式が正しくありません';
+  }
+
+  return null;
+}
+
+async function handleSubmit() {
+  // バリデーション
+  const error = validate();
+  if (error) {
+    errorMessage = error;
+    return;
+  }
+
+  // 送信時も同じように trim した値を使う
+  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: email.trim(),    // バリデーションと同じ
+      password: password.trim() // バリデーションと同じ
+    })
+  });
+}
+```
+
+**重要**: バリデーションで `trim()` した値をチェックするなら、送信時も `trim()` した値を送る。
+
+---
+
+### よくある実装ミスと修正方法
+
+| ミス | 問題 | 修正方法 |
+|------|------|----------|
+| JSON パースを先にする | 502/504 で例外が発生 | `response.ok` を先にチェック |
+| エラー時の JSON パースを try-catch しない | 非 JSON レスポンスで例外 | try-catch で囲む |
+| バックエンドのメッセージを上書き | 具体的なエラー理由が失われる | `fallback` を優先する |
+| バリデーションと送信で異なる値を使う | サーバー側で認証失敗 | 両方で `trim()` した値を使う |
+| 存在しないステータスコードをハンドリング | 到達不能コード | `backend/src/services/auth.service.ts` を確認 |
+| 環境変数を各ファイルで重複定義 | 方針がズレる | `$lib/api/config.ts` で一元管理 |
+
+---
+
 ## ユーザー `/api/v1/users`
 
 | メソッド | パス | 説明 | 認証 |
@@ -259,23 +455,4 @@ Response 200:
 
 ---
 
-## 共通エラーレスポンス形式
-
-```json
-{
-  "error": {
-    "code": "UNAUTHORIZED",
-    "message": "ログインが必要です"
-  }
-}
-```
-
-| コード | HTTPステータス | 意味 |
-|--------|---------------|------|
-| `BAD_REQUEST` | 400 | 入力値エラー |
-| `UNAUTHORIZED` | 401 | 未認証 |
-| `FORBIDDEN` | 403 | 権限なし |
-| `NOT_FOUND` | 404 | リソースが存在しない |
-| `CONFLICT` | 409 | 重複エラー |
-| `RATE_LIMITED` | 429 | リクエスト過多 |
-| `INTERNAL_ERROR` | 500 | サーバーエラー |
+## ランキング `/api/v1/ranking`

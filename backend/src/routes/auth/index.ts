@@ -15,13 +15,15 @@ import {
 import { rateLimit } from "../../middleware/rateLimit/index.js";
 
 // パスワード強度チェック（register・reset-password 共通）
+// スペースを含むパスワードを禁止する
 const strongPasswordSchema = z
   .string()
   .min(8, "パスワードは8文字以上にしてください")
   .regex(/[A-Z]/, "パスワードには英大文字を1文字以上含めてください")
   .regex(/[a-z]/, "パスワードには英小文字を1文字以上含めてください")
   .regex(/[0-9]/, "パスワードには数字を1文字以上含めてください")
-  .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "パスワードには記号を1文字以上含めてください");
+  .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "パスワードには記号を1文字以上含めてください")
+  .refine((val) => !/ /.test(val), "パスワードにスペースは使用できません");
 
 const registerSchema = z.object({
   username: z

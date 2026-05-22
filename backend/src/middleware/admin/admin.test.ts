@@ -58,7 +58,7 @@ describe("adminMiddleware", () => {
 
     expect(res.status).toBe(401);
     const body = await res.json();
-    expect(body.error).toBe("Unauthorized");
+    expect(body.error).toBe("認証が必要です");
   });
 
   // -------------------------------------------------------------------
@@ -70,7 +70,7 @@ describe("adminMiddleware", () => {
 
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error).toBe("Forbidden");
+    expect(body.error).toBe("管理者権限が必要です");
   });
 
   // -------------------------------------------------------------------

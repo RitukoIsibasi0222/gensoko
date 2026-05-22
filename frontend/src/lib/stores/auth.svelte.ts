@@ -1,3 +1,5 @@
+import { API_BASE_URL } from '$lib/api/config';
+
 /**
  * ログイン中のユーザー情報。
  * POST /auth/login のレスポンス内 user オブジェクトの形に合わせている。
@@ -40,17 +42,6 @@ export type AuthState = {
 
 const STORAGE_KEY_TOKEN = 'auth_token';
 const STORAGE_KEY_USER = 'auth_user';
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
-
-// 開発時のみ VITE_API_BASE_URL 未設定を早期検知する。
-// 本番ビルドでコンソールに出続けないよう import.meta.env.DEV で限定する。
-if (import.meta.env.DEV && !import.meta.env.VITE_API_BASE_URL) {
-  console.warn(
-    '[AuthStore] VITE_API_BASE_URL が設定されていません。' +
-      'API リクエストが同一オリジンに飛んで 404 になる可能性があります。' +
-      '.env ファイルに VITE_API_BASE_URL を設定してください。'
-  );
-}
 
 /**
  * 値が AuthUser の形を満たすかチェックする型ガード。

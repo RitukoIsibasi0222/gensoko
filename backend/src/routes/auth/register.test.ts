@@ -200,4 +200,44 @@ describe("POST /auth/register", () => {
     expect(res.status).toBe(500);
     expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: "user-1" } });
   });
+
+  it("バリデーション: パスワードにスペースを含む場合は 400 を返す", async () => {
+    const res = await app.request("/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "taro123",
+        email: "taro@example.com",
+        password: "Pass 1234!", // スペースを含む
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe("バリデーションエラー");
+    expect(json.details).toBeDefined();
+    // Zod の details にスペース禁止エラーが含まれることを確認
+    expect(JSON.stringify(json.details)).toContain("スペース");
+  });
+
+  it("バリデーション: パスワードの前後にスペースがある場合は Zod バリデーションで 400 を返す", async () => {
+    // Zod のバリデーションはサービス層より前に実行されるため、
+    // 前後のスペースもスペース禁止ルールに引っかかる
+    const res = await app.request("/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "taro123",
+        email: "taro@example.com",
+        password: "  Pass1234!  ", // 前後にスペース
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe("バリデーションエラー");
+    // details にスペース禁止エラーが含まれることを確認
+    expect(json.details).toBeDefined();
+    expect(JSON.stringify(json.details)).toContain("スペース");
+  });
 });

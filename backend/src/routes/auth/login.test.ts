@@ -336,4 +336,52 @@ describe("POST /auth/login", () => {
 
     expect(vi.mocked(prisma.userStats.upsert)).not.toHaveBeenCalled();
   });
+
+  it("パスワード正規化: 前後にスペースがある場合は trim してから検証する", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(ACTIVE_USER as never);
+    // trim 後のパスワードで比較が成功する
+    vi.mocked(bcrypt.compare).mockImplementation((async (pwd: string) => {
+      return pwd === "Pass1234!" ? true : false;
+    }) as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.userStats.upsert).mockResolvedValue({} as never);
+
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "taro@example.com",
+        password: "  Pass1234!  ", // 前後にスペース
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    // trim 後のパスワードで bcrypt.compare が呼ばれることを確認
+    expect(bcrypt.compare).toHaveBeenCalledWith("Pass1234!", ACTIVE_USER.passwordHash);
+  });
+
+  it("パスワード正規化: 内部にスペースがある場合はクライアント側で弾かれるべき（サーバーでは 401）", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(ACTIVE_USER as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(false as never); // パスワード不一致
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "taro@example.com",
+        password: "Pass 1234!", // 内部にスペース（本来はクライアント側で弾く）
+      }),
+    });
+
+    expect(res.status).toBe(401);
+    const json = await res.json();
+    expect(json.error).toBe("メールアドレスまたはパスワードが正しくありません");
+    // loginFailCount が増加することを確認
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: ACTIVE_USER.id },
+      data: { loginFailCount: 1 },
+    });
+  });
 });

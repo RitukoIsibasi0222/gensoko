@@ -10,6 +10,11 @@ function getFrontendBaseUrl(): string {
   return process.env.FRONTEND_URL ?? "http://localhost:5174";
 }
 
+/** パスワードの先頭/末尾のスペースを除去する（フロントエンドと同じ正規化） */
+function normalizePassword(rawPassword: string): string {
+  return rawPassword.trim();
+}
+
 export class AuthError extends Error {
   constructor(
     public readonly status: 400 | 401 | 403 | 404 | 409 | 500,
@@ -25,7 +30,8 @@ export async function register(input: {
   email: string;
   password: string;
 }): Promise<void> {
-  const { username, email, password } = input;
+  const { username, email, password: rawPassword } = input;
+  const password = normalizePassword(rawPassword);
 
   // 1. DB にメールまたはユーザー名の重複チェック + ユーザー作成をトランザクションで実行
   const { token, userId } = await prisma.$transaction(async (tx) => {
@@ -164,7 +170,8 @@ export async function login(input: { email: string; password: string }): Promise
   refreshToken: string;
   user: { id: string; username: string; role: Role };
 }> {
-  const { email, password } = input;
+  const { email, password: rawPassword } = input;
+  const password = normalizePassword(rawPassword);
 
   // 1. ユーザー取得
   const user = await prisma.user.findUnique({
@@ -212,6 +219,7 @@ export async function login(input: { email: string; password: string }): Promise
 
   // 5. パスワード検証
   const isValid = await bcrypt.compare(password, user.passwordHash);
+
   if (!isValid) {
     const newFailCount = Math.min(currentFailCount + 1, MAX_LOGIN_FAIL);
     const updateData: { loginFailCount: number; lockedUntil?: Date } = {
@@ -380,7 +388,8 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
 }
 
 export async function resetPassword(input: { token: string; password: string }): Promise<void> {
-  const { token, password } = input;
+  const { token, password: rawPassword } = input;
+  const password = normalizePassword(rawPassword);
 
   // 1. tokenをsha256ハッシュ化してDBと照合
   const tokenHash = createHash("sha256").update(token).digest("hex");

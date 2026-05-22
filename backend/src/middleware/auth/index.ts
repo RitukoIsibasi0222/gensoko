@@ -24,7 +24,7 @@ export const authMiddleware: MiddlewareHandler<{
   // 1. Authorization ヘッダーを取得
   const authHeader = c.req.header("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
-    return c.json({ error: "Unauthorized" }, 401);
+    return c.json({ error: "認証が必要です" }, 401);
   }
 
   // 2. "Bearer " の後ろのトークン部分を取り出す
@@ -35,7 +35,7 @@ export const authMiddleware: MiddlewareHandler<{
   try {
     payload = (await verify(token, getJwtSecret(), "HS256")) as JwtPayload;
   } catch {
-    return c.json({ error: "Invalid token" }, 401);
+    return c.json({ error: "トークンが無効です" }, 401);
   }
 
   // 4. DB からユーザーを取得（必要な項目のみ select）
@@ -51,21 +51,21 @@ export const authMiddleware: MiddlewareHandler<{
   });
 
   if (!user) {
-    return c.json({ error: "User not found" }, 401);
+    return c.json({ error: "ユーザーが見つかりません" }, 401);
   }
 
   // 5. アカウント状態チェック
   if (!user.isActive) {
-    return c.json({ error: "Account suspended" }, 403);
+    return c.json({ error: "アカウントが停止されています" }, 403);
   }
 
   if (!user.emailVerified) {
-    return c.json({ error: "Email not verified" }, 403);
+    return c.json({ error: "メールアドレスが確認されていません" }, 403);
   }
 
   // JWT 発行後にアカウントがロックされたケースも弾く
   if (user.lockedUntil && user.lockedUntil > new Date()) {
-    return c.json({ error: "Account locked" }, 403);
+    return c.json({ error: "アカウントがロックされています" }, 403);
   }
 
   // 6. 後続のハンドラで使えるようにユーザー情報をセット
@@ -97,7 +97,7 @@ export const optionalAuthMiddleware: MiddlewareHandler<{
   }
 
   if (!authHeader.startsWith("Bearer ")) {
-    return c.json({ error: "Invalid authorization format" }, 401);
+    return c.json({ error: "認証形式が正しくありません" }, 401);
   }
 
   const token = authHeader.slice(7);
@@ -106,7 +106,7 @@ export const optionalAuthMiddleware: MiddlewareHandler<{
   try {
     payload = (await verify(token, getJwtSecret(), "HS256")) as JwtPayload;
   } catch {
-    return c.json({ error: "Invalid token" }, 401);
+    return c.json({ error: "トークンが無効です" }, 401);
   }
 
   const user = await prisma.user.findUnique({
