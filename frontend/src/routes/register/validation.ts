@@ -15,10 +15,14 @@ import { isValidEmailFormat } from '$lib/validation/email';
 /**
  * ユーザー名のバリデーション
  *
- * 制約:
+ * 制約（バックエンドの registerSchema に準拠）:
  * - 必須
  * - 3〜20文字
  * - 英数字とアンダースコアのみ（/^[a-zA-Z0-9_]+$/）
+ *
+ * フロント独自（バックエンドとの差分）:
+ * - 空欄時: 「ユーザー名を入力してください」
+ *   （バックエンド Zod は min(3) のエラー「ユーザー名は3文字以上にしてください」）
  *
  * @param value - trim 済みのユーザー名
  * @returns エラーメッセージ（エラーがない場合は null）
@@ -46,6 +50,11 @@ export function validateUsername(value: string): string | null {
  * - 簡易形式チェック（`$lib/validation/email.ts` の `isValidEmailFormat` を使用）
  *   - バックエンドは `z.string().email()` でより厳密に検証するため、こちらは「明らかな入力ミスの早期検知」が目的
  *
+ * フロント独自（バックエンドとの差分）:
+ * - 空欄時: 「メールアドレスを入力してください」
+ *   （バックエンド Zod は email() のエラー「有効なメールアドレスを入力してください」）
+ * - 形式チェック: 簡易正規表現による早期検知（バックエンドは RFC 準拠の z.string().email() でより厳密に検証）
+ *
  * @param value - trim 済みのメールアドレス
  * @returns エラーメッセージ（エラーがない場合は null）
  */
@@ -70,6 +79,10 @@ export function validateEmail(value: string): string | null {
  * - 英小文字を1文字以上含む
  * - 数字を1文字以上含む
  * - 記号（!@#$%^&*()_+-=[]{}など）を1文字以上含む
+ *
+ * フロント独自（バックエンドとの差分）:
+ * - 空欄時: 「パスワードを入力してください」
+ *   （バックエンド Zod は min(8) のエラー「パスワードは8文字以上にしてください」）
  *
  * @param value - trim 済みのパスワード（先頭/末尾スペースは呼び出し元で除去済み。内部スペースのみ検知対象）
  * @returns エラーメッセージ（エラーがない場合は null）
