@@ -108,7 +108,7 @@ export function validatePassword(value: string): string | null
 
 - [x] T1: バリデーションヘルパー関数の作成（`routes/register/validation.ts`）
 - [x] T2: ページコンポーネントの骨組み（`routes/register/+page.svelte`）
-- [ ] T3: `handleSubmit` 実装（`routes/register/+page.svelte`）
+- [x] T3: `handleSubmit` 実装（`routes/register/+page.svelte`）
 - [ ] T4: フォーム UI 実装（`routes/register/+page.svelte`）
 - [ ] T5: 成功画面 UI 実装（`routes/register/+page.svelte`）
 - [ ] T6: 既ログイン時のリダイレクト処理（`routes/register/+page.svelte`）
