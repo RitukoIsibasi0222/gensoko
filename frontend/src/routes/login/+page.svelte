@@ -3,18 +3,7 @@
   import { toastStore } from '$lib/stores/toast.svelte';
   import { goto } from '$app/navigation';
   import { ApiError } from '$lib/api/errors';
-
-  // API ベース URL（authStore パターンに倣う）
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
-
-  // 開発時のみ VITE_API_BASE_URL 未設定を早期検知する
-  if (import.meta.env.DEV && !import.meta.env.VITE_API_BASE_URL) {
-    console.warn(
-      '[LoginPage] VITE_API_BASE_URL が設定されていません。' +
-        'API リクエストが失敗する可能性があります。' +
-        '.env ファイルに VITE_API_BASE_URL を設定してください。'
-    );
-  }
+  import { API_BASE_URL } from '$lib/api/config';
 
   // フォーム入力値
   let email = $state('');

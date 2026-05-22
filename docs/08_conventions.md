@@ -253,4 +253,40 @@ export default [
   if (answers.length >= 10) { ... }
   ```
 
+- **共通設定は 1 箇所で管理する**（重複コードを避ける）
+  ```typescript
+  // ✅ 良い: 共通設定ファイルで一元管理
+  // frontend/src/lib/api/config.ts
+  export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+  
+  // frontend/src/lib/stores/auth.svelte.ts
+  import { API_BASE_URL } from '$lib/api/config';
+  
+  // frontend/src/routes/login/+page.svelte
+  import { API_BASE_URL } from '$lib/api/config';
+
+  // ❌ 悪い: 各ファイルで同じ定義を繰り返す
+  // auth.svelte.ts
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+  
+  // login/+page.svelte
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+  
+  // register/+page.svelte
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+  // ↑ 3箇所に同じコード → メッセージやフォールバック方針がズレやすい
+  ```
+  
+  **なぜ重要か**:
+  - 1箇所で管理すれば、変更が必要なときも1箇所を修正するだけで済む
+  - フォールバック方針や警告メッセージが複数箇所でズレるリスクを防ぐ
+  - コードレビューで「これは共通化すべき」という指摘を減らせる
+  
+  **共通化すべきもの**:
+  - API ベース URL
+  - 環境変数の読み込みとフォールバック
+  - エラーハンドリングのパターン
+  - バリデーション関数
+  - 定数（タイムアウト値、リトライ回数など）
+
 - **関数は1つのことだけ行う**（長くなったら分割を検討する）
