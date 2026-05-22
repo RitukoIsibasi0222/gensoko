@@ -430,6 +430,7 @@ function validate(normalizedEmail: string, normalizedPassword: string): string |
   if (!normalizedPassword) return 'パスワードを入力してください';
 
   // 形式チェック（正規化済みの値を使う）
+  // isValidEmailFormat は $lib/validation/email.ts の共通関数
   if (!isValidEmailFormat(normalizedEmail)) {
     return 'メールアドレスの形式が正しくありません';
   }
