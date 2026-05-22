@@ -124,13 +124,17 @@
       // （JSON パース前に HTTP ステータスを確認し、非 JSON レスポンス時のエラーを防ぐ）
       if (!response.ok) {
         // エラーレスポンスの場合は JSON パースを試みる
-        let errorBody: { error?: string } | null = null;
+        let errorBody: { error?: string; details?: { message: string }[] } | null = null;
         try {
           errorBody = await response.json();
         } catch {
           // JSON パース失敗時（502/504 等の非 JSON レスポンス）は null のまま
         }
-        const message = toJpMessage(response.status, errorBody?.error || '');
+        // details[0].message を優先（400 バリデーションエラー時の具体的なメッセージを使用）
+        const message = toJpMessage(
+          response.status,
+          errorBody?.details?.[0]?.message ?? errorBody?.error ?? ''
+        );
         throw new ApiError(response.status, message, errorBody);
       }
 
