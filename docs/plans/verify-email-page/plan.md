@@ -368,14 +368,32 @@ let countdown: number;             // 成功時の自動遷移までの残り秒
 
 ## レビュー観点（実装完了時のセルフチェック）
 
-- [ ] `$effect` を使っていない（`onMount` のみ）
-- [ ] `$app/stores` を import していない（`$app/state` のみ）
-- [ ] `setTimeout` / `setInterval` のクリーンアップが `onMount` の return で実装されている
-- [ ] 既認証メッセージ文字列が `auth.service.ts` line 326 と完全一致している
-- [ ] ネットワークエラーが `ApiError(0, ...)` にラップされている
-- [ ] 3 状態 UI が `{#if}/{:else if}/{:else}` で正しく分岐している
-- [ ] アクセシビリティ属性（`role="status"` / `aria-live` / `role="alert"`）が設定されている
-- [ ] Prettier フォーマット済み（`npm run format`）
-- [ ] ESLint エラーなし（`npm run lint`）
-- [ ] `docs/05_progress.md` のタスクが `[x]` に更新されている
-- [ ] このファイルに「実装完了」セクションが追記されている
+- [x] `$effect` を使っていない（`onMount` のみ）
+- [x] `$app/stores` を import していない（`$app/state` のみ）
+- [x] `setTimeout` / `setInterval` のクリーンアップが `onMount` の return で実装されている
+- [x] 既認証メッセージ文字列が `auth.service.ts` line 326 と完全一致している
+- [x] ネットワークエラーが `ApiError(0, ...)` にラップされている
+- [x] 3 状態 UI が `{#if}/{:else if}/{:else}` で正しく分岐している
+- [x] アクセシビリティ属性（`role="status"` / `aria-live` / `role="alert"`）が設定されている
+- [x] Prettier フォーマット済み（`npm run format`）
+- [x] ESLint エラーなし（`npm run lint`）
+- [x] `docs/05_progress.md` のタスクが `[x]` に更新されている
+- [x] このファイルに「実装完了」セクションが追記されている
+
+---
+
+## 実装完了
+
+- 完了日: 2026-05-24
+- 実装ブランチ: feature/phase3-verify-email-page
+
+### 計画からの変更点
+
+なし（計画書通りに実装）
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `frontend/src/routes/verify-email/+page.svelte` | 修正（全文書換） | メール認証完了ページの実装 |
+| `docs/05_progress.md` | 修正 | `/register` 完了・`/verify-email` 完了マーク |
