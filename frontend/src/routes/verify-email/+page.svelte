@@ -118,7 +118,7 @@
     //    hash も保持して URL が意図せず変わらないようにする
     const cleanUrl = new URL(page.url);
     cleanUrl.searchParams.delete('token');
-    replaceState(cleanUrl.pathname + cleanUrl.search + cleanUrl.hash, {});
+    replaceState(cleanUrl.pathname + cleanUrl.search + cleanUrl.hash, page.state);
 
     // 4. 認証処理を開始
     void verify();
