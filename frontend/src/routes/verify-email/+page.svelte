@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { goto } from '$app/navigation';
+  import { goto, replaceState } from '$app/navigation';
   import { API_BASE_URL } from '$lib/api/config';
   import { ApiError, parseErrorResponse } from '$lib/api/errors';
   import { toastStore } from '$lib/stores/toast.svelte';
@@ -16,81 +16,96 @@
   // 「既に認証済み」を判定する定数（バックエンドのメッセージと一致させる）
   const ALREADY_VERIFIED_MESSAGE = '既にメールアドレスは確認済みです';
 
-  onMount(() => {
-    let redirectTimerId: ReturnType<typeof setTimeout> | null = null;
-    let countdownIntervalId: ReturnType<typeof setInterval> | null = null;
+  // onMount で一度だけ URL から読み取ったトークンを保持（再試行に備える）
+  let storedToken = $state<string | null>(null);
 
-    async function verify() {
-      // 1. トークン取得 + ガード
-      const token = page.url.searchParams.get('token');
-      if (!token) {
-        status = 'error';
-        errorMessage = '認証リンクが無効です。メール内のリンクから再度アクセスしてください。';
+  // タイマー ID（onMount の cleanup 関数からも参照するためコンポーネントスコープに置く）
+  let redirectTimerId: ReturnType<typeof setTimeout> | null = null;
+  let countdownIntervalId: ReturnType<typeof setInterval> | null = null;
+
+  function startCountdownAndRedirect() {
+    countdownIntervalId = setInterval(() => {
+      if (countdown <= 1 && countdownIntervalId !== null) {
+        clearInterval(countdownIntervalId);
+        countdownIntervalId = null;
+      } else {
+        countdown -= 1;
+      }
+    }, 1000);
+    redirectTimerId = setTimeout(() => {
+      goto('/login');
+    }, 3000);
+  }
+
+  async function verify() {
+    // storedToken が null の場合は何もしない（onMount のガードで事前に弾く）
+    if (!storedToken) return;
+
+    status = 'verifying';
+    errorMessage = null;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/verify-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: storedToken })
+      });
+
+      if (!response.ok) {
+        await parseErrorResponse(response);
+      }
+
+      // 通常成功
+      status = 'success';
+      alreadyVerified = false;
+      toastStore.success('メール認証が完了しました！');
+      startCountdownAndRedirect();
+    } catch (error) {
+      // ApiError でも fetch 例外でも一律 ApiError として扱う
+      const apiError =
+        error instanceof ApiError
+          ? error
+          : new ApiError(0, '通信に失敗しました。ネットワーク接続を確認してください。');
+
+      // 「既に認証済み」は success として扱う（T3）
+      if (apiError.status === 400 && apiError.message === ALREADY_VERIFIED_MESSAGE) {
+        status = 'success';
+        alreadyVerified = true;
+        toastStore.info('既にメール認証が完了しています');
+        startCountdownAndRedirect();
         return;
       }
 
-      // トークンを URL から除去（取得直後・fetch 前。トークンは変数で保持）
-      const cleanUrl = new URL(page.url);
-      cleanUrl.searchParams.delete('token');
-      history.replaceState({}, '', cleanUrl.pathname + cleanUrl.search);
+      // それ以外はエラー
+      status = 'error';
+      errorMessage = apiError.message;
+      toastStore.fromApiError(apiError);
+    }
+  }
 
-      // 2. API 呼び出し
-      try {
-        const response = await fetch(`${API_BASE_URL}/auth/verify-email`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token })
-        });
-
-        if (!response.ok) {
-          await parseErrorResponse(response);
-        }
-
-        // 3a. 通常成功
-        status = 'success';
-        alreadyVerified = false;
-        toastStore.success('メール認証が完了しました！');
-        startCountdownAndRedirect();
-      } catch (error) {
-        // ApiError でも fetch 例外でも一律 ApiError として扱う
-        const apiError =
-          error instanceof ApiError
-            ? error
-            : new ApiError(0, '通信に失敗しました。ネットワーク接続を確認してください。');
-
-        // 3b. 「既に認証済み」は success として扱う（T3）
-        if (apiError.status === 400 && apiError.message === ALREADY_VERIFIED_MESSAGE) {
-          status = 'success';
-          alreadyVerified = true;
-          toastStore.info('既にメール認証が完了しています');
-          startCountdownAndRedirect();
-          return;
-        }
-
-        // 3c. それ以外はエラー
-        status = 'error';
-        errorMessage = apiError.message;
-        toastStore.fromApiError(apiError);
-      }
+  onMount(() => {
+    // 1. トークン取得 + ガード
+    const rawToken = page.url.searchParams.get('token');
+    if (!rawToken) {
+      status = 'error';
+      errorMessage = '認証リンクが無効です。メール内のリンクから再度アクセスしてください。';
+      return;
     }
 
-    function startCountdownAndRedirect() {
-      countdownIntervalId = setInterval(() => {
-        if (countdown <= 1 && countdownIntervalId !== null) {
-          clearInterval(countdownIntervalId);
-          countdownIntervalId = null;
-        } else {
-          countdown -= 1;
-        }
-      }, 1000);
-      redirectTimerId = setTimeout(() => {
-        goto('/login');
-      }, 3000);
-    }
+    // 2. トークンをコンポーネントスコープ変数に保持（再試行に備える）
+    storedToken = rawToken;
 
-    verify();
+    // 3. トークンを URL から除去（取得直後・fetch 前。トークンは storedToken で保持）
+    //    SvelteKit の replaceState を使い、ナビゲーション用メタ情報を保持する
+    //    hash も保持して URL が意図せず変わらないようにする
+    const cleanUrl = new URL(page.url);
+    cleanUrl.searchParams.delete('token');
+    replaceState(cleanUrl.pathname + cleanUrl.search + cleanUrl.hash, {});
 
-    // クリーンアップ（T4）
+    // 4. 認証処理を開始
+    void verify();
+
+    // クリーンアップ
     return () => {
       if (redirectTimerId !== null) clearTimeout(redirectTimerId);
       if (countdownIntervalId !== null) clearInterval(countdownIntervalId);
@@ -168,9 +183,18 @@
         <p class="text-lg font-medium text-gray-800">認証に失敗しました</p>
         <p class="text-sm text-red-700">{errorMessage}</p>
         <div class="flex flex-col gap-2 sm:flex-row">
+          {#if storedToken}
+            <button
+              type="button"
+              onclick={verify}
+              class="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+            >
+              再試行する
+            </button>
+          {/if}
           <a
             href="/register"
-            class="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+            class="rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
           >
             再度ユーザー登録する
           </a>
