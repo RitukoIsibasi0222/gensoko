@@ -29,6 +29,11 @@
         return;
       }
 
+      // トークンを URL から除去（取得直後・fetch 前。トークンは変数で保持）
+      const cleanUrl = new URL(page.url);
+      cleanUrl.searchParams.delete('token');
+      history.replaceState({}, '', cleanUrl.pathname + cleanUrl.search);
+
       // 2. API 呼び出し
       try {
         const response = await fetch(`${API_BASE_URL}/auth/verify-email`, {
@@ -41,8 +46,7 @@
           await parseErrorResponse(response);
         }
 
-        // 3a. 通常成功（認証完了後にトークンを URL から除去）
-        history.replaceState({}, '', '/verify-email');
+        // 3a. 通常成功
         status = 'success';
         alreadyVerified = false;
         toastStore.success('メール認証が完了しました！');
@@ -56,8 +60,6 @@
 
         // 3b. 「既に認証済み」は success として扱う（T3）
         if (apiError.status === 400 && apiError.message === ALREADY_VERIFIED_MESSAGE) {
-          // 認証完了済み確認後にトークンを URL から除去
-          history.replaceState({}, '', '/verify-email');
           status = 'success';
           alreadyVerified = true;
           toastStore.info('既にメール認証が完了しています');
