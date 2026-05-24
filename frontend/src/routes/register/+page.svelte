@@ -1,6 +1,6 @@
 <script lang="ts">
   import { API_BASE_URL } from '$lib/api/config';
-  import { ApiError } from '$lib/api/errors';
+  import { ApiError, parseErrorResponse } from '$lib/api/errors';
   import { toastStore } from '$lib/stores/toast.svelte';
   import { validateUsername, validateEmail, validatePassword } from './validation';
   import { goto } from '$app/navigation';
@@ -81,16 +81,7 @@
 
       // response.ok チェックを先に行う（JSON パース前に HTTP ステータスを確認）
       if (!response.ok) {
-        let errorBody: { error?: string; details?: { message: string }[] } | null = null;
-        try {
-          errorBody = await response.json();
-        } catch {
-          // JSON パース失敗時（502/504 等の非 JSON レスポンス）は null のまま
-        }
-        // details[0].message を優先（バリデーションエラー時の具体的なメッセージを使用）
-        const message =
-          errorBody?.details?.[0]?.message ?? errorBody?.error ?? 'エラーが発生しました';
-        throw new ApiError(response.status, message, errorBody);
+        await parseErrorResponse(response);
       }
 
       // 登録成功: パスワードをクリアしてから成功フラグを立てる（メモリ上に残さない）

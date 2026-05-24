@@ -61,6 +61,10 @@
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
 | `frontend/src/routes/verify-email/+page.svelte` | 修正（全文書換） | メール認証完了ページの実装 |
+| `frontend/src/lib/api/errors.ts` | 修正 | `ErrorBody` 型・`parseErrorBody()`・`parseErrorResponse()` を追加 |
+| `frontend/src/lib/api/errors.test.ts` | 新規 | `parseErrorBody` / `parseErrorResponse` のユニットテスト（12件） |
+| `frontend/src/routes/register/+page.svelte` | 修正 | `parseErrorResponse()` を使うよう変更（重複コード削除） |
+| `frontend/src/routes/login/+page.svelte` | 修正 | `parseErrorBody()` を使うよう変更（重複コード削除） |
 | `docs/05_progress.md` | 修正 | タスク完了マーク（`[ ]` → `[x]`） |
 
 ---
@@ -101,11 +105,12 @@
 
 ### 4. 自動遷移: 成功時 3 秒カウントダウン後に `/login` へ自動 `goto`
 
-- **選択**: 成功（通常 / 既認証 両方）時に `setTimeout(() => goto('/login'), 3000)` で自動遷移
+- **選択**: 成功（通常 / 既認証 両方）時に `setTimeout(() => goto('/login'), REDIRECT_SECONDS * 1000)` で自動遷移
 - **根拠**: ユーザー指定要件
+- **定数管理**: `const REDIRECT_SECONDS = 3` を 1 箇所で定義し、`countdown` 初期値・リセット・`setTimeout` の遅延 (ms) の 3 箇所から参照する。秒数を変更する際に値のズレが起きないようにする
 - **クリーンアップ**: `onMount` の return 関数で `clearTimeout` を呼び、コンポーネントアンマウント時にタイマーをキャンセル（メモリリーク・遷移後の意図しない再 goto を防ぐ）
 - **手動遷移ボタン**: 「今すぐログイン」ボタンも併設し、カウントダウンを待たずに進めるようにする
-- **カウントダウン表示**: `let countdown = $state(3)` + `setInterval` で「3秒後に...」「2秒後に...」と表示
+- **カウントダウン表示**: `let countdown = $state(REDIRECT_SECONDS)` + `setInterval` で「3秒後に...」「2秒後に...」と表示
 
 ### 5. ネットワークエラーは `ApiError(0, ...)` にラップして UI を一元化
 
@@ -340,9 +345,9 @@ let countdown: number;             // 成功時の自動遷移までの残り秒
 1. **`$effect` を使わない**: API トリガーは必ず `onMount` を使う。`$effect` は再実行リスクあり
 2. **`$app/state` を使う**: `$app/stores` は旧 API。SvelteKit v2 では `$app/state` の `page` を使う（**store ではなく runes 対応のオブジェクト**なので `$page` ではなく `page.url` のようにアクセス）
 3. **クリーンアップを忘れない**: `setTimeout` / `setInterval` は `onMount` の return 関数で必ず `clearTimeout` / `clearInterval` する。これを忘れると、ユーザーが手動で `/login` に遷移した直後に再度 `goto('/login')` が走るバグになる
-4. **既認証メッセージ文字列の完全一致**: バックエンド `auth.service.ts` line 326 の `"既にメールアドレスは確認済みです"` と完全一致させる。typo すると判定が機能しない
+4. **既認証メッセージ文字列の完全一致**: バックエンド `auth.service.ts` の `"既にメールアドレスは確認済みです"` と完全一致させる。typo すると判定が機能しない
 5. **`response.ok` チェックを JSON パースより先に**: 非 JSON レスポンス（502 等）が来た時の例外を防ぐ（login/register と同じパターン）
-6. **正常系の JSON は await しても使わない**: `await response.json()` で受け取ったボディは使用しないが、ストリームを閉じるために await はする
+6. **正常系のレスポンスボディは使用しない**: `response.ok` が true の場合、バックエンドは `{ message: "..." }` を返すがフロント側では使用しない。`await response.json()` は呼ばない（バックエンドが将来 204 を返すと例外になるため）
 7. **ネットワークエラーは `ApiError(0, ...)` にラップ**: try-catch 内で `error instanceof ApiError ? error : new ApiError(0, '...')` の三項演算で一元化する
 8. **`countdown` の表示は 3→2→1**: 0 になったら `clearInterval` で止める。UI 上は「{countdown}秒後に」と表示するため、0 を表示しないように間隔と setTimeout のタイミングを合わせる
 9. **インデント**: Prettier `tabWidth: 2` に従う（既存ファイル参照）
@@ -368,14 +373,44 @@ let countdown: number;             // 成功時の自動遷移までの残り秒
 
 ## レビュー観点（実装完了時のセルフチェック）
 
-- [ ] `$effect` を使っていない（`onMount` のみ）
-- [ ] `$app/stores` を import していない（`$app/state` のみ）
-- [ ] `setTimeout` / `setInterval` のクリーンアップが `onMount` の return で実装されている
-- [ ] 既認証メッセージ文字列が `auth.service.ts` line 326 と完全一致している
-- [ ] ネットワークエラーが `ApiError(0, ...)` にラップされている
-- [ ] 3 状態 UI が `{#if}/{:else if}/{:else}` で正しく分岐している
-- [ ] アクセシビリティ属性（`role="status"` / `aria-live` / `role="alert"`）が設定されている
-- [ ] Prettier フォーマット済み（`npm run format`）
-- [ ] ESLint エラーなし（`npm run lint`）
-- [ ] `docs/05_progress.md` のタスクが `[x]` に更新されている
-- [ ] このファイルに「実装完了」セクションが追記されている
+- [x] `$effect` を使っていない（`onMount` のみ）
+- [x] `$app/stores` を import していない（`$app/state` のみ）
+- [x] `setTimeout` / `setInterval` のクリーンアップが `onMount` の return で実装されている
+- [x] 既認証メッセージ文字列（`"既にメールアドレスは確認済みです"`）がバックエンドと完全一致している
+- [x] ネットワークエラーが `ApiError(0, ...)` にラップされている
+- [x] 3 状態 UI が `{#if}/{:else if}/{:else}` で正しく分岐している
+- [x] アクセシビリティ属性（`role="status"` / `aria-live` / `role="alert"`）が設定されている
+- [x] Prettier フォーマット済み（`npm run format`）
+- [x] ESLint エラーなし（`npm run lint`）
+- [x] `docs/05_progress.md` のタスクが `[x]` に更新されている
+- [x] このファイルに「実装完了」セクションが追記されている
+
+---
+
+## 実装完了
+
+- 完了日: 2026-05-24
+- 実装ブランチ: feature/phase3-verify-email-page
+
+### 計画からの変更点
+
+- エラーボディ解析ロジックの共通化として、`$lib/api/errors.ts` に `ErrorBody` 型・`parseErrorBody()`・`parseErrorResponse()` を追加（`verify-email`・`register`・`login` の重複コードを削除）
+- セキュリティ対応: トークン取得後に `history.replaceState` で URL から `?token=` を除去
+- `await response.json()` を成功パスから削除（未使用かつ将来の 204 対応のため）
+- `$lib/api/errors.test.ts` を新規作成して共通ヘルパーのユニットテスト 12 件を追加
+- `plan.md` の既認証メッセージ参照を行番号から文字列引用に変更
+- カウントダウン秒数を `REDIRECT_SECONDS = 3` 定数に集約し、`countdown` 初期値・リセット・`setTimeout` の遅延 (ms) を 1 箇所で管理（PR #30 レビュー対応）
+- `startCountdownAndRedirect()` に既存タイマーのクリアと `countdown` リセットを追加（多重起動防止）
+- `verify()` に `isVerifying` フラグによる多重実行ガードを追加し、`finally` で確実に解放
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `frontend/src/routes/verify-email/+page.svelte` | 修正（全文書換） | メール認証完了ページの実装・トークン URL 削除・不要な JSON パース削除・タイマー多重起動防止・多重実行ガード追加 |
+| `frontend/src/lib/api/errors.ts` | 修正 | `ErrorBody` 型・`parseErrorBody()`・`parseErrorResponse()` を追加 |
+| `frontend/src/lib/api/errors.test.ts` | 新規 | `parseErrorBody` / `parseErrorResponse` のユニットテスト（12件） |
+| `frontend/src/routes/register/+page.svelte` | 修正 | `parseErrorResponse()` を使うよう変更 |
+| `frontend/src/routes/login/+page.svelte` | 修正 | `parseErrorBody()` を使うよう変更 |
+| `docs/05_progress.md` | 修正 | `/register` 完了・`/verify-email` 完了マーク |
+| `frontend/package-lock.json` | 修正 | npm 依存解決の正規化（peer フラグ整理） |
