@@ -398,12 +398,14 @@ let countdown: number;             // 成功時の自動遷移までの残り秒
 - `await response.json()` を成功パスから削除（未使用かつ将来の 204 対応のため）
 - `$lib/api/errors.test.ts` を新規作成して共通ヘルパーのユニットテスト 12 件を追加
 - `plan.md` の既認証メッセージ参照を行番号から文字列引用に変更
+- `startCountdownAndRedirect()` に既存タイマーのクリアと `countdown` リセットを追加（多重起動防止）
+- `verify()` に `isVerifying` フラグによる多重実行ガードを追加し、`finally` で確実に解放
 
 ### 実際の変更ファイル
 
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
-| `frontend/src/routes/verify-email/+page.svelte` | 修正（全文書換） | メール認証完了ページの実装・トークン URL 削除・不要な JSON パース削除 |
+| `frontend/src/routes/verify-email/+page.svelte` | 修正（全文書換） | メール認証完了ページの実装・トークン URL 削除・不要な JSON パース削除・タイマー多重起動防止・多重実行ガード追加 |
 | `frontend/src/lib/api/errors.ts` | 修正 | `ErrorBody` 型・`parseErrorBody()`・`parseErrorResponse()` を追加 |
 | `frontend/src/lib/api/errors.test.ts` | 新規 | `parseErrorBody` / `parseErrorResponse` のユニットテスト（12件） |
 | `frontend/src/routes/register/+page.svelte` | 修正 | `parseErrorResponse()` を使うよう変更 |
