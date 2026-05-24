@@ -349,7 +349,7 @@ let formError: string | null;            // API エラー・ネットワーク�
 ## 実装完了
 - 完了日: 2026-05-24
 - 実装ブランチ: feature/forgot-password-page
-- PR: 未作成
+- PR: #31
 
 ### 計画からの変更点
 - 型チェック警告（`Cannot find type definition file for 'node'`）解消のため、計画外で `frontend` に `@types/node` を追加した
