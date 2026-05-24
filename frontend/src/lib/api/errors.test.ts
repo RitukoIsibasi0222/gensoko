@@ -29,8 +29,8 @@ describe('parseErrorBody', () => {
     expect(body).toBeNull();
   });
 
-  it('空ボディのレスポンスの場合は null を返す', async () => {
-    const response = new Response(null, { status: 204 });
+  it('空ボディのエラーレスポンスの場合は null を返す', async () => {
+    const response = new Response(null, { status: 500 });
     const body = await parseErrorBody(response);
     expect(body).toBeNull();
   });
