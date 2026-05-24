@@ -29,6 +29,9 @@
         return;
       }
 
+      // トークンを URL から除去（ブラウザ履歴・Referer からの漏洩防止）
+      history.replaceState({}, '', '/verify-email');
+
       // 2. API 呼び出し
       try {
         const response = await fetch(`${API_BASE_URL}/auth/verify-email`, {
@@ -40,8 +43,6 @@
         if (!response.ok) {
           await parseErrorResponse(response);
         }
-
-        await response.json();
 
         // 3a. 通常成功
         status = 'success';
