@@ -23,7 +23,20 @@
   let redirectTimerId: ReturnType<typeof setTimeout> | null = null;
   let countdownIntervalId: ReturnType<typeof setInterval> | null = null;
 
+  // 多重実行ガードフラグ
+  let isVerifying = false;
+
   function startCountdownAndRedirect() {
+    // 既存タイマーをクリアしてから再設定する（多重起動防止）
+    if (countdownIntervalId !== null) {
+      clearInterval(countdownIntervalId);
+      countdownIntervalId = null;
+    }
+    if (redirectTimerId !== null) {
+      clearTimeout(redirectTimerId);
+      redirectTimerId = null;
+    }
+    countdown = 3;
     countdownIntervalId = setInterval(() => {
       if (countdown <= 1 && countdownIntervalId !== null) {
         clearInterval(countdownIntervalId);
@@ -40,6 +53,9 @@
   async function verify() {
     // storedToken が null の場合は何もしない（onMount のガードで事前に弾く）
     if (!storedToken) return;
+    // 多重実行ガード（再試行ボタン連打等で並行 fetch が走るのを防ぐ）
+    if (isVerifying) return;
+    isVerifying = true;
 
     status = 'verifying';
     errorMessage = null;
@@ -80,6 +96,8 @@
       status = 'error';
       errorMessage = apiError.message;
       toastStore.fromApiError(apiError);
+    } finally {
+      isVerifying = false;
     }
   }
 
