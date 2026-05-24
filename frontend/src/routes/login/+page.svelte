@@ -2,7 +2,7 @@
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import { goto } from '$app/navigation';
-  import { ApiError } from '$lib/api/errors';
+  import { ApiError, parseErrorBody } from '$lib/api/errors';
   import { API_BASE_URL } from '$lib/api/config';
   import { isValidEmailFormat } from '$lib/validation/email';
 
@@ -122,13 +122,7 @@
       // authStore パターンに倣い、response.ok チェックを先に行う
       // （JSON パース前に HTTP ステータスを確認し、非 JSON レスポンス時のエラーを防ぐ）
       if (!response.ok) {
-        // エラーレスポンスの場合は JSON パースを試みる
-        let errorBody: { error?: string; details?: { message: string }[] } | null = null;
-        try {
-          errorBody = await response.json();
-        } catch {
-          // JSON パース失敗時（502/504 等の非 JSON レスポンス）は null のまま
-        }
+        const errorBody = await parseErrorBody(response);
         // details[0].message を優先（400 バリデーションエラー時の具体的なメッセージを使用）
         const message = toJpMessage(
           response.status,

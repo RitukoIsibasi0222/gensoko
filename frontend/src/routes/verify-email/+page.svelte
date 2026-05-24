@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { API_BASE_URL } from '$lib/api/config';
-  import { ApiError } from '$lib/api/errors';
+  import { ApiError, parseErrorResponse } from '$lib/api/errors';
   import { toastStore } from '$lib/stores/toast.svelte';
 
   type VerifyStatus = 'verifying' | 'success' | 'error';
@@ -38,15 +38,7 @@
         });
 
         if (!response.ok) {
-          let errorBody: { error?: string; details?: { message: string }[] } | null = null;
-          try {
-            errorBody = await response.json();
-          } catch {
-            // 非 JSON レスポンス（502/504 等）
-          }
-          const message =
-            errorBody?.details?.[0]?.message ?? errorBody?.error ?? 'エラーが発生しました';
-          throw new ApiError(response.status, message, errorBody);
+          await parseErrorResponse(response);
         }
 
         await response.json();
