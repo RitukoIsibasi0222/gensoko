@@ -189,18 +189,18 @@ let formError: string | null;            // API エラー・ネットワーク�
 | T11 | `docs/05_progress.md` のステータス更新 | `docs/05_progress.md` | 該当タスクが `[x]` になる | T10 | 中 |
 | T12 | 本計画書に「実装完了」セクション追記 | 本ファイル | 計画書テンプレートに沿って完了情報を記録 | T11 | 中 |
 
-- [ ] T1: スクリプト骨組み・import・state 定義
-- [ ] T2: 既ログイン時リダイレクト
-- [ ] T3: `validateEmail` 関数
-- [ ] T4: `handleSubmit` 実装
-- [ ] T5: フォーム UI
-- [ ] T6: 成功画面 UI
-- [ ] T7: トースト連携
-- [ ] T8: lint / format / check
-- [ ] T9: 既存テスト全通過確認
-- [ ] T10: 手動疎通確認（Mailpit 含む）
-- [ ] T11: `docs/05_progress.md` 更新
-- [ ] T12: 計画書に実装完了セクション追記
+- [x] T1: スクリプト骨組み・import・state 定義
+- [x] T2: 既ログイン時リダイレクト
+- [x] T3: `validateEmail` 関数
+- [x] T4: `handleSubmit` 実装
+- [x] T5: フォーム UI
+- [x] T6: 成功画面 UI
+- [x] T7: トースト連携
+- [x] T8: lint / format / check
+- [x] T9: 既存テスト全通過確認
+- [x] T10: 手動疎通確認（Mailpit 含む）
+- [x] T11: `docs/05_progress.md` 更新
+- [x] T12: 計画書に実装完了セクション追記
 
 ---
 
@@ -345,3 +345,21 @@ let formError: string | null;            // API エラー・ネットワーク�
 
 5. **リスク: バックエンドエラー文言を固定文言で上書きしてしまう**
    - **回避策**: `parseErrorResponse` を使う（`details[0].message ?? error ?? defaultMessage` の優先順で自動処理）。`catch` ブロックでは `error.message` をそのまま `formError` に入れるだけにする
+
+## 実装完了
+- 完了日: 2026-05-24
+- 実装ブランチ: feature/forgot-password-page
+- PR: 未作成
+
+### 計画からの変更点
+- 型チェック警告（`Cannot find type definition file for 'node'`）解消のため、計画外で `frontend` に `@types/node` を追加した
+- 手動疎通確認は UI 操作と API 直接実行の組み合わせで実施した（空欄/形式不正/成功画面/未登録同一UI/レート制限/ネットワークエラー/既ログイン時リダイレクト/Mailpit到達）
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `frontend/src/routes/forgot-password/+page.svelte` | 修正 | 申請フォーム・送信処理・成功画面・既ログイン時リダイレクトを実装 |
+| `frontend/package.json` | 修正 | `@types/node` を devDependencies に追加 |
+| `frontend/package-lock.json` | 修正 | 依存追加に伴うロック更新 |
+| `docs/05_progress.md` | 修正 | `/forgot-password` タスクを完了に更新 |
+| `docs/plans/forgot-password-page/plan.md` | 修正 | タスク完了チェックと実装完了記録を追記 |
