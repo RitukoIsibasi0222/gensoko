@@ -29,9 +29,6 @@
         return;
       }
 
-      // トークンを URL から除去（ブラウザ履歴・Referer からの漏洩防止）
-      history.replaceState({}, '', '/verify-email');
-
       // 2. API 呼び出し
       try {
         const response = await fetch(`${API_BASE_URL}/auth/verify-email`, {
@@ -44,7 +41,8 @@
           await parseErrorResponse(response);
         }
 
-        // 3a. 通常成功
+        // 3a. 通常成功（認証完了後にトークンを URL から除去）
+        history.replaceState({}, '', '/verify-email');
         status = 'success';
         alreadyVerified = false;
         toastStore.success('メール認証が完了しました！');
@@ -58,6 +56,8 @@
 
         // 3b. 「既に認証済み」は success として扱う（T3）
         if (apiError.status === 400 && apiError.message === ALREADY_VERIFIED_MESSAGE) {
+          // 認証完了済み確認後にトークンを URL から除去
+          history.replaceState({}, '', '/verify-email');
           status = 'success';
           alreadyVerified = true;
           toastStore.info('既にメール認証が完了しています');
@@ -74,10 +74,11 @@
 
     function startCountdownAndRedirect() {
       countdownIntervalId = setInterval(() => {
-        countdown -= 1;
-        if (countdown <= 0 && countdownIntervalId !== null) {
+        if (countdown <= 1 && countdownIntervalId !== null) {
           clearInterval(countdownIntervalId);
           countdownIntervalId = null;
+        } else {
+          countdown -= 1;
         }
       }, 1000);
       redirectTimerId = setTimeout(() => {
