@@ -11,7 +11,10 @@
   let status = $state<VerifyStatus>('verifying');
   let errorMessage = $state<string | null>(null);
   let alreadyVerified = $state(false);
-  let countdown = $state(3);
+
+  // リダイレクトまでのカウントダウン秒数（1 箇所で管理して setTimeout の ms との不整合を防ぐ）
+  const REDIRECT_SECONDS = 3;
+  let countdown = $state(REDIRECT_SECONDS);
 
   // 「既に認証済み」を判定する定数（バックエンドのメッセージと一致させる）
   const ALREADY_VERIFIED_MESSAGE = '既にメールアドレスは確認済みです';
@@ -36,7 +39,7 @@
       clearTimeout(redirectTimerId);
       redirectTimerId = null;
     }
-    countdown = 3;
+    countdown = REDIRECT_SECONDS;
     countdownIntervalId = setInterval(() => {
       if (countdown <= 1 && countdownIntervalId !== null) {
         clearInterval(countdownIntervalId);
@@ -47,7 +50,7 @@
     }, 1000);
     redirectTimerId = setTimeout(() => {
       goto('/login');
-    }, 3000);
+    }, REDIRECT_SECONDS * 1000);
   }
 
   async function verify() {

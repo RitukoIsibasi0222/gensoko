@@ -105,11 +105,12 @@
 
 ### 4. 自動遷移: 成功時 3 秒カウントダウン後に `/login` へ自動 `goto`
 
-- **選択**: 成功（通常 / 既認証 両方）時に `setTimeout(() => goto('/login'), 3000)` で自動遷移
+- **選択**: 成功（通常 / 既認証 両方）時に `setTimeout(() => goto('/login'), REDIRECT_SECONDS * 1000)` で自動遷移
 - **根拠**: ユーザー指定要件
+- **定数管理**: `const REDIRECT_SECONDS = 3` を 1 箇所で定義し、`countdown` 初期値・リセット・`setTimeout` の遅延 (ms) の 3 箇所から参照する。秒数を変更する際に値のズレが起きないようにする
 - **クリーンアップ**: `onMount` の return 関数で `clearTimeout` を呼び、コンポーネントアンマウント時にタイマーをキャンセル（メモリリーク・遷移後の意図しない再 goto を防ぐ）
 - **手動遷移ボタン**: 「今すぐログイン」ボタンも併設し、カウントダウンを待たずに進めるようにする
-- **カウントダウン表示**: `let countdown = $state(3)` + `setInterval` で「3秒後に...」「2秒後に...」と表示
+- **カウントダウン表示**: `let countdown = $state(REDIRECT_SECONDS)` + `setInterval` で「3秒後に...」「2秒後に...」と表示
 
 ### 5. ネットワークエラーは `ApiError(0, ...)` にラップして UI を一元化
 
@@ -398,6 +399,7 @@ let countdown: number;             // 成功時の自動遷移までの残り秒
 - `await response.json()` を成功パスから削除（未使用かつ将来の 204 対応のため）
 - `$lib/api/errors.test.ts` を新規作成して共通ヘルパーのユニットテスト 12 件を追加
 - `plan.md` の既認証メッセージ参照を行番号から文字列引用に変更
+- カウントダウン秒数を `REDIRECT_SECONDS = 3` 定数に集約し、`countdown` 初期値・リセット・`setTimeout` の遅延 (ms) を 1 箇所で管理（PR #30 レビュー対応）
 - `startCountdownAndRedirect()` に既存タイマーのクリアと `countdown` リセットを追加（多重起動防止）
 - `verify()` に `isVerifying` フラグによる多重実行ガードを追加し、`finally` で確実に解放
 
