@@ -138,7 +138,11 @@
         <p class="text-gray-700">認証中です。しばらくお待ちください...</p>
       </div>
     {:else if status === 'success'}
-      <div class="flex flex-col items-center gap-4 py-4 text-center">
+      <div
+        role="status"
+        aria-live="polite"
+        class="flex flex-col items-center gap-4 py-4 text-center"
+      >
         <!-- チェックマーク（緑） -->
         <svg
           xmlns="http://www.w3.org/2000/svg"
