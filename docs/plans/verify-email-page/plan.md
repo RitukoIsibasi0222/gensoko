@@ -371,7 +371,7 @@ let countdown: number;             // 成功時の自動遷移までの残り秒
 - [x] `$effect` を使っていない（`onMount` のみ）
 - [x] `$app/stores` を import していない（`$app/state` のみ）
 - [x] `setTimeout` / `setInterval` のクリーンアップが `onMount` の return で実装されている
-- [x] 既認証メッセージ文字列が `auth.service.ts` line 326 と完全一致している
+- [x] 既認証メッセージ文字列（`"既にメールアドレスは確認済みです"`）がバックエンドと完全一致している
 - [x] ネットワークエラーが `ApiError(0, ...)` にラップされている
 - [x] 3 状態 UI が `{#if}/{:else if}/{:else}` で正しく分岐している
 - [x] アクセシビリティ属性（`role="status"` / `aria-live` / `role="alert"`）が設定されている
