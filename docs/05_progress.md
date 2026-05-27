@@ -64,7 +64,7 @@
 - [x] ユーザー登録画面 `/register`（入力・確認メール送信完了メッセージ）
 - [x] メール認証完了ページ `/verify-email`（トークン自動送信・成功/失敗メッセージ）
 - [x] パスワードリセット申請画面 `/forgot-password`
-- [ ] パスワードリセット画面 `/reset-password`（トークン付きURL経由）
+- [ ] パスワードリセット画面 `/reset-password`（トークン付きURL経由） — 計画書: [`docs/plans/reset-password-page/plan.md`](plans/reset-password-page/plan.md)
 - [ ] プロフィール設定画面 `/settings`（ユーザー名変更・パスワード変更・アカウント削除）
 
 ### 既存 API との疎通確認
