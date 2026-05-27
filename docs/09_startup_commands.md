@@ -9,6 +9,13 @@
 ```bash
 cd /home/rituko/labs/Gensoko
 
+# 初回のみ（または node_modules ボリュームを削除した直後）
+docker compose run --rm hono npm ci
+docker compose run --rm sveltekit npm ci
+
+# Prisma Client の再生成（初回・依存更新後に実行）
+docker compose run --rm hono npx prisma generate
+
 # 全サービス起動（初回 or 停止後）
 docker compose up -d
 
@@ -20,7 +27,7 @@ docker compose ps
 |---|---|---|
 | `hono` | バックエンド API (Hono) | http://localhost:3000 |
 | `sveltekit` | フロントエンド (SvelteKit) | http://localhost:5174 |
-| `postgres` | データベース (PostgreSQL) | localhost:5432 |
+| `postgres` | データベース (PostgreSQL) | localhost:5432（HTTP ではない） |
 | `mailpit` | メール確認 UI | http://localhost:8025 |
 
 ---
@@ -33,6 +40,8 @@ docker compose ps
 | API ルート | http://localhost:3000/ |
 | フロントエンド | http://localhost:5174 |
 | メール受信確認 | http://localhost:8025 |
+
+`postgres` の `5432` は DB 接続用ポートなので、ブラウザで開いても表示確認はできない。
 
 ---
 
