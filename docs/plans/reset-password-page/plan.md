@@ -257,22 +257,22 @@ let storedToken: string | null;          // URL から取得して保持する t
 | T15 | `docs/05_progress.md` のステータス更新 | `docs/05_progress.md` | 該当タスクが `[x]` になる | T14 | 中 |
 | T16 | 本計画書に「実装完了」セクション追記 | 本ファイル | 計画書テンプレートに沿って完了情報を記録 | T15 | 中 |
 
-- [ ] T1: `validatePassword` 移動
-- [ ] T2: `register/validation.ts` 再エクスポート化
-- [ ] T3: register 既存テスト通過確認
-- [ ] T4: スクリプト骨組み・import・state 定義
-- [ ] T5: 既ログイン時リダイレクト
-- [ ] T6: `onMount` token 取得・URL 除去
-- [ ] T7: フィールドバリデーション関数
-- [ ] T8: `handleSubmit` 実装
-- [ ] T9: フォーム UI
-- [ ] T10: 成功画面 UI
-- [ ] T11: トースト連携
-- [ ] T12: lint / format / check
-- [ ] T13: 既存テスト全通過確認
-- [ ] T14: 手動疎通確認
-- [ ] T15: `docs/05_progress.md` 更新
-- [ ] T16: 計画書に実装完了セクション追記
+- [x] T1: `validatePassword` 移動
+- [x] T2: `register/validation.ts` 再エクスポート化
+- [x] T3: register 既存テスト通過確認
+- [x] T4: スクリプト骨組み・import・state 定義
+- [x] T5: 既ログイン時リダイレクト
+- [x] T6: `onMount` token 取得・URL 除去
+- [x] T7: フィールドバリデーション関数
+- [x] T8: `handleSubmit` 実装
+- [x] T9: フォーム UI
+- [x] T10: 成功画面 UI
+- [x] T11: トースト連携
+- [x] T12: lint / format / check
+- [x] T13: 既存テスト全通過確認
+- [x] T14: 手動疎通確認
+- [x] T15: `docs/05_progress.md` 更新
+- [x] T16: 計画書に実装完了セクション追記
 
 ---
 
@@ -484,3 +484,28 @@ let storedToken: string | null;          // URL から取得して保持する t
 
 8. **リスク: token なし時に送信ボタンが押せて 400 になる**
    - **回避策**: `storedToken === null` のときボタンを `disabled` にし、`handleSubmit` 内でも早期 return する（二重ガード）
+
+---
+
+## 実装完了
+- 完了日: 2026-05-28
+- 実装ブランチ: feature/reset-password-page
+- PR: 未作成
+
+### 計画からの変更点
+- `replaceState` の呼び出しタイミングで SvelteKit ルーター初期化前エラーが起きたため、`reset-password` と `verify-email` の両画面で URL から token を除去する処理を遅延実行に調整した
+- 新規登録からの手動疎通確認中に、未認証ユーザーの同一メールアドレス・同一ユーザー名で確認メールを再送できない問題が見つかり、バックエンドの再登録処理とテストを追加した
+- ログイン実動作確認中に `refresh_tokens` の Prisma スキーマと実 DB 定義の不整合が見つかり、`backend/prisma/schema.prisma` を実 DB に合わせて修正した
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `frontend/src/lib/validation/password.ts` | 新規 | `validatePassword` を共通化 |
+| `frontend/src/routes/register/validation.ts` | 修正 | `validatePassword` を再エクスポート化 |
+| `frontend/src/routes/reset-password/+page.svelte` | 修正 | パスワードリセット画面の本実装 |
+| `frontend/src/routes/verify-email/+page.svelte` | 修正 | token URL 除去タイミングを修正 |
+| `backend/src/services/auth.service.ts` | 修正 | 未認証ユーザーの再登録時に確認メールを再送できるよう修正 |
+| `backend/src/routes/auth/register.test.ts` | 修正 | 未認証ユーザー再登録のテストを追加 |
+| `backend/prisma/schema.prisma` | 修正 | `refresh_tokens` のスキーマ不整合を修正 |
+| `docs/05_progress.md` | 修正 | reset-password と認証系疎通確認の完了反映 |
+| `docs/plans/reset-password-page/plan.md` | 修正 | タスク完了と実装完了記録を反映 |
