@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { goto, replaceState } from '$app/navigation';
+  import { API_BASE_URL } from '$lib/api/config';
+  import { ApiError, parseErrorResponse } from '$lib/api/errors';
   import { authStore } from '$lib/stores/auth.svelte';
   import { validatePassword } from '$lib/validation/password';
 
@@ -66,6 +68,59 @@
     }
 
     return null;
+  }
+
+  async function handleSubmit(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+
+    if (isSubmitting) {
+      return;
+    }
+
+    if (!storedToken) {
+      formError ??= 'リセットリンクが無効です。メール内のリンクから再度アクセスしてください。';
+      return;
+    }
+
+    const normalizedPassword = password.trim();
+    const normalizedConfirmPassword = confirmPassword.trim();
+
+    formError = null;
+    passwordError = validatePasswordField(normalizedPassword);
+    confirmPasswordError = validateConfirmPasswordField(
+      normalizedPassword,
+      normalizedConfirmPassword
+    );
+
+    if (passwordError || confirmPasswordError) {
+      return;
+    }
+
+    isSubmitting = true;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ token: storedToken, password: normalizedPassword })
+      });
+
+      if (!response.ok) {
+        await parseErrorResponse(response);
+      }
+
+      isSuccess = true;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        formError = error.message;
+      } else {
+        formError = 'ネットワークエラーが発生しました。接続を確認してください';
+      }
+    } finally {
+      isSubmitting = false;
+    }
   }
 </script>
 
