@@ -47,10 +47,9 @@
 
     const cleanUrl = new URL(page.url);
     cleanUrl.searchParams.delete('token');
-
-    requestAnimationFrame(() => {
+    setTimeout(() => {
       replaceState(cleanUrl.pathname + cleanUrl.search + cleanUrl.hash, page.state);
-    });
+    }, 0);
   });
 
   /** trim 済みパスワードを受け取る */

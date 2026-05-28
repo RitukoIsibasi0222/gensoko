@@ -117,11 +117,13 @@
     storedToken = rawToken;
 
     // 3. トークンを URL から除去（取得直後・fetch 前。トークンは storedToken で保持）
-    //    SvelteKit の replaceState を使い、ナビゲーション用メタ情報を保持する
+    //    SvelteKit router 初期化後に replaceState を呼ぶ
     //    hash も保持して URL が意図せず変わらないようにする
     const cleanUrl = new URL(page.url);
     cleanUrl.searchParams.delete('token');
-    replaceState(cleanUrl.pathname + cleanUrl.search + cleanUrl.hash, page.state);
+    setTimeout(() => {
+      replaceState(cleanUrl.pathname + cleanUrl.search + cleanUrl.hash, page.state);
+    }, 0);
 
     // 4. 認証処理を開始
     void verify();
