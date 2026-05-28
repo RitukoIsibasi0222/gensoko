@@ -127,19 +127,110 @@
 <div class="mx-auto max-w-md px-4 py-8">
   <h1 class="text-2xl font-bold text-gray-800">パスワードリセット</h1>
   <p class="mt-2 text-gray-600">
-    新しいパスワードを設定する画面です。送信処理とバリデーションは次のタスクで実装します。
+    新しいパスワードを入力して再設定してください。
   </p>
 
-  {#if formError}
-    <div
-      role="alert"
-      class="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
-    >
-      {formError}
-    </div>
-  {/if}
+  {#if !isSuccess}
+    <form class="mt-6 space-y-4" novalidate onsubmit={handleSubmit}>
+      {#if formError}
+        <div
+          id="form-error"
+          role="alert"
+          class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+        >
+          {formError}
+        </div>
+      {/if}
 
-  <div class="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-    <p class="text-sm text-gray-500">準備中の state を定義済みです。</p>
-  </div>
+      <div>
+        <label for="password" class="block text-sm font-medium text-gray-700">
+          新しいパスワード
+        </label>
+        <div class="relative mt-1">
+          <input
+            id="password"
+            type={showPassword ? 'text' : 'password'}
+            bind:value={password}
+            autocomplete="new-password"
+            required
+            aria-invalid={passwordError ? 'true' : undefined}
+            aria-describedby={passwordError ? 'password-error' : undefined}
+            class="w-full rounded-md border border-gray-300 px-3 py-2 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+          />
+          <button
+            type="button"
+            onclick={() => (showPassword = !showPassword)}
+            aria-label={showPassword ? 'パスワードを隠す' : 'パスワードを表示する'}
+            class="absolute inset-y-0 right-0 flex items-center rounded-md pr-3 text-gray-400 hover:text-gray-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+          >
+            {#if showPassword}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5 w-5"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z"
+                  clip-rule="evenodd"
+                />
+                <path
+                  d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z"
+                />
+              </svg>
+            {:else}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5 w-5"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                <path
+                  fill-rule="evenodd"
+                  d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            {/if}
+          </button>
+        </div>
+        {#if passwordError}
+          <p id="password-error" class="mt-1 text-sm text-red-600">{passwordError}</p>
+        {/if}
+      </div>
+
+      <div>
+        <label for="confirm-password" class="block text-sm font-medium text-gray-700">
+          確認用パスワード
+        </label>
+        <input
+          id="confirm-password"
+          type={showPassword ? 'text' : 'password'}
+          bind:value={confirmPassword}
+          autocomplete="new-password"
+          required
+          aria-invalid={confirmPasswordError ? 'true' : undefined}
+          aria-describedby={confirmPasswordError ? 'confirm-password-error' : undefined}
+          class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+        />
+        {#if confirmPasswordError}
+          <p id="confirm-password-error" class="mt-1 text-sm text-red-600">
+            {confirmPasswordError}
+          </p>
+        {/if}
+      </div>
+
+      <button
+        type="submit"
+        disabled={isSubmitting || !storedToken}
+        class="w-full rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {isSubmitting ? '送信中...' : 'パスワードを再設定する'}
+      </button>
+    </form>
+  {/if}
 </div>
