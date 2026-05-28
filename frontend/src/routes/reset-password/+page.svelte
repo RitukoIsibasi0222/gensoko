@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
+  import { onMount } from 'svelte';
+  import { page } from '$app/state';
+  import { goto, replaceState } from '$app/navigation';
   import { authStore } from '$lib/stores/auth.svelte';
 
   // フォーム入力値
@@ -28,6 +30,21 @@
       goto('/');
     }
   });
+
+  onMount(() => {
+    const rawToken = page.url.searchParams.get('token');
+
+    if (!rawToken) {
+      formError = 'リセットリンクが無効です。メール内のリンクから再度アクセスしてください。';
+      return;
+    }
+
+    storedToken = rawToken;
+
+    const cleanUrl = new URL(page.url);
+    cleanUrl.searchParams.delete('token');
+    replaceState(cleanUrl.pathname + cleanUrl.search + cleanUrl.hash, page.state);
+  });
 </script>
 
 <div class="mx-auto max-w-md px-4 py-8">
@@ -35,6 +52,15 @@
   <p class="mt-2 text-gray-600">
     新しいパスワードを設定する画面です。送信処理とバリデーションは次のタスクで実装します。
   </p>
+
+  {#if formError}
+    <div
+      role="alert"
+      class="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+    >
+      {formError}
+    </div>
+  {/if}
 
   <div class="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
     <p class="text-sm text-gray-500">準備中の state を定義済みです。</p>
