@@ -5,6 +5,7 @@
   import { API_BASE_URL } from '$lib/api/config';
   import { ApiError, parseErrorResponse } from '$lib/api/errors';
   import { authStore } from '$lib/stores/auth.svelte';
+  import { toastStore } from '$lib/stores/toast.svelte';
   import { validatePassword } from '$lib/validation/password';
 
   // フォーム入力値
@@ -115,6 +116,7 @@
       confirmPassword = '';
       showPassword = false;
       isSuccess = true;
+      toastStore.success('パスワードをリセットしました');
     } catch (error) {
       if (error instanceof ApiError) {
         formError = error.message;
