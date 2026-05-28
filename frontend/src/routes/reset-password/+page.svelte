@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { authStore } from '$lib/stores/auth.svelte';
+
   // フォーム入力値
   let password = $state('');
   let confirmPassword = $state('');
@@ -17,6 +20,14 @@
 
   // URL から取得して保持する token
   let storedToken = $state<string | null>(null);
+
+  // 既にログイン済みならトップページにリダイレクト
+  // 初期化中（refresh トークン検証中）は判定しない
+  $effect(() => {
+    if (!authStore.isInitializing && authStore.isLoggedIn) {
+      goto('/');
+    }
+  });
 </script>
 
 <div class="mx-auto max-w-md px-4 py-8">
