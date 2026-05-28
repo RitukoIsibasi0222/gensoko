@@ -33,14 +33,39 @@ export async function register(input: {
   const { username, email, password: rawPassword } = input;
   const password = normalizePassword(rawPassword);
 
-  // 1. DB にメールまたはユーザー名の重複チェック + ユーザー作成をトランザクションで実行
-  const { token, userId } = await prisma.$transaction(async (tx) => {
+  // 1. DB にメールまたはユーザー名の重複チェックを行い、
+  //    未認証の同一アカウントなら再登録として確認メールを再送できるようにする
+  const { token, userId, createdNewUser } = await prisma.$transaction(async (tx) => {
     const existing = await tx.user.findFirst({
       where: { OR: [{ email }, { username }] },
-      select: { id: true },
+      select: { id: true, email: true, username: true, emailVerified: true },
     });
     if (existing) {
-      throw new AuthError(409, "メールアドレスまたはユーザー名が既に使用されています");
+      const isSamePendingAccount =
+        existing.email === email && existing.username === username && !existing.emailVerified;
+
+      if (!isSamePendingAccount) {
+        throw new AuthError(409, "メールアドレスまたはユーザー名が既に使用されています");
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12);
+      const token = randomBytes(32).toString("hex");
+      const tokenHash = createHash("sha256").update(token).digest("hex");
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24時間
+
+      await tx.user.update({
+        where: { id: existing.id },
+        data: { passwordHash },
+        select: { id: true },
+      });
+
+      // 既存の未使用トークンは無効化して、最新の確認メールだけを有効にする
+      await tx.emailVerification.deleteMany({ where: { userId: existing.id } });
+      await tx.emailVerification.create({
+        data: { userId: existing.id, tokenHash, expiresAt },
+      });
+
+      return { token, userId: existing.id, createdNewUser: false };
     }
 
     // 2. パスワードをハッシュ化（コスト=12）
@@ -61,7 +86,7 @@ export async function register(input: {
       data: { userId: user.id, tokenHash, expiresAt },
     });
 
-    return { token, userId: user.id };
+    return { token, userId: user.id, createdNewUser: true };
   });
 
   // 5. メール送信（DB 確定後に実行。DB トランザクション内で外部 I/O を待たないよう分離）
@@ -76,8 +101,13 @@ export async function register(input: {
       html: `<p>以下のURLをクリックしてメールアドレスを確認してください（有効期限: 24時間）</p><p><a href="${verifyUrl}">${verifyUrl}</a></p>`,
     });
   } catch (err) {
-    // 送信失敗時は作成済みユーザーを削除して再登録可能な状態に戻す
-    await prisma.user.delete({ where: { id: userId } });
+    if (createdNewUser) {
+      // 送信失敗時は作成済みユーザーを削除して再登録可能な状態に戻す
+      await prisma.user.delete({ where: { id: userId } });
+    } else {
+      // 未認証ユーザーの再登録時はアカウントを残し、今回発行した確認トークンだけ無効化する
+      await prisma.emailVerification.deleteMany({ where: { userId } });
+    }
     throw err;
   }
 }
