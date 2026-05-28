@@ -3,6 +3,7 @@
   import { page } from '$app/state';
   import { goto, replaceState } from '$app/navigation';
   import { authStore } from '$lib/stores/auth.svelte';
+  import { validatePassword } from '$lib/validation/password';
 
   // フォーム入力値
   let password = $state('');
@@ -45,6 +46,27 @@
     cleanUrl.searchParams.delete('token');
     replaceState(cleanUrl.pathname + cleanUrl.search + cleanUrl.hash, page.state);
   });
+
+  /** trim 済みパスワードを受け取る */
+  function validatePasswordField(value: string): string | null {
+    return validatePassword(value);
+  }
+
+  /** trim 済みの password / confirmPassword を受け取り、一致判定する */
+  function validateConfirmPasswordField(
+    normalizedPassword: string,
+    normalizedConfirmPassword: string
+  ): string | null {
+    if (!normalizedConfirmPassword) {
+      return '確認用パスワードを入力してください';
+    }
+
+    if (normalizedPassword !== normalizedConfirmPassword) {
+      return '確認用パスワードが一致しません';
+    }
+
+    return null;
+  }
 </script>
 
 <div class="mx-auto max-w-md px-4 py-8">
