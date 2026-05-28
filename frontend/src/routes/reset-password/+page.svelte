@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { page } from '$app/state';
   import { goto, replaceState } from '$app/navigation';
   import { API_BASE_URL } from '$lib/api/config';
@@ -47,9 +47,12 @@
 
     const cleanUrl = new URL(page.url);
     cleanUrl.searchParams.delete('token');
-    setTimeout(() => {
+    // onMount 直後は SvelteKit router が未初期化の場合があるため、tick() で 1 ティック待ってから
+    // replaceState を呼ぶ。これを外すと router 初期化前エラーが再発する。
+    void (async () => {
+      await tick();
       replaceState(cleanUrl.pathname + cleanUrl.search + cleanUrl.hash, page.state);
-    }, 0);
+    })();
   });
 
   /** trim 済みパスワードを受け取る */
