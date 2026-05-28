@@ -64,12 +64,12 @@
 - [x] ユーザー登録画面 `/register`（入力・確認メール送信完了メッセージ）
 - [x] メール認証完了ページ `/verify-email`（トークン自動送信・成功/失敗メッセージ）
 - [x] パスワードリセット申請画面 `/forgot-password`
-- [ ] パスワードリセット画面 `/reset-password`（トークン付きURL経由） — 計画書: [`docs/plans/reset-password-page/plan.md`](plans/reset-password-page/plan.md)
+- [x] パスワードリセット画面 `/reset-password`（トークン付きURL経由） — 計画書: [`docs/plans/reset-password-page/plan.md`](plans/reset-password-page/plan.md)
 - [ ] プロフィール設定画面 `/settings`（ユーザー名変更・パスワード変更・アカウント削除）
 
 ### 既存 API との疎通確認
-- [ ] ログイン → JWT 取得 → リフレッシュ の流れを実動作確認
-- [ ] 登録 → メール認証 → ログイン の流れを実動作確認（Mailpit で確認）
+- [x] ログイン → JWT 取得 → リフレッシュ の流れを実動作確認
+- [x] 登録 → メール認証 → ログイン の流れを実動作確認（Mailpit で確認）
 
 ### 仕様微調整タスク（UI を触って気づいた点を記録）
 - [ ] 認証 API インターフェースの微調整（あれば）

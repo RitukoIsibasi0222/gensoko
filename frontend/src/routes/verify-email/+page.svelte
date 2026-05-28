@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { page } from '$app/state';
   import { goto, replaceState } from '$app/navigation';
   import { API_BASE_URL } from '$lib/api/config';
@@ -117,11 +117,15 @@
     storedToken = rawToken;
 
     // 3. トークンを URL から除去（取得直後・fetch 前。トークンは storedToken で保持）
-    //    SvelteKit の replaceState を使い、ナビゲーション用メタ情報を保持する
+    //    onMount 直後は SvelteKit router が未初期化の場合があるため、tick() で 1 ティック待ってから
+    //    replaceState を呼ぶ。これを外すと router 初期化前エラーが再発する。
     //    hash も保持して URL が意図せず変わらないようにする
     const cleanUrl = new URL(page.url);
     cleanUrl.searchParams.delete('token');
-    replaceState(cleanUrl.pathname + cleanUrl.search + cleanUrl.hash, page.state);
+    void (async () => {
+      await tick();
+      replaceState(cleanUrl.pathname + cleanUrl.search + cleanUrl.hash, page.state);
+    })();
 
     // 4. 認証処理を開始
     void verify();

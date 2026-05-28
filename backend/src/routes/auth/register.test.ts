@@ -174,6 +174,48 @@ describe("POST /auth/register", () => {
     expect(body.error).toBeDefined();
   });
 
+  it("未認証の同一メールアドレス・同一ユーザー名なら再登録できる", async () => {
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "existing-user",
+      email: "taro@example.com",
+      username: "taro123",
+      emailVerified: false,
+    });
+    const update = vi.fn().mockResolvedValue({ id: "existing-user" });
+    const deleteMany = vi.fn().mockResolvedValue({ count: 1 });
+    const create = vi.fn().mockResolvedValue({});
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+      return fn({
+        user: {
+          findFirst,
+          create: vi.fn(),
+          update,
+        },
+        emailVerification: {
+          create,
+          deleteMany,
+        },
+      } as never);
+    });
+    vi.mocked(mailer.sendMail).mockResolvedValue(undefined as never);
+
+    const res = await app.request("/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "taro123",
+        email: "taro@example.com",
+        password: "Pass1234!",
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    expect(update).toHaveBeenCalled();
+    expect(deleteMany).toHaveBeenCalledWith({ where: { userId: "existing-user" } });
+    expect(create).toHaveBeenCalled();
+  });
+
   it("メール送信失敗: sendMail が throw した場合は user を削除して 500 を返す", async () => {
     vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
       return fn({
