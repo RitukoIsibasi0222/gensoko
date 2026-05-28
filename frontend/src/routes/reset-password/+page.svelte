@@ -111,6 +111,9 @@
         await parseErrorResponse(response);
       }
 
+      password = '';
+      confirmPassword = '';
+      showPassword = false;
       isSuccess = true;
     } catch (error) {
       if (error instanceof ApiError) {
@@ -232,5 +235,21 @@
         {isSubmitting ? '送信中...' : 'パスワードを再設定する'}
       </button>
     </form>
+  {:else}
+    <div
+      role="status"
+      class="mt-6 rounded-md border border-green-200 bg-green-50 px-6 py-8 text-center"
+    >
+      <p class="text-lg font-semibold text-green-800">パスワードをリセットしました</p>
+      <p class="mt-2 text-sm text-green-700">
+        新しいパスワードでログインしてください。他の端末でも再度ログインが必要です。
+      </p>
+      <a
+        href="/login"
+        class="mt-4 inline-flex rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+      >
+        ログイン画面へ
+      </a>
+    </div>
   {/if}
 </div>
