@@ -216,6 +216,39 @@ describe("POST /auth/register", () => {
     expect(create).toHaveBeenCalled();
   });
 
+  it("削除済みアカウントと同じメール/ユーザー名では再登録できず 403 を返す", async () => {
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+      return fn({
+        user: {
+          findFirst: vi.fn().mockResolvedValue({
+            id: "deleted-user",
+            email: "taro@example.com",
+            username: "taro123",
+            emailVerified: true,
+            isActive: false,
+            deletedAt: new Date("2026-05-29T00:00:00.000Z"),
+          }),
+          create: vi.fn(),
+        },
+        emailVerification: { create: vi.fn() },
+      } as never);
+    });
+
+    const res = await app.request("/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "taro123",
+        email: "taro@example.com",
+        password: "Pass1234!",
+      }),
+    });
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toBe("このアカウントは削除済みのため再登録できません");
+  });
+
   it("メール送信失敗: sendMail が throw した場合は user を削除して 500 を返す", async () => {
     vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
       return fn({

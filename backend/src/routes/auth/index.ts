@@ -2,6 +2,7 @@ import { zValidator } from "@hono/zod-validator";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { Hono } from "hono";
 import { z } from "zod";
+import { strongPasswordSchema, usernameSchema } from "../../lib/validation/auth.js";
 import {
   AuthError,
   login,
@@ -14,23 +15,8 @@ import {
 } from "../../services/auth.service.js";
 import { rateLimit } from "../../middleware/rateLimit/index.js";
 
-// パスワード強度チェック（register・reset-password 共通）
-// スペースを含むパスワードを禁止する
-const strongPasswordSchema = z
-  .string()
-  .min(8, "パスワードは8文字以上にしてください")
-  .regex(/[A-Z]/, "パスワードには英大文字を1文字以上含めてください")
-  .regex(/[a-z]/, "パスワードには英小文字を1文字以上含めてください")
-  .regex(/[0-9]/, "パスワードには数字を1文字以上含めてください")
-  .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "パスワードには記号を1文字以上含めてください")
-  .refine((val) => !/ /.test(val), "パスワードにスペースは使用できません");
-
 const registerSchema = z.object({
-  username: z
-    .string()
-    .min(3, "ユーザー名は3文字以上にしてください")
-    .max(20, "ユーザー名は20文字以内にしてください")
-    .regex(/^[a-zA-Z0-9_]+$/, "ユーザー名は英数字とアンダースコアのみ使用できます"),
+  username: usernameSchema,
   email: z.string().email("有効なメールアドレスを入力してください"),
   password: strongPasswordSchema,
 });

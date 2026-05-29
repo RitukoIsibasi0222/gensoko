@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { authRouter } from "./routes/auth/index.js";
+import { usersRouter } from "./routes/users/index.js";
 import type { AppVariables } from "./types/index.js";
 
 const app = new Hono<{ Variables: AppVariables }>();
@@ -14,7 +15,7 @@ app.use(
   cors({
     origin: process.env.FRONTEND_URL ?? "http://localhost:5174",
     allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     credentials: true,
   }),
 );
@@ -30,6 +31,7 @@ app.get("/api/v1/health", (c) => {
 
 // ルート登録
 app.route("/api/v1/auth", authRouter);
+app.route("/api/v1/users", usersRouter);
 
 // サーバー起動
 const port = Number(process.env.PORT ?? 3000);
