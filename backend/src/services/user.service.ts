@@ -6,6 +6,15 @@ function normalizePassword(rawPassword: string): string {
   return rawPassword.trim();
 }
 
+function isUniqueConstraintViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === "P2002"
+  );
+}
+
 export class UserError extends Error {
   constructor(
     public readonly status: 400 | 403 | 409,
@@ -79,11 +88,19 @@ export async function updateCurrentUsername(input: { userId: string; username: s
     throw new UserError(409, "このユーザー名は既に使用されています");
   }
 
-  const updatedUser = await prisma.user.update({
-    where: { id: input.userId },
-    data: { username: normalizedUsername },
-    select: { id: true, username: true, role: true },
-  });
+  let updatedUser: { id: string; username: string; role: Role };
+  try {
+    updatedUser = await prisma.user.update({
+      where: { id: input.userId },
+      data: { username: normalizedUsername },
+      select: { id: true, username: true, role: true },
+    });
+  } catch (error) {
+    if (isUniqueConstraintViolation(error)) {
+      throw new UserError(409, "このユーザー名は既に使用されています");
+    }
+    throw error;
+  }
 
   return { user: updatedUser };
 }

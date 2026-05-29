@@ -357,7 +357,7 @@ export function validateDeleteAcknowledgement(checked: boolean): string | null;
 - [x] T15: パスワード変更セクションを実装
 - [x] T16: アカウント削除セクションを実装
 - [x] T17: frontend の lint / format / check / test を通す
-- [ ] T18: 手動疎通確認
+- [x] T18: 手動疎通確認
 - [x] T19: `docs/05_progress.md` のステータス更新
 - [x] T20: 計画書に実装完了セクション追記
 
@@ -467,13 +467,14 @@ export function validateDeleteAcknowledgement(checked: boolean): string | null;
 ## 実装完了
 - 完了日: 2026-05-29
 - 実装ブランチ: feature/settings-page
-- PR: 未作成
+- PR: #35
 
 ### 計画からの変更点
 - 監査目的の保持要件に合わせ、`DELETE /users/me` は物理削除ではなく `users.deletedAt` を使うソフト削除へ変更した（`isActive=false` とトークン削除を併用）。
 - `backend/src/lib/validation/auth.ts` を新規追加し、`strongPasswordSchema` と `usernameSchema` を共通化した。
+- `backend/prisma/migrations/20260530003000_fix_users_deleted_column_consistency/migration.sql` を追加し、`deleted_at` / `deletedAt` のカラム差異を環境差分に依存せず吸収するようにした。
 - `frontend/src/lib/validation/password.ts` と `frontend/src/routes/reset-password/+page.svelte` は `npm run format` による整形差分のみ発生した。
-- T18（手動疎通確認）は未実施。自動テスト（backend/frontend）は完了。
+- T18（手動疎通確認）は実施済み。Playwrightで `register -> verify-email -> login` 導線と `/settings` 認証導線を確認した。
 
 ### 実際の変更ファイル
 | ファイル | 変更種別 | 内容 |
@@ -488,6 +489,7 @@ export function validateDeleteAcknowledgement(checked: boolean): string | null;
 | `backend/src/services/user.service.ts` | 新規 | users API のサービス層実装 |
 | `backend/prisma/schema.prisma` | 修正 | `users.deletedAt` を追加（ソフト削除） |
 | `backend/prisma/migrations/20260529224639_add_user_deleted_at/migration.sql` | 新規 | `users.deleted_at` カラム追加マイグレーション |
+| `backend/prisma/migrations/20260530003000_fix_users_deleted_column_consistency/migration.sql` | 新規 | `deleted_at` / `deletedAt` 差異を吸収する整合マイグレーション |
 | `frontend/src/lib/stores/auth.svelte.ts` | 修正 | `updateUser(user)` を追加 |
 | `frontend/src/lib/validation/username.ts` | 新規 | 共通ユーザー名バリデーションを追加 |
 | `frontend/src/lib/validation/username.test.ts` | 新規 | ユーザー名バリデーションの unit test を追加 |
