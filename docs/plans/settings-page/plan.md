@@ -340,26 +340,26 @@ export function validateDeleteAcknowledgement(checked: boolean): string | null;
 | T19 | `docs/05_progress.md` のステータス更新 | `docs/05_progress.md` | 該当タスクが `[x]` になる | T18 | 中 |
 | T20 | 本計画書に「実装完了」セクション追記 | 本ファイル | 計画書テンプレートに沿って完了情報を記録 | T19 | 中 |
 
-- [ ] T1: CORS `allowMethods` に `PATCH` を追加
-- [ ] T2: `GET /users/me` の失敗テストを先に作成
-- [ ] T3: `PATCH /users/me` の失敗テストを先に作成
-- [ ] T4: `DELETE /users/me` の失敗テストを先に作成
-- [ ] T5: users service を実装
-- [ ] T6: users router を実装し app に mount
-- [ ] T7: backend の lint / format / test を通す
-- [ ] T8: `validateUsername` を `$lib/validation/username.ts` に移動
-- [ ] T9: `register/validation.ts` を再エクスポートに切替
-- [ ] T10: register/validation.test.ts の `validateUsername` 系テストを移管
-- [ ] T11: `authStore.updateUser()` を追加
-- [ ] T12: settings 専用バリデーションを実装
-- [ ] T13: settings ページの骨組み・初期ロード
-- [ ] T14: ユーザー名変更セクションを実装
-- [ ] T15: パスワード変更セクションを実装
-- [ ] T16: アカウント削除セクションを実装
-- [ ] T17: frontend の lint / format / check / test を通す
+- [x] T1: CORS `allowMethods` に `PATCH` を追加
+- [x] T2: `GET /users/me` の失敗テストを先に作成
+- [x] T3: `PATCH /users/me` の失敗テストを先に作成
+- [x] T4: `DELETE /users/me` の失敗テストを先に作成
+- [x] T5: users service を実装
+- [x] T6: users router を実装し app に mount
+- [x] T7: backend の lint / format / test を通す
+- [x] T8: `validateUsername` を `$lib/validation/username.ts` に移動
+- [x] T9: `register/validation.ts` を再エクスポートに切替
+- [x] T10: register/validation.test.ts の `validateUsername` 系テストを移管
+- [x] T11: `authStore.updateUser()` を追加
+- [x] T12: settings 専用バリデーションを実装
+- [x] T13: settings ページの骨組み・初期ロード
+- [x] T14: ユーザー名変更セクションを実装
+- [x] T15: パスワード変更セクションを実装
+- [x] T16: アカウント削除セクションを実装
+- [x] T17: frontend の lint / format / check / test を通す
 - [ ] T18: 手動疎通確認
-- [ ] T19: `docs/05_progress.md` のステータス更新
-- [ ] T20: 計画書に実装完了セクション追記
+- [x] T19: `docs/05_progress.md` のステータス更新
+- [x] T20: 計画書に実装完了セクション追記
 
 ## 技術的注意点
 
@@ -463,3 +463,40 @@ export function validateDeleteAcknowledgement(checked: boolean): string | null;
 
 - **リスク: users API 実装が後回しになって settings UI だけ先に進む**
   - 回避策: タスク順を「CORS 修正 → backend Red → backend Green → backend lint/test → frontend」に固定し、backend が緑になるまで frontend 実装に進まない。
+
+## 実装完了
+- 完了日: 2026-05-29
+- 実装ブランチ: feature/settings-page
+- PR: 未作成
+
+### 計画からの変更点
+- 監査目的の保持要件に合わせ、`DELETE /users/me` は物理削除ではなく `users.deletedAt` を使うソフト削除へ変更した（`isActive=false` とトークン削除を併用）。
+- `backend/src/lib/validation/auth.ts` を新規追加し、`strongPasswordSchema` と `usernameSchema` を共通化した。
+- `frontend/src/lib/validation/password.ts` と `frontend/src/routes/reset-password/+page.svelte` は `npm run format` による整形差分のみ発生した。
+- T18（手動疎通確認）は未実施。自動テスト（backend/frontend）は完了。
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `backend/src/index.ts` | 修正 | CORS `allowMethods` に `PATCH` を追加、`usersRouter` を mount |
+| `backend/src/lib/validation/auth.ts` | 新規 | `usernameSchema` / `strongPasswordSchema` の共通定義 |
+| `backend/src/routes/auth/index.ts` | 修正 | 共通バリデーション参照に切替 |
+| `backend/src/routes/users/index.ts` | 修正 | `GET/PATCH/DELETE /users/me` を実装 |
+| `backend/src/routes/users/get-me.test.ts` | 新規 | `GET /users/me` テスト追加 |
+| `backend/src/routes/users/update-me.test.ts` | 新規 | `PATCH /users/me` テスト追加 |
+| `backend/src/routes/users/delete-me.test.ts` | 新規 | `DELETE /users/me` テスト追加 |
+| `backend/src/services/user.service.ts` | 新規 | users API のサービス層実装 |
+| `backend/prisma/schema.prisma` | 修正 | `users.deletedAt` を追加（ソフト削除） |
+| `backend/prisma/migrations/20260529224639_add_user_deleted_at/migration.sql` | 新規 | `users.deleted_at` カラム追加マイグレーション |
+| `frontend/src/lib/stores/auth.svelte.ts` | 修正 | `updateUser(user)` を追加 |
+| `frontend/src/lib/validation/username.ts` | 新規 | 共通ユーザー名バリデーションを追加 |
+| `frontend/src/lib/validation/username.test.ts` | 新規 | ユーザー名バリデーションの unit test を追加 |
+| `frontend/src/routes/register/validation.ts` | 修正 | `validateUsername` の再エクスポート化 |
+| `frontend/src/routes/register/validation.test.ts` | 修正 | `validateUsername` ケースを移管 |
+| `frontend/src/routes/(app)/settings/+page.svelte` | 修正 | settings 画面本体を実装 |
+| `frontend/src/routes/(app)/settings/validation.ts` | 新規 | settings 専用バリデーション追加 |
+| `frontend/src/routes/(app)/settings/validation.test.ts` | 新規 | settings バリデーションの unit test 追加 |
+| `frontend/src/lib/validation/password.ts` | 修正 | 整形（改行のみ） |
+| `frontend/src/routes/reset-password/+page.svelte` | 修正 | 整形（文の折り返しのみ） |
+| `docs/05_progress.md` | 修正 | `/settings` タスクを `[-]` から `[x]` へ更新 |
+| `docs/plans/settings-page/plan.md` | 修正 | タスク完了チェック・実装完了セクションを追記 |
