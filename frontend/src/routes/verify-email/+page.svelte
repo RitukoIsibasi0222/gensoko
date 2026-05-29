@@ -39,10 +39,12 @@
     return {};
   }
 
-  function setPageState(
+  async function setPageState(
     patch: Record<string, unknown>,
     options: { removeVerifyToken?: boolean } = {}
-  ) {
+  ): Promise<void> {
+    await tick();
+
     const currentState = getPageState();
     const cleanUrl = new URL(page.url);
     cleanUrl.searchParams.delete('token');
@@ -116,7 +118,7 @@
       // 通常成功
       status = 'success';
       alreadyVerified = false;
-      setPageState(
+      await setPageState(
         {
           verifyEmailCompleted: true,
           verifyEmailAlreadyVerified: false
@@ -141,7 +143,7 @@
       if (apiError.status === 400 && apiError.message === ALREADY_VERIFIED_MESSAGE) {
         status = 'success';
         alreadyVerified = true;
-        setPageState(
+        await setPageState(
           {
             verifyEmailCompleted: true,
             verifyEmailAlreadyVerified: true
