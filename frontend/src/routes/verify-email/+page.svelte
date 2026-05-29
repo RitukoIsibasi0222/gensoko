@@ -44,6 +44,8 @@
     options: { removeVerifyToken?: boolean } = {}
   ) {
     const currentState = getPageState();
+    const cleanUrl = new URL(page.url);
+    cleanUrl.searchParams.delete('token');
     const baseState = options.removeVerifyToken
       ? (() => {
           const rest = { ...currentState };
@@ -52,7 +54,7 @@
         })()
       : currentState;
 
-    replaceState(page.url.pathname + page.url.search + page.url.hash, {
+    replaceState(cleanUrl.pathname + cleanUrl.search + cleanUrl.hash, {
       ...baseState,
       ...patch
     });

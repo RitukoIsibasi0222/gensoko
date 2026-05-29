@@ -16,6 +16,11 @@ BEGIN
       AND table_name = 'users'
       AND column_name = 'deletedAt'
   ) THEN
+    UPDATE "users"
+    SET "deletedAt" = COALESCE("deletedAt", "deleted_at")
+    WHERE "deletedAt" IS NULL
+      AND "deleted_at" IS NOT NULL;
+
     ALTER TABLE "users" DROP COLUMN "deleted_at";
   ELSIF EXISTS (
     SELECT 1
