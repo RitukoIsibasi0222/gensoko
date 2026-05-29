@@ -176,6 +176,18 @@ class AuthStore {
   }
 
   /**
+   * ログイン状態を維持したまま user 情報のみ更新する。
+   * status が authenticated のときだけ反映し、accessToken/status は変更しない。
+   */
+  updateUser(user: AuthUser) {
+    if (this.state.status !== 'authenticated') {
+      return;
+    }
+    this.state.user = user;
+    this.#saveToStorage();
+  }
+
+  /**
    * ログアウトする。
    * state と sessionStorage を先にクリアしてから POST /auth/logout を送信する。
    * fetch がネットワークハング等で完了しなくても、クリアは確実に実行される。

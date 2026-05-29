@@ -1,5 +1,6 @@
 import { isValidEmailFormat } from '$lib/validation/email';
 export { validatePassword } from '$lib/validation/password';
+export { validateUsername } from '$lib/validation/username';
 
 /**
  * ユーザー登録フォームのバリデーション関数
@@ -12,37 +13,6 @@ export { validatePassword } from '$lib/validation/password';
  * メールアドレスは $lib/validation/email.ts の簡易チェックを使用する（バックエンドは z.string().email() でより厳密に検証）。
  * （backend/src/routes/auth/index.ts 参照）
  */
-
-/**
- * ユーザー名のバリデーション
- *
- * 制約（バックエンドの registerSchema に準拠）:
- * - 必須
- * - 3〜20文字
- * - 英数字とアンダースコアのみ（/^[a-zA-Z0-9_]+$/）
- *
- * フロント独自（バックエンドとの差分）:
- * - 空欄時: 「ユーザー名を入力してください」
- *   （バックエンド Zod は min(3) のエラー「ユーザー名は3文字以上にしてください」）
- *
- * @param value - trim 済みのユーザー名
- * @returns エラーメッセージ（エラーがない場合は null）
- */
-export function validateUsername(value: string): string | null {
-  if (!value) {
-    return 'ユーザー名を入力してください';
-  }
-  if (value.length < 3) {
-    return 'ユーザー名は3文字以上にしてください';
-  }
-  if (value.length > 20) {
-    return 'ユーザー名は20文字以内にしてください';
-  }
-  if (!/^[a-zA-Z0-9_]+$/.test(value)) {
-    return 'ユーザー名は英数字とアンダースコアのみ使用できます';
-  }
-  return null;
-}
 
 /**
  * メールアドレスのバリデーション
@@ -68,4 +38,3 @@ export function validateEmail(value: string): string | null {
   }
   return null;
 }
-
