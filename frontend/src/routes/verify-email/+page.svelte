@@ -29,6 +29,35 @@
   // 多重実行ガードフラグ
   let isVerifying = false;
 
+  // 競合する古い非同期結果を無視するための連番
+  let verifyRequestId = 0;
+
+  function getPageState(): Record<string, unknown> {
+    if (typeof page.state === 'object' && page.state !== null) {
+      return page.state as Record<string, unknown>;
+    }
+    return {};
+  }
+
+  function setPageState(
+    patch: Record<string, unknown>,
+    options: { removeVerifyToken?: boolean } = {}
+  ) {
+    const currentState = getPageState();
+    const baseState = options.removeVerifyToken
+      ? (() => {
+          const rest = { ...currentState };
+          delete rest.verifyEmailToken;
+          return rest;
+        })()
+      : currentState;
+
+    replaceState(page.url.pathname + page.url.search + page.url.hash, {
+      ...baseState,
+      ...patch
+    });
+  }
+
   function startCountdownAndRedirect() {
     // 既存タイマーをクリアしてから再設定する（多重起動防止）
     if (countdownIntervalId !== null) {
@@ -56,9 +85,12 @@
   async function verify() {
     // storedToken が null の場合は何もしない（onMount のガードで事前に弾く）
     if (!storedToken) return;
+    // すでに成功表示になっている場合は再実行しない
+    if (status === 'success') return;
     // 多重実行ガード（再試行ボタン連打等で並行 fetch が走るのを防ぐ）
     if (isVerifying) return;
     isVerifying = true;
+    const currentRequestId = ++verifyRequestId;
 
     status = 'verifying';
     errorMessage = null;
@@ -74,12 +106,29 @@
         await parseErrorResponse(response);
       }
 
+      // 後から開始されたリクエストがある場合は古い結果を破棄
+      if (currentRequestId !== verifyRequestId) {
+        return;
+      }
+
       // 通常成功
       status = 'success';
       alreadyVerified = false;
+      setPageState(
+        {
+          verifyEmailCompleted: true,
+          verifyEmailAlreadyVerified: false
+        },
+        { removeVerifyToken: true }
+      );
       toastStore.success('メール認証が完了しました！');
       startCountdownAndRedirect();
     } catch (error) {
+      // 後から開始されたリクエストがある場合は古い結果を破棄
+      if (currentRequestId !== verifyRequestId) {
+        return;
+      }
+
       // ApiError でも fetch 例外でも一律 ApiError として扱う
       const apiError =
         error instanceof ApiError
@@ -90,6 +139,13 @@
       if (apiError.status === 400 && apiError.message === ALREADY_VERIFIED_MESSAGE) {
         status = 'success';
         alreadyVerified = true;
+        setPageState(
+          {
+            verifyEmailCompleted: true,
+            verifyEmailAlreadyVerified: true
+          },
+          { removeVerifyToken: true }
+        );
         toastStore.info('既にメール認証が完了しています');
         startCountdownAndRedirect();
         return;
@@ -100,13 +156,31 @@
       errorMessage = apiError.message;
       toastStore.fromApiError(apiError);
     } finally {
-      isVerifying = false;
+      if (currentRequestId === verifyRequestId) {
+        isVerifying = false;
+      }
     }
   }
 
   onMount(() => {
+    const currentState = getPageState();
+
+    // 直前に成功済みの履歴状態があれば、再検証せず成功表示を維持する
+    if (currentState.verifyEmailCompleted === true) {
+      status = 'success';
+      alreadyVerified = currentState.verifyEmailAlreadyVerified === true;
+      startCountdownAndRedirect();
+      return () => {
+        if (redirectTimerId !== null) clearTimeout(redirectTimerId);
+        if (countdownIntervalId !== null) clearInterval(countdownIntervalId);
+      };
+    }
+
     // 1. トークン取得 + ガード
-    const rawToken = page.url.searchParams.get('token');
+    const queryToken = page.url.searchParams.get('token');
+    const stateToken =
+      typeof currentState.verifyEmailToken === 'string' ? currentState.verifyEmailToken : null;
+    const rawToken = queryToken ?? stateToken;
     if (!rawToken) {
       status = 'error';
       errorMessage = '認証リンクが無効です。メール内のリンクから再度アクセスしてください。';
@@ -120,18 +194,34 @@
     //    onMount 直後は SvelteKit router が未初期化の場合があるため、tick() で 1 ティック待ってから
     //    replaceState を呼ぶ。これを外すと router 初期化前エラーが再発する。
     //    hash も保持して URL が意図せず変わらないようにする
-    const cleanUrl = new URL(page.url);
-    cleanUrl.searchParams.delete('token');
-    void (async () => {
-      await tick();
-      replaceState(cleanUrl.pathname + cleanUrl.search + cleanUrl.hash, page.state);
-    })();
+    if (queryToken) {
+      const cleanUrl = new URL(page.url);
+      cleanUrl.searchParams.delete('token');
+      void (async () => {
+        await tick();
+
+        // 先に成功状態へ遷移している場合は上書きしない
+        const latestState = getPageState();
+        if (latestState.verifyEmailCompleted === true) {
+          return;
+        }
+
+        replaceState(cleanUrl.pathname + cleanUrl.search + cleanUrl.hash, {
+          ...latestState,
+          verifyEmailToken: rawToken,
+          verifyEmailCompleted: false,
+          verifyEmailAlreadyVerified: false
+        });
+      })();
+    }
 
     // 4. 認証処理を開始
     void verify();
 
     // クリーンアップ
     return () => {
+      verifyRequestId += 1;
+      isVerifying = false;
       if (redirectTimerId !== null) clearTimeout(redirectTimerId);
       if (countdownIntervalId !== null) clearInterval(countdownIntervalId);
     };
