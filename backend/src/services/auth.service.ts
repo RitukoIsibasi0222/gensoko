@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { sign } from "hono/jwt";
+import { normalizePassword } from "../lib/normalize.js";
 import { prisma } from "../lib/prisma.js";
 import { mailer } from "../lib/mail.js";
 import type { Role } from "@prisma/client";
@@ -8,11 +9,6 @@ import type { Role } from "@prisma/client";
 /** フロントエンドのベース URL を返す。環境変数が未設定の場合は開発用デフォルトを使用する */
 function getFrontendBaseUrl(): string {
   return process.env.FRONTEND_URL ?? "http://localhost:5174";
-}
-
-/** パスワードの先頭/末尾のスペースを除去する（フロントエンドと同じ正規化） */
-function normalizePassword(rawPassword: string): string {
-  return rawPassword.trim();
 }
 
 export class AuthError extends Error {

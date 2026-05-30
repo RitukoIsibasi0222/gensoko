@@ -1,10 +1,7 @@
 import bcrypt from "bcryptjs";
 import type { Role } from "@prisma/client";
+import { normalizePassword } from "../lib/normalize.js";
 import { prisma } from "../lib/prisma.js";
-
-function normalizePassword(rawPassword: string): string {
-  return rawPassword.trim();
-}
 
 function isUniqueConstraintViolation(error: unknown): boolean {
   return (
