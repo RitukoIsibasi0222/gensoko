@@ -100,6 +100,7 @@
 | `frontend/src/lib/components/home/AppOverviewSection.svelte` | 新規 | 学習価値を伝える 3 つ前後の概要カードを表示 |
 | `frontend/src/lib/components/home/RankingPreviewSection.svelte` | 新規 | 週間ランキングの上位プレビューと `/ranking` 導線を表示 |
 | `frontend/src/routes/(app)/+page.svelte` | 修正（全文書換） | authStore とコンテンツ定数を接続し、トップページ全体を組み立てる |
+| `frontend/src/routes/(app)/+page.ts` | 新規 | `prerender` / `ssr` のページ設定を明示 |
 | `docs/05_progress.md` | 修正 | 実装完了時に該当タスクを `[ ]` から `[x]` に更新 |
 | `docs/plans/top-page/plan.md` | 新規 | 本計画書。実装完了時に完了セクションを追記 |
 
@@ -274,18 +275,18 @@ type Props = {
 | T10 | 進捗ドキュメントを更新する | `docs/05_progress.md` | 「トップページ `/`」が `[x]` に更新される | 中 |
 | T11 | 計画書に実装完了記録を追記する | `docs/plans/top-page/plan.md` | 実装完了セクションに実際の変更ファイルと差分が記録される | 中 |
 
-- [ ] T1: トップページ用のコピー定数・CTA 判定・ランキングプレビュー用ヘルパーを定義する（`frontend/src/lib/home/content.ts`）
-- [ ] T2: T1 の純粋関数に対するユニットテストを追加する（`frontend/src/lib/home/content.test.ts`）
-- [ ] T3: Hero セクションをコンポーネント化する（`frontend/src/lib/components/home/HeroSection.svelte`）
-- [ ] T4: アプリ概要セクションをコンポーネント化する（`frontend/src/lib/components/home/AppOverviewSection.svelte`）
-- [ ] T5: ランキングプレビューセクションをコンポーネント化する（`frontend/src/lib/components/home/RankingPreviewSection.svelte`）
-- [ ] T6: ルートページを組み立て、authStore と各セクションを接続する（`frontend/src/routes/(app)/+page.svelte`）
-- [ ] T6.5: ページ設定を明示する（`frontend/src/routes/(app)/+page.ts`）
-- [ ] T7: トップページ全体のレスポンシブ・アクセシビリティ調整を行う（`frontend/src/routes/(app)/+page.svelte`, `frontend/src/lib/components/home/*.svelte`）
-- [ ] T8: 品質チェックを実行する（`frontend/`）
-- [ ] T9: 手動確認を実施する（手動）
-- [ ] T10: 進捗ドキュメントを更新する（`docs/05_progress.md`）
-- [ ] T11: 計画書に実装完了記録を追記する（`docs/plans/top-page/plan.md`）
+- [x] T1: トップページ用のコピー定数・CTA 判定・ランキングプレビュー用ヘルパーを定義する（`frontend/src/lib/home/content.ts`）
+- [x] T2: T1 の純粋関数に対するユニットテストを追加する（`frontend/src/lib/home/content.test.ts`）
+- [x] T3: Hero セクションをコンポーネント化する（`frontend/src/lib/components/home/HeroSection.svelte`）
+- [x] T4: アプリ概要セクションをコンポーネント化する（`frontend/src/lib/components/home/AppOverviewSection.svelte`）
+- [x] T5: ランキングプレビューセクションをコンポーネント化する（`frontend/src/lib/components/home/RankingPreviewSection.svelte`）
+- [x] T6: ルートページを組み立て、authStore と各セクションを接続する（`frontend/src/routes/(app)/+page.svelte`）
+- [x] T6.5: ページ設定を明示する（`frontend/src/routes/(app)/+page.ts`）
+- [x] T7: トップページ全体のレスポンシブ・アクセシビリティ調整を行う（`frontend/src/routes/(app)/+page.svelte`, `frontend/src/lib/components/home/*.svelte`）
+- [x] T8: 品質チェックを実行する（`frontend/`）
+- [x] T9: 手動確認を実施する（手動）
+- [x] T10: 進捗ドキュメントを更新する（`docs/05_progress.md`）
+- [x] T11: 計画書に実装完了記録を追記する（`docs/plans/top-page/plan.md`）
 
 ## 技術的注意点
 
@@ -352,3 +353,28 @@ type Props = {
 | fake username 露出 | ダミーランキングを誤って本番にも出すと、実在しないユーザー名が表示され信頼を損なう | 初期実装で `HOME_RANKING_PREVIEW_INITIAL` を空配列に固定し、ダミーエントリを定数として持たない |
 | SSR / hydration mismatch | SSR は `audience='initializing'` 固定だが、クライアント初期化直後に CTA が切り替わる | initializing 用プレースホルダーを必ず実装し、SSR とクライアント初回描画が同一マークアップになることを手動確認に含める |
 | `AuthStatus` 型のドリフト | 認証 store 側の status 値が増減したのにトップページが追従し損ねる | `TopPageAudience` を `AuthStatus` の別名として import し、追加時は TypeScript エラーで気付ける状態にする |
+
+## 実装完了
+- 完了日: 2026-05-30
+- 実装ブランチ: `feature/phase4-top-page`
+- PR: （未作成）
+
+### 計画からの変更点
+- `T9: 手動確認` を Playwright で完了。確認内容は以下。
+- `/` で Hero / アプリ概要 / ランキングプレビューの3セクションが表示されること
+- 初期化後に主 CTA が `新規登録して始める`（`/register`）へ切り替わること
+- モバイル幅（375px）で横スクロールが発生しないこと
+- `/ranking` へ遷移できること
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `frontend/src/lib/home/content.ts` | 新規 | audience 判定、主/副CTA生成、ランキングプレビュー切り出し関数、トップページ用定数を追加 |
+| `frontend/src/lib/home/content.test.ts` | 新規 | `getTopPageAudience` / `getPrimaryCta` / `getSecondaryCta` / `selectRankingPreviewEntries` のユニットテストを追加 |
+| `frontend/src/lib/components/home/HeroSection.svelte` | 新規 | Hero UI（h1、主CTA、副CTA、initializing時の非活性表示）を追加 |
+| `frontend/src/lib/components/home/AppOverviewSection.svelte` | 新規 | 概要カード表示コンポーネントを追加 |
+| `frontend/src/lib/components/home/RankingPreviewSection.svelte` | 新規 | ランキングプレビュー（空状態表示を含む）を追加 |
+| `frontend/src/routes/(app)/+page.svelte` | 修正 | トップページスタブを置換し、`$derived` で audience/CTA/preview を組み立て |
+| `frontend/src/routes/(app)/+page.ts` | 新規 | `prerender = false` / `ssr = true` を明示 |
+| `docs/05_progress.md` | 修正 | フェーズ4のトップページ項目を完了 `[x]` に更新 |
+| `docs/plans/top-page/plan.md` | 修正 | チェックリスト・実装完了記録・実変更ファイルを反映 |
