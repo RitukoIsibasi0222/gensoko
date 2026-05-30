@@ -284,7 +284,7 @@ type Props = {
 - [x] T6.5: ページ設定を明示する（`frontend/src/routes/(app)/+page.ts`）
 - [x] T7: トップページ全体のレスポンシブ・アクセシビリティ調整を行う（`frontend/src/routes/(app)/+page.svelte`, `frontend/src/lib/components/home/*.svelte`）
 - [x] T8: 品質チェックを実行する（`frontend/`）
-- [ ] T9: 手動確認を実施する（手動）
+- [x] T9: 手動確認を実施する（手動）
 - [x] T10: 進捗ドキュメントを更新する（`docs/05_progress.md`）
 - [x] T11: 計画書に実装完了記録を追記する（`docs/plans/top-page/plan.md`）
 
@@ -360,8 +360,11 @@ type Props = {
 - PR: （未作成）
 
 ### 計画からの変更点
-- `T9: 手動確認` は未完。`npm run dev -- --host 127.0.0.1 --port 4173` 実行時に `EACCES: permission denied, unlink 'frontend/node_modules/.vite/deps_ssr/_metadata.json'` が発生し、ローカル表示確認を継続できなかった。
-- 対応案: `frontend/node_modules/.vite/deps_ssr` 配下の所有者を実行ユーザーに修正後、T9を再実施する。
+- `T9: 手動確認` を Playwright で完了。確認内容は以下。
+- `/` で Hero / アプリ概要 / ランキングプレビューの3セクションが表示されること
+- 初期化後に主 CTA が `新規登録して始める`（`/register`）へ切り替わること
+- モバイル幅（375px）で横スクロールが発生しないこと
+- `/ranking` へ遷移できること
 
 ### 実際の変更ファイル
 | ファイル | 変更種別 | 内容 |
