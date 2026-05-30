@@ -18,6 +18,10 @@ export type TopPageCta = {
 
 const DEFAULT_PREVIEW_LIMIT = 3;
 
+export const HOME_HERO_TITLE = '元素を、遊んで覚える。';
+export const HOME_HERO_DESCRIPTION =
+  'アプリ概要を確認してから、ゲーム学習に進めます。ランキング導線もここからすぐに辿れます。';
+
 export const HOME_OVERVIEW_ITEMS: readonly {
   title: string;
   description: string;
@@ -63,7 +67,6 @@ export function getPrimaryCta(audience: TopPageAudience): TopPageCta {
         disabled: false
       };
     case 'initializing':
-    default:
       return {
         href: '#',
         label: '準備中...',
