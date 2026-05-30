@@ -43,9 +43,7 @@ const deleteMeSchema = z
   })
   .strict();
 
-function clearRefreshTokenCookies(c: {
-  header: (name: string, value: string, options?: { append?: boolean }) => void;
-}) {
+function clearRefreshTokenCookies(c: Parameters<typeof deleteCookie>[0]) {
   for (const path of REFRESH_COOKIE_PATHS) {
     deleteCookie(c, "refreshToken", { path });
   }
