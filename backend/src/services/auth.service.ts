@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { sign } from "hono/jwt";
+import { normalizePassword } from "../lib/normalize.js";
 import { prisma } from "../lib/prisma.js";
 import { mailer } from "../lib/mail.js";
 import type { Role } from "@prisma/client";
@@ -8,11 +9,6 @@ import type { Role } from "@prisma/client";
 /** フロントエンドのベース URL を返す。環境変数が未設定の場合は開発用デフォルトを使用する */
 function getFrontendBaseUrl(): string {
   return process.env.FRONTEND_URL ?? "http://localhost:5174";
-}
-
-/** パスワードの先頭/末尾のスペースを除去する（フロントエンドと同じ正規化） */
-function normalizePassword(rawPassword: string): string {
-  return rawPassword.trim();
 }
 
 export class AuthError extends Error {
@@ -38,9 +34,24 @@ export async function register(input: {
   const { token, userId, createdNewUser } = await prisma.$transaction(async (tx) => {
     const existing = await tx.user.findFirst({
       where: { OR: [{ email }, { username }] },
-      select: { id: true, email: true, username: true, emailVerified: true },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        emailVerified: true,
+        isActive: true,
+        deletedAt: true,
+      },
     });
     if (existing) {
+      if (existing.deletedAt) {
+        throw new AuthError(403, "このアカウントは削除済みのため再登録できません");
+      }
+
+      if (existing.isActive === false) {
+        throw new AuthError(403, "このアカウントは利用停止されています");
+      }
+
       const isSamePendingAccount =
         existing.email === email && existing.username === username && !existing.emailVerified;
 
@@ -213,6 +224,7 @@ export async function login(input: { email: string; password: string }): Promise
       passwordHash: true,
       emailVerified: true,
       isActive: true,
+      deletedAt: true,
       loginFailCount: true,
       lockedUntil: true,
     },
@@ -223,6 +235,10 @@ export async function login(input: { email: string; password: string }): Promise
   }
 
   // 2. アカウント停止チェック
+  if (user.deletedAt) {
+    throw new AuthError(403, "このアカウントは削除されています");
+  }
+
   if (!user.isActive) {
     throw new AuthError(403, "アカウントが停止されています");
   }
@@ -376,13 +392,13 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
   // 1. ユーザー検索
   const user = await prisma.user.findUnique({
     where: { email },
-    select: { id: true },
+    select: { id: true, isActive: true, deletedAt: true },
   });
 
   // 2. ユーザーが存在しない場合は何もしない（列挙攻撃対策: エラーを返さない）
   // タイミング攻撃対策: ダミーのハッシュ計算で存在するユーザーとの処理時間差を縮める
   // cost=4 にして CPU 負荷を抑える（cost=12 は DoS の踏み台になり得る）
-  if (!user) {
+  if (!user || user.isActive === false || user.deletedAt) {
     await bcrypt.hash("timing-safe-dummy", 4);
     return;
   }

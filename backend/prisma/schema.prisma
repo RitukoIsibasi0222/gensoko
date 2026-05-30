@@ -35,6 +35,7 @@ model User {
   role           Role      @default(USER)
   emailVerified  Boolean   @default(false)
   isActive       Boolean   @default(true)
+  deletedAt      DateTime?
   loginFailCount Int       @default(0)
   lockedUntil    DateTime?
   lastLoginAt    DateTime?

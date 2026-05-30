@@ -136,9 +136,7 @@
 
 <div class="mx-auto max-w-md px-4 py-8">
   <h1 class="text-2xl font-bold text-gray-800">パスワードリセット</h1>
-  <p class="mt-2 text-gray-600">
-    新しいパスワードを入力して再設定してください。
-  </p>
+  <p class="mt-2 text-gray-600">新しいパスワードを入力して再設定してください。</p>
 
   {#if !isSuccess}
     <form class="mt-6 space-y-4" novalidate onsubmit={handleSubmit}>

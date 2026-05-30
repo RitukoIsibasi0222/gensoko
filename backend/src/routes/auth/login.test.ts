@@ -46,6 +46,7 @@ const ACTIVE_USER = {
   passwordHash: "$2b$12$hashedpassword",
   emailVerified: true,
   isActive: true,
+  deletedAt: null,
   loginFailCount: 0,
   lockedUntil: null,
 };
@@ -263,6 +264,21 @@ describe("POST /auth/login", () => {
     expect(res.status).toBe(403);
     const body = await res.json();
     expect(body.error).toBeDefined();
+  });
+
+  it("異常系: 削除済みアカウントは 403 を返す", async () => {
+    const deletedUser = { ...ACTIVE_USER, deletedAt: new Date("2026-05-29T00:00:00.000Z") };
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(deletedUser as never);
+
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "taro@example.com", password: "Pass1234!" }),
+    });
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toBe("このアカウントは削除されています");
   });
 
   it("streak: 昨日ログイン済みの場合は currentStreak が +1 になる", async () => {
