@@ -9,16 +9,18 @@
   const NETWORK_ERROR_MESSAGE = 'ネットワークエラーが発生しました。接続を確認してください';
 
   let elements = $state<Element[]>([]);
-  let isLoading = $state(false);
+  let isLoading = $state(true);
+  let isRequesting = false;
   let errorMessage = $state<string | null>(null);
 
   const isEmpty = $derived(!isLoading && errorMessage === null && elements.length === 0);
 
   async function loadElements(showToast = false): Promise<void> {
-    if (isLoading) {
+    if (isRequesting) {
       return;
     }
 
+    isRequesting = true;
     isLoading = true;
     errorMessage = null;
 
@@ -34,6 +36,7 @@
       }
     } finally {
       isLoading = false;
+      isRequesting = false;
     }
   }
 
