@@ -320,4 +320,6 @@ export async function getElements(): Promise<Element[]>;
 | `frontend/src/lib/api/elements.ts` | 新規 | 元素一覧 API クライアント実装 |
 | `frontend/src/routes/(app)/elements/+page.ts` | 新規 | SSR/prerender 設定を追加 |
 | `frontend/src/routes/(app)/elements/+page.svelte` | 修正 | 4状態UI・118カード表示・再読み込み導線を実装 |
+| `frontend/src/routes/(app)/+page.svelte` | 修正 | トップページの認証状態依存ロジックをリファクタリング |
+| `frontend/src/lib/api/elements.test.ts` | 新規 | 元素一覧 API クライアントのユニットテスト |
 | `docs/05_progress.md` | 修正 | フェーズ4 `/elements` タスクを完了に更新 |
