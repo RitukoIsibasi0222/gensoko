@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import AppOverviewSection from '$lib/components/home/AppOverviewSection.svelte';
   import HeroSection from '$lib/components/home/HeroSection.svelte';
   import RankingPreviewSection from '$lib/components/home/RankingPreviewSection.svelte';
@@ -17,14 +16,9 @@
 
   const rankingPreviewEntries = selectRankingPreviewEntries(HOME_RANKING_PREVIEW_INITIAL, 3);
 
-  let mounted = $state(false);
-  onMount(() => {
-    mounted = true;
-  });
-
-  const audience = $derived(
-    mounted ? getTopPageAudience(authStore.isInitializing, authStore.isLoggedIn) : 'initializing'
-  );
+  // authStore.state.status の初期値が 'initializing' のため SSR/hydration の整合は store 側で担保される。
+  // Header.svelte と同じパターンで authStore を直接参照する（mounted フラグは不要）。
+  const audience = $derived(getTopPageAudience(authStore.isInitializing, authStore.isLoggedIn));
   const primaryCta = $derived(getPrimaryCta(audience));
   const secondaryCta = $derived(getSecondaryCta(audience));
 </script>
