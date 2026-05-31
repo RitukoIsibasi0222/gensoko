@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { authRouter } from "./routes/auth/index.js";
+import { elementsRouter } from "./routes/elements/index.js";
 import { usersRouter } from "./routes/users/index.js";
 import type { AppVariables } from "./types/index.js";
 
@@ -31,6 +32,7 @@ app.get("/api/v1/health", (c) => {
 
 // ルート登録
 app.route("/api/v1/auth", authRouter);
+app.route("/api/v1/elements", elementsRouter);
 app.route("/api/v1/users", usersRouter);
 
 // サーバー起動

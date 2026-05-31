@@ -248,20 +248,20 @@ export async function getElements(): Promise<Element[]>;
 | T13 | docs 更新 | `docs/05_progress.md` | 該当タスク完了に更新 | 中 |
 | T14 | 実装完了記録追記 | `docs/plans/elements-page/plan.md` | 実装完了セクション追記 | 中 |
 
-- [ ] T1: GET /elements の Red テスト作成
-- [ ] T2: GET /elements 実装
-- [ ] T3: elements ルーターをマウント
-- [ ] T4: backend 品質チェック
-- [ ] T5: Element 型定義作成
-- [ ] T6: 分類色マップ + テスト作成
-- [ ] T7: elements API クライアント作成
-- [ ] T8: ページ設定ファイル追加
-- [ ] T9: /elements ページ状態管理実装
-- [ ] T10: 118カードグリッド + 分類色表示実装
-- [ ] T11: frontend 品質チェック
-- [ ] T12: 手動確認（PC/モバイル）
-- [ ] T13: docs 更新
-- [ ] T14: 実装完了記録追記
+- [x] T1: GET /elements の Red テスト作成
+- [x] T2: GET /elements 実装
+- [x] T3: elements ルーターをマウント
+- [x] T4: backend 品質チェック
+- [x] T5: Element 型定義作成
+- [x] T6: 分類色マップ + テスト作成
+- [x] T7: elements API クライアント作成
+- [x] T8: ページ設定ファイル追加
+- [x] T9: /elements ページ状態管理実装
+- [x] T10: 118カードグリッド + 分類色表示実装
+- [x] T11: frontend 品質チェック
+- [x] T12: 手動確認（PC/モバイル）
+- [x] T13: docs 更新
+- [x] T14: 実装完了記録追記
 
 ## 10. 技術的注意点
 
@@ -298,3 +298,28 @@ export async function getElements(): Promise<Element[]>;
 | fetch 二重実行 | `$effect` 依存で再実行される | `onMount` 固定 |
 | 未知カテゴリ追加 | 色未定義でUI崩れ | フォールバック色を実装 |
 | テスト粒度不整合 | seed 件数依存の不安定テスト | Prisma モック中心のユニットテスト |
+
+## 実装完了
+- 完了日: 2026-05-31
+- 実装ブランチ: feature/phase4-elements-page
+- PR: 未作成
+
+### 計画からの変更点
+- 追加の補助コンポーネント分割は行わず、`+page.svelte` 単体で4状態UIを実装した
+- `docs/05_progress.md` の該当タスクを `[-]` から `[x]` に更新した
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `backend/src/routes/elements/elements.test.ts` | 新規 | GET /elements の Red/Green テスト追加 |
+| `backend/src/routes/elements/index.ts` | 修正 | GET /elements 実装（id 昇順） |
+| `backend/src/index.ts` | 修正 | `/api/v1/elements` にルーターをマウント |
+| `frontend/src/lib/elements/types.ts` | 新規 | Element 型定義を追加 |
+| `frontend/src/lib/elements/category-style.ts` | 新規 | 分類色マップとフォールバック定義 |
+| `frontend/src/lib/elements/category-style.test.ts` | 新規 | 分類色マップのユニットテスト |
+| `frontend/src/lib/api/elements.ts` | 新規 | 元素一覧 API クライアント実装 |
+| `frontend/src/routes/(app)/elements/+page.ts` | 新規 | SSR/prerender 設定を追加 |
+| `frontend/src/routes/(app)/elements/+page.svelte` | 修正 | 4状態UI・118カード表示・再読み込み導線を実装 |
+| `frontend/src/routes/(app)/+page.svelte` | 修正 | トップページの認証状態依存ロジックをリファクタリング |
+| `frontend/src/lib/api/elements.test.ts` | 新規 | 元素一覧 API クライアントのユニットテスト |
+| `docs/05_progress.md` | 修正 | フェーズ4 `/elements` タスクを完了に更新 |
