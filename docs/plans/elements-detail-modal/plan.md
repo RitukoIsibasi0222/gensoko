@@ -188,18 +188,18 @@ type Props = {
 | T11 | 進捗ドキュメント更新 | `docs/05_progress.md` | 該当タスクが `[-]` → `[x]` になる | T10 | 中 |
 | T12 | 本計画書に「実装完了」セクション追記 | 本ファイル | テンプレートに沿って実装結果・実ファイル一覧・計画からの差分を記録 | T11 | 中 |
 
-- [ ] T1: 進捗を実装中に更新（`docs/05_progress.md`）
-- [ ] T2: 詳細表示ヘルパーの Red テスト先行作成（`frontend/src/lib/elements/detail-fields.test.ts`）
-- [ ] T3: 詳細表示ヘルパー実装（`frontend/src/lib/elements/detail-fields.ts`）
-- [ ] T4: モーダルコンポーネント骨組み（`frontend/src/lib/components/elements/ElementDetailModal.svelte`）
-- [ ] T5: 閉じる操作 3 経路実装（同上）
-- [ ] T6: a11y・初期フォーカス・スクロールロック・リスナー解除（同上）
-- [ ] T7: カードの `<button>` 化（`frontend/src/routes/(app)/elements/+page.svelte`）
-- [ ] T8: `selectedElement` とモーダル呼び出し・フォーカス復帰（同上）
-- [ ] T9: 品質チェック（`frontend/`）
-- [ ] T10: 手動確認（手動）
-- [ ] T11: 進捗ドキュメント更新（`docs/05_progress.md`）
-- [ ] T12: 計画書に実装完了セクション追記（本ファイル）
+- [x] T1: 進捗を実装中に更新（`docs/05_progress.md`）
+- [x] T2: 詳細表示ヘルパーの Red テスト先行作成（`frontend/src/lib/elements/detail-fields.test.ts`）
+- [x] T3: 詳細表示ヘルパー実装（`frontend/src/lib/elements/detail-fields.ts`）
+- [x] T4: モーダルコンポーネント骨組み（`frontend/src/lib/components/elements/ElementDetailModal.svelte`）
+- [x] T5: 閉じる操作 3 経路実装（同上）
+- [x] T6: a11y・初期フォーカス・スクロールロック・リスナー解除（同上）
+- [x] T7: カードの `<button>` 化（`frontend/src/routes/(app)/elements/+page.svelte`）
+- [x] T8: `selectedElement` とモーダル呼び出し・フォーカス復帰（同上）
+- [x] T9: 品質チェック（`frontend/`）
+- [x] T10: 手動確認（手動）
+- [x] T11: 進捗ドキュメント更新（`docs/05_progress.md`）
+- [x] T12: 計画書に実装完了セクション追記（本ファイル）
 
 ## 技術的注意点
 
@@ -346,3 +346,26 @@ type Props = {
 | 既存挙動の退行 | 一覧取得・分類色・既存テストが壊れる | `+page.svelte` の通信部分は触らず、`category-style.ts` を再利用、`npm run test:run` で全テスト緑を完了条件化 |
 | SSR エラー | `document` / `window` 参照で hydration エラー | `$effect` 内に限定し、SSR 経路で実行されない構造にする |
 | デザイン崩れ | 小画面でモーダル超過 | `max-w-md` + `max-h-[90vh] overflow-y-auto` + モバイル手動確認を必須化 |
+
+## 実装完了
+- 完了日: 2026-06-02
+- 実装ブランチ: feature/phase4-elements-detail-modal
+- PR: 未作成
+
+### 計画からの変更点
+- 背景クリックは `div` の click ではなく全画面 `button` で実装し、a11y エラーを回避した
+- マウス操作でモーダルを開いた場合はフォーカス復帰しない挙動に調整し、フォーカスリング残留を解消した
+- モーダル開閉時のスクロールバー消失によるレイアウトシフト対策として、`body` の `padding-right` をスクロールバー幅分補正した
+- 画面レビューで追加要望があったため、角丸 4px 統一と `Noto Sans JP` 適用を本タスク内で実施した
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `frontend/src/lib/elements/detail-fields.ts` | 新規 | 詳細項目の表示順・ラベル・null フォールバック整形を実装 |
+| `frontend/src/lib/elements/detail-fields.test.ts` | 新規 | `buildElementDetailFields` のユニットテストを追加 |
+| `frontend/src/lib/components/elements/ElementDetailModal.svelte` | 新規 | モーダル本体、閉じる導線、a11y、スクロールロック、レイアウトシフト補正を実装 |
+| `frontend/src/routes/(app)/elements/+page.svelte` | 修正 | カードの `button` 化、モーダル連携、フォーカス復帰、UI微調整を実装 |
+| `frontend/src/lib/components/home/HeroSection.svelte` | 修正 | CTA ボタン角丸を 4px に統一 |
+| `frontend/src/app.css` | 修正 | `Noto Sans JP` の読み込みとデフォルトフォント適用 |
+| `docs/05_progress.md` | 修正 | 該当タスクを `[ ]` → `[-]` → `[x]` へ更新 |
+| `docs/plans/elements-detail-modal/plan.md` | 修正 | タスクリスト完了反映と実装完了記録を追記 |
