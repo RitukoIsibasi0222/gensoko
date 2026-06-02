@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import ElementDetailModal from '$lib/components/elements/ElementDetailModal.svelte';
   import { getElements } from '$lib/api/elements';
   import { ApiError } from '$lib/api/errors';
   import { getElementCategoryStyle } from '$lib/elements/category-style';
@@ -12,6 +13,8 @@
   let isLoading = $state(true);
   let isRequesting = false;
   let errorMessage = $state<string | null>(null);
+  let selectedElement = $state<Element | null>(null);
+  let returnFocusEl: HTMLElement | null = null;
 
   const isEmpty = $derived(!isLoading && errorMessage === null && elements.length === 0);
 
@@ -40,6 +43,22 @@
     }
   }
 
+  function openModal(element: Element, event: MouseEvent): void {
+    const currentTarget = event.currentTarget;
+    returnFocusEl = currentTarget instanceof HTMLElement ? currentTarget : null;
+    selectedElement = element;
+  }
+
+  function closeModal(): void {
+    const focusTarget = returnFocusEl;
+    selectedElement = null;
+    returnFocusEl = null;
+
+    queueMicrotask(() => {
+      focusTarget?.focus();
+    });
+  }
+
   onMount(() => {
     void loadElements();
   });
@@ -52,11 +71,11 @@
   </section>
 
   {#if isLoading}
-    <section class="rounded-lg border border-gray-200 bg-white p-6">
+    <section class="rounded border border-gray-200 bg-white p-6">
       <p class="text-sm text-gray-600">元素一覧を読み込み中です...</p>
     </section>
   {:else if errorMessage}
-    <section class="rounded-lg border border-red-200 bg-red-50 p-6">
+    <section class="rounded border border-red-200 bg-red-50 p-6">
       <p class="text-sm text-red-700">{errorMessage}</p>
       <button
         type="button"
@@ -67,7 +86,7 @@
       </button>
     </section>
   {:else if isEmpty}
-    <section class="rounded-lg border border-gray-200 bg-white p-6">
+    <section class="rounded border border-gray-200 bg-white p-6">
       <p class="text-sm text-gray-600">該当する元素がありません。</p>
     </section>
   {:else}
@@ -77,22 +96,26 @@
         {#each elements as element (element.id)}
           {@const style = getElementCategoryStyle(element.category)}
           <li>
-            <article
-              class={`rounded-lg border p-3 transition-shadow hover:shadow-sm ${style.cardClass}`}
-              aria-label={`${element.id}番 ${element.symbol} ${element.nameJa}`}
+            <button
+              type="button"
+              class={`w-full rounded border p-3 text-left transition-shadow hover:ring-2 hover:ring-[var(--color-brand)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)] ${style.cardClass}`}
+              aria-label={`${element.id}番 ${element.symbol} ${element.nameJa} の詳細を開く`}
+              onclick={(event) => openModal(element, event)}
             >
-              <p class="text-xs font-semibold text-gray-500">{element.id}</p>
+              <p class="text-base font-semibold text-gray-500">{element.id}</p>
               <p class="mt-2 text-2xl font-bold text-gray-900">{element.symbol}</p>
               <p class="mt-1 text-sm font-medium text-gray-700">{element.nameJa}</p>
               <p
-                class={`mt-3 inline-block rounded-full px-2 py-1 text-xs font-semibold ${style.badgeClass}`}
+                class={`mt-3 inline-block rounded px-2 py-1 text-xs font-semibold ${style.badgeClass}`}
               >
                 {element.category}
               </p>
-            </article>
+            </button>
           </li>
         {/each}
       </ul>
+
+      <ElementDetailModal element={selectedElement} onClose={closeModal} />
     </section>
   {/if}
 </div>
