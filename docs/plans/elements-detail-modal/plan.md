@@ -356,7 +356,7 @@ type Props = {
 - 背景クリックは `div` の click ではなく全画面 `button` で実装し、a11y エラーを回避した
 - フォーカスリング残留対策として、マウス/キーボード判定分岐ではなく `focus-visible:` を採用し、閉鎖時フォーカス復帰は常に行う実装へ統一した
 - モーダル開閉時のスクロールバー消失によるレイアウトシフト対策として、`body` の `padding-right` をスクロールバー幅分補正した
-- 画面レビューで追加要望があったため、角丸 4px 統一と `Noto Sans JP` 適用を本タスク内で実施した
+- 画面レビューで追加要望があったため、角丸 4px 統一と日本語向けフォントスタック調整を本タスク内で実施した
 
 ### レビュー反映（改善）
 - 背景の `<button>` がタブ順に混入していた a11y バグを修正（`tabindex="-1"`）。`aria-hidden` は外し、`aria-label` を付けた
@@ -372,6 +372,6 @@ type Props = {
 | `frontend/src/lib/components/elements/ElementDetailModal.svelte` | 新規 | モーダル本体、閉じる導線、a11y、スクロールロック、レイアウトシフト補正を実装 |
 | `frontend/src/routes/(app)/elements/+page.svelte` | 修正 | カードの `button` 化、モーダル連携、フォーカス復帰、UI微調整を実装 |
 | `frontend/src/lib/components/home/HeroSection.svelte` | 修正 | CTA ボタン角丸を 4px に統一 |
-| `frontend/src/app.css` | 修正 | `Noto Sans JP` の読み込みとデフォルトフォント適用 |
+| `frontend/src/app.css` | 修正 | 日本語向けフォントスタック調整とデフォルトフォント適用 |
 | `docs/05_progress.md` | 修正 | 該当タスクを `[ ]` → `[-]` → `[x]` へ更新 |
 | `docs/plans/elements-detail-modal/plan.md` | 修正 | タスクリスト完了反映と実装完了記録を追記 |

@@ -11,8 +11,6 @@
   let { element, onClose }: Props = $props();
   let closeButtonEl = $state<HTMLButtonElement | null>(null);
   let dialogEl = $state<HTMLDivElement | null>(null);
-  const titleId = 'element-detail-modal-title';
-  const descId = 'element-detail-modal-description';
 
   $effect(() => {
     if (element === null) {
@@ -92,6 +90,8 @@
 </script>
 
 {#if element}
+  {@const titleId = `element-detail-modal-title-${element.id}`}
+  {@const descId = `element-detail-modal-description-${element.id}`}
   {@const style = getElementCategoryStyle(element.category)}
   {@const fields = buildElementDetailFields(element)}
 

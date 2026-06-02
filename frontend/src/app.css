@@ -1,7 +1,9 @@
 @import 'tailwindcss';
 
 @theme {
-  --font-sans: 'Noto Sans JP', sans-serif;
+  --font-sans:
+    'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic UI', 'Yu Gothic',
+    'Meiryo', sans-serif;
   --color-brand: #013220;
   --color-brand-hover: #01501a;
   --color-ink: #202020;

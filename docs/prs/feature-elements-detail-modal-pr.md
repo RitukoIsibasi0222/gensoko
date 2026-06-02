@@ -52,7 +52,7 @@
 ### 4. 画面スタイルの微調整
 
 - 角丸を 4px 系に統一
-- `Noto Sans JP` を導入して日本語表示の視認性を改善
+- 日本語向けフォントスタックを調整して視認性を改善
 
 対象ファイル:
 - `frontend/src/lib/components/home/HeroSection.svelte`
@@ -70,7 +70,7 @@
 ## レビュー反映（追加改善）
 
 1. 背景の全画面 `button` がタブ順に入っていた問題を修正
-- `tabindex="-1"` と `aria-hidden="true"` を付与し、キーボード移動のノイズを解消
+- `tabindex="-1"` を付与し、`aria-hidden` は使わず `aria-label` で意図を明示
 
 2. フォーカスリング挙動を改善
 - `focus:ring-*` を `focus-visible:ring-*` に統一
