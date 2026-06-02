@@ -57,9 +57,10 @@
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
     <button
       type="button"
-      class="absolute inset-0 bg-black/50"
+      tabindex="-1"
+      aria-hidden="true"
+      class="absolute inset-0 cursor-default bg-black/50 focus:outline-none"
       onclick={onClose}
-      aria-label="背景をクリックして閉じる"
     ></button>
 
     <div
@@ -84,7 +85,7 @@
           type="button"
           bind:this={closeButtonEl}
           onclick={onClose}
-          class="rounded border border-gray-300 px-3 py-1.5 text-base text-gray-700 hover:bg-gray-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          class="rounded border border-gray-300 px-3 py-1.5 text-base text-gray-700 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           aria-label="閉じる"
         >
           閉じる
@@ -93,9 +94,7 @@
 
       <p id={descId} class="sr-only">選択した元素の詳細情報を表示しています。</p>
 
-      <p
-        class={`mt-4 inline-block rounded px-2 py-1 text-base font-semibold ${style.badgeClass}`}
-      >
+      <p class={`mt-4 inline-block rounded px-2 py-1 text-base font-semibold ${style.badgeClass}`}>
         {element.category}
       </p>
 

@@ -13,11 +13,12 @@ function formatNullableNumber(value: number | null): string {
 }
 
 function formatEtymology(value: string | null): string {
-  if (value === null || value.trim() === '') {
+  if (value === null) {
     return '情報なし';
   }
 
-  return value;
+  const trimmed = value.trim();
+  return trimmed === '' ? '情報なし' : trimmed;
 }
 
 export function buildElementDetailFields(element: Element): ElementDetailField[] {

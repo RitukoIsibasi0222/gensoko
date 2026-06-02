@@ -48,4 +48,9 @@ describe('buildElementDetailFields', () => {
     const fields = buildElementDetailFields(createElement({ etymology: '   ' }));
     expect(fields.find((field) => field.key === 'etymology')?.value).toBe('情報なし');
   });
+
+  it('etymology の前後空白は trim される', () => {
+    const fields = buildElementDetailFields(createElement({ etymology: '  ラテン語 lapis  ' }));
+    expect(fields.find((field) => field.key === 'etymology')?.value).toBe('ラテン語 lapis');
+  });
 });

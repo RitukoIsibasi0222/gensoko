@@ -15,7 +15,6 @@
   let errorMessage = $state<string | null>(null);
   let selectedElement = $state<Element | null>(null);
   let returnFocusEl: HTMLElement | null = null;
-  let shouldRestoreFocus = false;
 
   const isEmpty = $derived(!isLoading && errorMessage === null && elements.length === 0);
 
@@ -46,26 +45,18 @@
 
   function openModal(element: Element, event: MouseEvent): void {
     const currentTarget = event.currentTarget;
-    if (currentTarget instanceof HTMLElement) {
-      returnFocusEl = currentTarget;
-    }
-
-    // click.detail === 0 はキーボード起点（Enter/Space）
-    shouldRestoreFocus = event.detail === 0;
-
+    returnFocusEl = currentTarget instanceof HTMLElement ? currentTarget : null;
     selectedElement = element;
   }
 
   function closeModal(): void {
-    const focusTarget = shouldRestoreFocus ? returnFocusEl : null;
+    const focusTarget = returnFocusEl;
     selectedElement = null;
+    returnFocusEl = null;
 
     queueMicrotask(() => {
       focusTarget?.focus();
     });
-
-    shouldRestoreFocus = false;
-    returnFocusEl = null;
   }
 
   onMount(() => {
@@ -107,7 +98,7 @@
           <li>
             <button
               type="button"
-              class={`w-full rounded border p-3 text-left transition-shadow hover:ring-2 hover:ring-[#2f7d57] focus:ring-2 focus:ring-[#2f7d57] focus:outline-none ${style.cardClass}`}
+              class={`w-full rounded border p-3 text-left transition-shadow hover:ring-2 hover:ring-[#2f7d57] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2f7d57] ${style.cardClass}`}
               aria-label={`${element.id}番 ${element.symbol} ${element.nameJa} の詳細を開く`}
               onclick={(event) => openModal(element, event)}
             >
