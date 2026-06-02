@@ -10,6 +10,7 @@
 
   let { element, onClose }: Props = $props();
   let closeButtonEl = $state<HTMLButtonElement | null>(null);
+  let dialogEl = $state<HTMLDivElement | null>(null);
   const titleId = 'element-detail-modal-title';
   const descId = 'element-detail-modal-description';
 
@@ -21,6 +22,46 @@
     const handleKeydown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose();
+        return;
+      }
+
+      if (event.key !== 'Tab') {
+        return;
+      }
+
+      if (dialogEl === null) {
+        return;
+      }
+
+      const focusableSelector =
+        'a[href], button:not([disabled]):not([tabindex="-1"]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+      const focusableElements = Array.from(dialogEl.querySelectorAll<HTMLElement>(focusableSelector));
+
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        dialogEl.focus();
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+      const activeElement = document.activeElement;
+
+      if (!(activeElement instanceof HTMLElement) || !dialogEl.contains(activeElement)) {
+        event.preventDefault();
+        firstElement.focus();
+        return;
+      }
+
+      if (event.shiftKey && activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+        return;
+      }
+
+      if (!event.shiftKey && activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
       }
     };
 
@@ -58,18 +99,19 @@
     <button
       type="button"
       tabindex="-1"
-      aria-hidden="true"
       class="absolute inset-0 cursor-default bg-black/50 focus:outline-none"
       onclick={onClose}
+      aria-label="背景をクリックして閉じる"
     ></button>
 
     <div
+      bind:this={dialogEl}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={descId}
       tabindex="-1"
-      class="relative z-10 w-full max-w-md rounded border border-gray-200 bg-white p-6 shadow-xl"
+      class="relative z-10 max-h-[90vh] w-full max-w-md overflow-y-auto rounded border border-gray-200 bg-white p-6 shadow-xl"
     >
       <div class="flex items-start justify-between gap-3">
         <div>
