@@ -58,7 +58,7 @@
       aria-labelledby={titleId}
       aria-describedby={descId}
       tabindex="-1"
-      class="relative z-10 w-full max-w-md rounded-lg border border-gray-200 bg-white p-6 shadow-xl"
+      class="relative z-10 w-full max-w-md rounded border border-gray-200 bg-white p-6 shadow-xl"
     >
       <div class="flex items-start justify-between gap-3">
         <div>
@@ -74,7 +74,7 @@
           type="button"
           bind:this={closeButtonEl}
           onclick={onClose}
-          class="rounded-md border border-gray-300 px-3 py-1.5 text-base text-gray-700 hover:bg-gray-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          class="rounded border border-gray-300 px-3 py-1.5 text-base text-gray-700 hover:bg-gray-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
           aria-label="閉じる"
         >
           閉じる
@@ -84,7 +84,7 @@
       <p id={descId} class="sr-only">選択した元素の詳細情報を表示しています。</p>
 
       <p
-        class={`mt-4 inline-block rounded-full px-2 py-1 text-base font-semibold ${style.badgeClass}`}
+        class={`mt-4 inline-block rounded px-2 py-1 text-base font-semibold ${style.badgeClass}`}
       >
         {element.category}
       </p>

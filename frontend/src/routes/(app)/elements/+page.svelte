@@ -80,11 +80,11 @@
   </section>
 
   {#if isLoading}
-    <section class="rounded-lg border border-gray-200 bg-white p-6">
+    <section class="rounded border border-gray-200 bg-white p-6">
       <p class="text-sm text-gray-600">元素一覧を読み込み中です...</p>
     </section>
   {:else if errorMessage}
-    <section class="rounded-lg border border-red-200 bg-red-50 p-6">
+    <section class="rounded border border-red-200 bg-red-50 p-6">
       <p class="text-sm text-red-700">{errorMessage}</p>
       <button
         type="button"
@@ -95,7 +95,7 @@
       </button>
     </section>
   {:else if isEmpty}
-    <section class="rounded-lg border border-gray-200 bg-white p-6">
+    <section class="rounded border border-gray-200 bg-white p-6">
       <p class="text-sm text-gray-600">該当する元素がありません。</p>
     </section>
   {:else}
@@ -107,7 +107,7 @@
           <li>
             <button
               type="button"
-              class={`w-full rounded-lg border p-3 text-left transition-shadow hover:ring-2 hover:ring-[#2f7d57] focus:ring-2 focus:ring-[#2f7d57] focus:outline-none ${style.cardClass}`}
+              class={`w-full rounded border p-3 text-left transition-shadow hover:ring-2 hover:ring-[#2f7d57] focus:ring-2 focus:ring-[#2f7d57] focus:outline-none ${style.cardClass}`}
               aria-label={`${element.id}番 ${element.symbol} ${element.nameJa} の詳細を開く`}
               onclick={(event) => openModal(element, event)}
             >
@@ -115,7 +115,7 @@
               <p class="mt-2 text-2xl font-bold text-gray-900">{element.symbol}</p>
               <p class="mt-1 text-sm font-medium text-gray-700">{element.nameJa}</p>
               <p
-                class={`mt-3 inline-block rounded-full px-2 py-1 text-xs font-semibold ${style.badgeClass}`}
+                class={`mt-3 inline-block rounded px-2 py-1 text-xs font-semibold ${style.badgeClass}`}
               >
                 {element.category}
               </p>
