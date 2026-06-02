@@ -74,10 +74,7 @@
       <div class="flex items-start justify-between gap-3">
         <div>
           <p class="text-base font-semibold text-gray-500">{element.id}</p>
-          <h2 id={titleId} class="mt-1 text-2xl font-bold text-gray-900">
-            {element.symbol}
-            {element.nameJa}
-          </h2>
+          <h2 id={titleId} class="mt-1 text-2xl font-bold text-gray-900">{element.symbol} {element.nameJa}</h2>
           <p class="mt-1 text-base text-gray-600">{element.nameEn}</p>
         </div>
 
