@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import ElementDetailModal from '$lib/components/elements/ElementDetailModal.svelte';
   import { getElements } from '$lib/api/elements';
   import { ApiError } from '$lib/api/errors';
   import { getElementCategoryStyle } from '$lib/elements/category-style';
@@ -12,6 +13,9 @@
   let isLoading = $state(true);
   let isRequesting = false;
   let errorMessage = $state<string | null>(null);
+  let selectedElement = $state<Element | null>(null);
+  let returnFocusEl: HTMLElement | null = null;
+  let shouldRestoreFocus = false;
 
   const isEmpty = $derived(!isLoading && errorMessage === null && elements.length === 0);
 
@@ -38,6 +42,30 @@
       isLoading = false;
       isRequesting = false;
     }
+  }
+
+  function openModal(element: Element, event: MouseEvent): void {
+    const currentTarget = event.currentTarget;
+    if (currentTarget instanceof HTMLElement) {
+      returnFocusEl = currentTarget;
+    }
+
+    // click.detail === 0 はキーボード起点（Enter/Space）
+    shouldRestoreFocus = event.detail === 0;
+
+    selectedElement = element;
+  }
+
+  function closeModal(): void {
+    const focusTarget = shouldRestoreFocus ? returnFocusEl : null;
+    selectedElement = null;
+
+    queueMicrotask(() => {
+      focusTarget?.focus();
+    });
+
+    shouldRestoreFocus = false;
+    returnFocusEl = null;
   }
 
   onMount(() => {
@@ -77,11 +105,13 @@
         {#each elements as element (element.id)}
           {@const style = getElementCategoryStyle(element.category)}
           <li>
-            <article
-              class={`rounded-lg border p-3 transition-shadow hover:shadow-sm ${style.cardClass}`}
-              aria-label={`${element.id}番 ${element.symbol} ${element.nameJa}`}
+            <button
+              type="button"
+              class={`w-full rounded-lg border p-3 text-left transition-shadow hover:ring-2 hover:ring-[#2f7d57] focus:ring-2 focus:ring-[#2f7d57] focus:outline-none ${style.cardClass}`}
+              aria-label={`${element.id}番 ${element.symbol} ${element.nameJa} の詳細を開く`}
+              onclick={(event) => openModal(element, event)}
             >
-              <p class="text-xs font-semibold text-gray-500">{element.id}</p>
+              <p class="text-base font-semibold text-gray-500">{element.id}</p>
               <p class="mt-2 text-2xl font-bold text-gray-900">{element.symbol}</p>
               <p class="mt-1 text-sm font-medium text-gray-700">{element.nameJa}</p>
               <p
@@ -89,10 +119,12 @@
               >
                 {element.category}
               </p>
-            </article>
+            </button>
           </li>
         {/each}
       </ul>
+
+      <ElementDetailModal element={selectedElement} onClose={closeModal} />
     </section>
   {/if}
 </div>
