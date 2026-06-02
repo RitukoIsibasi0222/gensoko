@@ -98,7 +98,7 @@
           <li>
             <button
               type="button"
-              class={`w-full rounded border p-3 text-left transition-shadow hover:ring-2 hover:ring-[#2f7d57] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2f7d57] ${style.cardClass}`}
+              class={`w-full rounded border p-3 text-left transition-shadow hover:ring-2 hover:ring-[var(--color-brand)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)] ${style.cardClass}`}
               aria-label={`${element.id}番 ${element.symbol} ${element.nameJa} の詳細を開く`}
               onclick={(event) => openModal(element, event)}
             >

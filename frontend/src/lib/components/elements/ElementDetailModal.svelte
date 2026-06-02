@@ -99,9 +99,9 @@
     <button
       type="button"
       tabindex="-1"
-      aria-hidden="true"
       class="absolute inset-0 cursor-default bg-black/50 focus:outline-none"
       onclick={onClose}
+      aria-label="背景をクリックして閉じる"
     ></button>
 
     <div
