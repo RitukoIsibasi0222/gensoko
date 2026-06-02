@@ -27,6 +27,15 @@
     window.addEventListener('keydown', handleKeydown);
 
     const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+    if (scrollbarWidth > 0) {
+      const computedPaddingRight = window.getComputedStyle(document.body).paddingRight;
+      const currentPaddingRight = Number.parseFloat(computedPaddingRight) || 0;
+      document.body.style.paddingRight = `${currentPaddingRight + scrollbarWidth}px`;
+    }
+
     document.body.style.overflow = 'hidden';
 
     queueMicrotask(() => {
@@ -36,6 +45,7 @@
     return () => {
       window.removeEventListener('keydown', handleKeydown);
       document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
     };
   });
 </script>
