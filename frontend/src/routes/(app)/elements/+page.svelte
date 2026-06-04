@@ -156,9 +156,6 @@
           </button>
         </section>
       {:else}
-        <p class="text-sm text-gray-600">
-          全{elements.length}件中 {filteredElements.length}件の元素を表示しています。
-        </p>
         <ul role="list" class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {#each filteredElements as element (element.id)}
             {@const style = getElementCategoryStyle(element.category)}
