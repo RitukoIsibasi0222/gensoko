@@ -1,9 +1,19 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
   import ElementDetailModal from '$lib/components/elements/ElementDetailModal.svelte';
+  import ElementSearchFilters from '$lib/components/elements/ElementSearchFilters.svelte';
   import { getElements } from '$lib/api/elements';
   import { ApiError } from '$lib/api/errors';
   import { getElementCategoryStyle } from '$lib/elements/category-style';
+  import {
+    DEFAULT_ELEMENT_SEARCH_FILTERS,
+    filterElements,
+    readElementSearchFilters,
+    toElementSearchParams
+  } from '$lib/elements/search-filter';
+  import type { ElementSearchFilters as ElementSearchFilterState } from '$lib/elements/search-filter';
   import type { Element } from '$lib/elements/types';
   import { toastStore } from '$lib/stores/toast.svelte';
 
@@ -15,8 +25,19 @@
   let errorMessage = $state<string | null>(null);
   let selectedElement = $state<Element | null>(null);
   let returnFocusEl: HTMLElement | null = null;
+  let appliedFilters = $state<ElementSearchFilterState>(
+    readElementSearchFilters(page.url.searchParams)
+  );
 
   const isEmpty = $derived(!isLoading && errorMessage === null && elements.length === 0);
+  const filteredElements = $derived(filterElements(elements, appliedFilters));
+  const isSearchEmpty = $derived(
+    !isLoading && errorMessage === null && elements.length > 0 && filteredElements.length === 0
+  );
+
+  $effect(() => {
+    appliedFilters = readElementSearchFilters(page.url.searchParams);
+  });
 
   async function loadElements(showToast = false): Promise<void> {
     if (isRequesting) {
@@ -59,6 +80,29 @@
     });
   }
 
+  function updateSearchUrl(filters: ElementSearchFilterState): void {
+    const searchParams = toElementSearchParams(filters);
+    const query = searchParams.toString();
+    const nextUrl = query === '' ? page.url.pathname : `${page.url.pathname}?${query}`;
+
+    void goto(nextUrl, {
+      replaceState: true,
+      noScroll: true,
+      keepFocus: true
+    });
+  }
+
+  function applyFilters(filters: ElementSearchFilterState): void {
+    appliedFilters = filters;
+    selectedElement = null;
+    returnFocusEl = null;
+    updateSearchUrl(filters);
+  }
+
+  function resetFilters(): void {
+    applyFilters(DEFAULT_ELEMENT_SEARCH_FILTERS);
+  }
+
   onMount(() => {
     void loadElements();
   });
@@ -91,31 +135,55 @@
     </section>
   {:else}
     <section class="space-y-3">
-      <p class="text-sm text-gray-600">全{elements.length}件の元素を表示しています。</p>
-      <ul role="list" class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-        {#each elements as element (element.id)}
-          {@const style = getElementCategoryStyle(element.category)}
-          <li>
-            <button
-              type="button"
-              class={`w-full rounded border p-3 text-left transition-shadow hover:ring-2 hover:ring-[var(--color-brand)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)] ${style.cardClass}`}
-              aria-label={`${element.id}番 ${element.symbol} ${element.nameJa} の詳細を開く`}
-              onclick={(event) => openModal(element, event)}
-            >
-              <p class="text-base font-semibold text-gray-500">{element.id}</p>
-              <p class="mt-2 text-2xl font-bold text-gray-900">{element.symbol}</p>
-              <p class="mt-1 text-sm font-medium text-gray-700">{element.nameJa}</p>
-              <p
-                class={`mt-3 inline-block rounded px-2 py-1 text-xs font-semibold ${style.badgeClass}`}
-              >
-                {element.category}
-              </p>
-            </button>
-          </li>
-        {/each}
-      </ul>
+      <ElementSearchFilters
+        filters={appliedFilters}
+        resultCount={filteredElements.length}
+        totalCount={elements.length}
+        onApply={applyFilters}
+        onReset={resetFilters}
+      />
 
-      <ElementDetailModal element={selectedElement} onClose={closeModal} />
+      {#if isSearchEmpty}
+        <section class="rounded border border-gray-200 bg-white p-6">
+          <p class="text-sm text-gray-700">条件に一致する元素がありません。</p>
+          <p class="mt-1 text-sm text-gray-500">キーワードやフィルター条件を変更してください。</p>
+          <button
+            type="button"
+            onclick={resetFilters}
+            class="mt-4 rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-100 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+          >
+            条件をリセット
+          </button>
+        </section>
+      {:else}
+        <p class="text-sm text-gray-600">
+          全{elements.length}件中 {filteredElements.length}件の元素を表示しています。
+        </p>
+        <ul role="list" class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          {#each filteredElements as element (element.id)}
+            {@const style = getElementCategoryStyle(element.category)}
+            <li>
+              <button
+                type="button"
+                class={`w-full rounded border p-3 text-left transition-shadow hover:ring-2 hover:ring-[var(--color-brand)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)] ${style.cardClass}`}
+                aria-label={`${element.id}番 ${element.symbol} ${element.nameJa} の詳細を開く`}
+                onclick={(event) => openModal(element, event)}
+              >
+                <p class="text-base font-semibold text-gray-500">{element.id}</p>
+                <p class="mt-2 text-2xl font-bold text-gray-900">{element.symbol}</p>
+                <p class="mt-1 text-sm font-medium text-gray-700">{element.nameJa}</p>
+                <p
+                  class={`mt-3 inline-block rounded px-2 py-1 text-xs font-semibold ${style.badgeClass}`}
+                >
+                  {element.category}
+                </p>
+              </button>
+            </li>
+          {/each}
+        </ul>
+
+        <ElementDetailModal element={selectedElement} onClose={closeModal} />
+      {/if}
     </section>
   {/if}
 </div>
