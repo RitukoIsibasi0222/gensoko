@@ -95,9 +95,11 @@
 | `frontend/src/lib/elements/search-filter.test.ts` | 新規 | キーワード・分類・周期・URL query・リセット挙動のユニットテスト |
 | `frontend/src/lib/components/elements/ElementSearchFilters.svelte` | 新規 | キーワード入力、分類 select、周期 select、検索ボタン、リセットボタン |
 | `frontend/src/routes/(app)/elements/+page.svelte` | 修正 | URL query 復元、検索条件状態、絞り込み結果表示、空状態文言の調整 |
+| `frontend/src/app.html` | 修正 | `npm run format` による Prettier 整形 |
+| `frontend/src/lib/components/elements/ElementDetailModal.svelte` | 修正 | `npm run format` による Prettier 整形 |
 | `docs/04_api.md` | 修正 | `q` の検索対象を「番号・記号・日本語名・英語名」として明確化 |
 | `docs/05_progress.md` | 修正 | 該当タスクを実装中、完了へ更新 |
-| `docs/plans/elements-search-filter/plan.md` | 新規 | 本計画書。実装完了時に実態へ更新 |
+| `docs/plans/elements-search-filter/plan.md` | 修正 | タスク完了チェック、実装完了記録、実際の変更ファイルを更新 |
 
 ## API 仕様（この機能で使う範囲のみ）
 
@@ -241,18 +243,18 @@ type Props = {
 | T11 | 進捗ドキュメント更新 | `docs/05_progress.md` | 該当タスクが `[-]` から `[x]` になる | 中 |
 | T12 | 計画書の実装完了更新 | `docs/plans/elements-search-filter/plan.md` | チェックボックス、実際の変更ファイル、変更点が実態と一致する | 中 |
 
-- [ ] T1: 進捗を実装中に更新（`docs/05_progress.md`）
-- [ ] T2: 検索条件 helper の Red テスト作成（`frontend/src/lib/elements/search-filter.test.ts`）
-- [ ] T3: 検索条件 helper 実装（`frontend/src/lib/elements/search-filter.ts`）
-- [ ] T4: 検索フォームコンポーネント作成（`frontend/src/lib/components/elements/ElementSearchFilters.svelte`）
-- [ ] T5: `/elements` に検索状態と URL query 復元を追加（`frontend/src/routes/(app)/elements/+page.svelte`）
-- [ ] T6: 絞り込み結果表示を既存カードグリッドへ接続（同上）
-- [ ] T7: 空状態・件数表示・リセット導線を調整（同上）
-- [ ] T8: API 仕様ドキュメントを UI と整合（`docs/04_api.md`）
-- [ ] T9: frontend 品質チェック（`frontend/`）
-- [ ] T10: 手動確認（ブラウザ）
-- [ ] T11: 進捗ドキュメント更新（`docs/05_progress.md`）
-- [ ] T12: 計画書の実装完了更新（本ファイル）
+- [x] T1: 進捗を実装中に更新（`docs/05_progress.md`）
+- [x] T2: 検索条件 helper の Red テスト作成（`frontend/src/lib/elements/search-filter.test.ts`）
+- [x] T3: 検索条件 helper 実装（`frontend/src/lib/elements/search-filter.ts`）
+- [x] T4: 検索フォームコンポーネント作成（`frontend/src/lib/components/elements/ElementSearchFilters.svelte`）
+- [x] T5: `/elements` に検索状態と URL query 復元を追加（`frontend/src/routes/(app)/elements/+page.svelte`）
+- [x] T6: 絞り込み結果表示を既存カードグリッドへ接続（同上）
+- [x] T7: 空状態・件数表示・リセット導線を調整（同上）
+- [x] T8: API 仕様ドキュメントを UI と整合（`docs/04_api.md`）
+- [x] T9: frontend 品質チェック（`frontend/`）
+- [x] T10: 手動確認（ブラウザ）
+- [x] T11: 進捗ドキュメント更新（`docs/05_progress.md`）
+- [x] T12: 計画書の実装完了更新（本ファイル）
 
 ## 技術的注意点
 
@@ -308,21 +310,21 @@ type Props = {
 
 ## 手動確認項目
 
-- [ ] `/elements` 初期表示で全件表示される
-- [ ] キーワード検索で記号・番号・日本語名・英語名を検索できる
-- [ ] キーワード前後の空白が結果に影響しない
-- [ ] 分類 select で絞り込める
-- [ ] 周期 select で絞り込める
-- [ ] キーワード・分類・周期を同時に指定できる
-- [ ] リセットで URL query と UI が初期状態に戻る
-- [ ] URL query 付きで再読み込みして条件が復元される
-- [ ] 検索結果 0 件時の空状態が自然に表示される
-- [ ] 絞り込み後のカードから詳細モーダルを開閉できる
-- [ ] 検索条件変更時に開いていたモーダルが閉じる
-- [ ] PC 幅でフォームとグリッドが崩れない
-- [ ] モバイル幅でフォーム、ボタン、select の文字がはみ出さない
-- [ ] Tab / Enter 操作で検索フォームとカード操作ができる
-- [ ] API エラー時の再読み込み導線が既存通り動く
+- [x] `/elements` 初期表示で全件表示される
+- [x] キーワード検索で記号・番号・日本語名・英語名を検索できる
+- [x] キーワード前後の空白が結果に影響しない
+- [x] 分類 select で絞り込める
+- [x] 周期 select で絞り込める
+- [x] キーワード・分類・周期を同時に指定できる
+- [x] リセットで URL query と UI が初期状態に戻る
+- [x] URL query 付きで再読み込みして条件が復元される
+- [x] 検索結果 0 件時の空状態が自然に表示される
+- [x] 絞り込み後のカードから詳細モーダルを開閉できる
+- [x] 検索条件変更時に開いていたモーダルが閉じる
+- [x] PC 幅でフォームとグリッドが崩れない
+- [x] モバイル幅でフォーム、ボタン、select の文字がはみ出さない
+- [ ] Tab / Enter 操作で検索フォームとカード操作ができる（Browser 入力補助エラーにより追加確認は未完了）
+- [ ] API エラー時の再読み込み導線が既存通り動く（既存導線は維持。障害注入によるブラウザ確認は未実施）
 
 ## 実装完了時の更新ルール
 
@@ -362,3 +364,42 @@ type Props = {
 ### 手動確認
 - PC / モバイル / キーボード操作で検索・フィルター・リセット・詳細モーダルを確認
 ```
+
+## 実装完了
+- 完了日: 2026-06-04
+- 実装ブランチ: feature/elements-search-filter
+- PR: 未作成
+
+### 計画からの変更点
+- `ElementSearchFilters.svelte` の Props 内に直接コールバック型を書くと ESLint が引数名を未使用扱いにしたため、`ElementSearchFilterApplyHandler` を `frontend/src/lib/elements/search-filter.ts` に切り出した。
+- 周期 select は `value={period}` だと選択後の表示が空になるため、DOM の select value と一致するよう `value={String(period)}` にした。
+- `npm run format` により `frontend/src/app.html` と `frontend/src/lib/components/elements/ElementDetailModal.svelte` に Prettier 整形のみの差分が発生した。
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `frontend/src/lib/elements/search-filter.ts` | 新規 | 検索条件 helper、URL query 変換、絞り込み関数、分類・周期 options、コールバック型 |
+| `frontend/src/lib/elements/search-filter.test.ts` | 新規 | 検索条件 helper のユニットテスト |
+| `frontend/src/lib/components/elements/ElementSearchFilters.svelte` | 新規 | 検索・フィルター UI |
+| `frontend/src/routes/(app)/elements/+page.svelte` | 修正 | 検索状態、URL query 復元、絞り込み結果表示、空状態、モーダル連携を追加 |
+| `frontend/src/app.html` | 修正 | Prettier 整形 |
+| `frontend/src/lib/components/elements/ElementDetailModal.svelte` | 修正 | Prettier 整形 |
+| `docs/04_api.md` | 修正 | `q` の検索対象を番号・記号・日本語名・英語名に明確化 |
+| `docs/05_progress.md` | 修正 | フェーズ4タスクを完了に更新 |
+| `docs/plans/elements-search-filter/plan.md` | 修正 | タスク完了チェック、手動確認結果、実装完了記録を更新 |
+
+### 実行した確認
+- `docker compose exec sveltekit npm run format`
+- `docker compose exec sveltekit npm run lint`
+- `docker compose exec sveltekit npm run check`
+- `docker compose exec sveltekit npm run test:run`
+
+### 確認結果
+- `lint`: 成功
+- `check`: 0 errors, 0 warnings
+- `test:run`: 10 files / 122 tests passed
+- 手動確認: PC 幅とモバイル幅 390px で、初期表示、キーワード検索（日本語名・英語名・番号）、分類、周期、複合条件、検索結果 0 件、リセット、URL query 復元、詳細モーダル、フィルター変更時のモーダル close を確認
+
+### 未確認・残リスク
+- API エラー時の再読み込み導線は既存実装を維持しているが、障害注入によるブラウザ確認は未実施。
+- Tab / Enter 操作は Browser 入力補助エラーにより追加確認未完了。

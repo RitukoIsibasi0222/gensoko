@@ -76,7 +76,7 @@ Error:
 Query params:
   category?: string   // 分類フィルター
   period?:   number   // 周期フィルター
-  q?:        string   // キーワード検索（記号・名前）
+  q?:        string   // キーワード検索（番号・記号・日本語名・英語名）
 
 Response 200:
 {
