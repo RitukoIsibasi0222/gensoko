@@ -33,7 +33,7 @@ function normalizeKeyword(value: string | null | undefined): string {
 
 function normalizeCategory(value: string | null | undefined): string {
   const category = value?.trim() ?? '';
-  return category in ELEMENT_CATEGORY_STYLE_MAP ? category : '';
+  return Object.hasOwn(ELEMENT_CATEGORY_STYLE_MAP, category) ? category : '';
 }
 
 function normalizePeriod(value: string | number | null | undefined): number | null {

@@ -166,7 +166,7 @@ docker compose exec sveltekit npm run test:run
 結果:
 - `lint`: 成功
 - `check`: `0 errors, 0 warnings`
-- `test:run`: `10 files / 122 tests passed`
+- `test:run`: `10 files / 123 tests passed`
 
 ### 手動確認
 

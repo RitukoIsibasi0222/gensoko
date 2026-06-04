@@ -54,7 +54,7 @@
     }
 
     const nextFilters = normalizeElementSearchFilters({
-      q: filters.q,
+      q: draftKeyword,
       category: target.value,
       period: filters.period
     });
@@ -73,7 +73,7 @@
     }
 
     const nextFilters = normalizeElementSearchFilters({
-      q: filters.q,
+      q: draftKeyword,
       category: filters.category,
       period: target.value
     });

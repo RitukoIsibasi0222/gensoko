@@ -132,6 +132,10 @@ describe('normalizeElementSearchFilters', () => {
     expect(normalizeElementSearchFilters({ category: '未知カテゴリ' }).category).toBe('');
   });
 
+  it('prototype 由来のキーは分類として扱わない', () => {
+    expect(normalizeElementSearchFilters({ category: 'toString' }).category).toBe('');
+  });
+
   it('period は 1 から 7 の整数だけ有効にする', () => {
     expect(normalizeElementSearchFilters({ period: 2 }).period).toBe(2);
     expect(normalizeElementSearchFilters({ period: '7' }).period).toBe(7);

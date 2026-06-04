@@ -368,7 +368,7 @@ type Props = {
 ## 実装完了
 - 完了日: 2026-06-04
 - 実装ブランチ: feature/elements-search-filter
-- PR: 未作成
+- PR: #42
 
 ### 計画からの変更点
 - `ElementSearchFilters.svelte` の Props 内に直接コールバック型を書くと ESLint が引数名を未使用扱いにしたため、`ElementSearchFilterApplyHandler` を `frontend/src/lib/elements/search-filter.ts` に切り出した。
@@ -397,7 +397,7 @@ type Props = {
 ### 確認結果
 - `lint`: 成功
 - `check`: 0 errors, 0 warnings
-- `test:run`: 10 files / 122 tests passed
+- `test:run`: 10 files / 123 tests passed
 - 手動確認: PC 幅とモバイル幅 390px で、初期表示、キーワード検索（日本語名・英語名・番号）、分類、周期、複合条件、検索結果 0 件、リセット、URL query 復元、詳細モーダル、フィルター変更時のモーダル close を確認
 
 ### 未確認・残リスク
