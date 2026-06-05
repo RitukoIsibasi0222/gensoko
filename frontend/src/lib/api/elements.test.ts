@@ -19,6 +19,11 @@ const VALID_ELEMENT = {
   etymology: null
 };
 
+const VALID_ELEMENT_WITH_MASTERY = {
+  ...VALID_ELEMENT,
+  masteryStatus: 'mastered'
+};
+
 describe('getElements', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
@@ -38,6 +43,56 @@ describe('getElements', () => {
 
     const result = await getElements();
     expect(result).toEqual([VALID_ELEMENT]);
+  });
+
+  it('正常系: accessToken なしでは Authorization ヘッダーを送らない', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ elements: [VALID_ELEMENT] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    await getElements();
+
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3000/api/v1/elements', {
+      method: 'GET',
+      credentials: 'include'
+    });
+  });
+
+  it('正常系: accessToken がある場合は Authorization ヘッダーを送る', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ elements: [VALID_ELEMENT_WITH_MASTERY] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    const result = await getElements({ accessToken: 'test-access-token' });
+
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3000/api/v1/elements', {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        Authorization: 'Bearer test-access-token'
+      }
+    });
+    expect(result).toEqual([VALID_ELEMENT_WITH_MASTERY]);
+  });
+
+  it('正常系: masteryStatus が learning の要素を返す', async () => {
+    const element = { ...VALID_ELEMENT, masteryStatus: 'learning' };
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ elements: [element] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    const result = await getElements();
+
+    expect(result).toEqual([element]);
   });
 
   it('正常系: 空配列のレスポンスも正常に返す', async () => {
@@ -134,6 +189,24 @@ describe('getElements', () => {
     } catch (e) {
       expect(e).toBeInstanceOf(ApiError);
       expect((e as ApiError).status).toBe(500);
+    }
+  });
+
+  it('レスポンス形式不正: masteryStatus が未知の値の場合は ApiError(500) が throw される', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ elements: [{ ...VALID_ELEMENT, masteryStatus: 'unknown' }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    try {
+      await getElements();
+      expect.fail('ApiError が throw されるべき');
+    } catch (e) {
+      expect(e).toBeInstanceOf(ApiError);
+      expect((e as ApiError).status).toBe(500);
+      expect((e as ApiError).message).toBe('元素一覧のレスポンス形式が不正です');
     }
   });
 

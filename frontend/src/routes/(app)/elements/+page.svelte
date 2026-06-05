@@ -1,12 +1,13 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { onMount } from 'svelte';
   import ElementDetailModal from '$lib/components/elements/ElementDetailModal.svelte';
+  import ElementMasteryBadge from '$lib/components/elements/ElementMasteryBadge.svelte';
   import ElementSearchFilters from '$lib/components/elements/ElementSearchFilters.svelte';
   import { getElements } from '$lib/api/elements';
   import { ApiError } from '$lib/api/errors';
   import { getElementCategoryStyle } from '$lib/elements/category-style';
+  import { getElementMasteryBadgeView } from '$lib/elements/mastery-badge';
   import {
     DEFAULT_ELEMENT_SEARCH_FILTERS,
     filterElements,
@@ -15,16 +16,18 @@
   } from '$lib/elements/search-filter';
   import type { ElementSearchFilters as ElementSearchFilterState } from '$lib/elements/search-filter';
   import type { Element } from '$lib/elements/types';
+  import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
 
   const NETWORK_ERROR_MESSAGE = 'ネットワークエラーが発生しました。接続を確認してください';
 
   let elements = $state<Element[]>([]);
   let isLoading = $state(true);
-  let isRequesting = false;
+  let isRequesting = $state(false);
   let errorMessage = $state<string | null>(null);
   let selectedElement = $state<Element | null>(null);
   let returnFocusEl: HTMLElement | null = null;
+  let lastAuthRequestKey = '';
   let appliedFilters = $state<ElementSearchFilterState>(
     readElementSearchFilters(page.url.searchParams)
   );
@@ -41,7 +44,31 @@
     returnFocusEl = null;
   });
 
-  async function loadElements(showToast = false): Promise<void> {
+  $effect(() => {
+    if (authStore.isInitializing) {
+      return;
+    }
+
+    if (isRequesting) {
+      return;
+    }
+
+    const accessToken = authStore.isLoggedIn ? authStore.accessToken : null;
+    const authRequestKey = authStore.isLoggedIn ? (accessToken ?? 'authenticated') : 'anonymous';
+    if (authRequestKey === lastAuthRequestKey) {
+      return;
+    }
+
+    lastAuthRequestKey = authRequestKey;
+    selectedElement = null;
+    returnFocusEl = null;
+    void loadElements(false, accessToken);
+  });
+
+  async function loadElements(
+    showToast = false,
+    accessToken = authStore.isLoggedIn ? authStore.accessToken : null
+  ): Promise<void> {
     if (isRequesting) {
       return;
     }
@@ -51,7 +78,7 @@
     errorMessage = null;
 
     try {
-      elements = await getElements();
+      elements = await getElements({ accessToken });
     } catch (error) {
       const message = error instanceof ApiError ? error.message : NETWORK_ERROR_MESSAGE;
       errorMessage = message;
@@ -70,6 +97,15 @@
     const currentTarget = event.currentTarget;
     returnFocusEl = currentTarget instanceof HTMLElement ? currentTarget : null;
     selectedElement = element;
+  }
+
+  function getElementCardAriaLabel(element: Element): string {
+    const detailLabel = `${element.id}番 ${element.symbol} ${element.nameJa} の詳細を開く`;
+    if (!authStore.isLoggedIn || !element.masteryStatus) {
+      return detailLabel;
+    }
+
+    return `${detailLabel}。${getElementMasteryBadgeView(element.masteryStatus).ariaLabel}`;
   }
 
   function closeModal(): void {
@@ -104,10 +140,6 @@
   function resetFilters(): void {
     applyFilters(DEFAULT_ELEMENT_SEARCH_FILTERS);
   }
-
-  onMount(() => {
-    void loadElements();
-  });
 </script>
 
 <div class="space-y-6">
@@ -165,7 +197,7 @@
               <button
                 type="button"
                 class={`w-full rounded border p-3 text-left transition-shadow hover:ring-2 hover:ring-[var(--color-brand)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)] ${style.cardClass}`}
-                aria-label={`${element.id}番 ${element.symbol} ${element.nameJa} の詳細を開く`}
+                aria-label={getElementCardAriaLabel(element)}
                 onclick={(event) => openModal(element, event)}
               >
                 <p class="text-base font-semibold text-gray-500">{element.id}</p>
@@ -176,6 +208,11 @@
                 >
                   {element.category}
                 </p>
+                {#if authStore.isLoggedIn && element.masteryStatus}
+                  <span class="mt-2 block">
+                    <ElementMasteryBadge status={element.masteryStatus} ariaHidden={true} />
+                  </span>
+                {/if}
               </button>
             </li>
           {/each}

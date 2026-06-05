@@ -1,12 +1,30 @@
 import { API_BASE_URL } from '$lib/api/config';
 import { ApiError, parseErrorResponse } from '$lib/api/errors';
-import type { Element } from '$lib/elements/types';
+import type { Element, ElementMasteryStatus } from '$lib/elements/types';
 
 type ElementsResponse = {
   elements: Element[];
 };
 
+export type GetElementsOptions = {
+  accessToken?: string | null;
+};
+
+type GetElementsFetchOptions = {
+  method: 'GET';
+  credentials: 'include';
+  headers?: {
+    Authorization: string;
+  };
+};
+
+function isElementMasteryStatus(value: unknown): value is ElementMasteryStatus {
+  return value === 'unlearned' || value === 'learning' || value === 'mastered';
+}
+
 function isElement(value: unknown): value is Element {
+  const masteryStatus = (value as Record<string, unknown> | null)?.masteryStatus;
+
   return (
     value !== null &&
     typeof value === 'object' &&
@@ -21,7 +39,8 @@ function isElement(value: unknown): value is Element {
     ((value as Record<string, unknown>).atomicWeight === null ||
       typeof (value as Record<string, unknown>).atomicWeight === 'number') &&
     ((value as Record<string, unknown>).etymology === null ||
-      typeof (value as Record<string, unknown>).etymology === 'string')
+      typeof (value as Record<string, unknown>).etymology === 'string') &&
+    (masteryStatus === undefined || isElementMasteryStatus(masteryStatus))
   );
 }
 
@@ -38,10 +57,20 @@ function isElementsResponse(value: unknown): value is ElementsResponse {
   return elements.every((item: unknown) => isElement(item));
 }
 
-export async function getElements(): Promise<Element[]> {
-  const response = await fetch(`${API_BASE_URL}/elements`, {
+export async function getElements(options: GetElementsOptions = {}): Promise<Element[]> {
+  const fetchOptions: GetElementsFetchOptions = {
     method: 'GET',
     credentials: 'include'
+  };
+
+  if (options.accessToken) {
+    fetchOptions.headers = {
+      Authorization: `Bearer ${options.accessToken}`
+    };
+  }
+
+  const response = await fetch(`${API_BASE_URL}/elements`, {
+    ...fetchOptions
   });
 
   if (!response.ok) {
