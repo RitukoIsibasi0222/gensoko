@@ -27,6 +27,116 @@
 - `authStore.isInitializing` 中に匿名 fetch しないよう、初回ロードと認証状態変化時の再取得条件を明確化する。
 - 習得状態の文言・色・aria label は helper に集約し、カードや将来の詳細表示で重複定義しない。
 
+### T1確認メモ
+
+- `elements-page` / `elements-detail-modal` / `elements-search-filter` の既存計画では、習得状態バッジはいずれも別タスクとして扱われている。
+- `docs/05_progress.md` フェーズ5には `isMastered` 表記が残っているため、T13 で `masteryStatus` 3値へ更新する。
+- T1では実装開始状態の記録のみ行い、API仕様・コード・テストの変更は T2 以降で行う。
+
+### T2確認メモ
+
+- 未学習を `unlearned` として Map に含めるには、表示対象の元素ID一覧が必要なため、`getElementMasteryStatusMap(userId, elementIds)` の形にする。
+- Red 確認: `cd backend && npm run test -- src/services/element-mastery.service.test.ts --run`
+- 失敗理由: `element-mastery.service.js` が未作成のため test suite が失敗する。service 本体は T3 で作成する。
+
+### T3確認メモ
+
+- `backend/src/services/element-mastery.service.ts` を作成し、表示対象の元素IDを初期値 `unlearned` として Map に含める実装にした。
+- 直近2回連続正解の判定数は `REQUIRED_CONSECUTIVE_CORRECT_COUNT` で定数化した。
+- Green 確認: `cd backend && npm run test -- src/services/element-mastery.service.test.ts --run`（7 tests passed）
+
+### T4確認メモ
+
+- `backend/src/middleware/auth/auth.test.ts` に optional auth の停止・メール未認証・ロック中ユーザー匿名扱いテストを追加した。
+- Red 確認: `cd backend && npm run test -- src/middleware/auth/auth.test.ts --run`
+- 失敗理由: `lockedUntil` が未来のユーザーでも `optionalAuthMiddleware` が `user` をセットしているため、`loggedIn` が `true` になる。実装修正は T5 で行う。
+
+### T5確認メモ
+
+- `optionalAuthMiddleware` の user セット条件に `lockedUntil` チェックを追加し、ロック中ユーザーを匿名扱いにした。
+- Green 確認: `cd backend && npm run test -- src/middleware/auth/auth.test.ts --run`（12 tests passed）
+
+### T6確認メモ
+
+- `backend/src/routes/elements/elements.test.ts` にログイン時 `masteryStatus` 付与と不正 token 401 のテストを追加した。
+- Red 確認: `cd backend && npm run test -- src/routes/elements/elements.test.ts --run`
+- 失敗理由: 現在の `GET /elements` は `optionalAuthMiddleware` を使っていないため、不正 token でも 200 になり、ログイン時も `masteryStatus` が付与されない。実装修正は T7 で行う。
+
+### T7確認メモ
+
+- `GET /elements` に `optionalAuthMiddleware` を適用し、`c.get("user")` がある場合のみ `masteryStatus` を付与する実装にした。
+- 未ログイン時は従来どおり `masteryStatus` なしの `elements` を返す。
+- Green 確認: `cd backend && npm run test -- src/routes/elements/elements.test.ts --run`（4 tests passed）
+
+### T8確認メモ
+
+- `frontend/src/lib/api/elements.test.ts` に `accessToken` 指定時の Authorization ヘッダー付与、`masteryStatus` 受け入れ、未知値の形式不正テストを追加した。
+- Red 確認: `cd frontend && npm run test:run -- src/lib/api/elements.test.ts`
+- 失敗理由: 現在の `getElements()` は token 引数を fetch options に反映せず、`masteryStatus` の3値検証も行っていない。実装修正は T9 で行う。
+
+### T9確認メモ
+
+- `ElementMasteryStatus` と `Element.masteryStatus?` を型に追加した。
+- `getElements({ accessToken })` を実装し、token がある場合のみ Authorization ヘッダーを送る。token がない場合は既存どおり `headers` を付けない。
+- `masteryStatus` は未定義、または `unlearned` / `learning` / `mastered` のみ正常として検証する。
+- Green 確認: `cd frontend && npm run test:run -- src/lib/api/elements.test.ts`（13 tests passed）
+
+### T10確認メモ
+
+- `frontend/src/lib/elements/mastery-badge.test.ts` を追加し、3状態の label / className / ariaLabel をテストで固定した。
+- Red 確認: `cd frontend && npm run test:run -- src/lib/elements/mastery-badge.test.ts`
+- 失敗理由: `mastery-badge.ts` が未作成のため import 解決に失敗する。helper と component は T11 で作成する。
+
+### T11確認メモ
+
+- `frontend/src/lib/elements/mastery-badge.ts` を作成し、3状態の表示設定を helper に集約した。
+- `frontend/src/lib/components/elements/ElementMasteryBadge.svelte` を作成し、helper の表示設定を描画する部品にした。
+- Green 確認: `cd frontend && npm run test:run -- src/lib/elements/mastery-badge.test.ts`（3 tests passed）
+
+### T12確認メモ
+
+- `/elements` ページの初回取得を `onMount` から認証状態監視の `$effect` へ変更し、`authStore.isInitializing` 中は fetch しないようにした。
+- `getElements({ accessToken })` を使い、ログイン時だけ Authorization ヘッダー付きで取得する。
+- `authStore.isLoggedIn && element.masteryStatus` の場合のみ `ElementMasteryBadge` をカード内に表示する。
+- 確認: `cd frontend && npm run test:run -- src/lib/api/elements.test.ts src/lib/elements/mastery-badge.test.ts`（16 tests passed）
+- 確認: `cd frontend && npm run check`（0 errors / 0 warnings）
+
+### T13確認メモ
+
+- `docs/04_api.md` に `GET /elements` の任意認証、ログイン時 `masteryStatus` 付与、3状態の意味、401/500 エラーを追記した。
+- `docs/05_progress.md` の設計決定1を `masteryStatus` 3値へ更新し、フェーズ5に残っていた `isMastered` 表記を削除した。
+- フェーズ4の習得状態バッジタスクと `GET /elements` インターフェース確定タスクを完了に更新した。
+
+### T14確認メモ
+
+- backend lint: `cd backend && npm run lint`（passed）
+- backend format check: `cd backend && npm run format:check`（passed）
+- backend test: `cd backend && npm run test -- --run`（16 files / 120 tests passed）
+- `forgot-password` の stderr は既存テストが内部エラーを意図的に発生させるケースのログで、テスト結果は全通過。
+
+### T15確認メモ
+
+- frontend format: `cd frontend && npm run format`（passed）
+- frontend lint: 初回は `RequestInit` の `no-undef` で失敗。`frontend/src/lib/api/elements.ts` の fetch options をローカル型へ変更して解消。
+- frontend lint 再実行: `cd frontend && npm run lint`（passed）
+- frontend check: `cd frontend && npm run check`（0 errors / 0 warnings）
+- frontend test: `cd frontend && npm run test:run`（11 files / 130 tests passed）
+
+### レビュー改善メモ
+
+- `getElementMasteryStatusMap()` は、表示対象元素が空の場合に DB を参照せず空の `Map` を返すようにした。
+- `GameSession.answers` の取得は `elementId in 表示対象ID` で絞り、不要な回答データを取得しないようにした。
+- 元素カードの `aria-label` にログイン時の習得状態を含め、ボタンとしてフォーカスされたときにも状態が読み上げ対象になるようにした。
+- 見た目用の `ElementMasteryBadge` はカード内では `aria-hidden` にし、親ボタンの accessible name と重複しないようにした。
+
+### T16確認メモ
+
+- Docker compose の `hono` / `sveltekit` / `postgres` / `mailpit` が起動済みであることを確認した。
+- `http://localhost:5174/elements` は 200 OK / `text/html` を返すことを確認した。
+- `http://localhost:3000/api/v1/elements` は未ログインで 200 OK / `application/json` を返すことを確認した。
+- 未ログインの SSR HTML に `未学習` 文言が含まれないことを確認した。
+- ブラウザ操作ツールと Playwright が利用できないため、ログイン・ログアウト後・検索後・モーダル開閉の実ブラウザ目視確認は未実施。自動テストと `svelte-check` で代替確認した。
+
 ## 前提条件・依存関係
 
 ### 既存の実装（公開インターフェース）
@@ -324,6 +434,7 @@ export type ElementMasteryStatus = "unlearned" | "learning" | "mastered";
 
 export async function getElementMasteryStatusMap(
   userId: string,
+  elementIds: readonly number[],
 ): Promise<Map<number, ElementMasteryStatus>>;
 ```
 
@@ -348,21 +459,21 @@ export async function getElementMasteryStatusMap(
 | T15 | frontend 品質チェック | `frontend/` | `npm run lint` / `npm run format` / `npm run check` / `npm run test:run` が通る | 高 |
 | T16 | 手動確認 | ブラウザ | 未ログイン・ログイン・ログアウト後・検索後・モーダル開閉で表示崩れがない | 高 |
 
-- [ ] T1: 進捗を実装中に更新し、既存計画書との差分を確認
-- [ ] T2: backend 習得状態集計 service の Red テスト作成
-- [ ] T3: backend 習得状態集計 service 実装
-- [ ] T4: 任意認証の安全側挙動を Red テストで固定
-- [ ] T5: `optionalAuthMiddleware` の user セット条件を修正
-- [ ] T6: `GET /elements` 任意認証・`masteryStatus` 付与の Red テスト追加
-- [ ] T7: `GET /elements` を任意認証対応に修正
-- [ ] T8: frontend 型・API client の Red テスト追加
-- [ ] T9: frontend 型・API client 実装
-- [ ] T10: バッジ helper/component の Red テスト作成
-- [ ] T11: バッジ helper/component 実装
-- [ ] T12: `/elements` ページに認証連携とバッジ表示を統合
-- [ ] T13: API・進捗・計画書を実態に合わせて更新
-- [ ] T14: backend 品質チェック
-- [ ] T15: frontend 品質チェック
+- [x] T1: 進捗を実装中に更新し、既存計画書との差分を確認
+- [x] T2: backend 習得状態集計 service の Red テスト作成
+- [x] T3: backend 習得状態集計 service 実装
+- [x] T4: 任意認証の安全側挙動を Red テストで固定
+- [x] T5: `optionalAuthMiddleware` の user セット条件を修正
+- [x] T6: `GET /elements` 任意認証・`masteryStatus` 付与の Red テスト追加
+- [x] T7: `GET /elements` を任意認証対応に修正
+- [x] T8: frontend 型・API client の Red テスト追加
+- [x] T9: frontend 型・API client 実装
+- [x] T10: バッジ helper/component の Red テスト作成
+- [x] T11: バッジ helper/component 実装
+- [x] T12: `/elements` ページに認証連携とバッジ表示を統合
+- [x] T13: API・進捗・計画書を実態に合わせて更新
+- [x] T14: backend 品質チェック
+- [x] T15: frontend 品質チェック
 - [ ] T16: 手動確認
 
 ## 技術的注意点

@@ -9,7 +9,7 @@
 
 | # | 内容 | 決定 |
 |---|------|------|
-| 設計決定1 | 習得バッジ用「どの元素が習得済みか」の追跡方法 | **GameAnswer集計方式**（新テーブルなし）。`POST /game/sessions` 時に直近2ゲーム連続正解を集計して `UserStats.masteredCount` を更新。`GET /elements` は認証時に `isMastered: boolean` を付与 |
+| 設計決定1 | 習得バッジ用「どの元素が習得済みか」の追跡方法 | **GameAnswer集計方式**（新テーブルなし）。`GET /elements` は認証時に `masteryStatus: "unlearned" \| "learning" \| "mastered"` を付与。`POST /game/sessions` 時の `UserStats.masteredCount` 更新はフェーズ7で実装 |
 | 設計決定2 | `GET /game/questions` → `POST /game/sessions` 間の正解一時保持 | **GameQuestionSetテーブル方式**。`GET /game/questions` でDBに正解情報と有効期限（30分）を保存し `questionSetId` を返す。`POST /game/sessions` で受け取り正誤判定後削除 |
 
 ---
@@ -83,16 +83,16 @@
 - [x] 元素一覧ページ `/elements`（118枚カードグリッド・分類色分け）
 - [x] 元素詳細モーダルコンポーネント（カードクリックで開く） — 計画書: [`docs/plans/elements-detail-modal/plan.md`](plans/elements-detail-modal/plan.md)
 - [x] 検索・フィルターUI（キーワード・分類・周期）
-- [ ] 習得状態バッジ表示（ログイン時のみ・未学習/学習中/習得）
+- [x] 習得状態バッジ表示（ログイン時のみ・未学習/学習中/習得） — 計画書: [`docs/plans/elements-mastery-badges/plan.md`](plans/elements-mastery-badges/plan.md)
 
 ### API インターフェース確定
-- [ ] `GET /elements` のクエリパラメーター・レスポンス形式を決定・ドキュメント更新
+- [x] `GET /elements` のクエリパラメーター・レスポンス形式を決定・ドキュメント更新
 
 ## フェーズ5: GET /elements API 本実装
 
 > フェーズ4 の疎通確認で確定したインターフェースを実装する。
 
-- [ ] GET /elements（keyword・category・period 検索・`isMastered` 付与【設計決定1】）
+- [ ] GET /elements（keyword・category・period 検索）
 - [ ] GET /elements/:id
 - [ ] `GET /elements` のテスト
 
