@@ -74,7 +74,7 @@ Error:
 ### GET `/elements`
 ```
 Headers:
-  Authorization?: Bearer <accessToken>  // 任意。ログイン時のみ習得状態を付与
+  Authorization: "Bearer <accessToken>"  // 任意。ログイン時のみ指定し、習得状態を付与
 
 Query params:
   category?: string   // 分類フィルター
