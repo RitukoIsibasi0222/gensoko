@@ -127,6 +127,7 @@
 - `getElementMasteryStatusMap()` は、表示対象元素が空の場合に DB を参照せず空の `Map` を返すようにした。
 - `GameSession.answers` の取得は `elementId in 表示対象ID` で絞り、不要な回答データを取得しないようにした。
 - PRレビュー指摘を受け、全対象元素の直近回答が必要件数に達した時点でセッション走査を打ち切るようにした。
+- PRレビュー指摘を受け、`GameSession` は `playedAt desc, id desc` で50件ずつページング取得し、未使用の `playedAt` は `select` しないようにした。
 - 元素カードの `aria-label` にログイン時の習得状態を含め、ボタンとしてフォーカスされたときにも状態が読み上げ対象になるようにした。
 - 見た目用の `ElementMasteryBadge` はカード内では `aria-hidden` にし、親ボタンの accessible name と重複しないようにした。
 - PRレビュー指摘を受け、認証状態変化やURL/filter変更でモーダルを閉じる場合も `closeModal()` 経由でフォーカス復帰するようにした。

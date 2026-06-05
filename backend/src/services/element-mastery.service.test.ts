@@ -36,9 +36,10 @@ describe("getElementMasteryStatusMap", () => {
     );
     expect(prisma.gameSession.findMany).toHaveBeenCalledWith({
       where: { userId: "user-1" },
-      orderBy: { playedAt: "desc" },
+      orderBy: [{ playedAt: "desc" }, { id: "desc" }],
+      skip: 0,
+      take: 50,
       select: {
-        playedAt: true,
         answers: {
           where: {
             elementId: { in: [1, 2] },
@@ -149,15 +150,8 @@ describe("getElementMasteryStatusMap", () => {
     );
   });
 
-  it("全対象元素の直近回答が必要件数に達したら古いセッションは走査しない", async () => {
-    const staleSession = {
-      playedAt: new Date("2026-06-01T00:00:00.000Z"),
-      get answers() {
-        throw new Error("古いセッションは走査しない");
-      },
-    };
-
-    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([
+  it("最初のページで全対象元素の直近回答が必要件数に達したら次ページを取得しない", async () => {
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValueOnce([
       {
         playedAt: new Date("2026-06-03T00:00:00.000Z"),
         answers: [
@@ -172,7 +166,6 @@ describe("getElementMasteryStatusMap", () => {
           { elementId: 2, isCorrect: true },
         ],
       },
-      staleSession,
     ] as never);
 
     const result = await getElementMasteryStatusMap("user-1", [1, 2]);
@@ -183,6 +176,44 @@ describe("getElementMasteryStatusMap", () => {
         [2, "mastered"],
       ]),
     );
+    expect(prisma.gameSession.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("最初のページで必要件数に達しない場合は次ページを取得する", async () => {
+    const firstPage = Array.from({ length: 50 }, (_, index) => ({
+      playedAt: new Date(Date.UTC(2026, 5, index + 1)),
+      answers: index === 0 ? [{ elementId: 1, isCorrect: true }] : [],
+    }));
+
+    vi.mocked(prisma.gameSession.findMany)
+      .mockResolvedValueOnce(firstPage as never)
+      .mockResolvedValueOnce([
+        {
+          playedAt: new Date("2026-05-01T00:00:00.000Z"),
+          answers: [{ elementId: 1, isCorrect: true }],
+        },
+      ] as never);
+
+    const result = await getElementMasteryStatusMap("user-1", [1]);
+
+    expect(result).toEqual(new Map([[1, "mastered"]]));
+    expect(prisma.gameSession.findMany).toHaveBeenNthCalledWith(2, {
+      where: { userId: "user-1" },
+      orderBy: [{ playedAt: "desc" }, { id: "desc" }],
+      skip: 50,
+      take: 50,
+      select: {
+        answers: {
+          where: {
+            elementId: { in: [1] },
+          },
+          select: {
+            elementId: true,
+            isCorrect: true,
+          },
+        },
+      },
+    });
   });
 
   it("表示対象ではない元素IDの回答は Map に含めない", async () => {

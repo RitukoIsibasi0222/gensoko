@@ -191,9 +191,10 @@ describe("GET /elements", () => {
     });
     expect(prisma.gameSession.findMany).toHaveBeenCalledWith({
       where: { userId: "user-1" },
-      orderBy: { playedAt: "desc" },
+      orderBy: [{ playedAt: "desc" }, { id: "desc" }],
+      skip: 0,
+      take: 50,
       select: {
-        playedAt: true,
         answers: {
           where: {
             elementId: { in: [1, 2] },

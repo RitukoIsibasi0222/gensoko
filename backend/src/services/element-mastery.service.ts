@@ -3,7 +3,6 @@ import { prisma } from "../lib/prisma.js";
 export type ElementMasteryStatus = "unlearned" | "learning" | "mastered";
 
 type GameSessionWithAnswers = {
-  playedAt: Date;
   answers: {
     elementId: number;
     isCorrect: boolean;
@@ -11,6 +10,7 @@ type GameSessionWithAnswers = {
 };
 
 const REQUIRED_CONSECUTIVE_CORRECT_COUNT = 2;
+const GAME_SESSION_PAGE_SIZE = 50;
 
 function resolveMasteryStatus(recentAnswers: boolean[]): ElementMasteryStatus {
   if (recentAnswers.length === 0) {
@@ -44,41 +44,54 @@ export async function getElementMasteryStatusMap(
     recentAnswersByElement.set(elementId, []);
   }
 
-  const sessions: GameSessionWithAnswers[] = await prisma.gameSession.findMany({
-    where: { userId },
-    orderBy: { playedAt: "desc" },
-    select: {
-      playedAt: true,
-      answers: {
-        where: {
-          elementId: { in: targetElementIds },
-        },
-        select: {
-          elementId: true,
-          isCorrect: true,
+  let skip = 0;
+  let hasMoreSessions = true;
+
+  while (elementIdsNeedingAnswers.size > 0 && hasMoreSessions) {
+    const sessions: GameSessionWithAnswers[] = await prisma.gameSession.findMany({
+      where: { userId },
+      orderBy: [{ playedAt: "desc" }, { id: "desc" }],
+      skip,
+      take: GAME_SESSION_PAGE_SIZE,
+      select: {
+        answers: {
+          where: {
+            elementId: { in: [...elementIdsNeedingAnswers] },
+          },
+          select: {
+            elementId: true,
+            isCorrect: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  sessionLoop: for (const session of sessions) {
-    for (const answer of session.answers) {
-      if (!elementIdsNeedingAnswers.has(answer.elementId)) {
-        continue;
-      }
+    hasMoreSessions = sessions.length === GAME_SESSION_PAGE_SIZE;
+    skip += sessions.length;
 
-      const recentAnswers = recentAnswersByElement.get(answer.elementId);
-      if (!recentAnswers) {
-        continue;
-      }
-
-      recentAnswers.push(answer.isCorrect);
-      if (recentAnswers.length >= REQUIRED_CONSECUTIVE_CORRECT_COUNT) {
-        elementIdsNeedingAnswers.delete(answer.elementId);
-
-        if (elementIdsNeedingAnswers.size === 0) {
-          break sessionLoop;
+    for (const session of sessions) {
+      for (const answer of session.answers) {
+        if (!elementIdsNeedingAnswers.has(answer.elementId)) {
+          continue;
         }
+
+        const recentAnswers = recentAnswersByElement.get(answer.elementId);
+        if (!recentAnswers) {
+          continue;
+        }
+
+        recentAnswers.push(answer.isCorrect);
+        if (recentAnswers.length >= REQUIRED_CONSECUTIVE_CORRECT_COUNT) {
+          elementIdsNeedingAnswers.delete(answer.elementId);
+
+          if (elementIdsNeedingAnswers.size === 0) {
+            break;
+          }
+        }
+      }
+
+      if (elementIdsNeedingAnswers.size === 0) {
+        break;
       }
     }
   }
