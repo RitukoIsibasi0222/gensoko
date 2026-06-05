@@ -37,6 +37,8 @@
 
   $effect(() => {
     appliedFilters = readElementSearchFilters(page.url.searchParams);
+    selectedElement = null;
+    returnFocusEl = null;
   });
 
   async function loadElements(showToast = false): Promise<void> {
