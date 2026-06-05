@@ -37,7 +37,7 @@ export async function getElementMasteryStatusMap(
     return new Map();
   }
 
-  const targetElementIdSet = new Set(targetElementIds);
+  const elementIdsNeedingAnswers = new Set(targetElementIds);
   const recentAnswersByElement = new Map<number, boolean[]>();
 
   for (const elementId of targetElementIds) {
@@ -61,18 +61,25 @@ export async function getElementMasteryStatusMap(
     },
   });
 
-  for (const session of sessions) {
+  sessionLoop: for (const session of sessions) {
     for (const answer of session.answers) {
-      if (!targetElementIdSet.has(answer.elementId)) {
+      if (!elementIdsNeedingAnswers.has(answer.elementId)) {
         continue;
       }
 
       const recentAnswers = recentAnswersByElement.get(answer.elementId);
-      if (!recentAnswers || recentAnswers.length >= REQUIRED_CONSECUTIVE_CORRECT_COUNT) {
+      if (!recentAnswers) {
         continue;
       }
 
       recentAnswers.push(answer.isCorrect);
+      if (recentAnswers.length >= REQUIRED_CONSECUTIVE_CORRECT_COUNT) {
+        elementIdsNeedingAnswers.delete(answer.elementId);
+
+        if (elementIdsNeedingAnswers.size === 0) {
+          break sessionLoop;
+        }
+      }
     }
   }
 

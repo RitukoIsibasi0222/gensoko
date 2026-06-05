@@ -149,6 +149,42 @@ describe("getElementMasteryStatusMap", () => {
     );
   });
 
+  it("全対象元素の直近回答が必要件数に達したら古いセッションは走査しない", async () => {
+    const staleSession = {
+      playedAt: new Date("2026-06-01T00:00:00.000Z"),
+      get answers() {
+        throw new Error("古いセッションは走査しない");
+      },
+    };
+
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([
+      {
+        playedAt: new Date("2026-06-03T00:00:00.000Z"),
+        answers: [
+          { elementId: 1, isCorrect: true },
+          { elementId: 2, isCorrect: true },
+        ],
+      },
+      {
+        playedAt: new Date("2026-06-02T00:00:00.000Z"),
+        answers: [
+          { elementId: 1, isCorrect: true },
+          { elementId: 2, isCorrect: true },
+        ],
+      },
+      staleSession,
+    ] as never);
+
+    const result = await getElementMasteryStatusMap("user-1", [1, 2]);
+
+    expect(result).toEqual(
+      new Map([
+        [1, "mastered"],
+        [2, "mastered"],
+      ]),
+    );
+  });
+
   it("表示対象ではない元素IDの回答は Map に含めない", async () => {
     vi.mocked(prisma.gameSession.findMany).mockResolvedValue([
       {
