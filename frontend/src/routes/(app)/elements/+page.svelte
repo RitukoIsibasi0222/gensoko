@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
+  import { untrack } from 'svelte';
   import ElementDetailModal from '$lib/components/elements/ElementDetailModal.svelte';
   import ElementMasteryBadge from '$lib/components/elements/ElementMasteryBadge.svelte';
   import ElementSearchFilters from '$lib/components/elements/ElementSearchFilters.svelte';
@@ -40,8 +41,9 @@
 
   $effect(() => {
     appliedFilters = readElementSearchFilters(page.url.searchParams);
-    selectedElement = null;
-    returnFocusEl = null;
+    untrack(() => {
+      closeModalIfOpen();
+    });
   });
 
   $effect(() => {
@@ -60,8 +62,14 @@
     }
 
     lastAuthRequestKey = authRequestKey;
-    selectedElement = null;
-    returnFocusEl = null;
+    const closedModal = untrack(() => closeModalIfOpen());
+    if (closedModal) {
+      queueMicrotask(() => {
+        void loadElements(false, accessToken);
+      });
+      return;
+    }
+
     void loadElements(false, accessToken);
   });
 
@@ -118,6 +126,16 @@
     });
   }
 
+  function closeModalIfOpen(): boolean {
+    if (selectedElement === null) {
+      returnFocusEl = null;
+      return false;
+    }
+
+    closeModal();
+    return true;
+  }
+
   function updateSearchUrl(filters: ElementSearchFilterState): void {
     const searchParams = toElementSearchParams(filters);
     const query = searchParams.toString();
@@ -132,8 +150,7 @@
 
   function applyFilters(filters: ElementSearchFilterState): void {
     appliedFilters = filters;
-    selectedElement = null;
-    returnFocusEl = null;
+    closeModalIfOpen();
     updateSearchUrl(filters);
   }
 
