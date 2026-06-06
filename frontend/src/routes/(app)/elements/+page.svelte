@@ -15,10 +15,7 @@
     readElementSearchFilters,
     toElementSearchParams
   } from '$lib/elements/search-filter';
-  import type {
-    ElementSearchFilterInput,
-    ElementSearchFilters as ElementSearchFilterState
-  } from '$lib/elements/search-filter';
+  import type { ElementSearchFilters as ElementSearchFilterState } from '$lib/elements/search-filter';
   import type { Element } from '$lib/elements/types';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
@@ -28,7 +25,7 @@
   type LoadElementsOptions = {
     showToast?: boolean;
     accessToken?: string | null;
-    filters?: ElementSearchFilterInput;
+    filters?: ElementSearchFilterState;
   };
 
   let elements = $state<Element[]>([]);
@@ -69,9 +66,10 @@
     }
 
     const nextFilters = readElementSearchFilters(page.url.searchParams);
+    const query = toElementSearchParams(nextFilters).toString();
     const accessToken = authStore.isLoggedIn ? authStore.accessToken : null;
     const authRequestKey = authStore.isLoggedIn ? (accessToken ?? 'authenticated') : 'anonymous';
-    const requestKey = `${authRequestKey}:${page.url.search}`;
+    const requestKey = `${authRequestKey}:${query}`;
     if (requestKey === lastRequestKey) {
       return;
     }
@@ -82,20 +80,11 @@
       closeModalIfOpen();
     });
 
-    const apiFilters: ElementSearchFilterInput = {
-      q: page.url.searchParams.get('q') ?? '',
-      category: page.url.searchParams.get('category') ?? '',
-      period: page.url.searchParams.get('period') ?? undefined
-    };
-    void loadElements({ accessToken, filters: apiFilters });
+    void loadElements({ accessToken, filters: nextFilters });
   });
 
   function isAbortError(error: unknown): boolean {
-    return (
-      typeof DOMException !== 'undefined' &&
-      error instanceof DOMException &&
-      error.name === 'AbortError'
-    );
+    return error instanceof Error && error.name === 'AbortError';
   }
 
   async function loadElements({
