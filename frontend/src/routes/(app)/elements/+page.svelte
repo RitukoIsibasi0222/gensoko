@@ -11,7 +11,7 @@
   import { getElementMasteryBadgeView } from '$lib/elements/mastery-badge';
   import {
     DEFAULT_ELEMENT_SEARCH_FILTERS,
-    filterElements,
+    hasActiveElementSearchFilters,
     readElementSearchFilters,
     toElementSearchParams
   } from '$lib/elements/search-filter';
@@ -22,72 +22,107 @@
 
   const NETWORK_ERROR_MESSAGE = 'ネットワークエラーが発生しました。接続を確認してください';
 
+  type LoadElementsOptions = {
+    showToast?: boolean;
+    accessToken?: string | null;
+    filters?: ElementSearchFilterState;
+  };
+
   let elements = $state<Element[]>([]);
-  let isLoading = $state(true);
-  let isRequesting = $state(false);
+  let isInitialLoading = $state(true);
+  let isSearching = $state(false);
   let errorMessage = $state<string | null>(null);
   let selectedElement = $state<Element | null>(null);
   let returnFocusEl: HTMLElement | null = null;
-  let lastAuthRequestKey = '';
+  let lastRequestKey = '';
+  let requestSequence = 0;
+  let activeAbortController: AbortController | null = null;
   let appliedFilters = $state<ElementSearchFilterState>(
     readElementSearchFilters(page.url.searchParams)
   );
 
-  const isEmpty = $derived(!isLoading && errorMessage === null && elements.length === 0);
-  const filteredElements = $derived(filterElements(elements, appliedFilters));
-  const isSearchEmpty = $derived(
-    !isLoading && errorMessage === null && elements.length > 0 && filteredElements.length === 0
+  const hasActiveFilters = $derived(hasActiveElementSearchFilters(appliedFilters));
+  const isUpdatingWithoutResults = $derived(
+    !isInitialLoading && errorMessage === null && isSearching && elements.length === 0
   );
-
-  $effect(() => {
-    appliedFilters = readElementSearchFilters(page.url.searchParams);
-    untrack(() => {
-      closeModalIfOpen();
-    });
-  });
+  const isEmpty = $derived(
+    !isInitialLoading &&
+      !isSearching &&
+      errorMessage === null &&
+      elements.length === 0 &&
+      !hasActiveFilters
+  );
+  const isSearchEmpty = $derived(
+    !isInitialLoading &&
+      !isSearching &&
+      errorMessage === null &&
+      elements.length === 0 &&
+      hasActiveFilters
+  );
 
   $effect(() => {
     if (authStore.isInitializing) {
       return;
     }
 
-    if (isRequesting) {
-      return;
-    }
-
+    const nextFilters = readElementSearchFilters(page.url.searchParams);
+    const query = toElementSearchParams(nextFilters).toString();
     const accessToken = authStore.isLoggedIn ? authStore.accessToken : null;
     const authRequestKey = authStore.isLoggedIn ? (accessToken ?? 'authenticated') : 'anonymous';
-    if (authRequestKey === lastAuthRequestKey) {
+    const requestKey = `${authRequestKey}:${query}`;
+    if (requestKey === lastRequestKey) {
       return;
     }
 
-    lastAuthRequestKey = authRequestKey;
-    const closedModal = untrack(() => closeModalIfOpen());
-    if (closedModal) {
-      queueMicrotask(() => {
-        void loadElements(false, accessToken);
-      });
-      return;
-    }
+    lastRequestKey = requestKey;
+    appliedFilters = nextFilters;
+    untrack(() => {
+      closeModalIfOpen();
+    });
 
-    void loadElements(false, accessToken);
+    void loadElements({ accessToken, filters: nextFilters });
   });
 
-  async function loadElements(
-    showToast = false,
-    accessToken = authStore.isLoggedIn ? authStore.accessToken : null
-  ): Promise<void> {
-    if (isRequesting) {
-      return;
-    }
+  function isAbortError(error: unknown): boolean {
+    return (
+      typeof DOMException !== 'undefined' &&
+      error instanceof DOMException &&
+      error.name === 'AbortError'
+    );
+  }
 
-    isRequesting = true;
-    isLoading = true;
+  async function loadElements({
+    showToast = false,
+    accessToken = authStore.isLoggedIn ? authStore.accessToken : null,
+    filters = appliedFilters
+  }: LoadElementsOptions = {}): Promise<void> {
+    activeAbortController?.abort();
+    const abortController = new AbortController();
+    activeAbortController = abortController;
+    const requestId = requestSequence + 1;
+    requestSequence = requestId;
+
+    if (!isInitialLoading) {
+      isSearching = true;
+    }
     errorMessage = null;
 
     try {
-      elements = await getElements({ accessToken });
+      const nextElements = await getElements({
+        accessToken,
+        filters,
+        signal: abortController.signal
+      });
+      if (requestId !== requestSequence) {
+        return;
+      }
+
+      elements = nextElements;
     } catch (error) {
+      if (isAbortError(error) || requestId !== requestSequence) {
+        return;
+      }
+
       const message = error instanceof ApiError ? error.message : NETWORK_ERROR_MESSAGE;
       errorMessage = message;
       elements = [];
@@ -96,8 +131,13 @@
         toastStore.error(message);
       }
     } finally {
-      isLoading = false;
-      isRequesting = false;
+      if (requestId === requestSequence) {
+        isInitialLoading = false;
+        isSearching = false;
+        if (activeAbortController === abortController) {
+          activeAbortController = null;
+        }
+      }
     }
   }
 
@@ -149,7 +189,6 @@
   }
 
   function applyFilters(filters: ElementSearchFilterState): void {
-    appliedFilters = filters;
     closeModalIfOpen();
     updateSearchUrl(filters);
   }
@@ -165,7 +204,7 @@
     <p class="mt-2 text-sm text-gray-600">118種類の元素を分類ごとに色分けして表示します。</p>
   </section>
 
-  {#if isLoading}
+  {#if isInitialLoading}
     <section class="rounded border border-gray-200 bg-white p-6">
       <p class="text-sm text-gray-600">元素一覧を読み込み中です...</p>
     </section>
@@ -174,22 +213,26 @@
       <p class="text-sm text-red-700">{errorMessage}</p>
       <button
         type="button"
-        onclick={() => loadElements(true)}
+        onclick={() => loadElements({ showToast: true })}
         class="mt-4 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
       >
         再読み込み
       </button>
+    </section>
+  {:else if isUpdatingWithoutResults}
+    <section class="rounded border border-gray-200 bg-white p-6" aria-busy="true">
+      <p class="text-sm text-gray-600">検索結果を読み込み中です...</p>
     </section>
   {:else if isEmpty}
     <section class="rounded border border-gray-200 bg-white p-6">
       <p class="text-sm text-gray-600">該当する元素がありません。</p>
     </section>
   {:else}
-    <section class="space-y-3">
+    <section class="space-y-3" aria-busy={isSearching ? 'true' : undefined}>
       <ElementSearchFilters
         filters={appliedFilters}
-        resultCount={filteredElements.length}
-        totalCount={elements.length}
+        resultCount={elements.length}
+        {isSearching}
         onApply={applyFilters}
         onReset={resetFilters}
       />
@@ -208,7 +251,7 @@
         </section>
       {:else}
         <ul role="list" class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-          {#each filteredElements as element (element.id)}
+          {#each elements as element (element.id)}
             {@const style = getElementCategoryStyle(element.category)}
             <li>
               <button

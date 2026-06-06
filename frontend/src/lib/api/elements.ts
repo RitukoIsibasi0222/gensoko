@@ -1,5 +1,7 @@
 import { API_BASE_URL } from '$lib/api/config';
 import { ApiError, parseErrorResponse } from '$lib/api/errors';
+import { normalizeElementSearchFilters, toElementSearchParams } from '$lib/elements/search-filter';
+import type { ElementSearchFilterInput } from '$lib/elements/search-filter';
 import type { Element, ElementMasteryStatus } from '$lib/elements/types';
 
 type ElementsResponse = {
@@ -8,6 +10,8 @@ type ElementsResponse = {
 
 export type GetElementsOptions = {
   accessToken?: string | null;
+  filters?: ElementSearchFilterInput;
+  signal?: AbortSignal;
 };
 
 type GetElementsFetchOptions = {
@@ -16,6 +20,7 @@ type GetElementsFetchOptions = {
   headers?: {
     Authorization: string;
   };
+  signal?: AbortSignal;
 };
 
 function isElementMasteryStatus(value: unknown): value is ElementMasteryStatus {
@@ -57,6 +62,17 @@ function isElementsResponse(value: unknown): value is ElementsResponse {
   return elements.every((item: unknown) => isElement(item));
 }
 
+function buildElementsUrl(filters: ElementSearchFilterInput | undefined): string {
+  const baseUrl = `${API_BASE_URL}/elements`;
+  if (filters === undefined) {
+    return baseUrl;
+  }
+
+  const searchParams = toElementSearchParams(normalizeElementSearchFilters(filters));
+  const query = searchParams.toString();
+  return query === '' ? baseUrl : `${baseUrl}?${query}`;
+}
+
 export async function getElements(options: GetElementsOptions = {}): Promise<Element[]> {
   const fetchOptions: GetElementsFetchOptions = {
     method: 'GET',
@@ -69,9 +85,11 @@ export async function getElements(options: GetElementsOptions = {}): Promise<Ele
     };
   }
 
-  const response = await fetch(`${API_BASE_URL}/elements`, {
-    ...fetchOptions
-  });
+  if (options.signal) {
+    fetchOptions.signal = options.signal;
+  }
+
+  const response = await fetch(buildElementsUrl(options.filters), fetchOptions);
 
   if (!response.ok) {
     await parseErrorResponse(response, '元素一覧の取得に失敗しました');

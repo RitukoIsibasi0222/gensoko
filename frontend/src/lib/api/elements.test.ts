@@ -81,6 +81,100 @@ describe('getElements', () => {
     expect(result).toEqual([VALID_ELEMENT_WITH_MASTERY]);
   });
 
+  it('正常系: filters がある場合は query string を付ける', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ elements: [VALID_ELEMENT] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    await getElements({
+      filters: {
+        q: '  H  ',
+        category: '非金属',
+        period: '1'
+      }
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/elements?q=H&category=%E9%9D%9E%E9%87%91%E5%B1%9E&period=1',
+      {
+        method: 'GET',
+        credentials: 'include'
+      }
+    );
+  });
+
+  it('正常系: 空の filters は query string に含めない', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ elements: [VALID_ELEMENT] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    await getElements({
+      filters: {
+        q: '   ',
+        category: '',
+        period: null
+      }
+    });
+
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3000/api/v1/elements', {
+      method: 'GET',
+      credentials: 'include'
+    });
+  });
+
+  it('正常系: accessToken と filters を同時に反映する', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ elements: [VALID_ELEMENT_WITH_MASTERY] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    await getElements({
+      accessToken: 'test-access-token',
+      filters: {
+        q: '水素',
+        category: '',
+        period: 1
+      }
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/elements?q=%E6%B0%B4%E7%B4%A0&period=1',
+      {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          Authorization: 'Bearer test-access-token'
+        }
+      }
+    );
+  });
+
+  it('正常系: AbortSignal を fetch に渡す', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ elements: [VALID_ELEMENT] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+    const controller = new AbortController();
+
+    await getElements({ signal: controller.signal });
+
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3000/api/v1/elements', {
+      method: 'GET',
+      credentials: 'include',
+      signal: controller.signal
+    });
+  });
+
   it('正常系: masteryStatus が learning の要素を返す', async () => {
     const element = { ...VALID_ELEMENT, masteryStatus: 'learning' };
     vi.mocked(fetch).mockResolvedValue(
