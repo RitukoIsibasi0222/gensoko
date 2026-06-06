@@ -15,7 +15,10 @@
     readElementSearchFilters,
     toElementSearchParams
   } from '$lib/elements/search-filter';
-  import type { ElementSearchFilters as ElementSearchFilterState } from '$lib/elements/search-filter';
+  import type {
+    ElementSearchFilterInput,
+    ElementSearchFilters as ElementSearchFilterState
+  } from '$lib/elements/search-filter';
   import type { Element } from '$lib/elements/types';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
@@ -25,7 +28,7 @@
   type LoadElementsOptions = {
     showToast?: boolean;
     accessToken?: string | null;
-    filters?: ElementSearchFilterState;
+    filters?: ElementSearchFilterInput;
   };
 
   let elements = $state<Element[]>([]);
@@ -66,10 +69,9 @@
     }
 
     const nextFilters = readElementSearchFilters(page.url.searchParams);
-    const query = toElementSearchParams(nextFilters).toString();
     const accessToken = authStore.isLoggedIn ? authStore.accessToken : null;
     const authRequestKey = authStore.isLoggedIn ? (accessToken ?? 'authenticated') : 'anonymous';
-    const requestKey = `${authRequestKey}:${query}`;
+    const requestKey = `${authRequestKey}:${page.url.search}`;
     if (requestKey === lastRequestKey) {
       return;
     }
@@ -80,7 +82,12 @@
       closeModalIfOpen();
     });
 
-    void loadElements({ accessToken, filters: nextFilters });
+    const apiFilters: ElementSearchFilterInput = {
+      q: page.url.searchParams.get('q') ?? '',
+      category: page.url.searchParams.get('category') ?? '',
+      period: page.url.searchParams.get('period') ?? undefined
+    };
+    void loadElements({ accessToken, filters: apiFilters });
   });
 
   function isAbortError(error: unknown): boolean {
@@ -219,10 +226,6 @@
         再読み込み
       </button>
     </section>
-  {:else if isUpdatingWithoutResults}
-    <section class="rounded border border-gray-200 bg-white p-6" aria-busy="true">
-      <p class="text-sm text-gray-600">検索結果を読み込み中です...</p>
-    </section>
   {:else if isEmpty}
     <section class="rounded border border-gray-200 bg-white p-6">
       <p class="text-sm text-gray-600">該当する元素がありません。</p>
@@ -237,7 +240,11 @@
         onReset={resetFilters}
       />
 
-      {#if isSearchEmpty}
+      {#if isUpdatingWithoutResults}
+        <section class="rounded border border-gray-200 bg-white p-6" aria-busy="true">
+          <p class="text-sm text-gray-600">検索結果を読み込み中です...</p>
+        </section>
+      {:else if isSearchEmpty}
         <section class="rounded border border-gray-200 bg-white p-6">
           <p class="text-sm text-gray-700">条件に一致する元素がありません。</p>
           <p class="mt-1 text-sm text-gray-500">キーワードやフィルター条件を変更してください。</p>
