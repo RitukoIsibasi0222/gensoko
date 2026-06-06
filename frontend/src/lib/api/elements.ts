@@ -22,20 +22,19 @@ export type GetElementOptions = {
   signal?: AbortSignal;
 };
 
-type GetElementsFetchOptions = {
+type BaseElementFetchOptions = {
   method: 'GET';
   credentials: 'include';
-  headers?: {
-    Authorization: string;
-  };
   signal?: AbortSignal;
 };
 
-type GetElementFetchOptions = {
-  method: 'GET';
-  credentials: 'include';
-  signal?: AbortSignal;
+type GetElementsFetchOptions = BaseElementFetchOptions & {
+  headers?: {
+    Authorization: string;
+  };
 };
+
+type GetElementFetchOptions = BaseElementFetchOptions;
 
 function isElementMasteryStatus(value: unknown): value is ElementMasteryStatus {
   return value === 'unlearned' || value === 'learning' || value === 'mastered';

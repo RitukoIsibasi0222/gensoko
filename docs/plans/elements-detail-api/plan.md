@@ -451,13 +451,17 @@ return c.json({ error: "バリデーションエラー", details: result.error.i
 - `getElement()` の HTTP エラーテストは、同じ `Response` body を複数回読まないよう、1 回の呼び出しで `status` と `message` を検証する形に調整した。
 - 画面 DOM の変更は行っていないため、A11Y は既存 `/elements` 画面の回帰確認対象として扱った。
 - レビュー改善として、`1e2` / `0x10` / `+1` のような 10進整数以外の path param 表記を 400 にする検証を追加した。
+- PR レビュー対応として、10進整数判定を `backend/src/lib/elements/number.ts` に切り出し、検索 API と詳細 API で共用した。
+- PR レビュー対応として、frontend の `getElements` / `getElement` fetch options 型に共通 base type を導入した。
 
 ### 実際の変更ファイル
 
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
+| `backend/src/lib/elements/number.ts` | 新規 | 10進整数文字列判定 helper を追加 |
 | `backend/src/lib/elements/detail.ts` | 新規 | `GET /elements/:id` の path param schema と ID 正規化を追加 |
 | `backend/src/lib/elements/detail.test.ts` | 新規 | ID param の正規化・範囲検証テストを追加 |
+| `backend/src/lib/elements/search.ts` | 修正 | 10進整数判定 helper を再利用 |
 | `backend/src/routes/elements/index.ts` | 修正 | `GET /:id` を追加し、findUnique / 404 / 500 を実装 |
 | `backend/src/routes/elements/element-detail.test.ts` | 新規 | `GET /elements/:id` の route テストを追加 |
 | `frontend/src/lib/api/elements.ts` | 修正 | `getElement(id, options?)` と単数レスポンス検証を追加 |
