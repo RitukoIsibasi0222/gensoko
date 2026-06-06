@@ -304,6 +304,31 @@ describe('getElements', () => {
     }
   });
 
+  it('正常系: 未知の category はそのまま query string に含める', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ elements: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    await getElements({
+      filters: {
+        q: '',
+        category: 'UNKNOWN_CATEGORY',
+        period: null
+      }
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/elements?category=UNKNOWN_CATEGORY',
+      {
+        method: 'GET',
+        credentials: 'include'
+      }
+    );
+  });
+
   it('fetch 拒否: ネットワークエラーでそのまま throw される', async () => {
     vi.mocked(fetch).mockRejectedValue(new TypeError('Failed to fetch'));
 
