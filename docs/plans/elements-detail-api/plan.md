@@ -407,10 +407,12 @@ return c.json({ error: "バリデーションエラー", details: result.error.i
 | backend helper | `id = "0"` | validation 失敗 |
 | backend helper | `id = "119"` | validation 失敗 |
 | backend helper | `id = "1.5"` | validation 失敗 |
+| backend helper | `id = "1e2"` / `"0x10"` / `"+1"` | validation 失敗 |
 | backend helper | `id = "abc"` | validation 失敗 |
 | backend route | `GET /elements/1` | 200 `{ element }` を返す |
 | backend route | `GET /elements/1` | `prisma.element.findUnique({ where: { id: 1 } })` が呼ばれる |
 | backend route | `GET /elements/119` | 400。DB を参照しない |
+| backend route | `GET /elements/1e2` | 400。DB を参照しない |
 | backend route | `GET /elements/abc` | 400。DB を参照しない |
 | backend route | `GET /elements/118` で DB が null | 404 `{ error: "元素が見つかりません" }` |
 | backend route | Prisma が throw | 500 `{ error: "サーバーエラーが発生しました" }` |
@@ -448,6 +450,7 @@ return c.json({ error: "バリデーションエラー", details: result.error.i
 
 - `getElement()` の HTTP エラーテストは、同じ `Response` body を複数回読まないよう、1 回の呼び出しで `status` と `message` を検証する形に調整した。
 - 画面 DOM の変更は行っていないため、A11Y は既存 `/elements` 画面の回帰確認対象として扱った。
+- レビュー改善として、`1e2` / `0x10` / `+1` のような 10進整数以外の path param 表記を 400 にする検証を追加した。
 
 ### 実際の変更ファイル
 
@@ -469,16 +472,17 @@ return c.json({ error: "バリデーションエラー", details: result.error.i
 |---|---|
 | Red: `backend/src/lib/elements/detail.test.ts` | 実装前に `detail.js` 未存在で失敗 |
 | Red: `backend/src/routes/elements/element-detail.test.ts` | 実装前に 404 で失敗 |
-| Green: backend 対象テスト | `detail.test.ts` 4 tests、`element-detail.test.ts` 6 tests、既存 `elements.test.ts` 9 tests passed |
+| Green: backend 対象テスト | `detail.test.ts` 5 tests、`element-detail.test.ts` 7 tests、既存 `elements.test.ts` 9 tests passed |
 | Red: `frontend/src/lib/api/elements.test.ts` | 実装前に `getElement is not a function` で失敗 |
 | Green: frontend 対象テスト | `elements.test.ts` 25 tests passed |
 | backend lint | `npm run lint` passed |
 | backend format check | `npm run format:check` passed |
-| backend test | `npm run test -- --run` 19 files / 149 tests passed |
+| backend test | `npm run test -- --run` 19 files / 151 tests passed |
 | frontend lint | `npm run lint` passed |
 | frontend check | `npm run check` 0 errors / 0 warnings |
 | frontend test | `npm run test:run` 11 files / 142 tests passed |
 | 手動確認: `GET /api/v1/elements/1` | 200 OK / `{ element: ... }` |
 | 手動確認: `GET /api/v1/elements/119` | 400 Bad Request / バリデーションエラー |
 | 手動確認: `GET /api/v1/elements/abc` | 400 Bad Request / バリデーションエラー |
+| 手動確認: `GET /api/v1/elements/1e2` | 400 Bad Request / バリデーションエラー |
 | DB 変更 | なし。migration / Prisma generate 不要 |

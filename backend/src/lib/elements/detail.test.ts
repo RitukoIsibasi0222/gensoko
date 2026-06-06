@@ -19,6 +19,12 @@ describe("elementIdParamSchema", () => {
     expect(elementIdParamSchema.safeParse({ id: "" }).success).toBe(false);
   });
 
+  it("10進整数以外の数値表記を無効にする", () => {
+    expect(elementIdParamSchema.safeParse({ id: "1e2" }).success).toBe(false);
+    expect(elementIdParamSchema.safeParse({ id: "0x10" }).success).toBe(false);
+    expect(elementIdParamSchema.safeParse({ id: "+1" }).success).toBe(false);
+  });
+
   it("未知の param key は無視する", () => {
     expect(elementIdParamSchema.parse({ id: "2", unknown: "ignored" })).toEqual({ id: 2 });
   });

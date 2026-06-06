@@ -89,6 +89,13 @@ describe("GET /elements/:id", () => {
     expect(prisma.element.findUnique).not.toHaveBeenCalled();
   });
 
+  it("10進整数以外の数値表記は400を返しDBを参照しない", async () => {
+    const res = await app.request("/elements/1e2", { method: "GET" });
+
+    expect(res.status).toBe(400);
+    expect(prisma.element.findUnique).not.toHaveBeenCalled();
+  });
+
   it("指定した元素が存在しない場合は404を返す", async () => {
     vi.mocked(prisma.element.findUnique).mockResolvedValue(null);
 
