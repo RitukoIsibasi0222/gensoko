@@ -12,13 +12,22 @@
   type Props = {
     filters: ElementSearchFilters;
     resultCount: number;
-    totalCount: number;
+    totalCount?: number;
+    isSearching?: boolean;
     disabled?: boolean;
     onApply: ElementSearchFilterApplyHandler;
     onReset(): void;
   };
 
-  let { filters, resultCount, totalCount, disabled = false, onApply, onReset }: Props = $props();
+  let {
+    filters,
+    resultCount,
+    totalCount,
+    isSearching = false,
+    disabled = false,
+    onApply,
+    onReset
+  }: Props = $props();
   let draftKeyword = $state('');
 
   const categoryOptions = getElementCategoryOptions();
@@ -27,9 +36,7 @@
     draftKeyword = filters.q;
   });
 
-  function handleSubmit(event: SubmitEvent): void {
-    event.preventDefault();
-
+  function applyCurrentFilters(): void {
     if (disabled) {
       return;
     }
@@ -41,6 +48,20 @@
     });
 
     onApply(nextFilters);
+  }
+
+  function handleSubmit(event: SubmitEvent): void {
+    event.preventDefault();
+    applyCurrentFilters();
+  }
+
+  function handleKeywordKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Enter' || event.isComposing) {
+      return;
+    }
+
+    event.preventDefault();
+    applyCurrentFilters();
   }
 
   function handleCategoryChange(event: Event): void {
@@ -103,6 +124,7 @@
         bind:value={draftKeyword}
         {disabled}
         placeholder="番号・記号・名前"
+        onkeydown={handleKeywordKeydown}
         class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
       />
     </div>
@@ -159,6 +181,12 @@
   </form>
 
   <p class="mt-3 text-sm text-gray-600" aria-live="polite">
-    全{totalCount}件中 {resultCount}件を表示しています。
+    {#if isSearching}
+      検索結果を更新しています。現在{resultCount}件を表示しています。
+    {:else if totalCount === undefined}
+      {resultCount}件を表示しています。
+    {:else}
+      全{totalCount}件中 {resultCount}件を表示しています。
+    {/if}
   </p>
 </section>
