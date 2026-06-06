@@ -1,5 +1,6 @@
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
+import { elementIdParamSchema } from "../../lib/elements/detail.js";
 import { buildElementWhereInput, elementSearchQuerySchema } from "../../lib/elements/search.js";
 import { prisma } from "../../lib/prisma.js";
 import { optionalAuthMiddleware } from "../../middleware/auth/index.js";
@@ -44,6 +45,32 @@ elementsRouter.get(
       }
 
       return c.json({ elements }, 200);
+    } catch {
+      return c.json({ error: "サーバーエラーが発生しました" }, 500);
+    }
+  },
+);
+
+elementsRouter.get(
+  "/:id",
+  zValidator("param", elementIdParamSchema, (result, c) => {
+    if (!result.success) {
+      return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
+    }
+  }),
+  async (c) => {
+    const { id } = c.req.valid("param");
+
+    try {
+      const element = await prisma.element.findUnique({
+        where: { id },
+      });
+
+      if (element === null) {
+        return c.json({ error: "元素が見つかりません" }, 404);
+      }
+
+      return c.json({ element }, 200);
     } catch {
       return c.json({ error: "サーバーエラーが発生しました" }, 500);
     }

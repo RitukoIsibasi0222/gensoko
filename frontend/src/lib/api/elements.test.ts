@@ -5,7 +5,7 @@ vi.mock('$lib/api/config', () => ({
   API_BASE_URL: 'http://localhost:3000/api/v1'
 }));
 
-const { getElements } = await import('./elements');
+const { getElement, getElements } = await import('./elements');
 
 const VALID_ELEMENT = {
   id: 1,
@@ -330,5 +330,121 @@ describe('getElements', () => {
     vi.mocked(fetch).mockRejectedValue(new TypeError('Failed to fetch'));
 
     await expect(getElements()).rejects.toThrow('Failed to fetch');
+  });
+});
+
+describe('getElement', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('正常系: element を返す', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ element: VALID_ELEMENT }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    const result = await getElement(1);
+
+    expect(result).toEqual(VALID_ELEMENT);
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3000/api/v1/elements/1', {
+      method: 'GET',
+      credentials: 'include'
+    });
+  });
+
+  it('正常系: AbortSignal を fetch に渡す', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ element: VALID_ELEMENT }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+    const controller = new AbortController();
+
+    await getElement(1, { signal: controller.signal });
+
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3000/api/v1/elements/1', {
+      method: 'GET',
+      credentials: 'include',
+      signal: controller.signal
+    });
+  });
+
+  it('HTTPエラー: ApiError が throw される', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ error: '元素が見つかりません' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    try {
+      await getElement(118);
+      expect.fail('ApiError が throw されるべき');
+    } catch (e) {
+      expect(e).toBeInstanceOf(ApiError);
+      expect((e as ApiError).status).toBe(404);
+      expect((e as ApiError).message).toBe('元素が見つかりません');
+    }
+  });
+
+  it('HTTPエラー: 非JSONレスポンスの場合はデフォルトメッセージが使われる', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response('Bad Gateway', {
+        status: 502,
+        headers: { 'Content-Type': 'text/html' }
+      })
+    );
+
+    await expect(getElement(1)).rejects.toThrow('元素詳細の取得に失敗しました');
+  });
+
+  it('レスポンス形式不正: element フィールドがない場合は ApiError(500) が throw される', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ data: VALID_ELEMENT }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    try {
+      await getElement(1);
+      expect.fail('ApiError が throw されるべき');
+    } catch (e) {
+      expect(e).toBeInstanceOf(ApiError);
+      expect((e as ApiError).status).toBe(500);
+      expect((e as ApiError).message).toBe('元素詳細のレスポンス形式が不正です');
+    }
+  });
+
+  it('レスポンス形式不正: element の必須フィールドが欠けている場合は ApiError(500) が throw される', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ element: { id: 1, symbol: 'H' } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    try {
+      await getElement(1);
+      expect.fail('ApiError が throw されるべき');
+    } catch (e) {
+      expect(e).toBeInstanceOf(ApiError);
+      expect((e as ApiError).status).toBe(500);
+      expect((e as ApiError).message).toBe('元素詳細のレスポンス形式が不正です');
+    }
+  });
+
+  it('fetch 拒否: ネットワークエラーでそのまま throw される', async () => {
+    vi.mocked(fetch).mockRejectedValue(new TypeError('Failed to fetch'));
+
+    await expect(getElement(1)).rejects.toThrow('Failed to fetch');
   });
 });
