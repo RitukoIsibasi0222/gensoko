@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '$lib/api/config';
 import { ApiError, parseErrorResponse } from '$lib/api/errors';
+import { normalizeElementSearchFilters, toElementSearchParams } from '$lib/elements/search-filter';
 import type { ElementSearchFilterInput } from '$lib/elements/search-filter';
 import type { Element, ElementMasteryStatus } from '$lib/elements/types';
 
@@ -67,24 +68,8 @@ function buildElementsUrl(filters: ElementSearchFilterInput | undefined): string
     return baseUrl;
   }
 
-  const params = new URLSearchParams();
-
-  if (typeof filters.q === 'string') {
-    const q = filters.q.trim();
-    if (q !== '') params.set('q', q);
-  }
-
-  if (typeof filters.category === 'string') {
-    const category = filters.category.trim();
-    if (category !== '') params.set('category', category);
-  }
-
-  const period = filters.period;
-  if (period !== null && period !== undefined && period !== '') {
-    params.set('period', String(period));
-  }
-
-  const query = params.toString();
+  const searchParams = toElementSearchParams(normalizeElementSearchFilters(filters));
+  const query = searchParams.toString();
   return query === '' ? baseUrl : `${baseUrl}?${query}`;
 }
 
