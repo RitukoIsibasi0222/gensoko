@@ -335,18 +335,18 @@ export async function getElement(id: number, options?: GetElementOptions): Promi
 
 ## タスクリスト（チェックボックス）
 
-- [ ] T1: 進捗を実装中にする（`docs/05_progress.md`）
-- [ ] T2: ID param helper の Red テストを書く（`backend/src/lib/elements/detail.test.ts`）
-- [ ] T3: ID param helper を実装する（`backend/src/lib/elements/detail.ts`）
-- [ ] T4: 詳細 endpoint の Red テストを書く（`backend/src/routes/elements/element-detail.test.ts`）
-- [ ] T5: `GET /elements/:id` を実装する（`backend/src/routes/elements/index.ts`）
-- [ ] T6: backend 品質チェックを行う（`backend/`）
-- [ ] T7: frontend `getElement()` の Red テストを書く（`frontend/src/lib/api/elements.test.ts`）
-- [ ] T8: frontend `getElement()` を実装する（`frontend/src/lib/api/elements.ts`）
-- [ ] T9: frontend 品質チェックを行う（`frontend/`）
-- [ ] T10: API 仕様書を更新する（`docs/04_api.md`）
-- [ ] T11: 手動確認を行う（手動）
-- [ ] T12: 完了ドキュメントを更新する（`docs/05_progress.md`, `docs/plans/elements-detail-api/plan.md`）
+- [x] T1: 進捗を実装中にする（`docs/05_progress.md`）
+- [x] T2: ID param helper の Red テストを書く（`backend/src/lib/elements/detail.test.ts`）
+- [x] T3: ID param helper を実装する（`backend/src/lib/elements/detail.ts`）
+- [x] T4: 詳細 endpoint の Red テストを書く（`backend/src/routes/elements/element-detail.test.ts`）
+- [x] T5: `GET /elements/:id` を実装する（`backend/src/routes/elements/index.ts`）
+- [x] T6: backend 品質チェックを行う（`backend/`）
+- [x] T7: frontend `getElement()` の Red テストを書く（`frontend/src/lib/api/elements.test.ts`）
+- [x] T8: frontend `getElement()` を実装する（`frontend/src/lib/api/elements.ts`）
+- [x] T9: frontend 品質チェックを行う（`frontend/`）
+- [x] T10: API 仕様書を更新する（`docs/04_api.md`）
+- [x] T11: 手動確認を行う（手動）
+- [x] T12: 完了ドキュメントを更新する（`docs/05_progress.md`, `docs/plans/elements-detail-api/plan.md`）
 
 ## 技術的注意点
 
@@ -437,3 +437,47 @@ return c.json({ error: "バリデーションエラー", details: result.error.i
 | `isElement()` をコピーして重複する | 一覧と詳細で検証条件がズレる | `frontend/src/lib/api/elements.ts` 内の既存 helper を再利用する |
 | 既存 `/elements` ページに余計な fetch を追加する | モーダル表示が遅くなり、エラー状態が増える | 本タスクではページ・モーダルを変更しない |
 | docs 更新漏れ | 実装者・レビュアーが仕様を追えない | T10 / T12 で `docs/04_api.md`、`docs/05_progress.md`、本計画書を更新する |
+
+## 実装完了
+
+- 完了日: 2026-06-06
+- 実装ブランチ: feature/elements-detail-api
+
+### 計画からの変更点
+
+- `getElement()` の HTTP エラーテストは、同じ `Response` body を複数回読まないよう、1 回の呼び出しで `status` と `message` を検証する形に調整した。
+- 画面 DOM の変更は行っていないため、A11Y は既存 `/elements` 画面の回帰確認対象として扱った。
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `backend/src/lib/elements/detail.ts` | 新規 | `GET /elements/:id` の path param schema と ID 正規化を追加 |
+| `backend/src/lib/elements/detail.test.ts` | 新規 | ID param の正規化・範囲検証テストを追加 |
+| `backend/src/routes/elements/index.ts` | 修正 | `GET /:id` を追加し、findUnique / 404 / 500 を実装 |
+| `backend/src/routes/elements/element-detail.test.ts` | 新規 | `GET /elements/:id` の route テストを追加 |
+| `frontend/src/lib/api/elements.ts` | 修正 | `getElement(id, options?)` と単数レスポンス検証を追加 |
+| `frontend/src/lib/api/elements.test.ts` | 修正 | `getElement()` の URL、AbortSignal、HTTP エラー、形式不正テストを追加 |
+| `docs/04_api.md` | 修正 | `GET /elements/:id` の詳細仕様・ステータスコード・レスポンス例を追記 |
+| `docs/05_progress.md` | 修正 | `GET /elements/:id` を完了に更新 |
+| `docs/plans/elements-detail-api/plan.md` | 修正 | タスクリスト完了化と実装完了セクションを追記 |
+
+### 確認結果
+
+| 確認 | 結果 |
+|---|---|
+| Red: `backend/src/lib/elements/detail.test.ts` | 実装前に `detail.js` 未存在で失敗 |
+| Red: `backend/src/routes/elements/element-detail.test.ts` | 実装前に 404 で失敗 |
+| Green: backend 対象テスト | `detail.test.ts` 4 tests、`element-detail.test.ts` 6 tests、既存 `elements.test.ts` 9 tests passed |
+| Red: `frontend/src/lib/api/elements.test.ts` | 実装前に `getElement is not a function` で失敗 |
+| Green: frontend 対象テスト | `elements.test.ts` 25 tests passed |
+| backend lint | `npm run lint` passed |
+| backend format check | `npm run format:check` passed |
+| backend test | `npm run test -- --run` 19 files / 149 tests passed |
+| frontend lint | `npm run lint` passed |
+| frontend check | `npm run check` 0 errors / 0 warnings |
+| frontend test | `npm run test:run` 11 files / 142 tests passed |
+| 手動確認: `GET /api/v1/elements/1` | 200 OK / `{ element: ... }` |
+| 手動確認: `GET /api/v1/elements/119` | 400 Bad Request / バリデーションエラー |
+| 手動確認: `GET /api/v1/elements/abc` | 400 Bad Request / バリデーションエラー |
+| DB 変更 | なし。migration / Prisma generate 不要 |
