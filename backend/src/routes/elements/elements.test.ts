@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { sign } from "hono/jwt";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getElementIdsMatchingKeyword } from "../../lib/elements/search.js";
 import type { AppVariables } from "../../types/index.js";
 
 vi.mock("../../lib/prisma.js", () => ({
@@ -198,6 +199,169 @@ describe("GET /elements", () => {
         answers: {
           where: {
             elementId: { in: [1, 2] },
+          },
+          select: {
+            elementId: true,
+            isCorrect: true,
+          },
+        },
+      },
+    });
+  });
+
+  it("q で番号・記号・日本語名・英語名の OR 検索を行う", async () => {
+    vi.mocked(prisma.element.findMany).mockResolvedValue([
+      {
+        id: 1,
+        symbol: "H",
+        nameJa: "水素",
+        nameEn: "Hydrogen",
+        category: "非金属",
+        period: 1,
+        group: 1,
+        atomicWeight: 1.008,
+        etymology: "由来",
+      },
+    ]);
+
+    const res = await app.request("/elements?q=1", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    expect(prisma.element.findMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { id: { in: getElementIdsMatchingKeyword("1") } },
+          { symbol: { contains: "1", mode: "insensitive" } },
+          { nameJa: { contains: "1" } },
+          { nameEn: { contains: "1", mode: "insensitive" } },
+        ],
+      },
+      orderBy: { id: "asc" },
+    });
+  });
+
+  it("category と period で完全一致検索を行う", async () => {
+    vi.mocked(prisma.element.findMany).mockResolvedValue([
+      {
+        id: 6,
+        symbol: "C",
+        nameJa: "炭素",
+        nameEn: "Carbon",
+        category: "非金属",
+        period: 2,
+        group: 14,
+        atomicWeight: 12.011,
+        etymology: null,
+      },
+    ]);
+
+    const params = new URLSearchParams({
+      category: "非金属",
+      period: "2",
+    });
+    const res = await app.request(`/elements?${params.toString()}`, { method: "GET" });
+
+    expect(res.status).toBe(200);
+    expect(prisma.element.findMany).toHaveBeenCalledWith({
+      where: {
+        category: "非金属",
+        period: 2,
+      },
+      orderBy: { id: "asc" },
+    });
+  });
+
+  it("q/category/period を組み合わせて検索する", async () => {
+    vi.mocked(prisma.element.findMany).mockResolvedValue([
+      {
+        id: 6,
+        symbol: "C",
+        nameJa: "炭素",
+        nameEn: "Carbon",
+        category: "非金属",
+        period: 2,
+        group: 14,
+        atomicWeight: 12.011,
+        etymology: null,
+      },
+    ]);
+
+    const params = new URLSearchParams({
+      q: " 炭 ",
+      category: " 非金属 ",
+      period: "2",
+    });
+    const res = await app.request(`/elements?${params.toString()}`, { method: "GET" });
+
+    expect(res.status).toBe(200);
+    expect(prisma.element.findMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { symbol: { contains: "炭", mode: "insensitive" } },
+          { nameJa: { contains: "炭" } },
+          { nameEn: { contains: "炭", mode: "insensitive" } },
+        ],
+        category: "非金属",
+        period: 2,
+      },
+      orderBy: { id: "asc" },
+    });
+  });
+
+  it("不正な period は400を返しDBを参照しない", async () => {
+    const res = await app.request("/elements?period=8", { method: "GET" });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body).toMatchObject({ error: "バリデーションエラー" });
+    expect(body.details).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: "周期は1から7の整数で指定してください",
+        }),
+      ]),
+    );
+    expect(prisma.element.findMany).not.toHaveBeenCalled();
+  });
+
+  it("ログイン時は検索結果の元素IDだけを習得状態集計に渡す", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(mockActiveUser as never);
+    vi.mocked(prisma.element.findMany).mockResolvedValue([
+      {
+        id: 6,
+        symbol: "C",
+        nameJa: "炭素",
+        nameEn: "Carbon",
+        category: "非金属",
+        period: 2,
+        group: 14,
+        atomicWeight: 12.011,
+        etymology: null,
+      },
+    ]);
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([] as never);
+
+    const token = await createToken();
+    const params = new URLSearchParams({
+      q: "炭",
+      category: "非金属",
+      period: "2",
+    });
+    const res = await app.request(`/elements?${params.toString()}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    expect(prisma.gameSession.findMany).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      orderBy: [{ playedAt: "desc" }, { id: "desc" }],
+      skip: 0,
+      take: 50,
+      select: {
+        answers: {
+          where: {
+            elementId: { in: [6] },
           },
           select: {
             elementId: true,
