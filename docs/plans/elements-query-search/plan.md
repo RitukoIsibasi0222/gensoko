@@ -357,20 +357,20 @@ type Props = {
 | T13 | frontend 品質チェックを実行する | `frontend/` | `npm run lint` / `npm run format` / `npm run check` / `npm run test:run` が通る | 高 |
 | T14 | 手動確認を行う | ブラウザ / API | `/elements?q=H`, category, period, 複合検索、ログイン時 badge、リセット、エラー導線、キーボード操作を確認する | 高 |
 
-- [ ] T1: 進捗を実装中に更新する（`docs/05_progress.md`）
-- [ ] T2: backend 検索 helper の Red テストを作成する（`backend/src/lib/elements/search.test.ts`）
-- [ ] T3: backend 検索 helper を実装する（`backend/src/lib/elements/search.ts`）
-- [ ] T4: `GET /elements` route の Red テストを追加する（`backend/src/routes/elements/elements.test.ts`）
-- [ ] T5: `GET /elements` に query validation と Prisma where を接続する（`backend/src/routes/elements/index.ts`）
-- [ ] T6: frontend API client の Red テストを追加する（`frontend/src/lib/api/elements.test.ts`）
-- [ ] T7: `getElements` を filters / signal 対応にする（`frontend/src/lib/api/elements.ts`）
-- [ ] T8: 検索 UI の件数表示と検索中状態を調整する（`frontend/src/lib/components/elements/ElementSearchFilters.svelte`）
-- [ ] T9: `/elements` 画面を query 付き API 呼び出しへ接続する（`frontend/src/routes/(app)/elements/+page.svelte`）
-- [ ] T10: API 仕様と進捗を更新する（`docs/04_api.md`, `docs/05_progress.md`）
-- [ ] T11: 計画書を実装実態に合わせて更新する（`docs/plans/elements-query-search/plan.md`）
-- [ ] T12: backend 品質チェックを実行する（`backend/`）
-- [ ] T13: frontend 品質チェックを実行する（`frontend/`）
-- [ ] T14: 手動確認を行う（ブラウザ / API）
+- [x] T1: 進捗を実装中に更新する（`docs/05_progress.md`）
+- [x] T2: backend 検索 helper の Red テストを作成する（`backend/src/lib/elements/search.test.ts`）
+- [x] T3: backend 検索 helper を実装する（`backend/src/lib/elements/search.ts`）
+- [x] T4: `GET /elements` route の Red テストを追加する（`backend/src/routes/elements/elements.test.ts`）
+- [x] T5: `GET /elements` に query validation と Prisma where を接続する（`backend/src/routes/elements/index.ts`）
+- [x] T6: frontend API client の Red テストを追加する（`frontend/src/lib/api/elements.test.ts`）
+- [x] T7: `getElements` を filters / signal 対応にする（`frontend/src/lib/api/elements.ts`）
+- [x] T8: 検索 UI の件数表示と検索中状態を調整する（`frontend/src/lib/components/elements/ElementSearchFilters.svelte`）
+- [x] T9: `/elements` 画面を query 付き API 呼び出しへ接続する（`frontend/src/routes/(app)/elements/+page.svelte`）
+- [x] T10: API 仕様と進捗を更新する（`docs/04_api.md`, `docs/05_progress.md`）
+- [x] T11: 計画書を実装実態に合わせて更新する（`docs/plans/elements-query-search/plan.md`）
+- [x] T12: backend 品質チェックを実行する（`backend/`）
+- [x] T13: frontend 品質チェックを実行する（`frontend/`）
+- [x] T14: 手動確認を行う（ブラウザ / API）
 
 ## 技術的注意点
 
@@ -521,3 +521,58 @@ type Props = {
 - 検索後の詳細モーダル
 - キーボード操作と `aria-live` の確認
 ```
+
+## 実装完了
+- 完了日: 2026-06-06
+- 実装ブランチ: feature/phase5-elements-query-search
+- PR: 未作成
+
+### 計画からの変更点
+- 手動 A11Y 確認でキーワード入力欄の Enter 検索が反映されないことを確認したため、`ElementSearchFilters.svelte` に Enter キー用 handler を追加した。
+- `applyCurrentFilters()` を追加し、検索ボタンと Enter キーで同じ正規化済み条件を使うようにした。
+- DB スキーマ変更は不要だったため、migration / Prisma migrate deploy は実施していない。
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `backend/src/lib/elements/search.ts` | 新規 | GET /elements query schema、period 検証、番号検索 ID 候補生成、Prisma where 生成 |
+| `backend/src/lib/elements/search.test.ts` | 新規 | query helper の Red/Green テスト |
+| `backend/src/routes/elements/index.ts` | 修正 | `zValidator("query", ...)` と Prisma where を GET /elements に接続 |
+| `backend/src/routes/elements/elements.test.ts` | 修正 | q/category/period 検索、400、検索結果 ID の `masteryStatus` 集計テストを追加 |
+| `frontend/src/lib/api/elements.ts` | 修正 | `filters` / `signal` 対応と query string 生成 |
+| `frontend/src/lib/api/elements.test.ts` | 修正 | filters、Authorization 併用、AbortSignal のテストを追加 |
+| `frontend/src/lib/components/elements/ElementSearchFilters.svelte` | 修正 | 件数表示、検索中状態、Enter キー検索を追加 |
+| `frontend/src/routes/(app)/elements/+page.svelte` | 修正 | URL query 基準の server-side filtering、request abort、`aria-busy` を追加 |
+| `docs/04_api.md` | 修正 | GET /elements の検索仕様と 400 を明記 |
+| `docs/05_progress.md` | 修正 | フェーズ5タスクを完了に更新 |
+| `docs/plans/elements-query-search/plan.md` | 修正 | タスク完了チェックと実装完了記録を更新 |
+
+### 実行した確認
+- `cd backend && npm run test -- src/lib/elements/search.test.ts --run`（Red: `./search.js` 未作成）
+- `cd backend && npm run test -- src/lib/elements/search.test.ts --run`（Green: 11 tests passed）
+- `cd backend && npm run test -- src/routes/elements/elements.test.ts --run`（Red: query 未接続で 4 tests failed）
+- `cd backend && npm run test -- src/routes/elements/elements.test.ts --run`（Green: 9 tests passed）
+- `cd backend && npm run test -- src/lib/elements/search.test.ts src/routes/elements/elements.test.ts --run`（20 tests passed）
+- `cd frontend && npm run test:run -- src/lib/api/elements.test.ts`（Red: 3 tests failed）
+- `cd frontend && npm run test:run -- src/lib/api/elements.test.ts`（Green: 17 tests passed）
+- `cd frontend && npm run test:run -- src/lib/api/elements.test.ts src/lib/elements/search-filter.test.ts`（39 tests passed）
+- `cd backend && npm run format`
+- `cd frontend && npm run format`
+- `cd backend && npm run lint`
+- `cd backend && npm run format:check`
+- `cd frontend && npm run lint`
+- `cd frontend && npm run check`
+- `cd backend && npm run test -- --run`（17 files / 139 tests passed）
+- `cd frontend && npm run test:run`（11 files / 134 tests passed）
+- Enter キー対応後の再確認: `cd frontend && npm run format`, `npm run lint`, `npm run check`, `npm run test:run`（11 files / 134 tests passed）
+
+### 手動確認
+- `/elements` 初期表示で 118 件表示されることを確認
+- キーワード `炭` の検索ボタン操作で `/elements?q=炭` になり 1 件表示されることを確認
+- キーワード `酸` の Enter 操作で `/elements?q=酸` になり 1 件表示されることを確認
+- 分類 `希ガス` で 7 件表示され、`category` query が付くことを確認
+- 分類 `希ガス` + 周期 `1` で 1 件表示され、`period` query が付くことを確認
+- キーワード `He` + 分類 `希ガス` + 周期 `1` の複合条件で 1 件表示されることを確認
+- リセットで `/elements` に戻り 118 件表示されることを確認
+- 検索後の元素カードから詳細モーダルが開くことを確認
+- ブラウザの error log が空であることを確認

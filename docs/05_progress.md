@@ -92,9 +92,9 @@
 
 > フェーズ4 の疎通確認で確定したインターフェースを実装する。
 
-- [ ] GET /elements（keyword・category・period 検索） — 計画書: [`docs/plans/elements-query-search/plan.md`](plans/elements-query-search/plan.md)
+- [x] GET /elements（keyword・category・period 検索） — 計画書: [`docs/plans/elements-query-search/plan.md`](plans/elements-query-search/plan.md)
 - [ ] GET /elements/:id
-- [ ] `GET /elements` のテスト
+- [x] `GET /elements` のテスト
 
 ## フェーズ6: UI モック（ゲーム）
 

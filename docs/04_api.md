@@ -77,9 +77,18 @@ Headers:
   Authorization: "Bearer <accessToken>"  // 任意。ログイン時のみ指定し、習得状態を付与
 
 Query params:
-  category?: string   // 分類フィルター
-  period?:   number   // 周期フィルター
+  category?: string   // 分類フィルター（trim 後に完全一致）
+  period?:   number   // 周期フィルター（1〜7 の整数）
   q?:        string   // キーワード検索（番号・記号・日本語名・英語名）
+
+Search behavior:
+  - q / category / period は AND 条件で組み合わせる
+  - q の内部では id / symbol / nameJa / nameEn を OR 条件で検索する
+  - id は文字列化した原子番号の部分一致（例: q=1 で 1, 10-19, 100-118 等）
+  - symbol / nameEn は大文字小文字を区別しない部分一致
+  - nameJa は日本語文字列の部分一致
+  - category は完全一致。不明な分類は 400 ではなく 0 件
+  - period が 1〜7 の整数でない場合は 400
 
 Response 200:
 {
@@ -106,6 +115,7 @@ masteryStatus:
   "mastered"   // 習得: 直近2回連続正解
 
 Error:
+400 バリデーションエラー（period が 1〜7 の整数でない等）
 401 Authorization ヘッダー形式不正・トークン無効
 500 サーバーエラー
 ```
