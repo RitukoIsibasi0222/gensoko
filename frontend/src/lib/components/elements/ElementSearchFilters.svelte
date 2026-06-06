@@ -56,7 +56,7 @@
   }
 
   function handleKeywordKeydown(event: KeyboardEvent): void {
-    if (event.key !== 'Enter') {
+    if (event.key !== 'Enter' || event.isComposing) {
       return;
     }
 
