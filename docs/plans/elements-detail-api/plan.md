@@ -442,6 +442,7 @@ return c.json({ error: "バリデーションエラー", details: result.error.i
 
 - 完了日: 2026-06-06
 - 実装ブランチ: feature/elements-detail-api
+- PR: #45
 
 ### 計画からの変更点
 
