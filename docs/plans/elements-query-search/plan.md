@@ -525,7 +525,7 @@ type Props = {
 ## 実装完了
 - 完了日: 2026-06-06
 - 実装ブランチ: feature/phase5-elements-query-search
-- PR: 未作成
+- PR: #44
 
 ### 計画からの変更点
 - 手動 A11Y 確認でキーワード入力欄の Enter 検索が反映されないことを確認したため、`ElementSearchFilters.svelte` に Enter キー用 handler を追加した。
