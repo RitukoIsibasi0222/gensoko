@@ -10,12 +10,12 @@ export const elementsRouter = new Hono<{ Variables: AppVariables }>();
 
 elementsRouter.get(
   "/",
-  optionalAuthMiddleware,
   zValidator("query", elementSearchQuerySchema, (result, c) => {
     if (!result.success) {
       return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
     }
   }),
+  optionalAuthMiddleware,
   async (c) => {
     const query = c.req.valid("query");
     const where = buildElementWhereInput(query);
