@@ -8,20 +8,33 @@ type ElementsResponse = {
   elements: Element[];
 };
 
+type ElementResponse = {
+  element: Element;
+};
+
 export type GetElementsOptions = {
   accessToken?: string | null;
   filters?: ElementSearchFilterInput;
   signal?: AbortSignal;
 };
 
-type GetElementsFetchOptions = {
+export type GetElementOptions = {
+  signal?: AbortSignal;
+};
+
+type BaseElementFetchOptions = {
   method: 'GET';
   credentials: 'include';
+  signal?: AbortSignal;
+};
+
+type GetElementsFetchOptions = BaseElementFetchOptions & {
   headers?: {
     Authorization: string;
   };
-  signal?: AbortSignal;
 };
+
+type GetElementFetchOptions = BaseElementFetchOptions;
 
 function isElementMasteryStatus(value: unknown): value is ElementMasteryStatus {
   return value === 'unlearned' || value === 'learning' || value === 'mastered';
@@ -62,6 +75,14 @@ function isElementsResponse(value: unknown): value is ElementsResponse {
   return elements.every((item: unknown) => isElement(item));
 }
 
+function isElementResponse(value: unknown): value is ElementResponse {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+
+  return isElement((value as { element?: unknown }).element);
+}
+
 function buildElementsUrl(filters: ElementSearchFilterInput | undefined): string {
   const baseUrl = `${API_BASE_URL}/elements`;
   if (filters === undefined) {
@@ -71,6 +92,10 @@ function buildElementsUrl(filters: ElementSearchFilterInput | undefined): string
   const searchParams = toElementSearchParams(normalizeElementSearchFilters(filters));
   const query = searchParams.toString();
   return query === '' ? baseUrl : `${baseUrl}?${query}`;
+}
+
+function buildElementUrl(id: number): string {
+  return `${API_BASE_URL}/elements/${id}`;
 }
 
 export async function getElements(options: GetElementsOptions = {}): Promise<Element[]> {
@@ -101,4 +126,28 @@ export async function getElements(options: GetElementsOptions = {}): Promise<Ele
   }
 
   return data.elements;
+}
+
+export async function getElement(id: number, options: GetElementOptions = {}): Promise<Element> {
+  const fetchOptions: GetElementFetchOptions = {
+    method: 'GET',
+    credentials: 'include'
+  };
+
+  if (options.signal) {
+    fetchOptions.signal = options.signal;
+  }
+
+  const response = await fetch(buildElementUrl(id), fetchOptions);
+
+  if (!response.ok) {
+    await parseErrorResponse(response, '元素詳細の取得に失敗しました');
+  }
+
+  const data = (await response.json()) as unknown;
+  if (!isElementResponse(data)) {
+    throw new ApiError(500, '元素詳細のレスポンス形式が不正です', data);
+  }
+
+  return data.element;
 }

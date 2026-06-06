@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { isDecimalIntegerString } from "./number.js";
 
 export type ElementSearchQuery = {
   q?: string;
@@ -90,7 +91,7 @@ export const elementSearchQuerySchema = z
   });
 
 export function getElementIdsMatchingKeyword(keyword: string): number[] {
-  if (!/^\d+$/.test(keyword)) {
+  if (!isDecimalIntegerString(keyword)) {
     return [];
   }
 

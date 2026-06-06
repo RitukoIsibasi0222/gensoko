@@ -120,6 +120,32 @@ Error:
 500 サーバーエラー
 ```
 
+### GET `/elements/:id`
+```
+Path params:
+  id: number  // 元素ID（1〜118 の10進整数）
+
+Response 200:
+{
+  "element": {
+    "id": 1,
+    "symbol": "H",
+    "nameJa": "水素",
+    "nameEn": "Hydrogen",
+    "category": "非金属",
+    "period": 1,
+    "group": 1,
+    "atomicWeight": 1.008,
+    "etymology": "ラテン語 hydrogenium に由来"
+  }
+}
+
+Error:
+400 バリデーションエラー（id が 1〜118 の10進整数でない）
+404 元素が見つからない
+500 サーバーエラー
+```
+
 ---
 
 ## ゲーム `/api/v1/game`
