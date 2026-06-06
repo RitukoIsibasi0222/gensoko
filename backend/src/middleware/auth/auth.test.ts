@@ -256,6 +256,63 @@ describe("optionalAuthMiddleware", () => {
     expect(body.userId).toBe("user-1");
   });
 
+  it("isActive=false のユーザーは匿名扱いで通過する", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      ...mockActiveUser,
+      isActive: false,
+    } as never);
+
+    const app = createOptionalApp();
+    const token = await createToken();
+
+    const res = await app.request("/public", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.loggedIn).toBe(false);
+    expect(body.userId).toBeNull();
+  });
+
+  it("emailVerified=false のユーザーは匿名扱いで通過する", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      ...mockActiveUser,
+      emailVerified: false,
+    } as never);
+
+    const app = createOptionalApp();
+    const token = await createToken();
+
+    const res = await app.request("/public", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.loggedIn).toBe(false);
+    expect(body.userId).toBeNull();
+  });
+
+  it("lockedUntil が未来のユーザーは匿名扱いで通過する", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      ...mockActiveUser,
+      lockedUntil: new Date(Date.now() + 60_000),
+    } as never);
+
+    const app = createOptionalApp();
+    const token = await createToken();
+
+    const res = await app.request("/public", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.loggedIn).toBe(false);
+    expect(body.userId).toBeNull();
+  });
+
   it("トークンが不正な場合は 401 を返す", async () => {
     const app = createOptionalApp();
     const res = await app.request("/public", {

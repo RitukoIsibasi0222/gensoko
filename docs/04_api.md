@@ -68,11 +68,14 @@ Error:
 
 | メソッド | パス | 説明 | 認証 |
 |---------|------|------|------|
-| GET | `/elements` | 元素一覧取得 | なし |
+| GET | `/elements` | 元素一覧取得 | 任意 |
 | GET | `/elements/:id` | 元素詳細取得 | なし |
 
 ### GET `/elements`
 ```
+Headers:
+  Authorization: "Bearer <accessToken>"  // 任意。ログイン時のみ指定し、習得状態を付与
+
 Query params:
   category?: string   // 分類フィルター
   period?:   number   // 周期フィルター
@@ -89,11 +92,22 @@ Response 200:
       "category": "非金属",
       "period": 1,
       "group": 1,
-      "atomicWeight": 1.008
+      "atomicWeight": 1.008,
+      "etymology": "ラテン語 hydrogenium に由来",
+      "masteryStatus": "mastered"  // ログイン時のみ付与
     },
     ...
   ]
 }
+
+masteryStatus:
+  "unlearned"  // 未学習: 回答履歴なし
+  "learning"   // 学習中: 回答履歴あり、直近2回連続正解ではない
+  "mastered"   // 習得: 直近2回連続正解
+
+Error:
+401 Authorization ヘッダー形式不正・トークン無効
+500 サーバーエラー
 ```
 
 ---

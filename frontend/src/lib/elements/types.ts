@@ -1,3 +1,5 @@
+export type ElementMasteryStatus = 'unlearned' | 'learning' | 'mastered';
+
 export type Element = {
   id: number;
   symbol: string;
@@ -8,4 +10,5 @@ export type Element = {
   group: number | null;
   atomicWeight: number | null;
   etymology: string | null;
+  masteryStatus?: ElementMasteryStatus;
 };

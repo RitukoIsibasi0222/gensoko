@@ -121,7 +121,8 @@ export const optionalAuthMiddleware: MiddlewareHandler<{
   });
 
   // ユーザーが有効な場合のみセット（無効なら未セットのまま通す）
-  if (user?.isActive && user.emailVerified) {
+  const isUnlocked = !user?.lockedUntil || user.lockedUntil <= new Date();
+  if (user?.isActive && user.emailVerified && isUnlocked) {
     c.set("user", { id: user.id, role: user.role });
   }
 
