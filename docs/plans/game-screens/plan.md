@@ -364,21 +364,21 @@ type Props = {
 | T14 | 手動確認を実施する | ブラウザ | PC / モバイルで `/game` のログイン中・未ログイン・苦手 4 件・苦手 5 件相当表示を確認する | 高 |
 | T15 | 進捗・計画書を実装完了へ更新する | `docs/05_progress.md`, `docs/plans/game-screens/plan.md` | `/game` タスクが `[x]` になり、plan.md に実装完了セクションと実際の変更ファイルが追記される | 中 |
 
-- [ ] T1: 既存仕様・既存実装を確認する
-- [ ] T2: 進捗を実装中へ更新する
-- [ ] T3: ゲーム定数・型定義を追加する
-- [ ] T4: モード設定・苦手ガード判定を実装する
-- [ ] T5: ガード判定のユニットテストを作成する
-- [ ] T6: モードカード component を実装する
-- [ ] T7: `/game` page を実装する
-- [ ] T8: 開始操作の多重実行・未実装画面への扱いを整理する
-- [ ] T9: ローディング・空状態・エラー状態を確認する
-- [ ] T10: frontend lint を実行する
-- [ ] T11: frontend format を実行する
-- [ ] T12: frontend test を実行する
-- [ ] T13: frontend check を実行する
-- [ ] T14: 手動確認を実施する
-- [ ] T15: 進捗・計画書を実装完了へ更新する
+- [x] T1: 既存仕様・既存実装を確認する
+- [x] T2: 進捗を実装中へ更新する
+- [x] T3: ゲーム定数・型定義を追加する
+- [x] T4: モード設定・苦手ガード判定を実装する
+- [x] T5: ガード判定のユニットテストを作成する
+- [x] T6: モードカード component を実装する
+- [x] T7: `/game` page を実装する
+- [x] T8: 開始操作の多重実行・未実装画面への扱いを整理する
+- [x] T9: ローディング・空状態・エラー状態を確認する
+- [x] T10: frontend lint を実行する
+- [x] T11: frontend format を実行する
+- [x] T12: frontend test を実行する
+- [x] T13: frontend check を実行する
+- [x] T14: 手動確認を実施する
+- [x] T15: 進捗・計画書を実装完了へ更新する
 
 ## 技術的注意点
 
@@ -532,3 +532,50 @@ type Props = {
 | PC 幅 | OK |
 | モバイル幅 390px | OK |
 ```
+
+## 実装完了
+
+- 完了日: 2026-06-12
+- 実装ブランチ: `feature/game-mode-select`
+- PR: 未作成
+
+### 計画からの変更点
+
+- `GameModeCard.svelte` のルート要素は当初 `article` で実装したが、外側が `ul > li` のモード選択リストであり、カード自体は独立記事ではなくリスト項目内の表示コンテナであるため `div` に変更した。
+- `/game/play` は未実装のため、開始ボタン押下時は遷移せず toast で「プレイ画面は後続タスクで実装します。」と表示する UI モックにした。
+- `onStart` の関数型は Svelte ファイル内で `no-unused-vars` に検出されたため、`GameModeStartHandler` として `frontend/src/lib/game/types.ts` に切り出した。
+- backend game / weak API は未実装・未 mount のため、計画どおり live fetch は行っていない。
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `frontend/src/lib/game/constants.ts` | 新規 | 苦手ガード定数 `MIN_WEAK_ELEMENTS_FOR_GAME` を追加 |
+| `frontend/src/lib/game/types.ts` | 新規 | `GameMode`、`GameModeConfig`、`GameModeStartAvailability`、`GameModeStartHandler` を追加 |
+| `frontend/src/lib/game/modes.ts` | 新規 | 6 モード定義、苦手モード判定、開始可否判定、ガード文言生成を追加 |
+| `frontend/src/lib/game/modes.test.ts` | 新規 | モード定義・苦手 5 件境界・ガード文言のユニットテストを追加 |
+| `frontend/src/lib/components/game/GameModeCard.svelte` | 新規 | モードカード、ログイン導線、開始ボタン、disabled 理由表示を追加 |
+| `frontend/src/routes/(app)/game/+page.svelte` | 修正 | `/game` スタブをモード選択画面へ置換 |
+| `frontend/src/routes/(app)/game/+page.ts` | 新規 | `ssr = true`, `prerender = false` を明示 |
+| `docs/05_progress.md` | 修正 | `/game` タスクを実装中、完了へ更新 |
+| `docs/plans/game-screens/plan.md` | 修正 | タスク完了チェックと実装完了記録を追記 |
+
+### 品質チェック
+
+| コマンド | 結果 |
+|---|---|
+| `cd frontend && npm run lint` | OK |
+| `cd frontend && npm run format` | OK |
+| `cd frontend && npm run test:run` | OK（12 files / 157 tests） |
+| `cd frontend && npm run check` | OK（0 errors / 0 warnings） |
+
+### 手動確認
+
+| 条件 | 結果 |
+|---|---|
+| 未ログイン `/game` | OK: 6 モード表示、ログイン導線 6 件 |
+| PC 幅 `/game` | OK: 見出し、モード一覧、コンソールエラーなし |
+| モバイル幅 390px | OK: 6 カード表示、横はみ出し検出なし |
+| 苦手 4 件相当 | OK: `modes.test.ts` で開始不可・ガード文言を確認。UI は preview 値 4 件で苦手モード disabled 表示 |
+| ログイン済み `/game` | 未確認: 手動確認時にログインセッションなし。`authStore.isLoggedIn` 分岐は実装済み |
+| 苦手 5 件相当 | 未確認: backend weak API 未実装のため実データ確認なし。`modes.test.ts` で開始可能境界を確認 |
