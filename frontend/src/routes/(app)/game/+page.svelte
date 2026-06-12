@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import GameModeCard from '$lib/components/game/GameModeCard.svelte';
+  import { MIN_WEAK_ELEMENTS_FOR_GAME } from '$lib/game/constants';
   import { GAME_MODE_CONFIGS } from '$lib/game/modes';
   import type { GameMode } from '$lib/game/types';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
 
-  const PREVIEW_WEAK_ELEMENT_COUNT = 4;
+  const PREVIEW_WEAK_ELEMENT_COUNT = MIN_WEAK_ELEMENTS_FOR_GAME - 1;
   const START_NOTICE_RESET_MS = 1200;
 
   let startingMode = $state<GameMode | null>(null);
@@ -63,7 +64,7 @@
         <div>
           <h2 id="game-mode-list-heading" class="text-lg font-bold text-gray-900">モードを選択</h2>
           <p class="mt-1 text-sm text-gray-600">
-            苦手モードは苦手元素が5件以上になると開始できます。
+            苦手モードは苦手元素が{MIN_WEAK_ELEMENTS_FOR_GAME}件以上になると開始できます。
           </p>
         </div>
         {#if authStore.isLoggedIn}
@@ -78,7 +79,7 @@
               {config}
               isLoggedIn={authStore.isLoggedIn}
               weakCount={PREVIEW_WEAK_ELEMENT_COUNT}
-              isStarting={startingMode === config.mode}
+              isStarting={startingMode !== null}
               onStart={handleStart}
             />
           </li>
