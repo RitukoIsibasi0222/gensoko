@@ -1,0 +1,1 @@
+export const MIN_WEAK_ELEMENTS_FOR_GAME = 5;

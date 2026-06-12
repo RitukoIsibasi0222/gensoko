@@ -101,7 +101,7 @@
 > 目的: ゲームの UX をモックで確認し、ゲーム系 API のインターフェースを決定する。
 
 ### 画面
-- [ ] ゲームモード選択画面 `/game`（モード一覧・苦手5問未満ガード表示） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
+- [x] ゲームモード選択画面 `/game`（モード一覧・苦手5問未満ガード表示） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 - [ ] ゲームプレイ画面 `/game/play`（インジケーター・15秒タイマー・4択・正誤フィードバック・1〜4キー操作） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 - [ ] ゲーム結果画面 `/game/result`（スコア・連続正解・間違え一覧・「もう一度」「ホームへ」） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 
