@@ -1,68 +1,62 @@
-# ゲーム画面（/game・/game/play・/game/result）実装計画
+# ゲームモード選択画面 `/game` 実装計画
 
-> 設計者ロール: シニアフロントエンドエンジニア（SvelteKit v2 / Svelte 5 Runes、ゲーム UX・API 連携設計）
+> 設計者ロール: シニアフロントエンドエンジニア（SvelteKit v2 / Svelte 5 Runes、ゲーム UX・状態設計）
+> 対象実装者: Codex
 
 ## 概要
 
-`docs/05_progress.md` フェーズ6「UI モック（ゲーム）」として、ゲームモード選択画面 `/game`、ゲームプレイ画面 `/game/play`、ゲーム結果画面 `/game/result` を作成する。
+`docs/05_progress.md` フェーズ6「UI モック（ゲーム）」のうち、ゲームモード選択画面 `/game`（モード一覧・苦手5問未満ガード表示）を実装する。
 
-現状の `backend/src/routes/game/index.ts`、`backend/src/services/game.service.ts`、`backend/src/routes/weak/index.ts`、`backend/src/services/weak.service.ts` は TODO であり、game / weak ルーターも `backend/src/index.ts` に未 mount である。そのため本タスクでは **フロントエンドの UI モックと、将来 API 連携に向けた型・状態設計** を実装範囲にする。バックエンド実装・DB 書き込み・実データ取得はフェーズ7以降に分離する。
+現状、`backend/src/routes/game/index.ts`、`backend/src/services/game.service.ts`、`backend/src/routes/weak/index.ts`、`backend/src/services/weak.service.ts` は TODO であり、`backend/src/index.ts` に game / weak ルーターも mount されていない。そのため本タスクでは **フロントエンドのモード選択 UI と、将来 API 連携に接続しやすい型・ガード判定設計** を実装範囲にする。`/game/play`、`/game/result`、backend game / weak API 本実装は別タスクとして扱う。
 
-プレイ画面は 10 問、15 秒タイマー、4 択、回答後フィードバック、1〜4 キー操作を実装する。結果画面はスコア、最大連続正解数、間違え一覧、「もう一度」「ホームへ」を表示する。
+本計画は既存 `docs/plans/game-screens/plan.md` のレビュー改善版であり、既存コード整合性、仕様整合性、A11Y、DB 整合性・負荷、テスト妥当性を実装前に確定する。
 
 ## レビュー結果と改善方針
 
-前回計画をシニアレビュー観点で見直し、以下を改善方針として反映する。
-
 | 観点 | レビュー結果 | 改善方針 |
 |---|---|---|
-| 既存コード整合性 | `game` / `weak` API は未実装・未 mount。live fetch 前提では画面が壊れる | フェーズ6は frontend-only UI モックに限定し、API 連携は型とドキュメント整合までにする |
-| 仕様整合性 | `docs/04_api.md` には `questionSetId` が未反映だが、`05_progress.md` と `schema.prisma` は `GameQuestionSet` 前提 | `docs/04_api.md` を `questionSetId` 前提へ更新する |
-| セキュリティ | 正解情報を API レスポンスに含めない方針と即時正誤フィードバックが衝突する | UI モックのみ内部モック正解を使う。本番 API では Phase7 で回答チェック API またはフィードバック仕様を決める |
-| A11Y | タイマー・正誤フィードバック・キーボード操作はスクリーンリーダーと競合しやすい | `aria-live`、`aria-current`、明示ラベル、focus 管理、reduced motion 配慮をタスクに含める |
-| DB 整合性・負荷 | 問題セット生成や苦手件数取得を UI 実装に混ぜると DB 責務が曖昧になる | フェーズ6では DB に触らない。Phase7 の API は 1 ゲーム 1 questionSet 作成・終了時削除の方針を維持する |
-| テスト | UI 操作が多く、純粋関数なしではテストが脆くなる | スコア・進行・ガード・時間計算を `lib/game` の純粋関数に切り出して Vitest で検証する |
+| 既存コード整合性 | game / weak backend は TODO かつ未 mount。live fetch 前提の `/game` は壊れる | 本タスクでは live fetch しない。UI と純粋関数を先に実装し、将来 API 接続点だけ明記する |
+| 仕様整合性 | `docs/05_progress.md` は `/game`、`/game/play`、`/game/result` を同じ plan に紐づけているが、実装粒度は分ける必要がある | 本計画は `/game` に絞り、後続画面は依存・スコープ外として明記する |
+| API 整合性 | `docs/04_api.md` の game API は `questionSetId` 反映が不十分 | `/game` 実装では API を呼ばない。API 仕様更新は別タスクまたは後続タスクで必須として記録する |
+| セキュリティ | 苦手 5 問未満ガードをフロントだけで完結させると迂回可能 | フロントの disabled は UX 補助に限定し、Phase7 API でも必ず再判定する |
+| A11Y | カード全体クリックや色だけの disabled 表現は操作・理解が難しい | 操作対象は button / link に限定し、disabled 理由をテキストで常時表示する |
+| DB 整合性・負荷 | `/game` 初期表示で `GET /weak` を毎回呼ぶ設計は、未実装 API への依存と将来の不要負荷になる | 今回は DB に触らない。将来接続時は認証後に必要最小限の weak count 取得へ限定する |
+| テスト | UI 表示だけのテストに偏ると、ガード条件の回帰を拾いにくい | `modes.ts` に純粋関数を切り出し、通常/苦手/件数境界をユニットテストする |
 
 ## 前提条件・依存関係
 
 ### 既存の実装（公開インターフェース）
 
 **`docs/05_progress.md`**
-- フェーズ6に以下の未実装タスクがある。
-  - ゲームモード選択画面 `/game`
-  - ゲームプレイ画面 `/game/play`
-  - ゲーム結果画面 `/game/result`
-  - `GET /game/questions` のレスポンス形式（問題・選択肢・questionSetId）決定
-  - `POST /game/sessions` のリクエスト/レスポンス形式決定
-- 設計決定2として、`GET /game/questions` は `GameQuestionSet` を保存し `questionSetId` を返す。
-
-**`docs/04_api.md`**
-- `GET /game/questions`
-  - 認証必須
-  - query: `mode: GameMode`
-  - 現状レスポンス例に `questionSetId` がないため、本計画内で更新する。
-- `POST /game/sessions`
-  - 認証必須
-  - 現状リクエスト例は `mode` を含むが、`docs/05_progress.md` と `docs/12_task_guide.md` は `questionSetId` 受信方式を前提としているため整合修正する。
-- `GET /weak`
-  - 認証必須
-  - 苦手モードの 5 問未満ガード判定に将来利用する。
+- フェーズ6に `ゲームモード選択画面 /game（モード一覧・苦手5問未満ガード表示）` が未実装として存在する。
+- 同じ計画書に `/game/play`、`/game/result`、game API インターフェース確定タスクも紐づいている。
+- 設計決定2として、将来の `GET /game/questions` は `GameQuestionSet` を保存し `questionSetId` を返す。
 
 **`docs/01_features.md`**
-- `GameMode`
+- `GameMode` は以下の 6 種。
   - `SYMBOL_TO_NAME_LV1`: 記号→名前 / 初級 / 1〜20番
   - `SYMBOL_TO_NAME_LV2`: 記号→名前 / 上級 / 21〜118番
   - `NAME_TO_SYMBOL_LV1`: 名前→記号 / 初級 / 1〜20番
   - `NAME_TO_SYMBOL_LV2`: 名前→記号 / 上級 / 21〜118番
   - `WEAK_SYMBOL_TO_NAME`: 記号→名前 / 苦手 / 苦手リストのみ
   - `WEAK_NAME_TO_SYMBOL`: 名前→記号 / 苦手 / 苦手リストのみ
-- 1ゲームは 10 問、15 秒タイムリミット、回答または時間切れ後に 1.5 秒フィードバック。
+- 苦手リストが 5 問未満の場合は苦手ゲーム開始不可。
+
+**`docs/04_api.md`**
+- `GET /game/questions`
+  - 認証必須。
+  - query: `mode: GameMode`
+  - 現状レスポンス例には `questionSetId` がないため、後続の API 仕様確定タスクで整合修正が必要。
+- `GET /weak`
+  - 認証必須。
+  - 将来、苦手モード開始可否の判定に利用する。
 
 **`backend/prisma/schema.prisma`**
-- `GameMode` enum は上記 6 種を定義済み。
+- `GameMode` enum は 6 種定義済み。
 - `GameQuestionSet` は `id`, `userId`, `mode`, `questions`, `expiresAt`, `createdAt` を持つ。
-- `GameSession` は `totalScore`, `correctCount`, `totalCount`, `maxStreak`, `durationSec` を持つ。
+- `GameSession` は `mode`, `totalScore`, `correctCount`, `totalCount`, `maxStreak`, `durationSec` を持つ。
 - `GameAnswer` は `elementId`, `isCorrect`, `answerTimeSec` を持つ。
+- `WeakElement` は `userId`, `elementId`, `missCount`, `consecutiveHit` を持つ。
 
 **`backend/src/routes/game/index.ts`**
 - 現状 `// TODO: implement`。
@@ -82,82 +76,79 @@
 
 **`backend/src/index.ts`**
 - mount 済みルーターは `/api/v1/auth`、`/api/v1/elements`、`/api/v1/users`。
-- game / weak ルーターは未 mount のため、フェーズ6では live fetch をしない。
+- game / weak ルーターは未 mount。
 
-**`frontend/src/lib/api/config.ts`**
-- `API_BASE_URL: string` — API ベース URL を一元管理する。
-- ページ側で `import.meta.env.VITE_API_BASE_URL` を直接読まない。
+**`frontend/src/routes/(app)/game/+page.svelte`**
+- 現状は見出しと「フェーズ6・7で実装予定」のスタブのみ。
+- 本タスクで全文書き換え対象。
 
-**`frontend/src/lib/api/errors.ts`**
-- `class ApiError extends Error`
-- `parseErrorBody(response: Response): Promise<ErrorBody>`
-- `parseErrorResponse(response: Response, defaultMessage?: string): Promise<never>`
-- エラー時は `response.ok` を JSON パース前に確認し、非 JSON レスポンスにも対応する。
+**`frontend/src/routes/(app)/+layout.svelte`**
+- Header / Footer / `main.max-w-5xl` を提供する。
+- `/game` はこの既存レイアウト内で成立するレスポンシブ UI とする。
 
 **`frontend/src/lib/stores/auth.svelte.ts`**
 - `authStore.isInitializing: boolean`
 - `authStore.isLoggedIn: boolean`
 - `authStore.accessToken: string | null`
-- `authStore.logout(): Promise<void>`
-- ゲーム API は認証必須のため、未ログイン時は `/login` へ誘導する。
+- `authStore.user: AuthUser | null`
+- 未ログイン時はゲーム開始ではなく `/login` への誘導を表示する。
 
 **`frontend/src/lib/stores/toast.svelte.ts`**
-- `toastStore.error(message: string): string`
 - `toastStore.warning(message: string): string`
-- `toastStore.success(message: string): string`
+- `toastStore.error(message: string): string`
 - `toastStore.fromApiError(error: ApiError): string`
-- API エラー・ゲーム開始失敗・結果保存失敗時の通知に使う。
+- 未ログイン開始、苦手ガード、将来 API エラー通知で利用可能。
 
-**`frontend/src/routes/(app)/+layout.svelte`**
-- Header / Footer / main コンテナを提供する。
-- ゲーム画面はこの最大幅内で成立するレスポンシブ UI とする。
+**`frontend/src/lib/api/config.ts`**
+- `API_BASE_URL: string`
+- API ベース URL はこのファイルから import する。page / component 内で環境変数を直接読まない。
 
-**`frontend/src/routes/(app)/game/+page.svelte`**
-- 現状スタブ。全文書き換え対象。
+**`frontend/src/lib/api/errors.ts`**
+- `ApiError`
+- `parseErrorBody(response: Response): Promise<ErrorBody>`
+- `parseErrorResponse(response: Response, defaultMessage?: string): Promise<never>`
+- 将来 API 接続時は `response.ok` を JSON パース前に確認し、非 JSON エラーにも対応する。
+
+**`frontend/src/routes/(app)/elements/+page.svelte`**
+- Svelte 5 Runes、`authStore.isInitializing` 待ち、loading / error / empty / success 状態、`toastStore` 利用の参考実装。
+
+**`frontend/src/lib/components/elements/ElementSearchFilters.svelte`**
+- UI 状態を component に分離し、正規化や URL query 責務を helper に寄せる参考実装。
+- 本タスクでは検索・フィルター UI は変更しない。
 
 ### 重要な制約
 
-- 本タスクはフェーズ6の UI モックであり、backend game / weak API 本実装は含めない。
-- ただし API 仕様の不整合を残さないため、`docs/04_api.md` は `questionSetId` 前提に更新する。
-- `GET /game/questions` で正解情報をクライアントに渡さない方針は維持する。
-- 即時の正誤フィードバックは UI 要件と既存 API 仕様が衝突するため、UI モックでは内部モックデータで表現し、Phase7 では追加 API または正誤表示タイミングを確定する。
-- `localStorage` に認証情報やゲーム結果を保存しない。画面間のゲーム状態は `gameStore` のメモリ状態を基本とし、リロード時は `/game` へ戻す。
-- Svelte 5 Runes（`$state`, `$derived`, `$effect`）を使う。`$:` は使わない。
-- タイマー・キーボードイベントは必ず cleanup する。
-- 数値定数（10問、15秒、1.5秒、苦手5問）は `frontend/src/lib/game/constants.ts` に集約する。
-- API エラーメッセージはバックエンドの日本語文言を上書きしない。
-- Tailwind の既存 `brand` / `ink` テーマを優先し、ゲーム画面だけ極端に別配色にしない。
-- 画面内テキスト・ボタンラベルはモバイル幅で折り返してもはみ出さないようにする。
+- 本タスクは `/game` の UI モック範囲に限定する。
+- backend game / weak API の live fetch は行わない。
+- `GET /game/questions` の正解情報をクライアントに渡さない方針は維持する。
+- 苦手 5 問未満ガードは UX 補助であり、将来 API 実装時もサーバー側で必ず再判定する。
+- `localStorage` に認証情報・ゲーム状態・苦手件数を保存しない。
+- Svelte 5 Runes（`$state`, `$derived`, `$effect`, `$props`）を使う。
+- `authStore.isInitializing` 中はログイン状態を確定表示しない。
+- 数値定数（苦手 5 問）は `frontend/src/lib/game/constants.ts` に集約し、UI へ直書きしない。
+- モード定義・ガード判定は `frontend/src/lib/game/modes.ts` に集約し、component / page に重複定義しない。
+- API ベース URL や共通エラー処理を各ファイルで重複定義しない。
+- UI 文言・エラー・ガードメッセージは日本語に統一する。
+- Tailwind の既存 `brand` / `ink` / gray 系のトーンに寄せ、既存画面から極端に浮かないデザインにする。
+- カード内カードを避け、カードは各モードの反復 item に限定する。
+- モバイル幅でボタン文言・説明文がはみ出さないようにする。
+- Prettier `tabWidth: 2` に従う。
 
 ## 対象ファイル一覧
 
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
-| `frontend/src/lib/game/constants.ts` | 新規 | 問題数、制限時間、フィードバック時間、苦手ガード件数などの定数 |
-| `frontend/src/lib/game/types.ts` | 新規 | `GameMode`、question、answer、result、mode config の型 |
-| `frontend/src/lib/game/modes.ts` | 新規 | 6 モードの表示名・説明・難易度・苦手モード判定 |
-| `frontend/src/lib/game/play-state.ts` | 新規 | ゲーム進行、スコア、連続正解、回答時間、結果生成の純粋関数 |
-| `frontend/src/lib/game/play-state.test.ts` | 新規 | 進行ロジック・ガード・結果集計のユニットテスト |
-| `frontend/src/lib/game/mock-questions.ts` | 新規 | UI モック用の固定問題セット（正解情報はこのファイル内に閉じる） |
-| `frontend/src/lib/stores/game.svelte.ts` | 新規 | `/game` → `/game/play` → `/game/result` 間のゲーム状態 store |
-| `frontend/src/lib/components/game/GameModeCard.svelte` | 新規 | モードカード、苦手 5 問未満ガード表示、開始ボタン |
-| `frontend/src/lib/components/game/GameProgressIndicator.svelte` | 新規 | 10 問の進捗インジケーター |
-| `frontend/src/lib/components/game/GameTimerBar.svelte` | 新規 | 15 秒カウントダウン表示 |
-| `frontend/src/lib/components/game/AnswerChoiceButton.svelte` | 新規 | 4 択ボタン、番号表示、選択状態、disabled 状態 |
-| `frontend/src/lib/components/game/GameFeedbackPanel.svelte` | 新規 | 正解・不正解・時間切れフィードバック |
-| `frontend/src/lib/components/game/GameResultSummary.svelte` | 新規 | スコア、正解数、正答率、最大連続正解数 |
-| `frontend/src/lib/components/game/MissedAnswersList.svelte` | 新規 | 間違えた問題一覧 |
-| `frontend/src/routes/(app)/game/+page.svelte` | 修正 | モード一覧、ログイン誘導、苦手 5 問未満ガード |
+| `frontend/src/lib/game/constants.ts` | 新規 | 苦手モード開始に必要な最低件数など、ゲーム画面で使う定数 |
+| `frontend/src/lib/game/types.ts` | 新規 | `GameMode`、モード設定、開始可否結果の型 |
+| `frontend/src/lib/game/modes.ts` | 新規 | 6 モードの表示情報、苦手モード判定、開始可否・ガード文言 |
+| `frontend/src/lib/game/modes.test.ts` | 新規 | モード定義、苦手 5 問未満ガード、文言生成のユニットテスト |
+| `frontend/src/lib/components/game/GameModeCard.svelte` | 新規 | モードカード、開始ボタン、disabled 理由、未ログイン表示 |
+| `frontend/src/routes/(app)/game/+page.svelte` | 修正 | モード一覧、認証状態別 CTA、苦手 5 問未満ガード表示 |
 | `frontend/src/routes/(app)/game/+page.ts` | 新規 | `ssr = true`, `prerender = false` を明示 |
-| `frontend/src/routes/(app)/game/play/+page.svelte` | 新規 | ゲームプレイ画面 |
-| `frontend/src/routes/(app)/game/play/+page.ts` | 新規 | `ssr = false`, `prerender = false` を明示 |
-| `frontend/src/routes/(app)/game/result/+page.svelte` | 新規 | 結果画面 |
-| `frontend/src/routes/(app)/game/result/+page.ts` | 新規 | `ssr = false`, `prerender = false` を明示 |
-| `docs/04_api.md` | 修正 | `questionSetId` 前提の game API 仕様へ整合修正 |
-| `docs/05_progress.md` | 修正 | フェーズ6の該当タスクに本計画書リンクを追記し、実装完了時に完了へ更新 |
-| `docs/plans/game-screens/plan.md` | 新規 | 本計画書 |
+| `docs/05_progress.md` | 修正 | 実装開始時に該当タスクを `[-]`、完了時に `[x]` へ更新 |
+| `docs/plans/game-screens/plan.md` | 修正 | 本タスクのチェックボックス更新、実装完了セクション追記 |
 
-## API仕様（この機能で使う範囲のみ）
+## API 仕様（この機能で使う範囲のみ）
 
 ### エラーレスポンス共通形式
 
@@ -167,14 +158,23 @@
 
 ステータスコード: 400 / 401 / 403 / 404 / 429 / 500 / 502 / 504
 
-### GET `/game/questions`
+### 今回の実装での API 利用
+
+| メソッド | パス | 認証 | 今回の呼び出し | 理由 |
+|---|---|---|---|---|
+| GET | `/api/v1/game/questions?mode=...` | 必須 | 呼び出さない | backend 未実装・未 mount のため |
+| GET | `/api/v1/weak` | 必須 | 呼び出さない | backend 未実装・未 mount のため |
+
+### 将来接続する API
+
+#### GET `/game/questions`
 
 | 項目 | 内容 |
 |---|---|
 | 認証 | 必須 |
 | Query | `mode: GameMode` |
-| 用途 | ゲーム開始時に 10 問と `questionSetId` を取得する |
-| 今回の UI モック | 呼び出さない。型と画面設計だけ揃える |
+| 用途 | `/game` の開始ボタン押下後、10 問と `questionSetId` を取得して `/game/play` へ進む |
+| 注意 | 苦手モードで苦手元素が 5 件未満の場合はサーバー側でも日本語エラーを返す |
 
 想定レスポンス:
 
@@ -196,71 +196,13 @@
 }
 ```
 
-重要:
-- 正解フラグ・正解 elementId は返さない。
-- `questionSetId` は必須。`POST /game/sessions` に渡す。
-- 苦手モードで苦手元素が 5 件未満の場合は、Phase7 API で 400 または 403 の日本語エラーを返す方針を確定する。
-
-### POST `/game/sessions`
+#### GET `/weak`
 
 | 項目 | 内容 |
 |---|---|
 | 認証 | 必須 |
-| 用途 | 10 問終了後に回答を送信し、サーバー計算済み結果を取得する |
-| 今回の UI モック | 呼び出さない。モック結果を store 内で生成する |
-
-想定リクエスト:
-
-```json
-{
-  "questionSetId": "cuid",
-  "answers": [
-    {
-      "elementId": 1,
-      "chosenElementId": 1,
-      "answerTimeSec": 5
-    }
-  ]
-}
-```
-
-時間切れの場合:
-
-```json
-{
-  "elementId": 1,
-  "chosenElementId": null,
-  "answerTimeSec": 15
-}
-```
-
-想定レスポンス:
-
-```json
-{
-  "sessionId": "cuid",
-  "correctCount": 8,
-  "totalScore": 1250,
-  "maxStreak": 5,
-  "results": [
-    {
-      "elementId": 1,
-      "isCorrect": true,
-      "correctAnswer": "水素",
-      "yourAnswer": "水素",
-      "score": 125
-    }
-  ]
-}
-```
-
-### GET `/weak`
-
-| 項目 | 内容 |
-|---|---|
-| 認証 | 必須 |
-| 用途 | 苦手モード開始可否（5 件以上）を判定する |
-| 今回の UI モック | backend 未実装のため live fetch はしない。`gameStore` または定数の preview 値でガード表示を検証する |
+| 用途 | 苦手モード開始可否の `weakCount` を算出する |
+| 注意 | 件数だけ必要な場合、将来は軽量 API または `GET /weak` のレスポンス利用を検討する |
 
 想定レスポンス:
 
@@ -280,66 +222,73 @@
 
 ## 設計上の決定事項
 
-1. **フェーズ6は frontend-only UI モックとして実装する**
-   - 選択: game / weak API の live fetch は行わず、固定モック問題と `gameStore` で画面遷移を成立させる。
-   - 根拠: backend game / weak は TODO かつ未 mount。フェーズ6の目的は UX 確認と API インターフェース確定であり、backend 実装はフェーズ7以降。
+1. **`/game` では live fetch を行うか**
+   - 選択: 今回は行わない。
+   - 根拠: game / weak API は TODO かつ未 mount。フェーズ6の目的は UI モックと UX 確認であり、API 本実装はフェーズ7。
 
-2. **API 仕様は `questionSetId` 前提へ更新する**
-   - 選択: `GET /game/questions` レスポンスと `POST /game/sessions` リクエストに `questionSetId` を明記する。
-   - 根拠: `docs/05_progress.md` の設計決定2、`docs/12_task_guide.md`、`schema.prisma` の `GameQuestionSet` と整合させるため。
+2. **検索条件を URL クエリに反映するか**
+   - 選択: 本画面では検索条件が存在しないため、URL query は使わない。
+   - 根拠: `/game` の状態はモード選択と認証状態・苦手件数ガードであり、検索・分類・周期の query は `/elements` の責務。不要な query を導入すると責務が混ざる。
 
-3. **即時正誤フィードバックは UI モック限定で表現する**
-   - 選択: `mock-questions.ts` の内部データにのみ正解情報を持たせ、UI モックでは回答直後に正誤を出す。
-   - 根拠: 既存 API 方針では正解をクライアントに渡さないため、本番 API 連携では追加の回答チェック API またはフィードバック仕様の再確定が必要。計画書にリスクとして明記する。
+3. **初期表示時に検索条件をどこから復元するか**
+   - 選択: 本画面では検索条件を復元しない。初期表示は `authStore` とモード定義から構成する。
+   - 根拠: `/game` には検索 UI がない。再読み込み時に保持すべき検索条件もない。
 
-4. **ゲーム状態は `gameStore` に集約する**
-   - 選択: 選択中モード、問題セット、現在問、回答履歴、結果を `frontend/src/lib/stores/game.svelte.ts` に持たせる。
-   - 根拠: `/game/play` と `/game/result` の route 間で状態を共有する必要がある。ページに状態を分散させると結果画面との整合が崩れやすい。
+4. **キーワード入力の反映タイミングをどうするか**
+   - 選択: 本画面ではキーワード入力を実装しない。
+   - 根拠: キーワード検索は `/elements` の完了済みタスク。ゲームモード選択画面に入力欄を追加すると、ゲーム開始導線が曖昧になる。
 
-5. **結果画面の直アクセス・リロードは `/game` に戻す**
-   - 選択: result が存在しない場合は `/game` へ遷移し、必要なら toast で「ゲームを開始してください」と表示する。
-   - 根拠: 認証情報やゲーム結果を localStorage に保存しない制約を守るため。
+5. **分類・周期の選択 UI をどう表現するか**
+   - 選択: 本画面では分類・周期 select を実装しない。
+   - 根拠: ゲームの出題範囲は `GameMode` によって決まる。分類・周期は元素一覧検索の責務であり、今回のモード一覧とは別概念。
 
-6. **苦手 5 問未満ガードは純粋関数で判定する**
-   - 選択: `canStartGameMode(mode, weakCount)` と `getGameModeGuardMessage(mode, weakCount)` を `modes.ts` に定義する。
-   - 根拠: `/game` の表示、開始ボタン disabled、将来 API 連携後の判定を同じロジックで扱える。
+6. **検索条件リセット時に API 再取得するか**
+   - 選択: 本画面では検索条件リセットを実装しない。
+   - 根拠: リセット対象となる検索状態がない。ゲーム状態の reset は `/game/play` / `/game/result` 実装時の `gameStore` 側で扱う。
 
-7. **タイマーは play page で制御し、回答後は停止する**
-   - 選択: 問題表示時に 15 秒カウントダウンを開始し、選択・時間切れ・画面離脱で停止する。
-   - 根拠: 多重 timer による二重回答・次問スキップを防ぐため。
+7. **API パラメータの組み立てをどの層で行うか**
+   - 選択: 将来 `GET /game/questions` を呼ぶ際は `lib/api/game.ts` または `gameStore` から `mode` を渡し、page / component では URL を組み立てない。
+   - 根拠: `API_BASE_URL`、Authorization、`parseErrorResponse` を共通化し、UI component に API 仕様を埋め込まないため。
 
-8. **1〜4キーは回答可能状態でのみ有効にする**
-   - 選択: フィードバック表示中、結果遷移中、ボタン disabled 中はキー入力を無視する。
-   - 根拠: キーボード連打で複数回答が記録される事故を防ぐため。
+8. **正規化済みの検索条件をどこで保持するか**
+   - 選択: 本画面では検索条件を保持しない。選択モードは `GameMode` 型で扱い、開始可否は `canStartGameMode(mode, weakCount)` の結果として都度導出する。
+   - 根拠: 状態を最小化し、モード定義と UI 表示のズレを防ぐ。
 
-9. **回答時間は一度だけ計算して再利用する**
-   - 選択: 回答確定時に `answerTimeSec` を計算し、回答履歴・結果計算・将来 API 送信に同じ値を渡す。
-   - 根拠: 正規化値を一度だけ計算して再利用する規約に合わせる。
+9. **エラー表示に toast を使うか、画面内表示にするか**
+   - 選択: 未ログイン・苦手 5 問未満のような予測可能なガードは画面内表示にする。将来 API 開始失敗など非同期エラーは `toastStore.fromApiError` または画面内エラーを併用する。
+   - 根拠: ガード条件はユーザーが開始前に確認すべき常設情報。API エラーは一時的な通知として toast が適する。
 
-10. **A11Y の状態通知を UI コンポーネント単位で設計する**
-    - 選択: 進捗・タイマー・フィードバック・結果に適切な `aria-live`、`aria-current`、説明文を付ける。
-    - 根拠: ゲーム UI は視覚変化が多く、スクリーンリーダーとキーボード利用者に状態変化を伝える必要がある。
+10. **既存コンポーネントを再利用するか、新規作成するか**
+    - 選択: Header / Footer / layout / authStore / toastStore は再利用し、モードカードは `GameModeCard.svelte` として新規作成する。
+    - 根拠: モードカードは game 固有の表示・disabled 理由・開始 CTA を持つため、独立 component にすると `/game` page が肥大化しない。
 
-11. **DB 負荷は Phase7 API 側で制御し、UI から多重開始を防ぐ**
-    - 選択: フェーズ6では DB に触らない。将来 API 連携時は開始ボタンを loading / disabled にし、二重 `GET /game/questions` を防ぐ。
-    - 根拠: `GameQuestionSet` は 1 開始ごとに DB 行を作るため、多重クリック対策が必要。
+11. **苦手件数はどこで管理するか**
+    - 選択: 今回は `/game/+page.svelte` のローカル状態または定数の preview 値として扱い、判定ロジックは `modes.ts` に置く。
+    - 根拠: backend 未実装のため永続化・実取得はしない。判定だけ先に純粋関数化して将来接続に備える。
 
-12. **ゲーム UI はカードを過度にネストしない**
-    - 選択: ページは full-width section と単体カードの組み合わせに留め、カード内カードを避ける。
-    - 根拠: 既存デザインのシンプルさと frontend guidance に合わせる。
+12. **未ログイン時のモード表示をどうするか**
+    - 選択: モード一覧は表示するが、開始ボタンは `/login` への誘導に切り替える。
+    - 根拠: game API は認証必須。未ログインでもゲーム内容は理解できるようにしつつ、開始操作ではログインに誘導する。
+
+13. **開始ボタン押下時の遷移先**
+    - 選択: 今回は通常モード開始時に `/game/play` へ進む導線を設計するが、`/game/play` 未実装の場合は実装段階でスタブ遷移または toast にするかを確認する。
+    - 根拠: `docs/05_progress.md` では `/game/play` が別未実装タスク。`/game` 単体実装時に壊れたリンクを作らないため。
+
+14. **苦手 5 問未満ガード文言**
+    - 選択: `getGameModeGuardMessage` で「苦手元素が5件以上必要です」系の日本語文言を返す。
+    - 根拠: disabled 理由を UI とテストで共有し、文言の重複・ズレを防ぐ。
 
 ## 公開インターフェース案
 
+### `frontend/src/lib/game/constants.ts`
+
 ```ts
-// frontend/src/lib/game/constants.ts
-export const GAME_QUESTION_COUNT = 10;
-export const GAME_TIME_LIMIT_SEC = 15;
-export const GAME_FEEDBACK_DELAY_MS = 1500;
 export const MIN_WEAK_ELEMENTS_FOR_GAME = 5;
 ```
 
+### `frontend/src/lib/game/types.ts`
+
 ```ts
-// frontend/src/lib/game/types.ts
 export type GameMode =
   | 'SYMBOL_TO_NAME_LV1'
   | 'SYMBOL_TO_NAME_LV2'
@@ -348,48 +297,6 @@ export type GameMode =
   | 'WEAK_SYMBOL_TO_NAME'
   | 'WEAK_NAME_TO_SYMBOL';
 
-export type GameChoice = {
-  elementId: number;
-  text: string;
-};
-
-export type GameQuestion = {
-  elementId: number;
-  question: string;
-  choices: GameChoice[];
-};
-
-export type GameQuestionSet = {
-  questionSetId: string;
-  mode: GameMode;
-  questions: GameQuestion[];
-};
-
-export type GameAnswerInput = {
-  elementId: number;
-  chosenElementId: number | null;
-  answerTimeSec: number;
-};
-
-export type GameResultItem = {
-  elementId: number;
-  isCorrect: boolean;
-  correctAnswer: string;
-  yourAnswer: string;
-  score: number;
-};
-
-export type GameSessionResult = {
-  sessionId: string;
-  correctCount: number;
-  totalScore: number;
-  maxStreak: number;
-  results: GameResultItem[];
-};
-```
-
-```ts
-// frontend/src/lib/game/modes.ts
 export type GameModeConfig = {
   mode: GameMode;
   title: string;
@@ -400,38 +307,40 @@ export type GameModeConfig = {
   requiresWeakElements: boolean;
 };
 
+export type GameModeStartAvailability = {
+  canStart: boolean;
+  guardMessage: string | null;
+};
+```
+
+### `frontend/src/lib/game/modes.ts`
+
+```ts
 export const GAME_MODE_CONFIGS: readonly GameModeConfig[];
 
 export function getGameModeConfig(mode: GameMode): GameModeConfig;
+
 export function isWeakGameMode(mode: GameMode): boolean;
+
 export function canStartGameMode(mode: GameMode, weakCount: number | null): boolean;
+
 export function getGameModeGuardMessage(mode: GameMode, weakCount: number | null): string | null;
+
+export function getGameModeStartAvailability(
+  mode: GameMode,
+  weakCount: number | null
+): GameModeStartAvailability;
 ```
 
-```ts
-// frontend/src/lib/game/play-state.ts
-export function calculateAnswerTimeSec(startedAtMs: number, answeredAtMs: number): number;
-export function calculateMaxStreak(results: readonly { isCorrect: boolean }[]): number;
-export function calculateCorrectCount(results: readonly { isCorrect: boolean }[]): number;
-export function calculateAccuracy(correctCount: number, totalCount: number): number;
-```
+### `frontend/src/lib/components/game/GameModeCard.svelte`
 
 ```ts
-// frontend/src/lib/stores/game.svelte.ts
-export const gameStore: {
-  readonly mode: GameMode | null;
-  readonly questionSet: GameQuestionSet | null;
-  readonly currentQuestionIndex: number;
-  readonly answers: readonly GameAnswerInput[];
-  readonly result: GameSessionResult | null;
-  readonly hasActiveGame: boolean;
-  readonly hasResult: boolean;
-
-  startMockGame(mode: GameMode): void;
-  answerCurrentQuestion(chosenElementId: number | null, answerTimeSec: number): void;
-  moveToNextQuestion(): boolean;
-  finishMockGame(): GameSessionResult;
-  reset(): void;
+type Props = {
+  config: GameModeConfig;
+  isLoggedIn: boolean;
+  weakCount: number | null;
+  isStarting?: boolean;
+  onStart(mode: GameMode): void;
 };
 ```
 
@@ -439,113 +348,187 @@ export const gameStore: {
 
 | タスクID | 内容 | ファイル | 完了条件 | 優先度 |
 |---|---|---|---|---|
-| T1 | ゲーム API 仕様の整合修正 | `docs/04_api.md` | `GET /game/questions` に `questionSetId`、`POST /game/sessions` に `questionSetId` リクエストが明記される | 高 |
-| T2 | ゲーム定数・型定義を作成 | `frontend/src/lib/game/constants.ts`, `frontend/src/lib/game/types.ts` | 6 種の `GameMode`、問題・回答・結果型が定義される | 高 |
-| T3 | モード設定と苦手ガード判定を実装 | `frontend/src/lib/game/modes.ts` | 6 モード表示情報と苦手 5 問未満判定が一元化される | 高 |
-| T4 | ゲーム進行の純粋関数とテストを作成 | `frontend/src/lib/game/play-state.ts`, `frontend/src/lib/game/play-state.test.ts` | 正解数、正答率、最大連続正解、回答時間のテストが通る | 高 |
-| T5 | UI モック用問題セットを作成 | `frontend/src/lib/game/mock-questions.ts` | 10 問・4 択・6 モード対応の固定問題が生成できる | 高 |
-| T6 | `gameStore` を実装 | `frontend/src/lib/stores/game.svelte.ts` | 開始、回答、次問、結果生成、reset が動作する | 高 |
-| T7 | モード選択コンポーネントを実装 | `frontend/src/lib/components/game/GameModeCard.svelte` | 通常モード開始、苦手ガード、未ログイン誘導が表示できる | 高 |
-| T8 | プレイ画面用コンポーネントを実装 | `GameProgressIndicator.svelte`, `GameTimerBar.svelte`, `AnswerChoiceButton.svelte`, `GameFeedbackPanel.svelte` | インジケーター、15 秒タイマー、4 択、フィードバックが表示できる | 高 |
-| T9 | 結果画面用コンポーネントを実装 | `GameResultSummary.svelte`, `MissedAnswersList.svelte` | スコア、連続正解、間違え一覧、CTA が表示できる | 高 |
-| T10 | `/game` を実装 | `frontend/src/routes/(app)/game/+page.svelte`, `frontend/src/routes/(app)/game/+page.ts` | モード一覧、苦手 5 問未満ガード、ログイン状態別 CTA が表示される | 高 |
-| T11 | `/game/play` を実装 | `frontend/src/routes/(app)/game/play/+page.svelte`, `frontend/src/routes/(app)/game/play/+page.ts` | 10 問進行、15 秒タイマー、1〜4 キー操作、時間切れ処理が動作する | 高 |
-| T12 | `/game/result` を実装 | `frontend/src/routes/(app)/game/result/+page.svelte`, `frontend/src/routes/(app)/game/result/+page.ts` | 結果表示、「もう一度」「ホームへ」、直アクセス時の戻しが動作する | 高 |
-| T13 | frontend 品質チェック | `frontend/` | `npm run lint`, `npm run format`, `npm run check`, `npm run test:run` が通る | 高 |
-| T14 | 手動確認 | ブラウザ | `/game` → `/game/play` → `/game/result`、PC/モバイル、1〜4 キー、時間切れ、苦手ガードを確認する | 高 |
-| T15 | 進捗・計画書更新 | `docs/05_progress.md`, `docs/plans/game-screens/plan.md` | フェーズ6該当タスクを完了にし、実装完了セクションを追記する | 中 |
+| T1 | 既存仕様・既存実装を確認する | `AGENTS.md`, `docs/05_progress.md`, `docs/04_api.md`, `docs/08_conventions.md`, `docs/07_testing_flow.md`, `docs/plans/game-screens/plan.md`, backend / frontend 関連ファイル | `/game` が UI モック範囲であること、game / weak API が未実装・未 mount であること、既存 store / API 共通処理の使い方が確認される | 高 |
+| T2 | 進捗を実装中へ更新する | `docs/05_progress.md` | `ゲームモード選択画面 /game` が `[ ]` から `[-]` に更新される | 中 |
+| T3 | ゲーム定数・型定義を追加する | `frontend/src/lib/game/constants.ts`, `frontend/src/lib/game/types.ts` | `MIN_WEAK_ELEMENTS_FOR_GAME`、`GameMode`、`GameModeConfig`、開始可否型が定義され、UI に直書き定数が残らない | 高 |
+| T4 | モード設定・苦手ガード判定を実装する | `frontend/src/lib/game/modes.ts` | 6 モードの表示情報、`isWeakGameMode`、`canStartGameMode`、`getGameModeGuardMessage` が一元化される | 高 |
+| T5 | ガード判定のユニットテストを作成する | `frontend/src/lib/game/modes.test.ts` | 通常モード、苦手 4 件、苦手 5 件、`null` 件数、文言生成のテストが通る | 高 |
+| T6 | モードカード component を実装する | `frontend/src/lib/components/game/GameModeCard.svelte` | タイトル、説明、形式、難易度、出題範囲、開始ボタン、未ログイン誘導、苦手ガード理由が表示される | 高 |
+| T7 | `/game` page を実装する | `frontend/src/routes/(app)/game/+page.svelte`, `frontend/src/routes/(app)/game/+page.ts` | モード一覧、認証状態別 CTA、苦手 5 問未満ガード、ローディング相当表示が既存 layout 内で表示される | 高 |
+| T8 | 開始操作の多重実行・未実装画面への扱いを整理する | `frontend/src/routes/(app)/game/+page.svelte` | 開始中はボタンが disabled になり、`/game/play` 未実装時の挙動が toast または明示導線として破綻しない | 高 |
+| T9 | ローディング・空状態・エラー状態を確認する | `frontend/src/routes/(app)/game/+page.svelte`, `frontend/src/lib/components/game/GameModeCard.svelte` | `authStore.isInitializing` 中の表示、モード定義欠損時の空状態、将来 API エラー用の表示方針が実装またはコメントで明確になる | 中 |
+| T10 | frontend lint を実行する | `frontend/` | `npm run lint` が通る | 高 |
+| T11 | format を実行する | `frontend/` | `npm run format` 実行後に不要な差分がない | 高 |
+| T12 | frontend test を実行する | `frontend/` | `npm run test:run` が通る | 高 |
+| T13 | Svelte / TypeScript check を実行する | `frontend/` | `npm run check` が通る | 高 |
+| T14 | 手動確認を実施する | ブラウザ | PC / モバイルで `/game` のログイン中・未ログイン・苦手 4 件・苦手 5 件相当表示を確認する | 高 |
+| T15 | 進捗・計画書を実装完了へ更新する | `docs/05_progress.md`, `docs/plans/game-screens/plan.md` | `/game` タスクが `[x]` になり、plan.md に実装完了セクションと実際の変更ファイルが追記される | 中 |
 
-- [ ] T1: ゲーム API 仕様の整合修正
-- [ ] T2: ゲーム定数・型定義を作成
-- [ ] T3: モード設定と苦手ガード判定を実装
-- [ ] T4: ゲーム進行の純粋関数とテストを作成
-- [ ] T5: UI モック用問題セットを作成
-- [ ] T6: `gameStore` を実装
-- [ ] T7: モード選択コンポーネントを実装
-- [ ] T8: プレイ画面用コンポーネントを実装
-- [ ] T9: 結果画面用コンポーネントを実装
-- [ ] T10: `/game` を実装
-- [ ] T11: `/game/play` を実装
-- [ ] T12: `/game/result` を実装
-- [ ] T13: frontend 品質チェック
-- [ ] T14: 手動確認
-- [ ] T15: 進捗・計画書更新
+- [ ] T1: 既存仕様・既存実装を確認する
+- [ ] T2: 進捗を実装中へ更新する
+- [ ] T3: ゲーム定数・型定義を追加する
+- [ ] T4: モード設定・苦手ガード判定を実装する
+- [ ] T5: ガード判定のユニットテストを作成する
+- [ ] T6: モードカード component を実装する
+- [ ] T7: `/game` page を実装する
+- [ ] T8: 開始操作の多重実行・未実装画面への扱いを整理する
+- [ ] T9: ローディング・空状態・エラー状態を確認する
+- [ ] T10: frontend lint を実行する
+- [ ] T11: frontend format を実行する
+- [ ] T12: frontend test を実行する
+- [ ] T13: frontend check を実行する
+- [ ] T14: 手動確認を実施する
+- [ ] T15: 進捗・計画書を実装完了へ更新する
 
 ## 技術的注意点
 
-- `GAME_TIME_LIMIT_SEC`, `GAME_FEEDBACK_DELAY_MS`, `MIN_WEAK_ELEMENTS_FOR_GAME` は直書きしない。
-- 回答確定時は `chosenElementId` と `answerTimeSec` を一度だけ作り、store に渡す。
-- 時間切れは `chosenElementId: null` として扱い、結果では「未回答」と表示する。
-- 1〜4 キーは `event.isComposing` を考慮し、日本語入力中は無視する。
-- `<svelte:window onkeydown={handleKeydown} />` を使う場合も、回答可能状態でのみ処理する。
-- `setTimeout` / `setInterval` を使う場合は `$effect` cleanup または `onDestroy` で必ず解除する。
-- `/game/play` と `/game/result` は SSR で store 状態が取れないため `ssr = false` を明示する。
-- API 連携に切り替える際は `API_BASE_URL` と `parseErrorResponse` を使い、`response.json()` を先に呼ばない。
-- API エラー時は `ApiError.message` を優先し、バックエンドの具体的な日本語メッセージを固定文言で上書きしない。
-- `authStore.isInitializing` 中はログイン判定を確定させず、ちらつきを避ける。
-- 画面上のエラー・ガード文言は日本語で統一する。
-- 苦手モードの disabled 理由はボタン付近に表示し、色だけに依存しない。
-- 結果画面の間違え一覧は空の場合「全問正解です」と表示する。
-- 「もう一度」は直前の mode で再開始する。mode が失われている場合は `/game` へ戻す。
-- UI モックの正解情報は `mock-questions.ts` から外に公開しない。公開 `GameQuestion` 型に `correctElementId` を含めない。
+- `MIN_WEAK_ELEMENTS_FOR_GAME` を UI component に直書きしない。
+- `GameMode` の文字列 union は Prisma の `GameMode` enum と一致させる。
+- モード表示名・説明・難易度・出題範囲は `GAME_MODE_CONFIGS` に集約し、page と component で重複定義しない。
+- 苦手モード判定は `mode.startsWith('WEAK_')` のような ad hoc 判定を複数箇所に書かず、`isWeakGameMode` に集約する。
+- 苦手件数が `null` の場合は「未取得」として扱い、通常モードは開始可能、苦手モードは開始不可または確認中表示にする。
+- 未ログイン時は `authStore.isInitializing` 完了後に CTA を表示する。初期化中に「未ログイン」と断定しない。
+- `toastStore` を使う場合はユーザー操作に対する補助通知に留め、常に必要なガード理由は画面内に表示する。
+- 将来 API 接続する場合は `API_BASE_URL`、`Authorization: Bearer ${authStore.accessToken}`、`credentials: 'include'`、`parseErrorResponse` を使う。
+- API エラー時はバックエンドの日本語メッセージを上書きしない。
+- `response.json()` は `response.ok` チェック前に呼ばない。
+- 開始ボタンは `isStarting` 中に disabled にし、多重クリックを防ぐ。
+- disabled 理由は色だけでなくテキストで表示する。
+- `<button>` と `<a>` の役割を混同しない。実行は button、ログイン遷移は link を使う。
+- component 内に `/api/v1/game/questions` など API パスを埋め込まない。
+- `/game/+page.ts` では `ssr = true`, `prerender = false` を明示し、認証 store 初期化中表示との hydration 不一致を避ける。
+- モバイルでは 1 カラム、広い画面では 2〜3 カラム程度の mode grid とし、カード内テキストがはみ出さないようにする。
+- UI 文言は日本語に統一する。
 
 ## A11Y要件
 
 | 対象 | 要件 |
 |---|---|
-| モードカード | カード全体ではなく開始ボタンを明確な操作対象にする。disabled の理由をボタン近くにテキストで表示する |
-| 進捗インジケーター | 現在問に `aria-current="step"` 相当の意味付けを行い、「3問目 / 10問中」のテキストを併記する |
-| タイマー | 残り秒数を視覚バーだけに依存しない。残り 5 秒以下など重要変化のみ `aria-live` で通知し、毎秒読み上げ続けない |
-| 4択ボタン | `1. 水素` のように番号と選択肢をラベルに含める。キーボード操作とクリック操作の結果を同じ処理にする |
-| フィードバック | 正解・不正解・時間切れを `aria-live="polite"` で通知する。色だけでなくテキストで状態を示す |
-| focus 管理 | 問題が切り替わったら見出しまたは選択肢領域へ自然に戻る。結果画面遷移時はページ見出しが最初に読める構造にする |
-| 動き | タイマーやフィードバックに過剰なアニメーションを使わない。必要な場合は `prefers-reduced-motion` に配慮する |
+| ページ構造 | `h1` は `/game` の画面名にし、モード一覧は section + list 構造で読む順序を安定させる |
+| モードカード | カード全体をクリック領域にしない。開始操作は button、ログイン遷移は link として明確に分ける |
+| disabled 表示 | disabled の理由をボタン付近にテキストで表示し、色だけに依存しない |
+| 未ログイン導線 | 「ログインすると開始できます」のような説明を CTA と近接させる |
+| focus | Tab で各モードの開始操作へ移動でき、disabled 要素でフォーカスが迷子にならない |
+| `aria-live` | `authStore.isInitializing` 後に表示が切り替わる補助文は必要最小限にし、過剰な読み上げを避ける |
+| レスポンシブ | 390px 幅でもボタン文言・ガード文言が切れない |
 
 ## DB整合性・負荷に関する注意
 
-- フェーズ6では DB 読み書きを行わないため、DB 負荷は発生しない。
-- Phase7 の `GET /game/questions` は 1 ゲーム開始につき 1 件の `GameQuestionSet` を作成する。フロント側は開始ボタンの多重クリックを防ぐ必要がある。
-- Phase7 の `POST /game/sessions` は `questionSetId` の userId・有効期限・未使用状態を検証し、完了後に `GameQuestionSet` を削除する。
-- 苦手モードの 5 問未満判定はサーバー側でも必ず行う。フロントの disabled は UX 補助であり、セキュリティ境界にしない。
-- `GET /weak` で苦手件数だけが必要な場合、将来は件数用 API または軽量レスポンスを検討する。ただし現時点では API 未実装のため、本計画では追加 API を作らない。
-- 問題セットをリロードごとに作成する実装にすると未使用 `GameQuestionSet` が増えるため、Phase7 では期限切れ削除方針も検討する。
+- 本タスクでは DB 読み書きを行わないため、DB 負荷は発生しない。
+- `/game` 初期表示で `GET /weak` を毎回呼ぶ実装は今回は行わない。
+- Phase7 で `GET /weak` または weak count API を接続する場合、認証済みユーザーに限定し、必要最小限の取得にする。
+- Phase7 の苦手 5 問未満判定はサーバー側でも必ず実行する。フロントの disabled は UX 補助であり、セキュリティ境界ではない。
+- Phase7 の `GET /game/questions` は `GameQuestionSet` を作成するため、多重クリックで複数 question set が作られないよう開始ボタンを loading / disabled にする。
+- 将来 `GameQuestionSet` を作成したまま離脱するケースに備え、API 側では有効期限切れデータの削除方針も検討する。
 
 ## テストケース一覧
 
 | ケース | 期待結果 |
 |---|---|
-| `canStartGameMode` 通常モード | weakCount に関係なく true |
-| `canStartGameMode` 苦手モード・weakCount 4 | false |
-| `canStartGameMode` 苦手モード・weakCount 5 | true |
-| `getGameModeGuardMessage` 苦手 4 件 | 「苦手元素が5件以上必要です」系の日本語文言 |
-| 回答時間計算 | 0〜15 秒の範囲に丸められる |
-| 最大連続正解数 | 正誤配列から最大 streak が返る |
-| 正答率計算 | `correctCount / totalCount` が percentage で返る |
-| `gameStore.startMockGame` | mode と 10 問の questionSet が設定される |
-| `gameStore.answerCurrentQuestion` | 同じ問題に二重回答できない |
-| `gameStore.finishMockGame` | correctCount, totalScore, maxStreak, results が生成される |
-| `/game` 未ログイン | モード開始ではなくログイン誘導が表示される |
-| `/game` 苦手 5 問未満 | 苦手モードカードの開始ボタンが disabled |
-| `/game/play` 1〜4 キー | 対応する選択肢が回答される |
-| `/game/play` 時間切れ | 未回答として記録され、フィードバック後に次問へ進む |
-| `/game/play` 回答後の連打 | 2 回目以降の回答は記録されない |
-| `/game/result` 結果なし直アクセス | `/game` へ戻る |
-| `/game/result` 間違えなし | 間違え一覧の代わりに全問正解メッセージ |
-| 品質チェック | lint / format / check / test:run が通る |
-| 手動確認 | PC・モバイルで表示崩れ、テキストはみ出し、操作不能がない |
-| A11Y 手動確認 | Tab 操作、1〜4 キー、スクリーンリーダー向け状態テキストが成立する |
+| 初期表示でモード一覧が表示される | 6 種のゲームモードが表示される |
+| `GAME_MODE_CONFIGS` | 6 種の `GameMode` が重複なく定義される |
+| 通常モードの開始可否 | `weakCount` に関係なく開始可能 |
+| 苦手モード・`weakCount = 4` | 開始不可、ガード文言が返る |
+| 苦手モード・`weakCount = 5` | 開始可能、ガード文言は `null` |
+| 苦手モード・`weakCount = null` | 未取得扱いで開始不可または確認中表示になる |
+| `getGameModeGuardMessage` | 「苦手元素が5件以上必要です」系の日本語文言を返す |
+| 未ログイン時 | モード内容は見えるが、開始操作はログイン誘導になる |
+| `authStore.isInitializing` 中 | ログイン/未ログインを断定する CTA がちらつかない |
+| 開始ボタン連打 | `isStarting` 中は二重開始しない |
+| ローディング中 | UI が崩れず、操作不能な箇所は disabled になる |
+| 空状態 | モード定義が空の場合にクラッシュせず日本語メッセージを表示する |
+| API エラー時の将来方針 | `ApiError.message` を優先して toast または画面内表示できる設計になっている |
+| モバイル表示 | 390px 幅でカード・ボタン・文言がはみ出さない |
+| キーボード操作 | Tab で各開始ボタン・ログインリンクへ移動できる |
+| lint | `npm run lint` が通る |
+| format | `npm run format` 実行後、Prettier 整形済み |
+| test | `npm run test:run` が通る |
+| check | `npm run check` が通る |
+
+注記:
+
+- 依頼文に含まれていた「キーワード検索」「分類」「周期」「URL クエリ復元」「検索条件リセット」のテストは `/elements` の検索・フィルター UI に対する観点であり、本 `/game` 画面では対象外とする。該当テストは既存 `frontend/src/lib/elements/search-filter.test.ts` と `ElementSearchFilters.svelte` 周辺で扱う。
 
 ## 実装リスクと回避策
 
 | リスク | 影響 | 回避策 |
 |---|---|---|
-| 即時正誤フィードバックと「正解を返さない API 方針」が衝突する | Phase7 で UI と API が噛み合わない | 本計画で明記し、Phase7 で回答チェック API 追加またはフィードバック仕様変更を決める |
-| backend game / weak が未実装 | live fetch 前提にすると画面が動かない | フェーズ6は UI モックとして固定問題と preview weak count で成立させる |
-| タイマーが多重起動する | 二重回答・自動遷移バグ | タイマー ID を管理し、回答・時間切れ・画面離脱で cleanup する |
-| キーボード連打で複数回答される | 回答履歴が壊れる | 回答可能状態を `canAnswer` で一元管理し、store 側でも二重回答を弾く |
-| route 直アクセスで store が空 | result / play 画面がクラッシュする | `hasActiveGame` / `hasResult` を確認し、不足時は `/game` へ戻す |
-| 苦手件数判定ロジックが複数箇所に分散する | 表示と開始可否がズレる | `modes.ts` の `canStartGameMode` と `getGameModeGuardMessage` に集約する |
-| モック正解情報が本番 API クライアントに混入する | 不正対策方針に反する | `mock-questions.ts` に限定し、公開 `GameQuestion` 型には正解フィールドを含めない |
-| API 仕様書と実装計画がズレる | Phase7 実装者が迷う | T1 で `docs/04_api.md` を `questionSetId` 前提に更新する |
-| A11Y が後回しになる | キーボード・支援技術利用者がゲームを完走できない | A11Y 要件と手動確認を T14 とテストケースに含める |
+| game / weak API が未実装なのに live fetch してしまう | `/game` 初期表示や開始操作が常に失敗する | 本タスクでは API を呼ばず、将来接続点だけ型と設計で明記する |
+| 苦手件数ガードが page と component に分散する | disabled 表示と開始可否がズレる | `modes.ts` の純粋関数に集約し、テストする |
+| 苦手 5 問の数値が直書きされる | 仕様変更時に修正漏れが起きる | `MIN_WEAK_ELEMENTS_FOR_GAME` に集約する |
+| 未ログイン状態のちらつき | refresh 中にログイン誘導が一瞬出る | `authStore.isInitializing` 中は判定保留 UI を出す |
+| `/game/play` 未実装でリンク切れになる | 開始ボタン押下後にユーザーが迷う | 実装時点で `/game/play` の有無を確認し、未実装なら toast または準備中表示にする |
+| 将来 API 接続時にエラー処理が重複する | `API_BASE_URL` や parse 処理が複数箇所に散る | `lib/api/game.ts` 追加時に `parseErrorResponse` を使う方針を維持する |
+| disabled が色だけで表現される | A11Y と UX が悪化する | disabled 理由をテキストで表示し、`aria-disabled` / `disabled` を適切に使う |
+| 依頼文の検索・フィルター要件を混ぜる | `/game` の責務が曖昧になる | 本計画では検索系要件を対象外として明記し、既存 `elements-search-filter` 計画へ分離する |
 
+## 手動確認項目
+
+| 項目 | 確認内容 |
+|---|---|
+| `/game` 初期表示 | 見出し、説明、6 モードが表示される |
+| 未ログイン表示 | 開始 CTA がログイン誘導になり、ゲーム開始できない |
+| ログイン済み表示 | 通常モードの開始ボタンが表示される |
+| 苦手 4 件相当 | 苦手モードが disabled になり、理由が表示される |
+| 苦手 5 件相当 | 苦手モードが開始可能表示になる |
+| 初期化中 | ログイン状態判定のちらつきがない |
+| 多重クリック | 開始中にボタンが disabled になる |
+| PC 幅 | 既存 layout 内でカード grid が読みやすい |
+| モバイル幅 390px | ボタン・カード・説明文がはみ出さない |
+| キーボード操作 | Tab / Shift+Tab で自然に操作できる |
+| スクリーンリーダー向け | disabled 理由がテキストとして読める |
+| コンソール | 不要なエラーや hydration mismatch が出ない |
+
+## 実装完了時の更新ルール
+
+実装完了時は以下を必ず行う。
+
+- `docs/05_progress.md` の `ゲームモード選択画面 /game（モード一覧・苦手5問未満ガード表示）` を `[x]` に更新する。
+- `docs/plans/game-screens/plan.md` の該当チェックボックスを `[x]` に更新する。
+- 計画時と実装時で変更ファイルが異なった場合、対象ファイル一覧を実態に合わせて更新する。
+- 設計判断が変わった場合、`## 実装完了` の「計画からの変更点」に記録する。
+- 実行した品質チェックを `## 実装完了` に記録する。
+- 手動確認した画面幅・ログイン状態・苦手件数条件を `## 実装完了` に記録する。
+
+実装完了セクションのテンプレート:
+
+```markdown
+## 実装完了
+- 完了日: YYYY-MM-DD
+- 実装ブランチ: feature/game-mode-select
+- PR: #N
+
+### 計画からの変更点
+- なし
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `frontend/src/lib/game/constants.ts` | 新規 | 苦手ガード定数 |
+| `frontend/src/lib/game/types.ts` | 新規 | ゲームモード型 |
+| `frontend/src/lib/game/modes.ts` | 新規 | モード定義・開始可否判定 |
+| `frontend/src/lib/game/modes.test.ts` | 新規 | ガード判定テスト |
+| `frontend/src/lib/components/game/GameModeCard.svelte` | 新規 | モードカード |
+| `frontend/src/routes/(app)/game/+page.svelte` | 修正 | モード選択画面 |
+| `frontend/src/routes/(app)/game/+page.ts` | 新規 | route 設定 |
+| `docs/05_progress.md` | 修正 | 進捗更新 |
+| `docs/plans/game-screens/plan.md` | 修正 | 実装完了記録 |
+
+### 品質チェック
+| コマンド | 結果 |
+|---|---|
+| `cd frontend && npm run lint` | OK |
+| `cd frontend && npm run format` | OK |
+| `cd frontend && npm run test:run` | OK |
+| `cd frontend && npm run check` | OK |
+
+### 手動確認
+| 条件 | 結果 |
+|---|---|
+| 未ログイン `/game` | OK |
+| ログイン済み `/game` | OK |
+| 苦手 4 件相当 | OK |
+| 苦手 5 件相当 | OK |
+| PC 幅 | OK |
+| モバイル幅 390px | OK |
+```
