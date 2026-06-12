@@ -18,6 +18,8 @@ const ALL_GAME_MODES: GameMode[] = [
   'WEAK_SYMBOL_TO_NAME',
   'WEAK_NAME_TO_SYMBOL'
 ];
+const INSUFFICIENT_WEAK_COUNT = MIN_WEAK_ELEMENTS_FOR_GAME - 1;
+const INSUFFICIENT_WEAK_GUARD_MESSAGE = `苦手モードを始めるには、苦手元素が${MIN_WEAK_ELEMENTS_FOR_GAME}件以上必要です。現在は${INSUFFICIENT_WEAK_COUNT}件です。`;
 
 describe('GAME_MODE_CONFIGS', () => {
   it('6種類のゲームモードを重複なく定義している', () => {
@@ -66,7 +68,7 @@ describe('canStartGameMode', () => {
   it('通常モードは weakCount に関係なく開始できる', () => {
     expect(canStartGameMode('SYMBOL_TO_NAME_LV1', null)).toBe(true);
     expect(canStartGameMode('SYMBOL_TO_NAME_LV1', 0)).toBe(true);
-    expect(canStartGameMode('NAME_TO_SYMBOL_LV2', 4)).toBe(true);
+    expect(canStartGameMode('NAME_TO_SYMBOL_LV2', INSUFFICIENT_WEAK_COUNT)).toBe(true);
   });
 
   it('苦手モードは weakCount が null の場合は開始できない', () => {
@@ -74,7 +76,7 @@ describe('canStartGameMode', () => {
   });
 
   it('苦手モードは必要件数未満では開始できない', () => {
-    expect(canStartGameMode('WEAK_SYMBOL_TO_NAME', MIN_WEAK_ELEMENTS_FOR_GAME - 1)).toBe(false);
+    expect(canStartGameMode('WEAK_SYMBOL_TO_NAME', INSUFFICIENT_WEAK_COUNT)).toBe(false);
   });
 
   it('苦手モードは必要件数以上なら開始できる', () => {
@@ -95,8 +97,8 @@ describe('getGameModeGuardMessage', () => {
   });
 
   it('苦手件数が不足している場合は現在件数を含むガード文言を返す', () => {
-    expect(getGameModeGuardMessage('WEAK_SYMBOL_TO_NAME', 4)).toBe(
-      '苦手モードを始めるには、苦手元素が5件以上必要です。現在は4件です。'
+    expect(getGameModeGuardMessage('WEAK_SYMBOL_TO_NAME', INSUFFICIENT_WEAK_COUNT)).toBe(
+      INSUFFICIENT_WEAK_GUARD_MESSAGE
     );
   });
 
@@ -114,9 +116,9 @@ describe('getGameModeStartAvailability', () => {
   });
 
   it('開始不可の場合は canStart false と guardMessage を返す', () => {
-    expect(getGameModeStartAvailability('WEAK_NAME_TO_SYMBOL', 4)).toEqual({
+    expect(getGameModeStartAvailability('WEAK_NAME_TO_SYMBOL', INSUFFICIENT_WEAK_COUNT)).toEqual({
       canStart: false,
-      guardMessage: '苦手モードを始めるには、苦手元素が5件以上必要です。現在は4件です。'
+      guardMessage: INSUFFICIENT_WEAK_GUARD_MESSAGE
     });
   });
 });

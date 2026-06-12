@@ -72,11 +72,7 @@ export function isWeakGameMode(mode: GameMode): boolean {
 }
 
 export function canStartGameMode(mode: GameMode, weakCount: number | null): boolean {
-  if (!isWeakGameMode(mode)) {
-    return true;
-  }
-
-  return weakCount !== null && weakCount >= MIN_WEAK_ELEMENTS_FOR_GAME;
+  return getGameModeGuardMessage(mode, weakCount) === null;
 }
 
 export function getGameModeGuardMessage(mode: GameMode, weakCount: number | null): string | null {
