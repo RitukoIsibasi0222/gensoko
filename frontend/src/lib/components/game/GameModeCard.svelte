@@ -1,21 +1,26 @@
 <script lang="ts">
   import { getGameModeStartAvailability } from '$lib/game/modes';
-  import type { GameModeConfig, GameModeStartHandler } from '$lib/game/types';
+  import type { GameMode, GameModeConfig, GameModeStartHandler } from '$lib/game/types';
 
   type Props = {
     config: GameModeConfig;
     isLoggedIn: boolean;
     weakCount: number | null;
-    isStarting?: boolean;
+    startingMode?: GameMode | null;
     onStart: GameModeStartHandler;
   };
 
-  let { config, isLoggedIn, weakCount, isStarting = false, onStart }: Props = $props();
+  let { config, isLoggedIn, weakCount, startingMode = null, onStart }: Props = $props();
 
   const availability = $derived(getGameModeStartAvailability(config.mode, weakCount));
-  const canStart = $derived(isLoggedIn && availability.canStart && !isStarting);
+  const isBusy = $derived(startingMode !== null);
+  const isStartingThisMode = $derived(startingMode === config.mode);
+  const canStart = $derived(isLoggedIn && availability.canStart && !isBusy);
   const guardMessage = $derived(
     isLoggedIn ? availability.guardMessage : 'ログインするとゲームを開始できます。'
+  );
+  const buttonLabel = $derived(
+    isStartingThisMode ? '準備中です...' : isBusy ? '他のモードを準備中です' : 'このモードで始める'
   );
 
   function handleStart(): void {
@@ -64,7 +69,7 @@
         onclick={handleStart}
         class="bg-brand hover:bg-brand-hover focus-visible:outline-brand inline-flex w-full items-center justify-center rounded px-4 py-2 text-sm font-semibold text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500"
       >
-        {isStarting ? '準備中です...' : 'このモードで始める'}
+        {buttonLabel}
       </button>
     {/if}
   </div>

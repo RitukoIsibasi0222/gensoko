@@ -79,7 +79,7 @@
               {config}
               isLoggedIn={authStore.isLoggedIn}
               weakCount={PREVIEW_WEAK_ELEMENT_COUNT}
-              isStarting={startingMode !== null}
+              {startingMode}
               onStart={handleStart}
             />
           </li>
