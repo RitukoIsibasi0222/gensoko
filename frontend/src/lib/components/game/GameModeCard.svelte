@@ -41,7 +41,7 @@
   </div>
 
   <div class="mt-4 flex-1">
-    <h2 class="text-lg font-bold text-gray-900">{config.title}</h2>
+    <h3 class="text-lg font-bold text-gray-900">{config.title}</h3>
     <p class="mt-2 text-sm leading-6 text-gray-600">{config.description}</p>
   </div>
 

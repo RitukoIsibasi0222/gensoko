@@ -537,7 +537,7 @@ type Props = {
 
 - 完了日: 2026-06-12
 - 実装ブランチ: `feature/game-mode-select`
-- PR: 未作成
+- PR: #46
 
 ### 計画からの変更点
 
