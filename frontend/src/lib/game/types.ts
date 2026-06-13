@@ -22,3 +22,30 @@ export type GameModeStartAvailability = {
 };
 
 export type GameModeStartHandler = (mode: GameMode) => void;
+
+export type GameChoice = {
+  choiceId: string;
+  text: string;
+};
+
+export type GamePlayQuestion = {
+  questionId: string;
+  prompt: string;
+  choices: readonly GameChoice[];
+};
+
+export type MockGamePlayQuestion = GamePlayQuestion & {
+  correctChoiceId: string;
+};
+
+export type GameAnswerDraft = {
+  questionId: string;
+  chosenChoiceId: string | null;
+  answerTimeSec: number;
+  isCorrect: boolean;
+  timedOut: boolean;
+};
+
+export type GamePlayPhase = 'answering' | 'feedback' | 'completed';
+
+export type GameChoiceHandler = (choiceId: string) => void;
