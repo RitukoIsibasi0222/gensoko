@@ -1,40 +1,23 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { goto } from '$app/navigation';
   import GameModeCard from '$lib/components/game/GameModeCard.svelte';
   import { MIN_WEAK_ELEMENTS_FOR_GAME } from '$lib/game/constants';
   import { GAME_MODE_CONFIGS } from '$lib/game/modes';
   import type { GameMode } from '$lib/game/types';
   import { authStore } from '$lib/stores/auth.svelte';
-  import { toastStore } from '$lib/stores/toast.svelte';
 
   const PREVIEW_WEAK_ELEMENT_COUNT = MIN_WEAK_ELEMENTS_FOR_GAME - 1;
-  const START_NOTICE_RESET_MS = 1200;
 
   let startingMode = $state<GameMode | null>(null);
-  let startResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   function handleStart(mode: GameMode): void {
     if (startingMode !== null) {
       return;
     }
 
-    if (startResetTimer !== null) {
-      clearTimeout(startResetTimer);
-    }
-
     startingMode = mode;
-    toastStore.info('プレイ画面は後続タスクで実装します。');
-    startResetTimer = setTimeout(() => {
-      startingMode = null;
-      startResetTimer = null;
-    }, START_NOTICE_RESET_MS);
+    void goto(`/game/play?mode=${mode}`);
   }
-
-  onDestroy(() => {
-    if (startResetTimer !== null) {
-      clearTimeout(startResetTimer);
-    }
-  });
 </script>
 
 <div class="space-y-6">
