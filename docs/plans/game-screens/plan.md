@@ -577,14 +577,13 @@ export function getMockGameQuestions(mode: GameMode): readonly MockGamePlayQuest
 
 - 完了日: 2026-06-13
 - 実装ブランチ: `feature/game-play`
-- PR: 未作成
+- PR: #47
 
 ### 計画からの変更点
 
 - `GET /game/questions` / `POST /game/sessions` は計画どおり呼び出さず、`frontend/src/lib/game/mock-questions.ts` の UI モック問題で実装した。
 - `/game/result` は未実装のため、10問完了後は `/game/play` 画面内の完了サマリーと「もう一度」「モード選択へ戻る」導線で完結させた。
 - ログイン済みセッションがない環境だったため、ブラウザでの実ゲーム進行操作は未確認。ゲーム進行の核は `play.test.ts`、画面構文は `npm run check`、未ログインガードとモバイル表示は Browser で確認した。
-- `npm run check` 実行時、`.svelte-kit` の一部生成ファイルが `root:root` 所有で書き込み不可だったため、生成ディレクトリの所有者を `rituko:rituko` に戻してから再実行した。ソース差分には含めていない。
 
 ### 実際の変更ファイル
 
