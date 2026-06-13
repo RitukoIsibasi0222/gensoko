@@ -111,6 +111,26 @@ describe('buildAnswerDraft', () => {
       timedOut: true
     });
   });
+
+  it('remainingSec が範囲外の場合は回答時間を 0 から timeLimitSec に丸める', () => {
+    expect(
+      buildAnswerDraft({
+        question: QUESTION,
+        chosenChoiceId: 'c1',
+        remainingSec: QUESTION_TIME_LIMIT_SEC + 5,
+        timeLimitSec: QUESTION_TIME_LIMIT_SEC
+      }).answerTimeSec
+    ).toBe(0);
+
+    expect(
+      buildAnswerDraft({
+        question: QUESTION,
+        chosenChoiceId: 'c1',
+        remainingSec: -5,
+        timeLimitSec: QUESTION_TIME_LIMIT_SEC
+      }).answerTimeSec
+    ).toBe(QUESTION_TIME_LIMIT_SEC);
+  });
 });
 
 describe('getNextQuestionIndex', () => {

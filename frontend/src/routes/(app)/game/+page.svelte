@@ -10,13 +10,17 @@
 
   let startingMode = $state<GameMode | null>(null);
 
-  function handleStart(mode: GameMode): void {
+  async function handleStart(mode: GameMode): Promise<void> {
     if (startingMode !== null) {
       return;
     }
 
     startingMode = mode;
-    void goto(`/game/play?mode=${mode}`);
+    try {
+      await goto(`/game/play?mode=${mode}`);
+    } catch {
+      startingMode = null;
+    }
   }
 </script>
 

@@ -26,7 +26,11 @@
     <p class="text-sm text-gray-600">{progressLabel}</p>
   </div>
 
-  <ol class="grid grid-cols-10 gap-1.5" aria-label={progressLabel}>
+  <ol
+    class="grid gap-1.5"
+    style={`grid-template-columns: repeat(${Math.max(totalCount, 1)}, minmax(0, 1fr))`}
+    aria-label={progressLabel}
+  >
     {#each items as item (item.index)}
       <li>
         <span
