@@ -25,6 +25,7 @@
   let lastMode = $state<GameMode | null>(null);
   let timerId: ReturnType<typeof setInterval> | null = null;
   let feedbackTimerId: ReturnType<typeof setTimeout> | null = null;
+  let questionStartedAtMs: number | null = null;
 
   const mode = $derived(normalizeGameModeParam(page.url.searchParams.get('mode')));
   const modeConfig = $derived(mode === null ? null : getGameModeConfig(mode));
@@ -73,18 +74,20 @@
     phase = 'answering';
     answers = [];
     selectedAnswer = null;
+    questionStartedAtMs = null;
   }
 
   function startTimer(): void {
     stopTimer();
+    questionStartedAtMs ??= Date.now();
     timerId = setInterval(() => {
-      const nextRemainingSec = Math.max(remainingSec - 1, 0);
+      const nextRemainingSec = getCurrentRemainingSec();
       remainingSec = nextRemainingSec;
 
       if (nextRemainingSec === 0) {
         submitAnswer(null);
       }
-    }, 1000);
+    }, 250);
   }
 
   function stopTimer(): void {
@@ -101,6 +104,15 @@
     }
   }
 
+  function getCurrentRemainingSec(): number {
+    if (questionStartedAtMs === null) {
+      return QUESTION_TIME_LIMIT_SEC;
+    }
+
+    const elapsedSec = Math.floor((Date.now() - questionStartedAtMs) / 1000);
+    return Math.max(QUESTION_TIME_LIMIT_SEC - elapsedSec, 0);
+  }
+
   function scheduleNextStep(): void {
     clearFeedbackTimer();
     feedbackTimerId = setTimeout(() => {
@@ -115,6 +127,7 @@
 
       currentIndex = nextIndex;
       remainingSec = QUESTION_TIME_LIMIT_SEC;
+      questionStartedAtMs = null;
       selectedAnswer = null;
       phase = 'answering';
       feedbackTimerId = null;
@@ -127,14 +140,17 @@
     }
 
     stopTimer();
+    const answerRemainingSec = getCurrentRemainingSec();
+    remainingSec = answerRemainingSec;
     const answer = buildAnswerDraft({
       question: currentQuestion,
       chosenChoiceId: choiceId,
-      remainingSec,
+      remainingSec: answerRemainingSec,
       timeLimitSec: QUESTION_TIME_LIMIT_SEC
     });
     answers = [...answers, answer];
     selectedAnswer = answer;
+    questionStartedAtMs = null;
     phase = 'feedback';
     scheduleNextStep();
   }
