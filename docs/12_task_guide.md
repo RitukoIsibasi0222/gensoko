@@ -465,13 +465,16 @@ backend/src/middleware/rateLimit/index.ts  ← 実装（既存ファイルを編
 | 対象 | 制限 |
 |---|---|
 | 認証系（login/register/forgot-password/reset-password） | 10分間に10リクエスト |
+| ゲーム結果送信（POST /game/sessions） | 1分間に20リクエスト |
 | 一般API | 1分間に60リクエスト |
 
 **実装の選択肢**
 
 - インメモリで管理（シンプル・Dockerを再起動するとリセットされる）
 - Redis で管理（本番向け・複数インスタンスに対応）
-- 今フェーズはインメモリで実装し、デプロイ時に Redis に差し替える設計にしておく
+- Cloudflare 側のエッジ制限で大量アクセスを先に遮断する（本番向け）
+- 今フェーズはテストしやすいミドルウェア境界で実装し、本番では Cloudflare 側の制限と併用する
+- Workers のインスタンス内メモリだけに依存せず、ユーザーID/IP単位で制限できる設計にしておく
 
 ---
 
@@ -669,9 +672,18 @@ GitHub ─→ GitHub Actions
 **手順の大まかな流れ**
 
 1. Supabase でプロジェクト作成 → `DATABASE_URL` を取得
-2. Cloudflare Workers に `wrangler deploy` でバックエンドをデプロイ
-3. Vercel に SvelteKit をデプロイ
-4. GitHub Actions で push 時に自動デプロイされるよう設定
+2. 本番DBバックアップ取得状況を確認
+3. GitHub Actions で `prisma migrate deploy` を実行
+4. Cloudflare Workers に `wrangler deploy` でバックエンドをデプロイ
+5. Vercel に SvelteKit をデプロイ
+6. GitHub Actions で push 時に自動デプロイされるよう設定
+
+**リリース前に必ず決めること**
+
+- `prisma migrate deploy` は API デプロイ前に実行する
+- DB変更は expand/contract 方式で後方互換を保つ
+- 500系エラーを検知するエラートラッキングまたは構造化ログの通知先を設定する
+- 認証系・一般API・`POST /game/sessions` のレート制限を本番設定に反映する
 
 ---
 

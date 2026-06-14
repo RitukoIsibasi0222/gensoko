@@ -1,6 +1,6 @@
 # Gensoko 実装タスク一覧
 
-> 更新日: 2026-06-13
+> 更新日: 2026-06-14
 > ステータス: `[ ]` 未実装 / `[-]` 実装中 / `[x]` 完了
 
 ---
@@ -11,6 +11,8 @@
 |---|------|------|
 | 設計決定1 | 習得バッジ用「どの元素が習得済みか」の追跡方法 | **GameAnswer集計方式**（新テーブルなし）。`GET /elements` は認証時に `masteryStatus: "unlearned" \| "learning" \| "mastered"` を付与。`POST /game/sessions` 時の `UserStats.masteredCount` 更新はフェーズ7で実装 |
 | 設計決定2 | `GET /game/questions` → `POST /game/sessions` 間の正解一時保持 | **GameQuestionSetテーブル方式**。`GET /game/questions` でDBに正解情報と有効期限（30分）を保存し `questionSetId` を返す。`POST /game/sessions` で受け取り正誤判定後削除 |
+| 設計決定3 | 本番DBマイグレーション運用 | GitHub Actions で本番デプロイ前に `prisma migrate deploy` を実行する。実行前に Supabase のバックアップ取得時刻を確認し、破壊的変更は expand/contract 方式で複数リリースに分ける |
+| 設計決定4 | 本番レート制限の責務分担 | Cloudflare 側のエッジ制限と Hono ミドルウェアを併用する。認証系・一般APIに加え、`POST /game/sessions` はユーザーID/IP単位でより厳しく制限する |
 
 ---
 
@@ -151,6 +153,8 @@
 ## フェーズ11: セキュリティ・品質仕上げ
 
 - [ ] セキュリティヘッダーミドルウェア（CSP/HSTS/X-Frame-Options/nosniff等）
+- [ ] APIレート制限の本番設計・適用（認証系 / 一般API / `POST /game/sessions`）
+- [ ] エラートラッキング・構造化ログ導入（500通知・requestId・個人情報除外）
 - [ ] ダークモード対応（OS設定追従 + トグルボタン）
 - [ ] レスポンシブデザイン確認・修正（PC/タブレット/スマホ）
 - [ ] アクセシビリティ確認（キーボード操作・スクリーンリーダー）
@@ -159,7 +163,8 @@
 ## フェーズ12: デプロイ
 
 - [ ] Supabase プロジェクト作成・接続 URL 取得
+- [ ] 本番DBバックアップ・Prismaマイグレーション運用（`migrate deploy` 実行タイミング・ロールバック方針）
 - [ ] Cloudflare Workers wrangler.toml + @prisma/adapter-cloudflare 設定・デプロイ
 - [ ] Vercel SvelteKit デプロイ・環境変数設定
-- [ ] GitHub Actions CI/CD 設定（自動デプロイ）
+- [ ] GitHub Actions CI/CD 設定（本番マイグレーション → APIデプロイ → フロントデプロイ）
 - [ ] npm audit・本番環境動作確認（ログイン/ゲーム/メール）
