@@ -131,6 +131,14 @@
 - **選択**: GET は `body` 不可（型レベルで弾く）。`apiGet` のオプション型から `body` を除外
 - **根拠**: RFC 7231 準拠
 
+### 8. Hono RPC の導入検討
+
+- **選択**: このタスク内で導入可否を検討し、採用判断を記録する。初期実装は fetch ラッパーを前提に進める
+- **根拠**:
+  - Hono RPC は backend の route 型を frontend に共有できる可能性があり、API 型の二重管理を減らせる
+  - 一方で frontend / backend が別パッケージ・別デプロイであるため、型 export の境界、ビルド時間、SvelteKit 側の import 経路、Cloudflare Workers 向け build との相性を確認する必要がある
+  - 認証 refresh、`credentials: 'include'`、共通 `ApiError`、非 JSON エラー処理は RPC 採用時も必要になるため、まず責務を整理してから採否を決める
+
 ## 公開インターフェース案
 
 実装コードは書かない。型シグネチャと役割説明のみ。
@@ -218,6 +226,7 @@
 | T15      | テスト: 401 並行 2 リクエスト → refresh が 1 回だけ呼ばれる           | `src/lib/api/client.test.ts`   | 高     | 単一フライト検証              |
 | T16      | テスト: 204 レスポンス → null を返す                                  | `src/lib/api/client.test.ts`   | 中     |                               |
 | T17      | テスト: AbortSignal が伝搬されてキャンセル可能                        | `src/lib/api/client.test.ts`   | 中     |                               |
+| T18      | Hono RPC の導入可否を検討し、採用 / 見送り理由を記録                  | 本ファイルまたは追加ADR        | 中     | 型共有・認証・build 境界      |
 
 進捗チェックリスト:
 
@@ -238,6 +247,7 @@
 - [ ] T15: テスト 単一フライト
 - [ ] T16: テスト 204
 - [ ] T17: テスト AbortSignal
+- [ ] T18: Hono RPC 導入可否の検討
 
 ## テストケース一覧
 

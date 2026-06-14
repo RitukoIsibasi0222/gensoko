@@ -79,7 +79,7 @@
 
 ### 3-1. GET /elements
 
-**目的**  
+**目的**
 元素一覧を返す。ログインユーザーには「この元素を習得済みか」も付与する（設計決定1）。
 
 **作成・変更ファイル**
@@ -120,7 +120,7 @@ backend/src/routes/elements/elements.test.ts  ← テスト（新規作成）
 
 ### 3-2. GET /elements/:id
 
-**目的**  
+**目的**
 特定の元素の詳細情報（由来情報 `etymology` を含む）を返す。
 
 **作成・変更ファイル**
@@ -186,6 +186,7 @@ GET /game/questions
 
 - 正解情報をクライアントに渡すと、開発者ツールで簡単に答えが分かってしまう
 - `GameQuestionSet` に有効期限(30分)を設けることで、古いセットでの不正回答を防止する
+- `expiresAt` に index を張り、期限切れ cleanup がテーブル全走査にならないようにする
 
 **よくあるミス**
 
@@ -234,7 +235,28 @@ backend/src/routes/game/sessions.test.ts  ← テスト（新規作成）
 
 ---
 
-### 3-5. GET /game/sessions
+### 3-5. 期限切れ GameQuestionSet クリーンアップ
+
+**目的**
+回答されずに期限切れになった `GameQuestionSet` を削除し、テーブル肥大化と古い一時データの残留を防ぐ。
+
+**作成・変更ファイル**
+
+```
+backend/src/jobs/cleanupGameQuestionSets.ts  ← 新規作成（手動実行・Cron共用）
+backend/src/jobs/cleanupGameQuestionSets.test.ts  ← テスト（新規作成）
+```
+
+**実装の流れ**
+
+1. `expiresAt < now` の `GameQuestionSet` を `deleteMany` で削除する
+2. 削除件数を構造化ログに出す（個人情報は含めない）
+3. 開発環境では手動実行、本番では Cloudflare Workers Cron Trigger で定期実行する
+4. `expiresAt` index が Prisma schema / migration に反映されていることを確認する
+
+---
+
+### 3-6. GET /game/sessions
 
 **目的**  
 ログインユーザーのゲーム履歴一覧を返す。
@@ -254,7 +276,7 @@ backend/src/routes/game/game-sessions.test.ts ← テスト（新規作成）
 
 ---
 
-### 3-6. GET /weak + DELETE /weak/:elementId
+### 3-7. GET /weak + DELETE /weak/:elementId
 
 **目的**  
 - `GET /weak`：ユーザーの苦手リストを返す
@@ -369,6 +391,7 @@ backend/src/jobs/weeklyReset.ts  ← 新規作成（cronジョブ）
 
 - Node.js の `node-cron` パッケージを使って定期実行する
 - または、Cloudflare Workers の Cron Trigger（デプロイ後に設定）
+- `GameQuestionSet` cleanup と同じ Cron 運用方針に寄せ、ジョブの実行ログ・失敗通知を共通化する
 
 ---
 

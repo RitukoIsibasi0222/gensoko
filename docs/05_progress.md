@@ -13,6 +13,7 @@
 | 設計決定2 | `GET /game/questions` → `POST /game/sessions` 間の正解一時保持 | **GameQuestionSetテーブル方式**。`GET /game/questions` でDBに正解情報と有効期限（30分）を保存し `questionSetId` を返す。`POST /game/sessions` で受け取り正誤判定後削除 |
 | 設計決定3 | 本番DBマイグレーション運用 | GitHub Actions で本番デプロイ前に `prisma migrate deploy` を実行する。実行前に Supabase のバックアップ取得時刻を確認し、破壊的変更は expand/contract 方式で複数リリースに分ける |
 | 設計決定4 | 本番レート制限の責務分担 | Cloudflare 側のエッジ制限と Hono ミドルウェアを併用する。認証系・一般APIに加え、`POST /game/sessions` はユーザーID/IP単位でより厳しく制限する |
+| 設計決定5 | スキーマ確定時のインデックス設計 | `docs/03_data_model.md` のインデックス案を Prisma schema / migration に反映する。`GameQuestionSet` 期限切れ cleanup、ランキング、履歴、苦手リスト、token 期限検索を主要対象にする |
 
 ---
 
@@ -22,7 +23,7 @@
 - [x] Docker Compose起動（hono/sveltekit/postgres/mailpit）※sveltekitはport 5174
 - [x] backend .env 作成（DATABASE_URL / JWT_SECRET / MAIL等）
 - [x] backend package.json・tsconfig.json 作成
-- [x] Prismaスキーマ定義・マイグレーション実行
+- [x] Prismaスキーマ定義・マイグレーション実行（主要インデックスは設計決定5に従い本番前に schema/migration へ反映）
 - [x] 元素シードデータ作成・投入（prisma/seed.ts・118元素）
 - [x] 元素モデルに由来フィールド追加（etymology）+ シードデータ更新
 - [x] src/index.ts 作成・Honoサーバー起動確認
@@ -58,7 +59,7 @@
 ### フロントエンド共通基盤
 - [x] SvelteKit ルーティング・共通レイアウト（ヘッダー/フッター/ナビ）
 - [x] 認証 Store（Svelte ストア・Bearer トークン管理・リフレッシュ自動実行）
-- [-] API クライアント基盤（`lib/api/client.ts`・共通エラーハンドリング） — 計画書: [`docs/plans/frontend-api-client/plan.md`](plans/frontend-api-client/plan.md)
+- [-] API クライアント基盤（`lib/api/client.ts`・共通エラーハンドリング・Hono RPC 導入可否検討） — 計画書: [`docs/plans/frontend-api-client/plan.md`](plans/frontend-api-client/plan.md)
 - [x] トースト通知コンポーネント（成功/エラー表示）
 
 ### アカウント系画面
@@ -104,7 +105,7 @@
 
 ### 画面
 - [x] ゲームモード選択画面 `/game`（モード一覧・苦手5問未満ガード表示） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
-- [x] ゲームプレイ画面 `/game/play`（インジケーター・15秒タイマー・4択・正誤フィードバック・1〜4キー操作） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
+- [x] ゲームプレイ画面 `/game/play`（インジケーター・15秒タイマー・4択・正誤フィードバック・1〜4キー操作・A11Y 読み上げ順考慮） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 - [ ] ゲーム結果画面 `/game/result`（スコア・連続正解・間違え一覧・「もう一度」「ホームへ」） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 
 ### API インターフェース確定
@@ -117,6 +118,7 @@
 
 - [ ] GET /game/questions（ランダム10問・4択生成・GameQuestionSet保存・苦手5問未満チェック【設計決定2】）
 - [ ] POST /game/sessions（questionSetId受信・正誤判定・スコア計算・苦手自動更新・consecutiveHit・masteredCount更新【設計決定1・2】）
+- [ ] 期限切れ GameQuestionSet クリーンアップ処理（手動実行 + Cron Trigger 想定）
 - [ ] GET /game/sessions（ゲーム履歴一覧）
 - [ ] ゲーム API のテスト
 
@@ -141,6 +143,7 @@
 - [ ] GET /users/me/stats
 - [ ] GET /ranking/weekly + /alltime（myRank フィールド・Top50）
 - [ ] 週間スコアリセットバッチ処理（weeklyScore リセット）
+- [ ] 定期バッチ運用設計（週間リセット・GameQuestionSet cleanup の Cron Trigger 設定）
 - [ ] 残 API のテスト
 
 ## フェーズ10: 管理者機能
