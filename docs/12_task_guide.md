@@ -79,7 +79,7 @@
 
 ### 3-1. GET /elements
 
-**目的**  
+**目的**
 元素一覧を返す。ログインユーザーには「この元素を習得済みか」も付与する（設計決定1）。
 
 **作成・変更ファイル**
@@ -120,7 +120,7 @@ backend/src/routes/elements/elements.test.ts  ← テスト（新規作成）
 
 ### 3-2. GET /elements/:id
 
-**目的**  
+**目的**
 特定の元素の詳細情報（由来情報 `etymology` を含む）を返す。
 
 **作成・変更ファイル**
@@ -186,6 +186,7 @@ GET /game/questions
 
 - 正解情報をクライアントに渡すと、開発者ツールで簡単に答えが分かってしまう
 - `GameQuestionSet` に有効期限(30分)を設けることで、古いセットでの不正回答を防止する
+- `expiresAt` に index を張り、期限切れ cleanup がテーブル全走査にならないようにする
 
 **よくあるミス**
 
@@ -234,7 +235,28 @@ backend/src/routes/game/sessions.test.ts  ← テスト（新規作成）
 
 ---
 
-### 3-5. GET /game/sessions
+### 3-5. 期限切れ GameQuestionSet クリーンアップ
+
+**目的**
+回答されずに期限切れになった `GameQuestionSet` を削除し、テーブル肥大化と古い一時データの残留を防ぐ。
+
+**作成・変更ファイル**
+
+```
+backend/src/jobs/cleanupGameQuestionSets.ts  ← 新規作成（手動実行・Cron共用）
+backend/src/jobs/cleanupGameQuestionSets.test.ts  ← テスト（新規作成）
+```
+
+**実装の流れ**
+
+1. `expiresAt < now` の `GameQuestionSet` を `deleteMany` で削除する
+2. 削除件数を構造化ログに出す（個人情報は含めない）
+3. 開発環境では手動実行、本番では Cloudflare Workers Cron Trigger で定期実行する
+4. `expiresAt` index が Prisma schema / migration に反映されていることを確認する
+
+---
+
+### 3-6. GET /game/sessions
 
 **目的**  
 ログインユーザーのゲーム履歴一覧を返す。
@@ -254,7 +276,7 @@ backend/src/routes/game/game-sessions.test.ts ← テスト（新規作成）
 
 ---
 
-### 3-6. GET /weak + DELETE /weak/:elementId
+### 3-7. GET /weak + DELETE /weak/:elementId
 
 **目的**  
 - `GET /weak`：ユーザーの苦手リストを返す
@@ -369,6 +391,7 @@ backend/src/jobs/weeklyReset.ts  ← 新規作成（cronジョブ）
 
 - Node.js の `node-cron` パッケージを使って定期実行する
 - または、Cloudflare Workers の Cron Trigger（デプロイ後に設定）
+- `GameQuestionSet` cleanup と同じ Cron 運用方針に寄せ、ジョブの実行ログ・失敗通知を共通化する
 
 ---
 
@@ -465,13 +488,16 @@ backend/src/middleware/rateLimit/index.ts  ← 実装（既存ファイルを編
 | 対象 | 制限 |
 |---|---|
 | 認証系（login/register/forgot-password/reset-password） | 10分間に10リクエスト |
+| ゲーム結果送信（POST /game/sessions） | 1分間に20リクエスト |
 | 一般API | 1分間に60リクエスト |
 
 **実装の選択肢**
 
 - インメモリで管理（シンプル・Dockerを再起動するとリセットされる）
 - Redis で管理（本番向け・複数インスタンスに対応）
-- 今フェーズはインメモリで実装し、デプロイ時に Redis に差し替える設計にしておく
+- Cloudflare 側のエッジ制限で大量アクセスを先に遮断する（本番向け）
+- 今フェーズはテストしやすいミドルウェア境界で実装し、本番では Cloudflare 側の制限と併用する
+- Workers のインスタンス内メモリだけに依存せず、ユーザーID/IP単位で制限できる設計にしておく
 
 ---
 
@@ -572,25 +598,41 @@ frontend/src/lib/api/client.ts    ← 共通フェッチ設定（ベースURL・
 
 ```ts
 // lib/api/client.ts
-const BASE_URL = import.meta.env.VITE_API_URL;
+import { API_BASE_URL } from '$lib/api/config';
+import { parseErrorResponse } from '$lib/api/errors';
+
+type ApiFetchOptions = Omit<RequestInit, "body"> & {
+  accessToken?: string | null;
+  body?: unknown;
+};
 
 export async function apiFetch<T>(
   path: string,
-  options?: RequestInit,
+  options: ApiFetchOptions = {},
 ): Promise<T> {
-  const token = get(authStore)?.token;
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
+  const { accessToken, headers, ...fetchOptions } = options;
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    credentials: "include",
+    ...fetchOptions,
+    body:
+      options.body === undefined || typeof options.body === "string"
+        ? options.body
+        : JSON.stringify(options.body),
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...headers,
     },
   });
+
   if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message ?? "APIエラー");
+    await parseErrorResponse(res);
   }
+
+  if (res.status === 204) {
+    return null as T;
+  }
+
   return res.json();
 }
 ```
@@ -669,9 +711,18 @@ GitHub ─→ GitHub Actions
 **手順の大まかな流れ**
 
 1. Supabase でプロジェクト作成 → `DATABASE_URL` を取得
-2. Cloudflare Workers に `wrangler deploy` でバックエンドをデプロイ
-3. Vercel に SvelteKit をデプロイ
-4. GitHub Actions で push 時に自動デプロイされるよう設定
+2. 本番DBバックアップ取得状況を確認
+3. GitHub Actions で `prisma migrate deploy` を実行
+4. Cloudflare Workers に `wrangler deploy` でバックエンドをデプロイ
+5. Vercel に SvelteKit をデプロイ
+6. GitHub Actions で push 時に自動デプロイされるよう設定
+
+**リリース前に必ず決めること**
+
+- `prisma migrate deploy` は API デプロイ前に実行する
+- DB変更は expand/contract 方式で後方互換を保つ
+- 500系エラーを検知するエラートラッキングまたは構造化ログの通知先を設定する
+- 認証系・一般API・`POST /game/sessions` のレート制限を本番設定に反映する
 
 ---
 

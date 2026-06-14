@@ -132,7 +132,7 @@ export default app;
 Vercelダッシュボード → Settings → Environment Variables：
 
 ```
-VITE_API_URL = https://gensoko-api.あなたのユーザー名.workers.dev
+VITE_API_BASE_URL = https://gensoko-api.あなたのユーザー名.workers.dev/api/v1
 ```
 
 ---
@@ -200,9 +200,31 @@ wrangler deploy
 
 ---
 
+## 本番DBバックアップ・マイグレーション運用
+
+### 基本方針
+
+- 本番DBの変更は `prisma migrate deploy` でのみ適用する
+- `prisma migrate deploy` は GitHub Actions の本番デプロイ中、Cloudflare Workers への API デプロイ前に実行する
+- 実行前に Supabase のバックアップ取得状況または手動バックアップ時刻を確認する
+- `DATABASE_URL` は GitHub Actions の Environment Secret として管理し、リポジトリや `wrangler.toml` には書かない
+
+### ロールバック方針
+
+DBを即時に巻き戻す前提にはしない。まず直前のアプリケーションバージョンへロールバックできるよう、スキーマ変更は後方互換を維持する。
+
+- 列追加は nullable または default 付きで追加し、旧コードが動く状態を保つ
+- 既存列の削除・rename・not null 化・型変更は同一リリースで行わず、expand/contract 方式で分ける
+- データ移行が必要な場合は、追加 → backfill → 新旧両対応 → 切替 → 旧列削除の順で進める
+- 障害時は API / フロントを先に直前バージョンへ戻し、データ復元が必要な場合のみバックアップからの復元を判断する
+
+---
+
 ## GitHub Actions による自動デプロイ（CI/CD）
 
-`.github/workflows/deploy.yml`:
+> 現時点では `.github/workflows/` は未作成。
+> 以下はフェーズ12で追加する `.github/workflows/deploy.yml` のサンプル。
+
 ```yaml
 name: Deploy
 
@@ -214,6 +236,7 @@ jobs:
   deploy-frontend:
     name: Deploy SvelteKit to Vercel
     runs-on: ubuntu-latest
+    needs: deploy-backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -239,6 +262,11 @@ jobs:
       - name: Install dependencies
         working-directory: backend
         run: npm install
+      - name: Deploy database migrations
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma migrate deploy
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
@@ -248,6 +276,28 @@ jobs:
 
 > `secrets.VERCEL_TOKEN` などは GitHub の「Settings > Secrets and variables > Actions」に登録します。
 
+> `secrets.DATABASE_URL` は `prisma migrate deploy` 用です。Workers 実行時の接続URLは `wrangler secret put DATABASE_URL` で別途設定します。
+
+---
+
+## オブザーバビリティ設定
+
+- 本番 API の `500` 系エラーを Sentry 等のエラートラッキング、または Cloudflare Workers の構造化ログで検知できるようにする
+- API レスポンスとログを紐づけるため、リクエストごとに `requestId` を発行する
+- ログには `method` / `path` / `status` / `durationMs` / `requestId` を含める
+- パスワード・トークン・Cookie・メールアドレスなどの秘密情報や個人情報はログや外部監視サービスに送らない
+- `500` 系エラーが発生したら開発者へ通知されるよう、通知先を設定する
+
+---
+
+## 本番レート制限設定
+
+- Cloudflare 側のエッジ制限で大量アクセスを遮断する
+- Hono のレート制限ミドルウェアでも認証系API・一般API・`POST /game/sessions` を制限する
+- `POST /auth/register` はメール爆撃対策として認証系APIの制限対象に含める
+- `POST /game/sessions` はチート・連打対策としてユーザーID + IP単位で制限する
+- 制限超過時の API レスポンスは `429` と日本語エラーメッセージに統一する
+
 ---
 
 ## 本番デプロイのチェックリスト
@@ -255,12 +305,17 @@ jobs:
 ```
 [ ] Supabaseプロジェクト作成・接続URLの取得
 [ ] Vercelアカウント作成・プロジェクトインポート
-[ ] Vercelに VITE_API_URL 環境変数を設定
+[ ] Vercelに VITE_API_BASE_URL 環境変数を設定
 [ ] Cloudflareアカウント作成・Wranglerインストール
 [ ] wrangler.toml 作成
 [ ] DATABASE_URL と JWT_SECRET を Wrangler Secrets に設定
+[ ] GitHub Actions の DATABASE_URL Secret を設定（migrate deploy 用）
+[ ] 本番DBバックアップ取得状況を確認
+[ ] prisma migrate deploy の実行タイミングを確認
 [ ] wrangler deploy で初回デプロイ
 [ ] GitHub Actions の Secrets 設定（CI/CD）
+[ ] エラートラッキングまたは構造化ログの通知先を設定
+[ ] Cloudflare / Hono のレート制限設定を確認
 [ ] 本番環境での動作確認（ログイン・ゲーム・メール）
 [ ] CORS設定の確認（フロントエンドのURLが正しく許可されているか）
 ```
@@ -494,7 +549,7 @@ jobs:
           npm install
           npm run build
         env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
       - name: Deploy to Firebase
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
@@ -506,7 +561,7 @@ jobs:
   # Railwayはpush時に自動デプロイされるので設定不要
 ```
 
-> ✅ `secrets.VITE_API_URL` などの秘密情報は GitHub の「Settings > Secrets」に登録します
+> ✅ `secrets.VITE_API_BASE_URL` などの秘密情報は GitHub の「Settings > Secrets」に登録します
 > ✅ Railway は GitHub と連携すると push 時に自動でデプロイされます（設定不要）
 
 ---
@@ -517,7 +572,7 @@ jobs:
 
 ```env
 # Laravelのデプロイ先URL（Railwayが発行したURL）
-VITE_API_URL=https://gensoko-api.railway.app
+VITE_API_BASE_URL=https://gensoko-api.railway.app/api/v1
 ```
 
 > `VITE_` で始まる変数はブラウザから見えます。秘密情報を入れないこと。
