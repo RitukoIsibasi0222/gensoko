@@ -222,7 +222,9 @@ DBを即時に巻き戻す前提にはしない。まず直前のアプリケー
 
 ## GitHub Actions による自動デプロイ（CI/CD）
 
-`.github/workflows/deploy.yml`:
+> 現時点では `.github/workflows/` は未作成。
+> 以下はフェーズ12で追加する `.github/workflows/deploy.yml` のサンプル。
+
 ```yaml
 name: Deploy
 

@@ -598,25 +598,41 @@ frontend/src/lib/api/client.ts    ← 共通フェッチ設定（ベースURL・
 
 ```ts
 // lib/api/client.ts
-const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+import { API_BASE_URL } from '$lib/api/config';
+import { parseErrorResponse } from '$lib/api/errors';
+
+type ApiFetchOptions = Omit<RequestInit, "body"> & {
+  accessToken?: string | null;
+  body?: unknown;
+};
 
 export async function apiFetch<T>(
   path: string,
-  options?: RequestInit,
+  options: ApiFetchOptions = {},
 ): Promise<T> {
-  const token = get(authStore)?.token;
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
+  const { accessToken, headers, ...fetchOptions } = options;
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    credentials: "include",
+    ...fetchOptions,
+    body:
+      options.body === undefined || typeof options.body === "string"
+        ? options.body
+        : JSON.stringify(options.body),
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...headers,
     },
   });
+
   if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message ?? "APIエラー");
+    await parseErrorResponse(res);
   }
+
+  if (res.status === 204) {
+    return null as T;
+  }
+
   return res.json();
 }
 ```
