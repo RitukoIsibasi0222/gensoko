@@ -598,7 +598,7 @@ frontend/src/lib/api/client.ts    ← 共通フェッチ設定（ベースURL・
 
 ```ts
 // lib/api/client.ts
-const BASE_URL = import.meta.env.VITE_API_URL;
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 export async function apiFetch<T>(
   path: string,

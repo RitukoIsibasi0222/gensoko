@@ -132,7 +132,7 @@ export default app;
 Vercelダッシュボード → Settings → Environment Variables：
 
 ```
-VITE_API_URL = https://gensoko-api.あなたのユーザー名.workers.dev
+VITE_API_BASE_URL = https://gensoko-api.あなたのユーザー名.workers.dev/api/v1
 ```
 
 ---
@@ -303,7 +303,7 @@ jobs:
 ```
 [ ] Supabaseプロジェクト作成・接続URLの取得
 [ ] Vercelアカウント作成・プロジェクトインポート
-[ ] Vercelに VITE_API_URL 環境変数を設定
+[ ] Vercelに VITE_API_BASE_URL 環境変数を設定
 [ ] Cloudflareアカウント作成・Wranglerインストール
 [ ] wrangler.toml 作成
 [ ] DATABASE_URL と JWT_SECRET を Wrangler Secrets に設定
@@ -547,7 +547,7 @@ jobs:
           npm install
           npm run build
         env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
       - name: Deploy to Firebase
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
@@ -559,7 +559,7 @@ jobs:
   # Railwayはpush時に自動デプロイされるので設定不要
 ```
 
-> ✅ `secrets.VITE_API_URL` などの秘密情報は GitHub の「Settings > Secrets」に登録します
+> ✅ `secrets.VITE_API_BASE_URL` などの秘密情報は GitHub の「Settings > Secrets」に登録します
 > ✅ Railway は GitHub と連携すると push 時に自動でデプロイされます（設定不要）
 
 ---
@@ -570,7 +570,7 @@ jobs:
 
 ```env
 # Laravelのデプロイ先URL（Railwayが発行したURL）
-VITE_API_URL=https://gensoko-api.railway.app
+VITE_API_BASE_URL=https://gensoko-api.railway.app/api/v1
 ```
 
 > `VITE_` で始まる変数はブラウザから見えます。秘密情報を入れないこと。

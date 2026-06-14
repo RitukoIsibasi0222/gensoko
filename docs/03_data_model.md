@@ -212,25 +212,25 @@ model UserStats {
 
 ```sql
 -- ゲーム履歴の検索高速化
-CREATE INDEX idx_game_sessions_user_played ON game_sessions(user_id, played_at DESC);
+CREATE INDEX idx_game_sessions_user_played ON "game_sessions"("userId", "playedAt" DESC);
 
 -- ゲーム回答の集計高速化
-CREATE INDEX idx_game_answers_session ON game_answers(session_id);
-CREATE INDEX idx_game_answers_element ON game_answers(element_id);
+CREATE INDEX idx_game_answers_session ON "game_answers"("sessionId");
+CREATE INDEX idx_game_answers_element ON "game_answers"("elementId");
 
 -- 苦手リストの検索
-CREATE INDEX idx_weak_elements_user ON weak_elements(user_id);
+CREATE INDEX idx_weak_elements_user ON "weak_elements"("userId");
 
 -- ランキング用
-CREATE INDEX idx_user_stats_weekly ON user_stats(weekly_score DESC);
-CREATE INDEX idx_user_stats_alltime ON user_stats(all_time_score DESC);
+CREATE INDEX idx_user_stats_weekly ON "user_stats"("weeklyScore" DESC);
+CREATE INDEX idx_user_stats_alltime ON "user_stats"("allTimeScore" DESC);
 
 -- リフレッシュトークンの有効期限チェック
-CREATE INDEX idx_refresh_tokens_expires ON refresh_tokens(expires_at);
+CREATE INDEX idx_refresh_tokens_expires ON "refresh_tokens"("expiresAt");
 
 -- メール認証・パスワードリセット・一時問題セットの期限切れ cleanup
-CREATE INDEX idx_email_verifications_expires ON email_verifications(expires_at);
-CREATE INDEX idx_password_reset_tokens_expires ON password_reset_tokens(expires_at);
-CREATE INDEX idx_game_question_sets_expires ON game_question_sets(expires_at);
-CREATE INDEX idx_game_question_sets_user_created ON game_question_sets(user_id, created_at DESC);
+CREATE INDEX idx_email_verifications_expires ON "email_verifications"("expiresAt");
+CREATE INDEX idx_password_reset_tokens_expires ON "password_reset_tokens"("expiresAt");
+CREATE INDEX idx_game_question_sets_expires ON "game_question_sets"("expiresAt");
+CREATE INDEX idx_game_question_sets_user_created ON "game_question_sets"("userId", "createdAt" DESC);
 ```
