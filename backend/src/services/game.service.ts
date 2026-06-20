@@ -10,7 +10,6 @@ const QUESTION_SET_EXPIRES_MS = 30 * 60 * 1000;
 export const QUESTION_TIME_LIMIT_SEC = 15;
 export const GAME_SESSION_DURATION_LIMIT_SEC = 1800;
 const BASE_CORRECT_SCORE = 100;
-const TIME_BONUS_PER_SEC = 5;
 const WEAK_ELEMENT_MASTERED_CONSECUTIVE_HIT_COUNT = 2;
 const ELEMENT_ID_MIN = 1;
 const ELEMENT_ID_MAX = 118;
@@ -289,12 +288,8 @@ function parseStoredQuestions(value: unknown): StoredGameQuestion[] {
   return value;
 }
 
-function calculateQuestionScore(isCorrect: boolean, answerTimeSec: number): number {
-  if (!isCorrect) {
-    return 0;
-  }
-
-  return BASE_CORRECT_SCORE + (QUESTION_TIME_LIMIT_SEC - answerTimeSec) * TIME_BONUS_PER_SEC;
+function calculateQuestionScore(isCorrect: boolean): number {
+  return isCorrect ? BASE_CORRECT_SCORE : 0;
 }
 
 function calculateMaxStreak(results: readonly GameSessionResultItem[]): number {
@@ -391,7 +386,7 @@ function buildSessionResults({
       correctAnswer: correctChoice.text,
       yourAnswer: chosenChoice?.text ?? null,
       answerTimeSec: answer.answerTimeSec,
-      score: calculateQuestionScore(isCorrect, answer.answerTimeSec),
+      score: calculateQuestionScore(isCorrect),
     };
   });
 }

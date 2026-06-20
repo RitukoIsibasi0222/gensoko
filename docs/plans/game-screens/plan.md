@@ -219,7 +219,7 @@
   "mode": "SYMBOL_TO_NAME_LV1",
   "correctCount": 8,
   "totalCount": 10,
-  "totalScore": 1120,
+  "totalScore": 800,
   "maxStreak": 5,
   "durationSec": 72,
   "playedAt": "2026-06-20T12:35:00.000Z",
@@ -233,7 +233,7 @@
       "correctAnswer": "水素",
       "yourAnswer": "水素",
       "answerTimeSec": 5,
-      "score": 150
+      "score": 100
     },
     {
       "questionId": "q2",
@@ -266,13 +266,12 @@
 
 ```ts
 const BASE_CORRECT_SCORE = 100;
-const TIME_BONUS_PER_SEC = 5;
 const QUESTION_TIME_LIMIT_SEC = 15;
 ```
 
 - 不正解・時間切れは `score = 0`。
-- 正解は `score = 100 + (15 - answerTimeSec) * 5`。
-- `answerTimeSec` は整数のため、1問あたりの最大スコアは175、最小正解スコアは100。
+- 正解は `score = 100`。
+- `answerTimeSec` は保存・表示用として扱い、クライアント申告値のため score には使わない。
 - `totalScore` は各問 `score` の合計。
 - `maxStreak` は request の配列順ではなく、保存済み `GameQuestionSet.questions` の順序に沿って計算する。
 
@@ -558,7 +557,7 @@ export function submitGameSession(
 | unknown questionId | 400 バリデーションエラー |
 | unknown chosenChoiceId | 400 バリデーションエラー |
 | chosenChoiceId null | 時間切れとして不正解、`yourAnswer: null`, `score: 0` |
-| 正解回答 | `isCorrect: true`、score が計算される |
+| 正解回答 | `isCorrect: true`、`score: 100` |
 | 不正解回答 | `isCorrect: false`、score 0 |
 | maxStreak | 保存済み question 順で最大連続正解数が計算される |
 | GameSession 保存 | userId, mode, totalScore, correctCount, totalCount, durationSec が保存される |
@@ -676,6 +675,7 @@ export function submitGameSession(
 - PRレビュー対応により、Abort 判定は `DOMException` だけでなく `Error` の `name === "AbortError"` も受け付ける形にした。
 - 追加PRレビュー対応により、`GameQuestionSet.expiresAt === now` も期限切れとして扱うようにし、境界テストを追加した。
 - 追加PRレビュー対応により、`masteredCount` は全118元素再計算ではなく、今回セッションで影響したユニーク元素の保存前後差分で更新するようにした。
+- 追加PRレビュー対応により、`answerTimeSec` は保存・表示用に限定し、スコアはクライアント申告時間に依存しない正解固定100点へ変更した。
 
 ### 実際の変更ファイル
 

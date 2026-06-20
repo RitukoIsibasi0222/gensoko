@@ -7,7 +7,7 @@ const SESSION_RESULT: GameSessionResponse = {
   mode: 'SYMBOL_TO_NAME_LV1',
   totalCount: 2,
   correctCount: 1,
-  totalScore: 155,
+  totalScore: 100,
   maxStreak: 1,
   durationSec: 22,
   playedAt: '2026-06-20T12:35:00.000Z',
@@ -21,7 +21,7 @@ const SESSION_RESULT: GameSessionResponse = {
       correctAnswer: '水素',
       yourAnswer: '水素',
       answerTimeSec: 4,
-      score: 155
+      score: 100
     },
     {
       questionId: 'q2',

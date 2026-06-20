@@ -224,7 +224,7 @@ Response 201:
   "mode": "SYMBOL_TO_NAME_LV1",
   "correctCount": 8,
   "totalCount": 10,
-  "totalScore": 1120,
+  "totalScore": 800,
   "maxStreak": 5,
   "durationSec": 72,
   "playedAt": "2026-06-20T12:35:00.000Z",
@@ -238,7 +238,7 @@ Response 201:
       "correctAnswer": "水素",
       "yourAnswer": "水素",
       "answerTimeSec": 5,
-      "score": 150
+      "score": 100
     },
     {
       "questionId": "q2",
@@ -256,8 +256,9 @@ Response 201:
 }
 
 Score:
-  - 正解: 100 + (15 - answerTimeSec) * 5
+  - 正解: 100
   - 不正解・時間切れ: 0
+  - answerTimeSec は保存・表示用。クライアント申告値のため score には使わない
   - maxStreak は保存済み GameQuestionSet.questions の順序で計算
 
 // ※ このレスポンスを /game/result の表示元にする

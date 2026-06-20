@@ -100,7 +100,7 @@ const mockSessionResult = {
   mode: "SYMBOL_TO_NAME_LV1" as const,
   correctCount: 1,
   totalCount: 1,
-  totalScore: 150,
+  totalScore: 100,
   maxStreak: 1,
   durationSec: 72,
   playedAt: new Date("2026-06-20T12:35:00.000Z"),
@@ -114,7 +114,7 @@ const mockSessionResult = {
       correctAnswer: "水素",
       yourAnswer: "水素",
       answerTimeSec: 5,
-      score: 150,
+      score: 100,
     },
   ],
 };
