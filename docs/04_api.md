@@ -209,28 +209,70 @@ Request:
   "durationSec": 72
 }
 
-// ※ スコア計算・正誤判定はすべてサーバーサイドで実施
+Request validation:
+  questionSetId: string  // 必須、trim 後に空文字不可
+  mode: GameMode         // 必須、GET /game/questions で取得した mode と一致
+  answers: array         // 必須、保存済み question 数と一致、questionId 重複不可
+  questionId: string     // 必須、保存済み questionId と一致
+  chosenChoiceId: string | null  // null は時間切れ。string は保存済み choiceId と一致
+  answerTimeSec: number  // 0〜15 の整数
+  durationSec: number    // 0〜1800 の整数
 
-Response 200:
+Response 201:
 {
   "sessionId": "cuid",
+  "mode": "SYMBOL_TO_NAME_LV1",
   "correctCount": 8,
-  "totalScore": 1250,
+  "totalCount": 10,
+  "totalScore": 1120,
   "maxStreak": 5,
+  "durationSec": 72,
+  "playedAt": "2026-06-20T12:35:00.000Z",
   "results": [
     {
+      "questionId": "q1",
       "elementId": 1,
+      "prompt": "H",
+      "chosenChoiceId": "1",
       "isCorrect": true,
       "correctAnswer": "水素",
       "yourAnswer": "水素",
-      "score": 125
+      "answerTimeSec": 5,
+      "score": 150
+    },
+    {
+      "questionId": "q2",
+      "elementId": 2,
+      "prompt": "He",
+      "chosenChoiceId": null,
+      "isCorrect": false,
+      "correctAnswer": "ヘリウム",
+      "yourAnswer": null,
+      "answerTimeSec": 15,
+      "score": 0
     },
     ...
   ]
 }
 
+Score:
+  - 正解: 100 + (15 - answerTimeSec) * 5
+  - 不正解・時間切れ: 0
+  - maxStreak は保存済み GameQuestionSet.questions の順序で計算
+
 // ※ このレスポンスを /game/result の表示元にする
 // ※ フロントエンドではスコア・正誤・連続正解を計算せず、サーバーが返した結果を表示する
+// ※ クライアントは isCorrect / score / correctChoiceId / elementId を送信しない
+// ※ 成功時は GameQuestionSet を削除し、二重送信を防ぐ
+
+Error:
+400 バリデーションエラー（body 不正、回答数不一致、questionId 重複、未知 questionId、未知 choiceId）
+401 認証が必要 / トークン無効
+403 アカウント停止・メール未確認・ロック中
+404 問題セットが見つからない（存在しない、または他ユーザーの questionSetId）
+409 問題セット期限切れ・mode 不一致・すでに送信済み
+429 レート制限
+500 サーバーエラー
 ```
 
 ---

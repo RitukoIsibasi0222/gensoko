@@ -462,30 +462,30 @@ export function submitGameSession(
 | T23 | 手動確認を実施する | ブラウザ | `/game` -> `/game/play` -> `/game/result` の主要導線を確認する | 高 |
 | T24 | 実装完了更新を行う | `docs/05_progress.md`, `docs/plans/game-screens/plan.md` | 進捗を `[x]` にし、実装完了セクションへ変更点・実ファイル・確認結果を記録する | 中 |
 
-- [ ] T1: 既存仕様・既存実装を確認する
-- [ ] T2: API 契約を docs に確定する
-- [ ] T3: 進捗を実装中へ更新する
-- [ ] T4: backend body validation を実装する
-- [ ] T5: backend route を追加する
-- [ ] T6: session submit service を実装する
-- [ ] T7: 正誤判定・スコア計算を実装する
-- [ ] T8: DB 保存 transaction を実装する
-- [ ] T9: frontend 型定義を追加する
-- [ ] T10: API client を実装する
-- [ ] T11: 回答送信用 helper を実装する
-- [ ] T12: 結果一時 store を追加する
-- [ ] T13: `/game/play` から submit する
-- [ ] T14: submit 中・失敗状態を実装する
-- [ ] T15: 結果画面を実装する
-- [ ] T16: backend route テストを作成する
-- [ ] T17: backend service テストを追加する
-- [ ] T18: frontend API client テストを追加する
-- [ ] T19: frontend helper / store テストを追加する
-- [ ] T20: lint を実行する
-- [ ] T21: format を実行する
-- [ ] T22: test を実行する
-- [ ] T23: 手動確認を実施する
-- [ ] T24: 実装完了更新を行う
+- [x] T1: 既存仕様・既存実装を確認する
+- [x] T2: API 契約を docs に確定する
+- [x] T3: 進捗を実装中へ更新する
+- [x] T4: backend body validation を実装する
+- [x] T5: backend route を追加する
+- [x] T6: session submit service を実装する
+- [x] T7: 正誤判定・スコア計算を実装する
+- [x] T8: DB 保存 transaction を実装する
+- [x] T9: frontend 型定義を追加する
+- [x] T10: API client を実装する
+- [x] T11: 回答送信用 helper を実装する
+- [x] T12: 結果一時 store を追加する
+- [x] T13: `/game/play` から submit する
+- [x] T14: submit 中・失敗状態を実装する
+- [x] T15: 結果画面を実装する
+- [x] T16: backend route テストを作成する
+- [x] T17: backend service テストを追加する
+- [x] T18: frontend API client テストを追加する
+- [x] T19: frontend helper / store テストを追加する
+- [x] T20: lint を実行する
+- [x] T21: format を実行する
+- [x] T22: test を実行する
+- [x] T23: 手動確認を実施する
+- [x] T24: 実装完了更新を行う
 
 ## 技術的注意点
 
@@ -654,6 +654,67 @@ export function submitGameSession(
 | test | `cd frontend && npm run test:run` | 未実行 / 成功 |
 | 手動確認 | `/game` -> `/game/play` -> `/game/result` | 未実行 / 成功 |
 ```
+
+## 実装完了（POST /game/sessions）
+
+- 完了日: 2026-06-20
+- 実装ブランチ: `feature/game-sessions`
+- PR: 未作成
+
+### 計画からの変更点
+
+- `POST /game/sessions` の実装範囲に `/game/result` 表示画面まで含め、`docs/05_progress.md` の `ゲーム結果画面 /game/result` も `[x]` に更新した。
+- 結果画面の学習体験を優先し、response item は `correctChoiceId` ではなく `correctAnswer` / `yourAnswer` を返して表示する契約にそろえた。
+- live API 接続後の `/game/play` では正解情報を保持しないため、回答直後の正誤フィードバックは行わず、「回答を記録しました」表示に変更した。正誤・スコアは `/game/result` で API レスポンスを source of truth として表示する。
+- `masteredCount` 再計算のため、`getElementMasteryStatusMap()` は transaction client を任意で受け取れる形に拡張した。
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `docs/04_api.md` | 修正 | `POST /game/sessions` の request / response / error / score 仕様を実装と整合 |
+| `docs/05_progress.md` | 修正 | `/game/result`、`POST /game/sessions` 仕様確定、`POST /game/sessions` 本実装を完了へ更新 |
+| `docs/plans/game-screens/plan.md` | 修正 | チェックリスト完了化と実装完了記録を追記 |
+| `backend/src/routes/game/index.ts` | 修正 | `POST /game/sessions` route、zod validation、rate limit、service error mapping を追加 |
+| `backend/src/routes/game/sessions.test.ts` | 新規 | 認証、validation、201、400、404、409 の route テストを追加 |
+| `backend/src/services/game.service.ts` | 修正 | session submit、正誤判定、score、streak、transaction 保存、WeakElement / UserStats 更新、GameQuestionSet 消費を追加 |
+| `backend/src/services/game.service.test.ts` | 修正 | submit service の正常系、validation、期限切れ、二重送信、weak / stats / masteredCount 更新テストを追加 |
+| `backend/src/services/element-mastery.service.ts` | 修正 | transaction client 対応を追加 |
+| `frontend/src/lib/api/game.ts` | 修正 | `submitGameSession()`、request / response runtime validation を追加 |
+| `frontend/src/lib/api/game.test.ts` | 修正 | session submit API client テストを追加 |
+| `frontend/src/lib/components/game/GameChoiceButton.svelte` | 修正 | 正解未判定時の回答済み表示を中立表示へ調整 |
+| `frontend/src/lib/game/types.ts` | 修正 | session answer / result response 型を追加・更新 |
+| `frontend/src/lib/game/play.ts` | 修正 | 本番 API 送信用 answer draft と duration 算出 helper を追加 |
+| `frontend/src/lib/game/play.test.ts` | 修正 | answer draft と duration helper のテストを追加 |
+| `frontend/src/lib/stores/game-session-result.svelte.ts` | 新規 | `/game/result` 用の同一タブ内一時 result store を追加 |
+| `frontend/src/lib/stores/game-session-result.svelte.test.ts` | 新規 | result store の set / matches / clear テストを追加 |
+| `frontend/src/routes/(app)/game/play/+page.svelte` | 修正 | live API 問題取得、全問完了 submit、保存中・失敗状態、結果遷移を追加 |
+| `frontend/src/routes/(app)/game/result/+page.ts` | 新規 | `ssr = true`, `prerender = false` を明示 |
+| `frontend/src/routes/(app)/game/result/+page.svelte` | 新規 | 結果サマリー、回答詳細、復習ポイント、store 空状態を追加 |
+
+### 実行した確認
+
+| 種別 | コマンド / 手順 | 結果 |
+|---|---|---|
+| format | `cd backend && npm run format` | 成功 |
+| format | `cd frontend && npm run format` | 成功 |
+| lint | `cd backend && npm run lint` | 成功 |
+| lint | `cd frontend && npm run lint` | 成功 |
+| format check | `cd backend && npm run format:check` | 成功 |
+| test | `cd backend && npm run test -- --run` | 成功（22 files / 180 tests） |
+| test | `cd frontend && npm run test:run` | 成功（16 files / 195 tests） |
+| check | `cd frontend && npm run check` | 成功（0 errors / 0 warnings） |
+
+### 手動確認
+
+| 条件 | 結果 |
+|---|---|
+| `/game/result?sessionId=manual-check` store 空状態 | OK: 「結果を表示できません」とゲーム導線を表示 |
+| `/game/play?mode=SYMBOL_TO_NAME_LV1` 未ログイン表示 | OK: 「ログインが必要です」とログイン導線を表示 |
+| PC 幅 | OK: `/game/result` / `/game/play` とも横はみ出しなし |
+| モバイル幅 390px | OK: `/game/result` / `/game/play` とも横はみ出しなし |
+| コンソール | OK: error log なし |
+| ログイン済み `/game/play` 問題取得・回答・結果送信導線 | 未確認: 手動確認環境にログインセッションなし。API client、route / service、Svelte 構文は自動テストで確認済み |
 
 ---
 
