@@ -46,11 +46,7 @@ gameRouter.get(
   }),
   async (c) => {
     const { mode } = c.req.valid("query");
-    const user = c.get("user");
-
-    if (!user) {
-      return c.json({ error: "認証が必要です" }, 401);
-    }
+    const user = c.get("user")!;
 
     try {
       const questionSet = await createGameQuestionSet({
