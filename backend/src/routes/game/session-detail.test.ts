@@ -62,10 +62,7 @@ vi.mock("../../services/game.service.js", () => ({
 }));
 
 import { prisma } from "../../lib/prisma.js";
-import {
-  createGameQuestionSet,
-  InsufficientWeakElementsError,
-} from "../../services/game.service.js";
+import { GameSessionNotFoundError, getGameSessionResult } from "../../services/game.service.js";
 import { gameRouter } from "./index.js";
 
 const app = new Hono<{ Variables: AppVariables }>();
@@ -93,67 +90,66 @@ const mockActiveUser = {
   lockedUntil: null,
 };
 
-const mockQuestionSet = {
-  questionSetId: "question-set-1",
-  expiresAt: new Date("2026-06-20T12:30:00.000Z"),
-  questions: [
+const mockSessionResult = {
+  sessionId: "session-1",
+  mode: "SYMBOL_TO_NAME_LV1" as const,
+  correctCount: 1,
+  totalCount: 2,
+  totalScore: 100,
+  maxStreak: 1,
+  durationSec: 20,
+  playedAt: new Date("2026-06-20T12:35:00.000Z"),
+  results: [
     {
       questionId: "q1",
+      elementId: 1,
       prompt: "H",
-      choices: [
-        { choiceId: "1", text: "水素" },
-        { choiceId: "6", text: "炭素" },
-        { choiceId: "8", text: "酸素" },
-        { choiceId: "7", text: "窒素" },
-      ],
+      chosenChoiceId: "1",
+      isCorrect: true,
+      correctAnswer: "水素",
+      yourAnswer: "水素",
+      answerTimeSec: 5,
+      score: 100,
+    },
+    {
+      questionId: "q2",
+      elementId: 2,
+      prompt: "He",
+      chosenChoiceId: null,
+      isCorrect: false,
+      correctAnswer: "ヘリウム",
+      yourAnswer: null,
+      answerTimeSec: 15,
+      score: 0,
     },
   ],
 };
 
-describe("GET /game/questions", () => {
+describe("GET /game/sessions/:sessionId", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv("JWT_SECRET", TEST_SECRET);
     vi.mocked(prisma.user.findUnique).mockResolvedValue(mockActiveUser as never);
-    vi.mocked(createGameQuestionSet).mockResolvedValue(mockQuestionSet);
+    vi.mocked(getGameSessionResult).mockResolvedValue(mockSessionResult);
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
-  it("認証済みユーザーに questionSetId と問題セットを200で返す", async () => {
-    const token = await createToken();
-    const res = await app.request("/game/questions?mode=SYMBOL_TO_NAME_LV1", {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      questionSetId: "question-set-1",
-      expiresAt: "2026-06-20T12:30:00.000Z",
-      questions: mockQuestionSet.questions,
-    });
-    expect(createGameQuestionSet).toHaveBeenCalledWith({
-      userId: "user-1",
-      mode: "SYMBOL_TO_NAME_LV1",
-    });
-  });
-
   it("未認証なら401を返す", async () => {
-    const res = await app.request("/game/questions?mode=SYMBOL_TO_NAME_LV1", {
+    const res = await app.request("/game/sessions/session-1", {
       method: "GET",
     });
 
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: "認証が必要です" });
-    expect(createGameQuestionSet).not.toHaveBeenCalled();
+    expect(getGameSessionResult).not.toHaveBeenCalled();
   });
 
-  it("mode が不正なら400を返す", async () => {
+  it("sessionId が空白なら400を返す", async () => {
     const token = await createToken();
-    const res = await app.request("/game/questions?mode=UNKNOWN", {
+    const res = await app.request("/game/sessions/%20%20%20", {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -161,27 +157,48 @@ describe("GET /game/questions", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("バリデーションエラー");
-    expect(createGameQuestionSet).not.toHaveBeenCalled();
+    expect(body.details.length).toBeGreaterThan(0);
+    expect(getGameSessionResult).not.toHaveBeenCalled();
   });
 
-  it("苦手元素が不足している場合は409を返す", async () => {
-    vi.mocked(createGameQuestionSet).mockRejectedValue(new InsufficientWeakElementsError());
+  it("認証済みユーザーに保存済みゲーム結果を200で返す", async () => {
     const token = await createToken();
-    const res = await app.request("/game/questions?mode=WEAK_SYMBOL_TO_NAME", {
+    const res = await app.request("/game/sessions/session-1", {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      error: "苦手モードを始めるには、苦手元素が5件以上必要です",
+      ...mockSessionResult,
+      playedAt: "2026-06-20T12:35:00.000Z",
+    });
+    expect(getGameSessionResult).toHaveBeenCalledWith({
+      userId: "user-1",
+      sessionId: "session-1",
+    });
+  });
+
+  it("service が GameSessionNotFoundError を投げたら404を返す", async () => {
+    vi.mocked(getGameSessionResult).mockRejectedValue(new GameSessionNotFoundError());
+    const token = await createToken();
+    const res = await app.request("/game/sessions/missing-session", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "ゲーム結果が見つかりません" });
+    expect(getGameSessionResult).toHaveBeenCalledWith({
+      userId: "user-1",
+      sessionId: "missing-session",
     });
   });
 
   it("予期しないエラーでは500を返す", async () => {
-    vi.mocked(createGameQuestionSet).mockRejectedValue(new Error("db error"));
+    vi.mocked(getGameSessionResult).mockRejectedValue(new Error("db error"));
     const token = await createToken();
-    const res = await app.request("/game/questions?mode=SYMBOL_TO_NAME_LV1", {
+    const res = await app.request("/game/sessions/session-1", {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     });

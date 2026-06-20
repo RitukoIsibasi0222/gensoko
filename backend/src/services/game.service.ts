@@ -74,6 +74,11 @@ export type SubmitGameSessionResult = {
   results: GameSessionResultItem[];
 };
 
+export type GetGameSessionResultParams = {
+  userId: string;
+  sessionId: string;
+};
+
 type StoredGameChoice = PublicGameChoice & {
   elementId: number;
 };
@@ -91,6 +96,33 @@ type CreateGameQuestionSetParams = {
   mode: GameMode;
   now?: Date;
   choiceIndexGenerator?: () => number;
+};
+
+type RestorableGameAnswer = {
+  id: string;
+  elementId: number;
+  questionIndex: number | null;
+  questionId: string | null;
+  prompt: string | null;
+  chosenChoiceId: string | null;
+  isCorrect: boolean;
+  correctAnswer: string | null;
+  yourAnswer: string | null;
+  answerTimeSec: number;
+  score: number | null;
+  element: PrismaElement;
+};
+
+type RestorableGameSession = {
+  id: string;
+  mode: GameMode;
+  totalScore: number;
+  correctCount: number;
+  totalCount: number;
+  maxStreak: number;
+  durationSec: number;
+  playedAt: Date;
+  answers: RestorableGameAnswer[];
 };
 
 export class InsufficientWeakElementsError extends Error {
@@ -132,6 +164,13 @@ export class GameSessionValidationError extends Error {
   constructor() {
     super("回答形式が正しくありません");
     this.name = "GameSessionValidationError";
+  }
+}
+
+export class GameSessionNotFoundError extends Error {
+  constructor() {
+    super("ゲーム結果が見つかりません");
+    this.name = "GameSessionNotFoundError";
   }
 }
 
@@ -555,6 +594,39 @@ function getResultElementIds(results: readonly GameSessionResultItem[]): number[
   return [...new Set(results.map((result) => result.elementId))];
 }
 
+function compareRestorableGameAnswers(
+  firstAnswer: RestorableGameAnswer,
+  secondAnswer: RestorableGameAnswer,
+): number {
+  const firstIndex = firstAnswer.questionIndex ?? Number.MAX_SAFE_INTEGER;
+  const secondIndex = secondAnswer.questionIndex ?? Number.MAX_SAFE_INTEGER;
+
+  if (firstIndex !== secondIndex) {
+    return firstIndex - secondIndex;
+  }
+
+  return firstAnswer.id.localeCompare(secondAnswer.id);
+}
+
+function toRestoredSessionResultItem(
+  answer: RestorableGameAnswer,
+  mode: GameMode,
+): GameSessionResultItem {
+  const answerWithSymbol = isNameToSymbolMode(mode);
+
+  return {
+    questionId: answer.questionId ?? answer.id,
+    elementId: answer.elementId,
+    prompt: answer.prompt ?? getPrompt(answer.element, answerWithSymbol),
+    chosenChoiceId: answer.chosenChoiceId,
+    isCorrect: answer.isCorrect,
+    correctAnswer: answer.correctAnswer ?? getChoiceText(answer.element, answerWithSymbol),
+    yourAnswer: answer.yourAnswer,
+    answerTimeSec: answer.answerTimeSec,
+    score: answer.score ?? calculateQuestionScore(answer.isCorrect),
+  };
+}
+
 function buildStoredQuestions(
   mode: GameMode,
   candidates: readonly PrismaElement[],
@@ -672,11 +744,18 @@ export async function submitGameSession({
     });
 
     await tx.gameAnswer.createMany({
-      data: results.map((result) => ({
+      data: results.map((result, questionIndex) => ({
         sessionId: session.id,
         elementId: result.elementId,
+        questionIndex,
+        questionId: result.questionId,
+        prompt: result.prompt,
+        chosenChoiceId: result.chosenChoiceId,
         isCorrect: result.isCorrect,
+        correctAnswer: result.correctAnswer,
+        yourAnswer: result.yourAnswer,
         answerTimeSec: result.answerTimeSec,
+        score: result.score,
       })),
     });
 
@@ -717,4 +796,39 @@ export async function submitGameSession({
       results,
     };
   });
+}
+
+export async function getGameSessionResult({
+  userId,
+  sessionId,
+}: GetGameSessionResultParams): Promise<SubmitGameSessionResult> {
+  const session = (await prisma.gameSession.findFirst({
+    where: { id: sessionId, userId },
+    include: {
+      answers: {
+        include: { element: true },
+        orderBy: [{ questionIndex: "asc" }, { id: "asc" }],
+      },
+    },
+  })) as RestorableGameSession | null;
+
+  if (!session) {
+    throw new GameSessionNotFoundError();
+  }
+
+  const results = [...session.answers]
+    .sort(compareRestorableGameAnswers)
+    .map((answer) => toRestoredSessionResultItem(answer, session.mode));
+
+  return {
+    sessionId: session.id,
+    mode: session.mode,
+    correctCount: session.correctCount,
+    totalCount: session.totalCount,
+    totalScore: session.totalScore,
+    maxStreak: session.maxStreak,
+    durationSec: session.durationSec,
+    playedAt: session.playedAt,
+    results,
+  };
 }
