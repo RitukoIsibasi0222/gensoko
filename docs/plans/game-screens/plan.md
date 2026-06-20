@@ -672,7 +672,7 @@ export function createGameQuestionSet(params: {
 
 | 項目 | 方針 |
 |---|---|
-| 入力 | `questionSetId`, `mode`, `answers[].questionId`, `answers[].chosenChoiceId`, `answers[].answerTimeSec`, `durationSec` |
+| 入力 | `questionSetId`, `mode`, `answers[].questionId`, `answers[].chosenChoiceId`（時間切れ時は `null`）, `answers[].answerTimeSec`, `durationSec` |
 | 正誤判定 | `GameQuestionSet.questions` の保存済み `correctChoiceId` を使い、サーバー側で行う |
 | スコア計算 | サーバー側で行い、`totalScore` と各問の `score` をレスポンスに含める |
 | 連続正解 | サーバー側で `maxStreak` を計算して返す |
