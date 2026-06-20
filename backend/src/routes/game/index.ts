@@ -6,8 +6,10 @@ import { authMiddleware } from "../../middleware/auth/index.js";
 import { rateLimit } from "../../middleware/rateLimit/index.js";
 import {
   createGameQuestionSet,
+  GAME_SESSION_DURATION_LIMIT_SEC,
   GameSessionValidationError,
   InsufficientWeakElementsError,
+  QUESTION_TIME_LIMIT_SEC,
   QuestionSetAlreadySubmittedError,
   QuestionSetExpiredError,
   QuestionSetModeMismatchError,
@@ -66,7 +68,7 @@ export const gameSessionBodySchema = z
               .number()
               .int({ message: DURATION_ERROR_MESSAGE })
               .min(0, { message: DURATION_ERROR_MESSAGE })
-              .max(15, { message: DURATION_ERROR_MESSAGE }),
+              .max(QUESTION_TIME_LIMIT_SEC, { message: DURATION_ERROR_MESSAGE }),
           })
           .strip(),
       )
@@ -75,7 +77,7 @@ export const gameSessionBodySchema = z
       .number()
       .int({ message: DURATION_ERROR_MESSAGE })
       .min(0, { message: DURATION_ERROR_MESSAGE })
-      .max(1800, { message: DURATION_ERROR_MESSAGE }),
+      .max(GAME_SESSION_DURATION_LIMIT_SEC, { message: DURATION_ERROR_MESSAGE }),
   })
   .strip();
 

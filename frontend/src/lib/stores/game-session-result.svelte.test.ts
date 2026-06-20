@@ -47,24 +47,26 @@ describe('gameSessionResultStore', () => {
   });
 
   it('set() した結果を保持する', () => {
-    gameSessionResultStore.set(SESSION_RESULT);
+    gameSessionResultStore.set(SESSION_RESULT, 'user-1');
 
     expect(gameSessionResultStore.result).toEqual(SESSION_RESULT);
   });
 
-  it('matches() は保持中 result の sessionId と query の一致を返す', () => {
-    gameSessionResultStore.set(SESSION_RESULT);
+  it('matches() は保持中 result の sessionId と userId の一致を返す', () => {
+    gameSessionResultStore.set(SESSION_RESULT, 'user-1');
 
-    expect(gameSessionResultStore.matches('session-1')).toBe(true);
-    expect(gameSessionResultStore.matches('other-session')).toBe(false);
-    expect(gameSessionResultStore.matches(null)).toBe(false);
+    expect(gameSessionResultStore.matches('session-1', 'user-1')).toBe(true);
+    expect(gameSessionResultStore.matches('other-session', 'user-1')).toBe(false);
+    expect(gameSessionResultStore.matches('session-1', 'user-2')).toBe(false);
+    expect(gameSessionResultStore.matches('session-1', null)).toBe(false);
+    expect(gameSessionResultStore.matches(null, 'user-1')).toBe(false);
   });
 
   it('clear() で result を null に戻す', () => {
-    gameSessionResultStore.set(SESSION_RESULT);
+    gameSessionResultStore.set(SESSION_RESULT, 'user-1');
     gameSessionResultStore.clear();
 
     expect(gameSessionResultStore.result).toBeNull();
-    expect(gameSessionResultStore.matches('session-1')).toBe(false);
+    expect(gameSessionResultStore.matches('session-1', 'user-1')).toBe(false);
   });
 });

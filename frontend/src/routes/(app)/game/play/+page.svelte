@@ -7,7 +7,11 @@
   import GameChoiceButton from '$lib/components/game/GameChoiceButton.svelte';
   import GameProgressIndicator from '$lib/components/game/GameProgressIndicator.svelte';
   import GameTimerBar from '$lib/components/game/GameTimerBar.svelte';
-  import { ANSWER_FEEDBACK_MS, QUESTION_TIME_LIMIT_SEC } from '$lib/game/constants';
+  import {
+    ANSWER_FEEDBACK_MS,
+    GAME_SESSION_DURATION_LIMIT_SEC,
+    QUESTION_TIME_LIMIT_SEC
+  } from '$lib/game/constants';
   import {
     buildSessionAnswerDraft,
     calculateAnswerDurationSec,
@@ -141,7 +145,10 @@
   }
 
   function isAbortError(error: unknown): boolean {
-    return error instanceof DOMException && error.name === 'AbortError';
+    return (
+      (error instanceof DOMException && error.name === 'AbortError') ||
+      (error instanceof Error && error.name === 'AbortError')
+    );
   }
 
   function getErrorMessage(error: unknown, fallback: string): string {
@@ -300,7 +307,10 @@
       return;
     }
 
-    if (mode === null || authStore.accessToken === null || questionSetId === null) {
+    const accessToken = authStore.accessToken;
+    const userId = authStore.user?.id ?? null;
+
+    if (mode === null || accessToken === null || userId === null || questionSetId === null) {
       submitStatus = 'error';
       submitError = 'ゲーム結果の送信に必要な情報が不足しています。';
       return;
@@ -323,8 +333,8 @@
         questionSetId,
         mode,
         answers,
-        durationSec: calculateAnswerDurationSec(answers, 1800),
-        accessToken: authStore.accessToken,
+        durationSec: calculateAnswerDurationSec(answers, GAME_SESSION_DURATION_LIMIT_SEC),
+        accessToken,
         signal: controller.signal
       });
 
@@ -332,7 +342,7 @@
         return;
       }
 
-      gameSessionResultStore.set(result);
+      gameSessionResultStore.set(result, userId);
       await goto(`/game/result?sessionId=${encodeURIComponent(result.sessionId)}`);
     } catch (error) {
       if (isAbortError(error) || controller.signal.aborted) {

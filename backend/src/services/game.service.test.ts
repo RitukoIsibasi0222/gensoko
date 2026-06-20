@@ -35,8 +35,10 @@ vi.mock("../lib/prisma.js", () => ({
 import { prisma } from "../lib/prisma.js";
 import {
   createGameQuestionSet,
+  GAME_SESSION_DURATION_LIMIT_SEC,
   GameSessionValidationError,
   InsufficientWeakElementsError,
+  QUESTION_TIME_LIMIT_SEC,
   QuestionSetAlreadySubmittedError,
   QuestionSetExpiredError,
   QuestionSetNotFoundError,
@@ -673,6 +675,105 @@ describe("submitGameSession", () => {
         update: expect.objectContaining({ masteredCount: 1 }),
       }),
     );
+  });
+
+  it("durationSec が上限を超える場合はDBトランザクション前にバリデーションエラーにする", async () => {
+    await expect(
+      submitGameSession({
+        userId: "user-1",
+        questionSetId: "question-set-1",
+        mode: "SYMBOL_TO_NAME_LV1",
+        answers: [
+          { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+          { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+        ],
+        durationSec: GAME_SESSION_DURATION_LIMIT_SEC + 1,
+        now: new Date("2026-06-20T12:05:00.000Z"),
+      }),
+    ).rejects.toBeInstanceOf(GameSessionValidationError);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("questionSetId が空文字の場合はDBトランザクション前にバリデーションエラーにする", async () => {
+    await expect(
+      submitGameSession({
+        userId: "user-1",
+        questionSetId: "   ",
+        mode: "SYMBOL_TO_NAME_LV1",
+        answers: [
+          { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+          { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+        ],
+        durationSec: 20,
+        now: new Date("2026-06-20T12:05:00.000Z"),
+      }),
+    ).rejects.toBeInstanceOf(GameSessionValidationError);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("answers が空配列の場合はDBトランザクション前にバリデーションエラーにする", async () => {
+    await expect(
+      submitGameSession({
+        userId: "user-1",
+        questionSetId: "question-set-1",
+        mode: "SYMBOL_TO_NAME_LV1",
+        answers: [],
+        durationSec: 20,
+        now: new Date("2026-06-20T12:05:00.000Z"),
+      }),
+    ).rejects.toBeInstanceOf(GameSessionValidationError);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("answerTimeSec が上限を超える場合はDBトランザクション前にバリデーションエラーにする", async () => {
+    await expect(
+      submitGameSession({
+        userId: "user-1",
+        questionSetId: "question-set-1",
+        mode: "SYMBOL_TO_NAME_LV1",
+        answers: [
+          { questionId: "q1", chosenChoiceId: "1", answerTimeSec: QUESTION_TIME_LIMIT_SEC + 1 },
+          { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+        ],
+        durationSec: 20,
+        now: new Date("2026-06-20T12:05:00.000Z"),
+      }),
+    ).rejects.toBeInstanceOf(GameSessionValidationError);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("answerTimeSec が整数でない場合はDBトランザクション前にバリデーションエラーにする", async () => {
+    await expect(
+      submitGameSession({
+        userId: "user-1",
+        questionSetId: "question-set-1",
+        mode: "SYMBOL_TO_NAME_LV1",
+        answers: [
+          { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5.5 },
+          { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+        ],
+        durationSec: 20,
+        now: new Date("2026-06-20T12:05:00.000Z"),
+      }),
+    ).rejects.toBeInstanceOf(GameSessionValidationError);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("questionId と chosenChoiceId が空文字の場合はDBトランザクション前にバリデーションエラーにする", async () => {
+    await expect(
+      submitGameSession({
+        userId: "user-1",
+        questionSetId: "question-set-1",
+        mode: "SYMBOL_TO_NAME_LV1",
+        answers: [
+          { questionId: "   ", chosenChoiceId: "1", answerTimeSec: 5 },
+          { questionId: "q2", chosenChoiceId: "   ", answerTimeSec: 15 },
+        ],
+        durationSec: 20,
+        now: new Date("2026-06-20T12:05:00.000Z"),
+      }),
+    ).rejects.toBeInstanceOf(GameSessionValidationError);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it("問題セットが見つからない場合は専用エラーにする", async () => {

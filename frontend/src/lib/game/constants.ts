@@ -1,4 +1,5 @@
 export const MIN_WEAK_ELEMENTS_FOR_GAME = 5;
 export const GAME_QUESTION_COUNT = 10;
 export const QUESTION_TIME_LIMIT_SEC = 15;
+export const GAME_SESSION_DURATION_LIMIT_SEC = 1800;
 export const ANSWER_FEEDBACK_MS = 1500;

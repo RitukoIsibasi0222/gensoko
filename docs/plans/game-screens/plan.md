@@ -659,7 +659,7 @@ export function submitGameSession(
 
 - 完了日: 2026-06-20
 - 実装ブランチ: `feature/game-sessions`
-- PR: 未作成
+- PR: #53
 
 ### 計画からの変更点
 
@@ -669,6 +669,11 @@ export function submitGameSession(
 - `masteredCount` 再計算のため、`getElementMasteryStatusMap()` は transaction client を任意で受け取れる形に拡張した。
 - DBレビューにより、同一セッション内で同じ元素が複数回出題された場合でも、`WeakElement.consecutiveHit` と習得判定では1セッション分として扱うよう改善した。これにより苦手モードで候補が10件未満の場合の過剰な mastered / weak 削除を防ぐ。
 - `GET /game/sessions` 履歴、習得状態集計、期限切れ `GameQuestionSet` cleanup の負荷を抑えるため、ゲーム関連テーブルに追加 index を付与した。
+- PRレビュー対応により、`gameSessionResultStore` は `sessionId` だけでなく `userId` も照合する形に変更した。ログアウト後に同じタブで別ユーザーがログインした場合でも、前ユーザーの結果を表示しない。
+- PRレビュー対応により、`submitGameSession()` service 入口でも `durationSec` と `answerTimeSec` の整数・範囲検証を行うようにした。route の zod validation 以外から呼ばれても不正値を DB transaction 前に拒否する。
+- 整合性再確認により、空の `questionSetId`、空配列 `answers`、空の `questionId` / `chosenChoiceId` も service 入口で DB transaction 前に拒否するよう強化した。
+- PRレビュー対応により、`answerTimeSec` / `durationSec` の上限値は service 定数から route validation へ参照する形にし、magic number の重複を避けた。
+- PRレビュー対応により、Abort 判定は `DOMException` だけでなく `Error` の `name === "AbortError"` も受け付ける形にした。
 
 ### 実際の変更ファイル
 
@@ -680,6 +685,7 @@ export function submitGameSession(
 | `backend/prisma/schema.prisma` | 修正 | `GameSession`, `GameAnswer`, `GameQuestionSet` に index を追加 |
 | `backend/prisma/migrations/20260620172000_add_game_session_indexes/migration.sql` | 新規 | ゲーム履歴・回答集計・期限切れ cleanup 用 index を追加 |
 | `backend/src/routes/game/index.ts` | 修正 | `POST /game/sessions` route、zod validation、rate limit、service error mapping を追加 |
+| `backend/src/routes/game/questions.test.ts` | 修正 | service 公開定数の追加に合わせて route test mock を更新 |
 | `backend/src/routes/game/sessions.test.ts` | 新規 | 認証、validation、201、400、404、409 の route テストを追加 |
 | `backend/src/services/game.service.ts` | 修正 | session submit、正誤判定、score、streak、transaction 保存、WeakElement / UserStats 更新、GameQuestionSet 消費を追加 |
 | `backend/src/services/game.service.test.ts` | 修正 | submit service の正常系、validation、期限切れ、二重送信、weak / stats / masteredCount 更新、同一セッション重複元素のテストを追加 |
@@ -688,6 +694,7 @@ export function submitGameSession(
 | `frontend/src/lib/api/game.ts` | 修正 | `submitGameSession()`、request / response runtime validation を追加 |
 | `frontend/src/lib/api/game.test.ts` | 修正 | session submit API client テストを追加 |
 | `frontend/src/lib/components/game/GameChoiceButton.svelte` | 修正 | 正解未判定時の回答済み表示を中立表示へ調整 |
+| `frontend/src/lib/game/constants.ts` | 修正 | session duration 上限定数を追加 |
 | `frontend/src/lib/game/types.ts` | 修正 | session answer / result response 型を追加・更新 |
 | `frontend/src/lib/game/play.ts` | 修正 | 本番 API 送信用 answer draft と duration 算出 helper を追加 |
 | `frontend/src/lib/game/play.test.ts` | 修正 | answer draft と duration helper のテストを追加 |
@@ -708,7 +715,7 @@ export function submitGameSession(
 | format check | `cd backend && npm run format:check` | 成功 |
 | prisma | `cd backend && npx prisma validate` | 成功 |
 | migration | `docker compose exec -T hono npx prisma migrate deploy` | 成功 |
-| test | `cd backend && npm run test -- --run` | 成功（22 files / 183 tests） |
+| test | `cd backend && npm run test -- --run` | 成功（22 files / 189 tests） |
 | test | `cd frontend && npm run test:run` | 成功（16 files / 195 tests） |
 | check | `cd frontend && npm run check` | 成功（0 errors / 0 warnings） |
 

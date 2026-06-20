@@ -7,7 +7,8 @@ const GAME_QUESTION_COUNT = 10;
 const GAME_CHOICE_COUNT = 4;
 const MIN_WEAK_ELEMENTS_FOR_GAME = 5;
 const QUESTION_SET_EXPIRES_MS = 30 * 60 * 1000;
-const QUESTION_TIME_LIMIT_SEC = 15;
+export const QUESTION_TIME_LIMIT_SEC = 15;
+export const GAME_SESSION_DURATION_LIMIT_SEC = 1800;
 const BASE_CORRECT_SCORE = 100;
 const TIME_BONUS_PER_SEC = 5;
 const WEAK_ELEMENT_MASTERED_CONSECUTIVE_HIT_COUNT = 2;
@@ -312,6 +313,41 @@ function calculateMaxStreak(results: readonly GameSessionResultItem[]): number {
   return maxStreak;
 }
 
+function isIntegerInRange(value: number, min: number, max: number): boolean {
+  return Number.isInteger(value) && value >= min && value <= max;
+}
+
+function validateSubmitGameSessionParams({
+  questionSetId,
+  answers,
+  durationSec,
+}: {
+  questionSetId: string;
+  answers: readonly SubmitGameSessionAnswer[];
+  durationSec: number;
+}): void {
+  if (questionSetId.trim().length === 0 || answers.length === 0) {
+    throw new GameSessionValidationError();
+  }
+
+  if (!isIntegerInRange(durationSec, 0, GAME_SESSION_DURATION_LIMIT_SEC)) {
+    throw new GameSessionValidationError();
+  }
+
+  for (const answer of answers) {
+    if (
+      answer.questionId.trim().length === 0 ||
+      (answer.chosenChoiceId !== null && answer.chosenChoiceId.trim().length === 0)
+    ) {
+      throw new GameSessionValidationError();
+    }
+
+    if (!isIntegerInRange(answer.answerTimeSec, 0, QUESTION_TIME_LIMIT_SEC)) {
+      throw new GameSessionValidationError();
+    }
+  }
+}
+
 function buildSessionResults({
   questions,
   answers,
@@ -581,6 +617,8 @@ export async function submitGameSession({
   durationSec,
   now = new Date(),
 }: SubmitGameSessionParams): Promise<SubmitGameSessionResult> {
+  validateSubmitGameSessionParams({ questionSetId, answers, durationSec });
+
   return prisma.$transaction(async (tx) => {
     const questionSet = await tx.gameQuestionSet.findFirst({
       where: { id: questionSetId, userId },

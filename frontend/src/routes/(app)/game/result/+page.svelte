@@ -1,12 +1,14 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { getGameModeConfig } from '$lib/game/modes';
+  import { authStore } from '$lib/stores/auth.svelte';
   import { gameSessionResultStore } from '$lib/stores/game-session-result.svelte';
   import type { GameSessionResultItem } from '$lib/game/types';
 
   const sessionId = $derived(page.url.searchParams.get('sessionId'));
+  const userId = $derived(authStore.user?.id ?? null);
   const result = $derived(
-    gameSessionResultStore.matches(sessionId) ? gameSessionResultStore.result : null
+    gameSessionResultStore.matches(sessionId, userId) ? gameSessionResultStore.result : null
   );
   const modeConfig = $derived(result === null ? null : getGameModeConfig(result.mode));
   const accuracy = $derived(

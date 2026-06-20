@@ -1,22 +1,32 @@
 import type { GameSessionResponse } from '$lib/game/types';
 
+type StoredGameSessionResult = {
+  userId: string;
+  result: GameSessionResponse;
+};
+
 class GameSessionResultStore {
-  #result = $state<GameSessionResponse | null>(null);
+  #storedResult = $state<StoredGameSessionResult | null>(null);
 
   get result(): GameSessionResponse | null {
-    return this.#result;
+    return this.#storedResult?.result ?? null;
   }
 
-  set(result: GameSessionResponse): void {
-    this.#result = result;
+  set(result: GameSessionResponse, userId: string): void {
+    this.#storedResult = { result, userId };
   }
 
-  matches(sessionId: string | null): boolean {
-    return sessionId !== null && this.#result?.sessionId === sessionId;
+  matches(sessionId: string | null, userId: string | null): boolean {
+    return (
+      sessionId !== null &&
+      userId !== null &&
+      this.#storedResult?.result.sessionId === sessionId &&
+      this.#storedResult.userId === userId
+    );
   }
 
   clear(): void {
-    this.#result = null;
+    this.#storedResult = null;
   }
 }
 
