@@ -80,7 +80,9 @@ function getChoices(
     throw new Error('選択肢を生成できません');
   }
 
-  const distractors = elements.filter((element) => element.id !== correctElement.id).slice(0, 3);
+  const distractors = elements
+    .filter((element) => element.id !== correctElement.id)
+    .slice(0, GAME_CHOICE_COUNT - 1);
   const choices = [...distractors];
   choices.splice(correctPosition, 0, correctElement);
 

@@ -29,7 +29,7 @@ const gameQuestionsRateLimit = rateLimit({
 
 export const gameQuestionsQuerySchema = z
   .object({
-    mode: z.enum(GAME_MODE_VALUES, { error: GAME_MODE_ERROR_MESSAGE }),
+    mode: z.enum(GAME_MODE_VALUES, { message: GAME_MODE_ERROR_MESSAGE }),
   })
   .strip();
 
