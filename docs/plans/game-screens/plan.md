@@ -1,3 +1,636 @@
+# `GET /game/questions` レスポンス形式確定 実装計画
+
+> 設計者ロール: シニアフルスタックエンジニア（Hono v4 / Prisma v7 / SvelteKit v2、API 契約設計・ゲーム状態設計・A11Y レビュー）
+> 対象実装者: Codex
+
+## 概要
+
+`docs/05_progress.md` フェーズ6「API インターフェース確定」のうち、`GET /game/questions` のレスポンス形式（問題・選択肢・`questionSetId`）を確定する。既存の `/game/play` は mock 問題で UI モック実装済みのため、本計画では live API 接続前に、正解情報をクライアントへ渡さず `GameQuestionSet` と `POST /game/sessions` でサーバー側正誤判定できる API 契約へ整理する。
+
+現状の `docs/04_api.md` は `questionSetId` がレスポンス例に未反映で、選択肢にも `elementId` が露出している。`docs/05_progress.md` の設計決定2（`GameQuestionSet` テーブル方式）と整合させるため、公開 API は `choiceId` ベースに寄せ、DB 内保存形式とクライアント公開形式を明確に分離する。
+
+## レビュー結果と改善方針
+
+| 観点 | レビュー結果 | 改善方針 |
+|---|---|---|
+| 既存コード整合性 | frontend の `/game/play` は `GameChoice.choiceId` / `GamePlayQuestion.questionId` / mock 専用 `correctChoiceId` で実装済み。backend の `routes/game` と `game.service` は TODO、`index.ts` に game ルーター未 mount | API 契約は既存 frontend 型へ寄せて `questionId` / `choiceId` を採用する。backend 実装は route を薄く、service に問題生成と保存を集約する |
+| 仕様整合性 | `docs/05_progress.md` は `GameQuestionSet` 方式と `questionSetId` 返却を決定済みだが、`docs/04_api.md` は未反映 | `docs/04_api.md` に `questionSetId`, `expiresAt`, `questions` を明記し、`POST /game/sessions` への接続点も最小限記録する |
+| セキュリティ | 現行 API 例は `elementId` をレスポンスに含み、正解推測の足場になり得る | 公開レスポンスは `{ choiceId, text }` のみ。`elementId` と `correctChoiceId` は `GameQuestionSet.questions` 内に保存し、クライアントへ返さない |
+| A11Y | 既存 UI は進捗・タイマー・4択ボタン・フィードバック component があり、色だけに依存しない表示を意識している | API 接続時も既存 component を再利用する。loading / error / empty は `aria-busy` と画面内メッセージを使い、毎秒 timer を過剰に読み上げない |
+| DB 整合性 | `GET /game/questions` は読み取りではなく `GameQuestionSet` を作成する副作用を持つ。連打や再読み込みで一時データが増える | 1回の開始につき1セットを作る前提を明記し、frontend の二重取得防止、backend rate limit、期限切れ cleanup の後続タスクを計画に入れる |
+| DB 負荷 | 元素は118件で小さいが、苦手モードは user ごとの `WeakElement` 参照が必要。問題取得を入力ごとに走らせる設計ではない | `mode` が確定してから明示的に1回取得する。Prisma ORM の `findMany` / `create` のみ使い、生 SQL は使わない |
+| テスト | API 契約、保存形式、正解非露出、frontend runtime validation をまたいだ確認が必要 | backend route / service、frontend API client、game helper、手動 A11Y / レスポンシブ確認を分けてテストする |
+| スコープ整合性 | 依頼文に「検索・フィルターUI」の語が混在していたが、`docs/05_progress.md` では元素検索 UI は完了済み | 本計画は `docs/plans/game-screens/plan.md` の `GET /game/questions` 仕様確定に限定する。元素検索 UI 改修は `docs/plans/elements-search-filter/plan.md` 側で扱う |
+
+## 前提条件・依存関係
+
+### 既存の実装（公開インターフェース）
+
+**`docs/05_progress.md`**
+- フェーズ6: `ゲームモード選択画面 /game` は `[x]`。
+- フェーズ6: `ゲームプレイ画面 /game/play` は `[x]`。
+- フェーズ6: `GET /game/questions` のレスポンス形式確定は `[ ]`。
+- 設計決定2: `GET /game/questions` で DB に正解情報と有効期限（30分）を保存し、`questionSetId` を返す。
+
+**`docs/04_api.md`**
+- 現行 `GET /game/questions` は `questions` のみを返す案になっている。
+- 現行レスポンス例には `questionSetId` が含まれていない。
+- 現行選択肢は `{ elementId, text }` であり、frontend の既存 `choiceId` 型や正解非露出方針とズレている。
+
+**`backend/prisma/schema.prisma`**
+- `GameMode` enum は6種類定義済み。
+- `GameQuestionSet` は `id`, `userId`, `mode`, `questions`, `expiresAt`, `createdAt` を持つ。
+- `GameSession`, `GameAnswer`, `WeakElement`, `UserStats` は後続の `POST /game/sessions` 実装で使う。
+- `datasource` に `url =` は書かない。Prisma v7 方針を維持する。
+
+**`backend/src/routes/game/index.ts`**
+- 現状 `// TODO: implement`。
+- 実装時は `GET /questions` を追加し、route 入口で zod query validation を行う。
+
+**`backend/src/services/game.service.ts`**
+- 現状 `// TODO: implement`。
+- 実装時は問題候補取得、4択生成、`GameQuestionSet` 保存、公開レスポンス変換を集約する。
+
+**`backend/src/index.ts`**
+- `/api/v1/game` は未 mount。
+- game API 本実装時に `app.route("/api/v1/game", gameRouter)` を追加する。
+
+**`backend/src/middleware/auth/index.ts`**
+- `authMiddleware` は必須認証。成功時 `c.get("user")` で `{ id, role }` を取得できる。
+- `verify(token, secret, "HS256")` の第3引数は必須。
+- エラー文言は日本語で返す。
+
+**`backend/src/middleware/rateLimit/index.ts`**
+- `rateLimit(options): MiddlewareHandler`。
+- 429 は `{ error: "リクエストが多すぎます。しばらく待ってから再試行してください" }`。
+- 現状は IP ベース。`GET /game/questions` は DB 書き込みを伴うため適用対象にする。
+
+**`frontend/src/lib/game/types.ts`**
+- `GameMode` — backend `GameMode` と同じ6種類。
+- `GameChoice` — 既存 UI mock の選択肢型 `{ choiceId: string; text: string }`。
+- `GamePlayQuestion` — 既存 UI mock の問題型 `{ questionId, prompt, choices }`。
+- `MockGamePlayQuestion` — UI mock 限定で `correctChoiceId` を持つ。
+- `GameAnswerDraft` — 現行 mock 用の回答型。API 接続時は送信型を分ける。
+
+**`frontend/src/lib/game/play.ts`**
+- `normalizeGameModeParam(value): GameMode | null`。
+- `buildAnswerDraft(...)` は mock 用の正誤判定を含む。
+- API 接続時は本番送信用 answer draft と mock 正誤判定を分ける。
+
+**`frontend/src/routes/(app)/game/+page.svelte`**
+- `goto("/game/play?mode=...")` でプレイ画面へ遷移する。
+
+**`frontend/src/routes/(app)/game/play/+page.svelte`**
+- `page.url.searchParams.get("mode")` を `normalizeGameModeParam()` で検証する。
+- 現状は `getMockGameQuestions(mode)` を使う。
+- `authStore.isInitializing`, `authStore.isLoggedIn` を見て表示を分岐する。
+- `1`〜`4` / `Numpad1`〜`Numpad4` の回答操作を持つ。
+
+**`frontend/src/lib/api/config.ts`**
+- `API_BASE_URL: string`。
+- API ベース URL はここから import し、各ファイルで再定義しない。
+
+**`frontend/src/lib/api/errors.ts`**
+- `ApiError`。
+- `parseErrorBody(response)`。
+- `parseErrorResponse(response, defaultMessage?)`。
+- 非 JSON エラー時は `null` body と default message を使う。
+
+**`frontend/src/lib/api/elements.ts`**
+- API client の既存参考実装。
+- `response.ok` を JSON parse 前に判定する。
+- `parseErrorResponse()` を使う。
+- レスポンス形式を runtime validation し、不正なら `ApiError(500, "...レスポンス形式が不正です", data)` を投げる。
+
+**`frontend/src/routes/(app)/elements/+page.svelte`**
+- URL query、AbortController、request sequence、loading / empty / error、toast の参考実装。
+
+### 重要な制約
+
+- 正解情報は `GET /game/questions` レスポンスに含めない。
+- `questionSetId` は必ずレスポンスに含め、後続 `POST /game/sessions` に渡す。
+- `GameQuestionSet.questions` にはサーバー側正誤判定に必要な情報を保存する。
+- `questionSetId` はログインユーザー本人の未期限切れセットだけ受け付ける前提にする。
+- `GameQuestionSet.expiresAt` は30分後を基本方針とする。
+- `GET /game/questions` は認証必須。
+- 苦手モードは backend でも苦手元素5件以上を検証する。
+- 入力検証は route 入口で zod に集約する。
+- DB アクセスは Prisma ORM 経由に限定する。
+- バックエンドのエラー文言は日本語に統一する。
+- フロントエンドは `API_BASE_URL` と `parseErrorResponse()` を再実装しない。
+- `response.ok` を JSON parse より先に判定する。
+- UI mock 用 `correctChoiceId` と API レスポンス型を混ぜない。
+- `mode` query の正規化は一度だけ行い、正規化済みの `GameMode` を再利用する。
+- `/game/play` の UI ロジックに API URL 組み立てやレスポンス変換を埋め込まない。
+- `localStorage` に問題セット、回答、認証情報を保存しない。
+
+### 確認事項
+
+- `POST /game/sessions` の完全なリクエスト/レスポンス確定は別タスクだが、本計画で `questionSetId`, `questionId`, `chosenChoiceId`, `answerTimeSec` という接続点は固定する。
+- 即時フィードバックを API 接続後も維持するかは、正解非露出方針と衝突する。API 接続後は原則として結果送信後の server response で正誤を表示し、プレイ中のフィードバック仕様変更が必要なら `POST /game/sessions` 計画で明記する。
+- 依頼文に含まれる「検索・フィルターUI（キーワード・分類・周期）」は既存完了タスクのため、本計画の実装対象には含めない。
+
+## 対象ファイル一覧（変更種別つき）
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `docs/04_api.md` | 修正 | `GET /game/questions` の `questionSetId`、問題、選択肢、エラー仕様を確定 |
+| `docs/05_progress.md` | 修正 | `GET /game/questions` レスポンス形式確定タスクを実装中・完了へ更新 |
+| `docs/plans/game-screens/plan.md` | 修正 | 本計画、チェックボックス、実装完了記録を追加 |
+| `backend/src/routes/game/index.ts` | 新規または修正 | `GET /questions` route、zod query validation、認証、rate limit、エラー形式 |
+| `backend/src/services/game.service.ts` | 新規または修正 | 問題生成、4択生成、`GameQuestionSet` 保存、公開レスポンス変換 |
+| `backend/src/index.ts` | 修正 | game ルーターを `/api/v1/game` に mount |
+| `backend/src/routes/game/questions.test.ts` | 新規 | `GET /game/questions` の route テスト |
+| `backend/src/services/game.service.test.ts` | 新規または修正 | 問題生成・選択肢生成・苦手件数ガードの service テスト |
+| `frontend/src/lib/game/types.ts` | 修正 | API レスポンス型、回答送信用型、UI mock 型の責務を分離 |
+| `frontend/src/lib/api/game.ts` | 新規 | `getGameQuestions()` API client、runtime validation、共通エラー処理 |
+| `frontend/src/lib/api/game.test.ts` | 新規 | query、Authorization、レスポンス検証、非 JSON エラー、AbortSignal のテスト |
+| `frontend/src/routes/(app)/game/play/+page.svelte` | 修正 | mock 問題から API 問題取得へ差し替える場合の loading / error / empty 状態 |
+| `frontend/src/lib/game/play.ts` | 修正 | mock 正誤判定と API 接続後の回答 draft 生成を分離 |
+| `frontend/src/lib/game/play.test.ts` | 修正 | API 接続後の回答 draft・mode 正規化のテスト更新 |
+
+## API 仕様（この機能で使う範囲のみ）
+
+### エラーレスポンス共通形式
+
+```json
+{ "error": "メッセージ文字列" }
+```
+
+バリデーションエラー時:
+
+```json
+{
+  "error": "バリデーションエラー",
+  "details": [
+    { "message": "ゲームモードが正しくありません" }
+  ]
+}
+```
+
+### GET `/api/v1/game/questions`
+
+| 項目 | 内容 |
+|---|---|
+| 認証 | 必須。`Authorization: Bearer <accessToken>` |
+| Query | `mode: GameMode` |
+| 成功 | 200 |
+| 用途 | 指定 mode の10問・4択と `questionSetId` を取得する |
+| 副作用 | `GameQuestionSet` を作成し、30分後の `expiresAt` を設定する |
+| 正解情報 | レスポンスに含めない |
+| 並び順 | questions と choices は生成済みの順序をそのまま使う |
+
+#### Query params
+
+| クエリ | 型 | 正規化・検証 |
+|---|---|---|
+| `mode` | `GameMode` | 必須。6種類の enum 以外は 400 |
+
+#### Response 200
+
+```json
+{
+  "questionSetId": "clx_question_set_id",
+  "expiresAt": "2026-06-20T12:30:00.000Z",
+  "questions": [
+    {
+      "questionId": "q1",
+      "prompt": "H",
+      "choices": [
+        { "choiceId": "1", "text": "水素" },
+        { "choiceId": "6", "text": "炭素" },
+        { "choiceId": "8", "text": "酸素" },
+        { "choiceId": "7", "text": "窒素" }
+      ]
+    }
+  ]
+}
+```
+
+#### Response type
+
+```ts
+export type GameQuestionsResponse = {
+  questionSetId: string;
+  expiresAt: string;
+  questions: GameApiQuestion[];
+};
+
+export type GameApiQuestion = {
+  questionId: string;
+  prompt: string;
+  choices: GameApiChoice[];
+};
+
+export type GameApiChoice = {
+  choiceId: string;
+  text: string;
+};
+```
+
+#### Error
+
+| ステータス | 条件 | body |
+|---|---|---|
+| 400 | `mode` が未指定・不正 | `{ "error": "バリデーションエラー", "details": [...] }` |
+| 401 | 未ログイン・token 不正 | `{ "error": "認証が必要です" }` または `{ "error": "トークンが無効です" }` |
+| 403 | 停止・メール未確認・ロック中 | 既存 auth middleware の日本語エラー |
+| 409 | 苦手モードで苦手元素が5件未満 | `{ "error": "苦手モードを始めるには、苦手元素が5件以上必要です" }` |
+| 429 | レート制限 | `{ "error": "リクエストが多すぎます。しばらく待ってから再試行してください" }` |
+| 500 | DB / 生成失敗 | `{ "error": "サーバーエラーが発生しました" }` |
+
+### `GameQuestionSet.questions` 保存形式案
+
+`GameQuestionSet.questions` はレスポンスと同じ表示情報に加え、サーバー正誤判定用の正解を保存する。
+
+```ts
+type StoredGameQuestionSetQuestion = {
+  questionId: string;
+  elementId: number;
+  prompt: string;
+  correctChoiceId: string;
+  choices: {
+    choiceId: string;
+    elementId: number;
+    text: string;
+  }[];
+};
+```
+
+- `elementId` と `correctChoiceId` は DB 内にのみ保存する。
+- クライアントへ返す `choices` は `{ choiceId, text }` のみ。
+- `choiceId` は当面 `String(element.id)` とし、後続 `POST /game/sessions` で選択肢照合に使う。
+- `questionId` は問題セット内で一意にする。例: `q1`〜`q10`。
+- 保存 JSON は10問分だけに限定し、不要な `nameEn`, `category`, `atomicWeight` などを含めない。
+
+### 後続 `POST /api/v1/game/sessions` との接続点
+
+本タスクで完全確定はしないが、`GET /game/questions` と整合する最低限の送信型を以下に寄せる。
+
+```json
+{
+  "questionSetId": "clx_question_set_id",
+  "mode": "SYMBOL_TO_NAME_LV1",
+  "answers": [
+    {
+      "questionId": "q1",
+      "chosenChoiceId": "1",
+      "answerTimeSec": 5
+    }
+  ],
+  "durationSec": 72
+}
+```
+
+## 設計上の決定事項（判断理由つき）
+
+1. **`questionSetId` をレスポンスに含めるか**
+   - 選択: 必ず含める。
+   - 根拠: `docs/05_progress.md` の設計決定2で `GameQuestionSet` 方式が確定している。`POST /game/sessions` でサーバー側正誤判定するには問題セットの識別子が必要。
+
+2. **正解情報をレスポンスに含めるか**
+   - 選択: 含めない。
+   - 根拠: クライアントに `correctChoiceId` や正解 `elementId` を渡すと改ざんや推測が容易になる。UI mock の正誤判定は本番 API 型に混ぜない。
+
+3. **選択肢 ID を `elementId` として公開するか**
+   - 選択: レスポンス上は `choiceId` として公開し、`elementId` という名前は出さない。
+   - 根拠: 画面が DB ID に密結合しない。内部保存では `elementId` を保持し、サーバー側照合に使う。
+
+4. **`questionId` の形式**
+   - 選択: 問題セット内で一意な安定 ID とし、初期実装では `q1`〜`q10` を許容する。
+   - 根拠: 回答送信時に配列順だけへ依存すると、欠落・並び替え・二重送信の検証が弱くなる。
+
+5. **`expiresAt` をレスポンスに含めるか**
+   - 選択: 含める。
+   - 根拠: フロントエンドで期限切れ時の再取得導線を作れる。DB の `GameQuestionSet.expiresAt` とも整合する。
+
+6. **検索条件を URL クエリに反映するか**
+   - 選択: ゲームでは検索条件ではなく `mode` を URL クエリに反映する。`/game/play?mode=SYMBOL_TO_NAME_LV1` を維持する。
+   - 根拠: 既存 `/game` からの導線と `/game/play` の実装がこの形で整っている。再読み込み時も mode を復元できる。
+
+7. **初期表示時に検索条件をどこから復元するか**
+   - 選択: 検索条件は対象外。ゲーム開始条件として `page.url.searchParams` から `mode` を復元し、`normalizeGameModeParam()` で一度だけ検証する。
+   - 根拠: URL を source of truth にすると、直打ち・再読み込み・戻る操作で状態が安定する。
+
+8. **キーワード入力の反映タイミング**
+   - 選択: 対象外。
+   - 根拠: 本機能はゲーム問題取得 API であり、キーワード入力 UI は `docs/plans/elements-search-filter/plan.md` の責務。
+
+9. **分類・周期の選択 UI**
+   - 選択: 対象外。
+   - 根拠: 本機能は `GameMode` による問題セット取得であり、元素一覧の分類・周期フィルターとは別タスク。
+
+10. **検索条件リセット時に API 再取得するか**
+    - 選択: 対象外。ゲームでは「もう一度」または mode 変更時に `GET /game/questions` を再取得する。
+    - 根拠: `GameQuestionSet` は取得ごとに作成されるため、再取得操作を明示的にする。
+
+11. **API パラメータの組み立てをどの層で行うか**
+    - 選択: `frontend/src/lib/api/game.ts` で行う。
+    - 根拠: page / component に URL 組み立てを埋め込まず、`elements.ts` と同じ API client 層に閉じる。
+
+12. **正規化済みの検索条件をどこで保持するか**
+    - 選択: 検索条件は対象外。正規化済み `mode` は `/game/play` page の derived state で保持し、API client には `GameMode` 型として渡す。
+    - 根拠: `mode` の検証を page で一度だけ行えば、API client は不正値を受けにくくなる。backend でも zod で再検証する。
+
+13. **エラー表示に toast を使うか、画面内表示にするか**
+    - 選択: 初回取得失敗は画面内エラー、再取得失敗や手動リトライ失敗は toast 併用。
+    - 根拠: ゲーム開始不能は画面の主状態なので画面内に残す必要がある。toast は補助通知に留める。
+
+14. **既存コンポーネントを再利用するか、新規作成するか**
+    - 選択: 既存 `GameProgressIndicator`, `GameTimerBar`, `GameChoiceButton`, `GameFeedbackPanel` を再利用し、API 接続用の表示状態だけ page で追加する。
+    - 根拠: UI は既に実装済み。API 契約のためにコンポーネントを作り直さず、データ供給層を差し替える。
+
+15. **`GET /game/questions` に rate limit を適用するか**
+    - 選択: 適用する。
+    - 根拠: GET だが `GameQuestionSet` を作成する DB 書き込み API であり、連打で一時データが増える。既存 rateLimit middleware を使う。
+
+16. **問題取得時に既存の未使用 `GameQuestionSet` を削除するか**
+    - 選択: 初期実装では期限切れ削除のみ service 内で安全に行い、同一ユーザーの未期限切れセット削除は `POST /game/sessions` と cleanup タスクで扱う。
+    - 根拠: 開始済みゲームの別タブ・戻る操作を壊すリスクがある。負荷対策は rate limit と期限切れ cleanup を優先する。
+
+## 公開インターフェース案（必要な場合）
+
+### `frontend/src/lib/game/types.ts`
+
+```ts
+export type GameQuestionsResponse = {
+  questionSetId: string;
+  expiresAt: string;
+  questions: GameApiQuestion[];
+};
+
+export type GameApiQuestion = {
+  questionId: string;
+  prompt: string;
+  choices: GameApiChoice[];
+};
+
+export type GameApiChoice = {
+  choiceId: string;
+  text: string;
+};
+
+export type GameSessionAnswerDraft = {
+  questionId: string;
+  chosenChoiceId: string | null;
+  answerTimeSec: number;
+};
+```
+
+### `frontend/src/lib/api/game.ts`
+
+```ts
+export type GetGameQuestionsOptions = {
+  mode: GameMode;
+  accessToken: string;
+  signal?: AbortSignal;
+};
+
+export function getGameQuestions(options: GetGameQuestionsOptions): Promise<GameQuestionsResponse>;
+```
+
+### `backend/src/services/game.service.ts`
+
+```ts
+export type PublicGameQuestion = {
+  questionId: string;
+  prompt: string;
+  choices: { choiceId: string; text: string }[];
+};
+
+export type CreateGameQuestionSetResult = {
+  questionSetId: string;
+  expiresAt: Date;
+  questions: PublicGameQuestion[];
+};
+
+export function createGameQuestionSet(params: {
+  userId: string;
+  mode: GameMode;
+  now?: Date;
+}): Promise<CreateGameQuestionSetResult>;
+```
+
+## タスクリスト（進捗管理）
+
+| タスクID | 内容 | ファイル | 完了条件 | 優先度 |
+|---|---|---|---|---|
+| T1 | 既存仕様・既存実装を確認する | `docs/05_progress.md`, `docs/04_api.md`, `docs/plans/game-screens/plan.md`, `backend/src/routes/game/index.ts`, `frontend/src/routes/(app)/game/play/+page.svelte` | `GET /game/questions` 未確定箇所、mock UI、`GameQuestionSet` 制約を把握する | 高 |
+| T2 | 進捗を実装中へ更新する | `docs/05_progress.md` | `GET /game/questions` レスポンス形式確定タスクを `[-]` にする | 中 |
+| T3 | API 契約を docs に確定する | `docs/04_api.md` | `questionSetId`, `expiresAt`, `questions`, `choices`, エラー仕様、`POST /game/sessions` との接続点が記載される | 高 |
+| T4 | backend query validation 方針を実装する | `backend/src/routes/game/index.ts` | `mode` を zod で検証し、不正値は日本語 400 を返す | 高 |
+| T5 | backend service 契約を実装する | `backend/src/services/game.service.ts` | 問題生成、4択生成、`GameQuestionSet` 保存、公開レスポンス変換の責務が service に集約される | 高 |
+| T6 | `GameQuestionSet.questions` 保存形式を実装する | `backend/src/services/game.service.ts` | DB 内保存形式と公開レスポンス形式が分離される | 高 |
+| T7 | rate limit と route mount を追加する | `backend/src/routes/game/index.ts`, `backend/src/index.ts` | `/api/v1/game/questions` が認証・rate limit 付きで呼べる | 高 |
+| T8 | frontend 型定義を更新する | `frontend/src/lib/game/types.ts` | API レスポンス型と mock 専用型が分離される | 高 |
+| T9 | frontend API client を追加する | `frontend/src/lib/api/game.ts` | `getGameQuestions({ mode, accessToken, signal })` が `API_BASE_URL` と `parseErrorResponse()` を使う | 高 |
+| T10 | API client の runtime validation を実装する | `frontend/src/lib/api/game.ts` | レスポンス形式不正なら `ApiError(500, "ゲーム問題のレスポンス形式が不正です", data)` を投げる | 高 |
+| T11 | `/game/play` の状態管理を API 接続向けに整理する | `frontend/src/routes/(app)/game/play/+page.svelte` | `mode` 正規化、loading、error、empty、abort、request sequence、再取得の責務が重複なく整理される | 高 |
+| T12 | mock 問題と API 問題の切り替え方針を決める | `frontend/src/lib/game/mock-questions.ts`, `frontend/src/routes/(app)/game/play/+page.svelte` | API 接続後に mock を test fixture / 開発 fallback など限定用途にする | 中 |
+| T13 | 回答 draft を API 送信用に分離する | `frontend/src/lib/game/play.ts`, `frontend/src/lib/game/types.ts` | 本番送信型に `isCorrect` を含めず、`questionId`, `chosenChoiceId`, `answerTimeSec` のみを保持できる | 高 |
+| T14 | ローディング・空状態・エラー状態を実装する | `frontend/src/routes/(app)/game/play/+page.svelte` | 初回取得中、0問、API エラー、期限切れ再取得導線が日本語で表示される | 高 |
+| T15 | backend route / service テストを作成する | `backend/src/routes/game/questions.test.ts`, `backend/src/services/game.service.test.ts` | 認証、mode validation、10問、4択、`questionSetId`, 正解非露出、苦手5件未満、500 が検証される | 高 |
+| T16 | frontend API client テストを作成する | `frontend/src/lib/api/game.test.ts` | query、Authorization、AbortSignal、非 JSON エラー、レスポンス形式不正を検証する | 高 |
+| T17 | frontend helper / page 関連テストを更新する | `frontend/src/lib/game/play.test.ts` | API 送信用 answer draft、空回答、時間境界、mode 正規化が検証される | 高 |
+| T18 | lint を実行する | `backend/`, `frontend/` | 対象範囲に応じて `npm run lint` が通る | 高 |
+| T19 | format を実行する | `backend/`, `frontend/` | 対象範囲に応じて `npm run format` または `npm run format:check` が通る | 高 |
+| T20 | test を実行する | `backend/`, `frontend/` | 対象範囲に応じて `npm run test -- --run` / `npm run test:run` が通る | 高 |
+| T21 | 手動確認を実施する | ブラウザ | `/game` から開始、問題取得中、成功、API エラー、再読み込み、モバイル表示を確認する | 高 |
+| T22 | 実装完了更新を行う | `docs/05_progress.md`, `docs/plans/game-screens/plan.md` | 進捗を `[x]` にし、実装完了セクションへ変更点・実ファイル・確認結果を記録する | 中 |
+
+- [ ] T1: 既存仕様・既存実装を確認する
+- [ ] T2: 進捗を実装中へ更新する
+- [ ] T3: API 契約を docs に確定する
+- [ ] T4: backend query validation 方針を実装する
+- [ ] T5: backend service 契約を実装する
+- [ ] T6: `GameQuestionSet.questions` 保存形式を実装する
+- [ ] T7: rate limit と route mount を追加する
+- [ ] T8: frontend 型定義を更新する
+- [ ] T9: frontend API client を追加する
+- [ ] T10: API client の runtime validation を実装する
+- [ ] T11: `/game/play` の状態管理を API 接続向けに整理する
+- [ ] T12: mock 問題と API 問題の切り替え方針を決める
+- [ ] T13: 回答 draft を API 送信用に分離する
+- [ ] T14: ローディング・空状態・エラー状態を実装する
+- [ ] T15: backend route / service テストを作成する
+- [ ] T16: frontend API client テストを作成する
+- [ ] T17: frontend helper / page 関連テストを更新する
+- [ ] T18: lint を実行する
+- [ ] T19: format を実行する
+- [ ] T20: test を実行する
+- [ ] T21: 手動確認を実施する
+- [ ] T22: 実装完了更新を行う
+
+## 技術的注意点
+
+- `GET /game/questions` は route 入口で zod validation を行う。
+- backend の import path は `.js` 拡張子を付ける。
+- `PrismaClient` 生成箇所は既存 `backend/src/lib/prisma.ts` を使い、新規生成しない。
+- `GameQuestionSet` 作成時は `expiresAt = now + 30分` にする。
+- `GameQuestionSet.questions` は10問分の判定に必要な最小情報だけ保存する。
+- 古い `GameQuestionSet` cleanup はフェーズ7の別タスクだが、期限切れ削除を service 内で安全に行う場合はテストする。
+- 問題数は `GAME_QUESTION_COUNT = 10` と整合させる。
+- 選択肢数は4件固定とする。
+- 苦手モードは frontend の guard だけに依存せず、backend service で必ず 409 を返す。
+- `choiceId` はレスポンス上の抽象 ID として扱い、frontend UI は `elementId` を知らなくてよい。
+- API client は `API_BASE_URL` を import し、環境変数を直接読まない。
+- API client は `response.ok` を JSON parse 前に確認する。
+- API client は `parseErrorResponse(response, "ゲーム問題の取得に失敗しました")` を使う。
+- ネットワークエラーは page 側で `ApiError` 以外として扱い、日本語 fallback を表示する。
+- `/game/play` で request が重なった場合、古い response が新しい state を上書きしないよう request sequence か AbortController を使う。
+- 初回 loading 中は二重開始・二重取得が起きない UI にする。
+- API 接続後は `MockGamePlayQuestion.correctChoiceId` に依存した即時正誤フィードバックを本番データへ混ぜない。
+- 本番 API 接続では回答直後の正解表示をどう扱うか、`POST /game/sessions` 確定タスクで最終判断する。
+
+## A11Y要件
+
+| 対象 | 要件 |
+|---|---|
+| 初回 loading | `aria-busy="true"` を使い、ゲーム開始準備中であることを画面内テキストで表示する |
+| エラー状態 | toast だけに依存せず、画面内にエラー本文と再試行導線を残す |
+| 空状態 | 0問の場合も空の選択肢領域を出さず、日本語メッセージと戻る導線を表示する |
+| 進捗 | 既存 `GameProgressIndicator` のテキスト進捗を維持する |
+| タイマー | 毎秒 `aria-live` で読み上げない。残り少ない状態は色だけに依存しない |
+| 選択肢 | `button` として実装し、1〜4 の番号をテキストで表示する |
+| キーボード | API loading / error / feedback 中は 1〜4 キーで誤回答が入らない |
+| focus | エラーから再試行後、ゲーム本文または問題領域へ自然に戻れるようにする |
+| レスポンシブ | 390px 幅で loading / error / 選択肢文言が横にはみ出さない |
+
+## DB整合性・負荷に関する注意
+
+- `GET /game/questions` は GET だが DB 書き込みを伴うため、実装・運用上は副作用あり API として扱う。
+- 1リクエストあたり作成する `GameQuestionSet` は1件、保存 JSON は10問分に限定する。
+- 元素マスターは118件のため、通常モードの候補取得は過度な負荷になりにくい。
+- 苦手モードは `WeakElement` を userId で絞り、必要フィールドだけ select / include する。
+- 生 SQL は使わず、Prisma ORM の `findMany`, `create`, 必要に応じて `deleteMany` を使う。
+- `GET /game/questions` 連打対策として、frontend は loading 中の再取得を抑止し、backend は rate limit を適用する。
+- `GameQuestionSet` の期限切れ cleanup はフェーズ7の明示タスクとして残す。実装時に route 内で軽量 cleanup を行う場合は、毎リクエストで広範囲 delete しない。
+- `POST /game/sessions` では `questionSetId`, `userId`, `mode`, `expiresAt` を照合し、正誤判定後に当該 `GameQuestionSet` を削除する方針を維持する。
+
+## テストケース一覧
+
+| ケース | 期待結果 |
+|---|---|
+| 初期表示で問題一覧が取得される | `/game/play?mode=SYMBOL_TO_NAME_LV1` で `GET /game/questions` が呼ばれ、10問が表示される |
+| 有効な mode | 200 で `questionSetId`, `expiresAt`, `questions` を返す |
+| mode 未指定 | 400 バリデーションエラー |
+| mode 不正値 | 400 バリデーションエラー |
+| 未ログイン | 401 の日本語エラー |
+| メール未確認・停止・ロック | auth middleware の 403 日本語エラー |
+| 通常モード | 10問・各4択が返る |
+| 苦手モードで苦手元素5件未満 | 409 の日本語エラー |
+| 苦手モードで苦手元素5件以上 | 10問・各4択が返る |
+| レスポンスに正解情報が含まれない | `correctChoiceId`, `isCorrect`, 判定用 `elementId` が公開レスポンスに含まれない |
+| `GameQuestionSet` が保存される | userId, mode, questions, expiresAt が Prisma 経由で保存される |
+| `questionSetId` が返る | 保存した `GameQuestionSet.id` と一致する |
+| `expiresAt` が返る | 30分後相当の ISO 文字列が返る |
+| 選択肢が4件 | 各 question の choices が4件 |
+| 選択肢 ID が重複しない | 1問内の `choiceId` が一意 |
+| API client が query を組み立てる | `/game/questions?mode=...` へ fetch する |
+| API client が Authorization を送る | `Authorization: Bearer <accessToken>` を含む |
+| API client が AbortSignal を渡す | fetch options に signal が含まれる |
+| API client の HTTP エラー | `ApiError` が throw され、backend の日本語 message を保持する |
+| API client の非 JSON エラー | default message で `ApiError` が throw される |
+| API client のレスポンス形式不正 | `ApiError(500, "ゲーム問題のレスポンス形式が不正です", data)` |
+| `/game/play` loading | 読み込み中表示になり、選択肢の二重操作が起きない |
+| `/game/play` API エラー | 画面内エラーと再取得導線が表示される |
+| `/game/play` 0問 | 空状態として「問題を取得できませんでした」系の日本語表示になる |
+| 再読み込み後 | URL の mode から再度問題を取得する |
+| もう一度 | 新しい問題セットを取得する方針の場合、新しい `questionSetId` になる |
+| A11Y | loading / error / empty / choices がキーボードと読み上げ順で破綻しない |
+| モバイル | 390px 幅で loading / error / 選択肢文言がはみ出さない |
+| lint | backend / frontend の対象 lint が通る |
+| format | Prettier 整形が通る |
+| test | backend / frontend の対象テストが通る |
+
+## 実装リスクと回避策
+
+| リスク | 影響 | 回避策 |
+|---|---|---|
+| `questionSetId` を docs にだけ書いて実装に反映し忘れる | `POST /game/sessions` と接続できない | backend / frontend 型とテストに `questionSetId` 必須を入れる |
+| 正解情報がレスポンスに混入する | クライアント側で正解推測・改ざんが可能になる | public response mapper を作り、保存形式と公開形式を分ける |
+| `elementId` という名前を公開し続ける | UI が DB ID に密結合する | 公開 API は `choiceId` に統一する |
+| mock 用 `correctChoiceId` が本番型に混ざる | 型上は動くがセキュリティ方針と矛盾する | `MockGamePlayQuestion` と `GameApiQuestion` を分ける |
+| 苦手モードの件数不足を frontend だけで防ぐ | API 直叩きで不整合が起きる | backend service で必ず 409 を返す |
+| `GameQuestionSet` が多重作成される | DB に不要データが溜まる | 開始中 disabled、AbortController、rate limit、期限切れ cleanup 方針を実装する |
+| 古い API response が新しい mode を上書きする | 画面と URL がズレる | request sequence または AbortController を使う |
+| 非 JSON 502/504 で画面がクラッシュする | エラー表示できない | `parseErrorResponse()` と try-catch パターンを守る |
+| `POST /game/sessions` 仕様と再度ズレる | 後続実装で手戻りが出る | 本計画で最低限 `questionSetId`, `questionId`, `chosenChoiceId` を接続点として固定する |
+| 即時フィードバックができなくなる | 既存 mock UI と UX が変わる | API 接続タスクで UX 変更を明示し、結果表示のタイミングを `POST /game/sessions` 計画に合わせる |
+
+## 手動確認項目
+
+| 項目 | 確認内容 |
+|---|---|
+| `/game` から開始 | 通常モード開始で `/game/play?mode=...` に遷移する |
+| 初回 loading | 問題取得中に画面が崩れず、二重取得が起きない |
+| 問題取得成功 | 10問、4択、進捗、タイマーが表示される |
+| `questionSetId` | Network response に `questionSetId` と `expiresAt` が含まれる |
+| 正解非露出 | Network response に `correctChoiceId`, `isCorrect`, 判定用 `elementId` が含まれない |
+| 未ログイン | ログイン導線または 401 エラーが日本語で表示される |
+| 不正 mode | 日本語エラーと `/game` へ戻る導線が表示される |
+| API 500 | 画面内エラーと再読み込み導線が表示される |
+| 非 JSON エラー | クラッシュせず fallback message が表示される |
+| もう一度 | 新しい問題セットを取得する方針の場合、新しい `questionSetId` になる |
+| PC 幅 | 問題・選択肢・エラー表示が既存 layout 内に収まる |
+| モバイル幅 390px | 選択肢・loading・error 文言がはみ出さない |
+| キーボード | loading / error / feedback 中に誤回答が入らない |
+| コンソール | hydration mismatch や未処理 promise rejection が出ない |
+
+## 実装完了時の更新ルール
+
+実装完了時は以下を必ず行う。
+
+- `docs/05_progress.md` の `GET /game/questions のレスポンス形式（問題・選択肢・questionSetId）を決定` を `[x]` に更新する。
+- `docs/plans/game-screens/plan.md` の該当チェックボックスを `[x]` に更新する。
+- `docs/04_api.md` の `GET /game/questions` が実装と一致していることを確認する。
+- `POST /game/sessions` 側に影響する決定は、同セクションまたは確認事項へ記録する。
+- 計画と実装で変更ファイルが異なった場合、対象ファイル一覧を実態に合わせて更新する。
+- 設計判断が変わった場合、`## 実装完了` の「計画からの変更点」に記録する。
+- 実行した lint / format / test / 手動確認を `## 実装完了` に記録する。
+
+実装完了セクションのテンプレート:
+
+```markdown
+## 実装完了
+- 完了日: YYYY-MM-DD
+- 実装ブランチ: feature/game-questions-response
+- PR: #N
+
+### 計画からの変更点
+- なし
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `docs/04_api.md` | 修正 | `GET /game/questions` レスポンス形式を更新 |
+| `docs/05_progress.md` | 修正 | 進捗更新 |
+| `docs/plans/game-screens/plan.md` | 修正 | 実装完了記録 |
+
+### 品質チェック
+| コマンド | 結果 |
+|---|---|
+| `cd backend && npm run lint` | OK / 未実施 |
+| `cd backend && npm run format:check` | OK / 未実施 |
+| `cd backend && npm run test -- --run` | OK / 未実施 |
+| `cd frontend && npm run lint` | OK / 未実施 |
+| `cd frontend && npm run format` | OK / 未実施 |
+| `cd frontend && npm run test:run` | OK / 未実施 |
+| `cd frontend && npm run check` | OK / 未実施 |
+
+### 手動確認
+| 条件 | 結果 |
+|---|---|
+| `/game` から開始 | OK / 未実施 |
+| `/game/play` 問題取得成功 | OK / 未実施 |
+| `questionSetId` 確認 | OK / 未実施 |
+| 正解情報非露出 | OK / 未実施 |
+| API エラー表示 | OK / 未実施 |
+| モバイル幅 390px | OK / 未実施 |
+```
+
+---
+
 # ゲームプレイ画面 `/game/play` 実装計画
 
 > 設計者ロール: シニアフロントエンドエンジニア（SvelteKit v2 / Svelte 5 Runes、ゲーム UX・状態設計）
