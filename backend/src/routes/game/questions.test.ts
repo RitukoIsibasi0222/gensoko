@@ -13,6 +13,8 @@ vi.mock("../../lib/prisma.js", () => ({
 
 vi.mock("../../services/game.service.js", () => ({
   createGameQuestionSet: vi.fn(),
+  GAME_SESSION_DURATION_LIMIT_SEC: 1800,
+  QUESTION_TIME_LIMIT_SEC: 15,
   InsufficientWeakElementsError: class InsufficientWeakElementsError extends Error {
     constructor() {
       super("苦手モードを始めるには、苦手元素が5件以上必要です");

@@ -18,7 +18,7 @@
 | セキュリティ | client が `isCorrect` や `score` を送れる設計にすると改ざん可能。`questionSetId` の存在有無や他ユーザー所有も漏らしやすい | request は `questionId`, `chosenChoiceId`, `answerTimeSec` のみに限定する。他ユーザー・存在しない問題セットはいずれも 404 にする |
 | A11Y | submit 中・保存失敗・結果画面 reload など、ゲーム完了後の状態が未定義。toast だけだと再試行導線が残らない | submit 中は `aria-busy` と persistent な画面内状態を出す。失敗時は画面内エラーと再試行ボタンを主、toast は補助にする |
 | DB 整合性 | `GameSession`, `GameAnswer`, `WeakElement`, `UserStats`, `GameQuestionSet` 削除が複数テーブルにまたがる。二重送信 race で重複 session が作られるリスクがある | Prisma transaction 内で問題セットを読み、先に `deleteMany` で消費権を確保してから session / answer / stats を作成する。削除件数 0 は二重送信として 409 にする |
-| DB 負荷 | 元素は118件で小さいが、`masteredCount` 再計算を毎問・毎回答で行うと無駄が出る。`GameQuestionSet` cleanup を広範囲に毎回走らせるのも重い | 再計算は session 保存後に1回だけ行う。期限切れ cleanup は別タスクを維持し、この API では対象 questionSet の消費・削除に限定する |
+| DB 負荷 | `masteredCount` を毎回全118元素で再計算すると、履歴増加に応じて `POST /game/sessions` が重くなる。`GameQuestionSet` cleanup を広範囲に毎回走らせるのも重い | `masteredCount` は今回セッションで影響したユニーク元素の保存前後差分で更新する。期限切れ cleanup は別タスクを維持し、この API では対象 questionSet の消費・削除に限定する |
 | テスト | route だけのテストでは score、weak 更新、stats 更新、二重送信 race が漏れる | route / service / frontend API client / helper / result store を分けてテストする。DB 更新順と transaction 失敗時のロールバック観点を service test に含める |
 | スコープ整合性 | 依頼文に「検索・フィルターUI（キーワード・分類・周期）」のプレースホルダーが混在しているが、`docs/05_progress.md` では元素検索 UI は完了済み | 本計画は `POST /game/sessions` と `/game/result` の表示元レスポンスに限定する。元素検索 UI は変更しない |
 
@@ -219,7 +219,7 @@
   "mode": "SYMBOL_TO_NAME_LV1",
   "correctCount": 8,
   "totalCount": 10,
-  "totalScore": 1120,
+  "totalScore": 800,
   "maxStreak": 5,
   "durationSec": 72,
   "playedAt": "2026-06-20T12:35:00.000Z",
@@ -233,7 +233,7 @@
       "correctAnswer": "水素",
       "yourAnswer": "水素",
       "answerTimeSec": 5,
-      "score": 150
+      "score": 100
     },
     {
       "questionId": "q2",
@@ -266,13 +266,12 @@
 
 ```ts
 const BASE_CORRECT_SCORE = 100;
-const TIME_BONUS_PER_SEC = 5;
 const QUESTION_TIME_LIMIT_SEC = 15;
 ```
 
 - 不正解・時間切れは `score = 0`。
-- 正解は `score = 100 + (15 - answerTimeSec) * 5`。
-- `answerTimeSec` は整数のため、1問あたりの最大スコアは175、最小正解スコアは100。
+- 正解は `score = 100`。
+- `answerTimeSec` は保存・表示用として扱い、クライアント申告値のため score には使わない。
 - `totalScore` は各問 `score` の合計。
 - `maxStreak` は request の配列順ではなく、保存済み `GameQuestionSet.questions` の順序に沿って計算する。
 
@@ -335,8 +334,8 @@ const QUESTION_TIME_LIMIT_SEC = 15;
     - 根拠: `WeakElement.consecutiveHit` の用途を明確にし、苦手モードの卒業条件を自動化できる。
 
 15. **`masteredCount` 更新方針**
-    - 選択: `GameAnswer` 作成後、対象ユーザーの習得済み元素数を `GameAnswer` 集計方式で再計算して `UserStats.masteredCount` を更新する。
-    - 根拠: `docs/05_progress.md` 設計決定1と整合する。元素数は118件のため、session 保存ごとの再計算でも初期規模では負荷が小さい。
+    - 選択: 今回セッションに出たユニーク `elementId` だけを対象に、`GameAnswer` 保存前後の習得状態を比較し、`UserStats.masteredCount` を差分更新する。
+    - 根拠: `docs/05_progress.md` 設計決定1と整合しつつ、ユーザーの過去セッションが増えた場合でも `POST /game/sessions` ごとの全118元素再走査を避けられる。
 
 ## 公開インターフェース案（必要な場合）
 
@@ -462,30 +461,30 @@ export function submitGameSession(
 | T23 | 手動確認を実施する | ブラウザ | `/game` -> `/game/play` -> `/game/result` の主要導線を確認する | 高 |
 | T24 | 実装完了更新を行う | `docs/05_progress.md`, `docs/plans/game-screens/plan.md` | 進捗を `[x]` にし、実装完了セクションへ変更点・実ファイル・確認結果を記録する | 中 |
 
-- [ ] T1: 既存仕様・既存実装を確認する
-- [ ] T2: API 契約を docs に確定する
-- [ ] T3: 進捗を実装中へ更新する
-- [ ] T4: backend body validation を実装する
-- [ ] T5: backend route を追加する
-- [ ] T6: session submit service を実装する
-- [ ] T7: 正誤判定・スコア計算を実装する
-- [ ] T8: DB 保存 transaction を実装する
-- [ ] T9: frontend 型定義を追加する
-- [ ] T10: API client を実装する
-- [ ] T11: 回答送信用 helper を実装する
-- [ ] T12: 結果一時 store を追加する
-- [ ] T13: `/game/play` から submit する
-- [ ] T14: submit 中・失敗状態を実装する
-- [ ] T15: 結果画面を実装する
-- [ ] T16: backend route テストを作成する
-- [ ] T17: backend service テストを追加する
-- [ ] T18: frontend API client テストを追加する
-- [ ] T19: frontend helper / store テストを追加する
-- [ ] T20: lint を実行する
-- [ ] T21: format を実行する
-- [ ] T22: test を実行する
-- [ ] T23: 手動確認を実施する
-- [ ] T24: 実装完了更新を行う
+- [x] T1: 既存仕様・既存実装を確認する
+- [x] T2: API 契約を docs に確定する
+- [x] T3: 進捗を実装中へ更新する
+- [x] T4: backend body validation を実装する
+- [x] T5: backend route を追加する
+- [x] T6: session submit service を実装する
+- [x] T7: 正誤判定・スコア計算を実装する
+- [x] T8: DB 保存 transaction を実装する
+- [x] T9: frontend 型定義を追加する
+- [x] T10: API client を実装する
+- [x] T11: 回答送信用 helper を実装する
+- [x] T12: 結果一時 store を追加する
+- [x] T13: `/game/play` から submit する
+- [x] T14: submit 中・失敗状態を実装する
+- [x] T15: 結果画面を実装する
+- [x] T16: backend route テストを作成する
+- [x] T17: backend service テストを追加する
+- [x] T18: frontend API client テストを追加する
+- [x] T19: frontend helper / store テストを追加する
+- [x] T20: lint を実行する
+- [x] T21: format を実行する
+- [x] T22: test を実行する
+- [x] T23: 手動確認を実施する
+- [x] T24: 実装完了更新を行う
 
 ## 技術的注意点
 
@@ -494,13 +493,13 @@ export function submitGameSession(
 - `PrismaClient` は既存 `backend/src/lib/prisma.ts` を使う。
 - `GameQuestionSet.questions` は `unknown` として扱い、service 内で runtime validation してから正誤判定する。
 - `questionSetId` が他ユーザーのものでも 404 にし、存在有無を漏らさない。
-- `GameQuestionSet.expiresAt < now` の場合は 409 を返し、該当 set は削除してよい。
+- `GameQuestionSet.expiresAt <= now` の場合は 409 を返し、期限終端時刻ちょうども期限切れとして扱う。
 - `chosenChoiceId` が null の場合は時間切れ。不正解かつ `yourAnswer: null`。
 - `chosenChoiceId` が保存済み choices に存在しない場合は 400。
 - 回答数・questionId 集合が保存済み question 集合と一致しない場合は 400。
 - `GameSession.totalCount` は保存済み question 数を使い、client の値は受け取らない。
 - `UserStats` が存在しない場合は upsert する。
-- `masteredCount` は `GameAnswer` 保存後の状態をもとに更新する。
+- `masteredCount` は今回セッションに出たユニーク元素の保存前後の習得状態差分で更新する。
 - frontend は `response.ok` を JSON parse より先に判定する。
 - frontend runtime validation は `results` の各フィールドまで確認する。
 - `/game/play` の submit 中は回答キー操作・再送信操作を抑止する。
@@ -528,7 +527,7 @@ export function submitGameSession(
 - `GameQuestionSet` 削除件数が 0 の場合は、すでに送信済みまたは race とみなし 409 を返す。
 - `GameAnswer` は保存済み questions の順序で作成し、request の順序には依存しない。
 - `WeakElement` 更新は対象 element ごとに限定し、全 weak list を毎回読み直さない。
-- `masteredCount` 再計算は session 保存ごとに1回だけ行う。118元素規模では許容範囲。
+- `masteredCount` 更新は今回セッションに出たユニーク元素に限定し、全118元素の再走査を毎回行わない。
 - 期限切れ `GameQuestionSet` の広範囲 cleanup はフェーズ7の別タスクに残し、この API で毎回全件 cleanup しない。
 - ranking 用の `weeklyScore` / `allTimeScore` は `totalScore` を加算する。`currentStreak` はこのタスクでは変更しない。
 - DB スキーマ変更は行わないため migration / `prisma migrate deploy` は不要。
@@ -558,7 +557,7 @@ export function submitGameSession(
 | unknown questionId | 400 バリデーションエラー |
 | unknown chosenChoiceId | 400 バリデーションエラー |
 | chosenChoiceId null | 時間切れとして不正解、`yourAnswer: null`, `score: 0` |
-| 正解回答 | `isCorrect: true`、score が計算される |
+| 正解回答 | `isCorrect: true`、`score: 100` |
 | 不正解回答 | `isCorrect: false`、score 0 |
 | maxStreak | 保存済み question 順で最大連続正解数が計算される |
 | GameSession 保存 | userId, mode, totalScore, correctCount, totalCount, durationSec が保存される |
@@ -654,6 +653,85 @@ export function submitGameSession(
 | test | `cd frontend && npm run test:run` | 未実行 / 成功 |
 | 手動確認 | `/game` -> `/game/play` -> `/game/result` | 未実行 / 成功 |
 ```
+
+## 実装完了（POST /game/sessions）
+
+- 完了日: 2026-06-20
+- 実装ブランチ: `feature/game-sessions`
+- PR: #53
+
+### 計画からの変更点
+
+- `POST /game/sessions` の実装範囲に `/game/result` 表示画面まで含め、`docs/05_progress.md` の `ゲーム結果画面 /game/result` も `[x]` に更新した。
+- 結果画面の学習体験を優先し、response item は `correctChoiceId` ではなく `correctAnswer` / `yourAnswer` を返して表示する契約にそろえた。
+- live API 接続後の `/game/play` では正解情報を保持しないため、回答直後の正誤フィードバックは行わず、「回答を記録しました」表示に変更した。正誤・スコアは `/game/result` で API レスポンスを source of truth として表示する。
+- `masteredCount` 再計算のため、`getElementMasteryStatusMap()` は transaction client を任意で受け取れる形に拡張した。
+- DBレビューにより、同一セッション内で同じ元素が複数回出題された場合でも、`WeakElement.consecutiveHit` と習得判定では1セッション分として扱うよう改善した。これにより苦手モードで候補が10件未満の場合の過剰な mastered / weak 削除を防ぐ。
+- `GET /game/sessions` 履歴、習得状態集計、期限切れ `GameQuestionSet` cleanup の負荷を抑えるため、ゲーム関連テーブルに追加 index を付与した。
+- PRレビュー対応により、`gameSessionResultStore` は `sessionId` だけでなく `userId` も照合する形に変更した。ログアウト後に同じタブで別ユーザーがログインした場合でも、前ユーザーの結果を表示しない。
+- PRレビュー対応により、`submitGameSession()` service 入口でも `durationSec` と `answerTimeSec` の整数・範囲検証を行うようにした。route の zod validation 以外から呼ばれても不正値を DB transaction 前に拒否する。
+- 整合性再確認により、空の `questionSetId`、空配列 `answers`、空の `questionId` / `chosenChoiceId` も service 入口で DB transaction 前に拒否するよう強化した。
+- PRレビュー対応により、`answerTimeSec` / `durationSec` の上限値は service 定数から route validation へ参照する形にし、magic number の重複を避けた。
+- PRレビュー対応により、Abort 判定は `DOMException` だけでなく `Error` の `name === "AbortError"` も受け付ける形にした。
+- 追加PRレビュー対応により、`GameQuestionSet.expiresAt === now` も期限切れとして扱うようにし、境界テストを追加した。
+- 追加PRレビュー対応により、`masteredCount` は全118元素再計算ではなく、今回セッションで影響したユニーク元素の保存前後差分で更新するようにした。
+- 追加PRレビュー対応により、`answerTimeSec` は保存・表示用に限定し、スコアはクライアント申告時間に依存しない正解固定100点へ変更した。
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `docs/04_api.md` | 修正 | `POST /game/sessions` の request / response / error / score 仕様を実装と整合 |
+| `docs/05_progress.md` | 修正 | `/game/result`、`POST /game/sessions` 仕様確定、`POST /game/sessions` 本実装を完了へ更新 |
+| `docs/plans/game-screens/plan.md` | 修正 | チェックリスト完了化と実装完了記録を追記 |
+| `backend/prisma/schema.prisma` | 修正 | `GameSession`, `GameAnswer`, `GameQuestionSet` に index を追加 |
+| `backend/prisma/migrations/20260620172000_add_game_session_indexes/migration.sql` | 新規 | ゲーム履歴・回答集計・期限切れ cleanup 用 index を追加 |
+| `backend/src/routes/game/index.ts` | 修正 | `POST /game/sessions` route、zod validation、rate limit、service error mapping を追加 |
+| `backend/src/routes/game/questions.test.ts` | 修正 | service 公開定数の追加に合わせて route test mock を更新 |
+| `backend/src/routes/game/sessions.test.ts` | 新規 | 認証、validation、201、400、404、409 の route テストを追加 |
+| `backend/src/services/game.service.ts` | 修正 | session submit、正誤判定、score、streak、transaction 保存、WeakElement / UserStats 更新、GameQuestionSet 消費を追加 |
+| `backend/src/services/game.service.test.ts` | 修正 | submit service の正常系、validation、期限切れ、二重送信、weak / stats / masteredCount 更新、同一セッション重複元素のテストを追加 |
+| `backend/src/services/element-mastery.service.ts` | 修正 | transaction client 対応と、同一セッション内の同一元素回答を1回分にまとめる集計を追加 |
+| `backend/src/services/element-mastery.service.test.ts` | 修正 | 同一セッション内の同一元素複数正解が1回分として扱われる回帰テストを追加 |
+| `frontend/src/lib/api/game.ts` | 修正 | `submitGameSession()`、request / response runtime validation を追加 |
+| `frontend/src/lib/api/game.test.ts` | 修正 | session submit API client テストを追加 |
+| `frontend/src/lib/components/game/GameChoiceButton.svelte` | 修正 | 正解未判定時の回答済み表示を中立表示へ調整 |
+| `frontend/src/lib/game/constants.ts` | 修正 | session duration 上限定数を追加 |
+| `frontend/src/lib/game/types.ts` | 修正 | session answer / result response 型を追加・更新 |
+| `frontend/src/lib/game/play.ts` | 修正 | 本番 API 送信用 answer draft と duration 算出 helper を追加 |
+| `frontend/src/lib/game/play.test.ts` | 修正 | answer draft と duration helper のテストを追加 |
+| `frontend/src/lib/stores/game-session-result.svelte.ts` | 新規 | `/game/result` 用の同一タブ内一時 result store を追加 |
+| `frontend/src/lib/stores/game-session-result.svelte.test.ts` | 新規 | result store の set / matches / clear テストを追加 |
+| `frontend/src/routes/(app)/game/play/+page.svelte` | 修正 | live API 問題取得、全問完了 submit、保存中・失敗状態、結果遷移を追加 |
+| `frontend/src/routes/(app)/game/result/+page.ts` | 新規 | `ssr = true`, `prerender = false` を明示 |
+| `frontend/src/routes/(app)/game/result/+page.svelte` | 新規 | 結果サマリー、回答詳細、復習ポイント、store 空状態を追加 |
+
+### 実行した確認
+
+| 種別 | コマンド / 手順 | 結果 |
+|---|---|---|
+| format | `cd backend && npm run format` | 成功 |
+| format | `cd frontend && npm run format` | 成功 |
+| lint | `cd backend && npm run lint` | 成功 |
+| lint | `cd frontend && npm run lint` | 成功 |
+| format check | `cd backend && npm run format:check` | 成功 |
+| prisma | `cd backend && npx prisma validate` | 成功 |
+| migration | `docker compose exec -T hono npx prisma migrate deploy` | 成功 |
+| test | `cd backend && npm run test -- --run` | 成功（22 files / 191 tests） |
+| test | `cd frontend && npm run test:run` | 成功（16 files / 195 tests） |
+| check | `cd frontend && npm run check` | 成功（0 errors / 0 warnings） |
+
+### 手動確認
+
+| 条件 | 結果 |
+|---|---|
+| `/game/result?sessionId=manual-check` store 空状態 | OK: 「結果を表示できません」とゲーム導線を表示 |
+| `/game/play?mode=SYMBOL_TO_NAME_LV1` 未ログイン表示 | OK: 「ログインが必要です」とログイン導線を表示 |
+| PC 幅 | OK: `/game/result` / `/game/play` とも横はみ出しなし |
+| モバイル幅 390px | OK: `/game/result` / `/game/play` とも横はみ出しなし |
+| コンソール | OK: error log なし |
+| DB migration 後 `/game/play?mode=SYMBOL_TO_NAME_LV1` | OK: 未ログイン表示、横はみ出しなし、console error なし |
+| ログイン済み `/game/play` 問題取得・回答・結果送信導線 | 未確認: 手動確認環境にログインセッションなし。API client、route / service、Svelte 構文は自動テストで確認済み |
 
 ---
 
