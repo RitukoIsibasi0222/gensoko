@@ -143,16 +143,24 @@ enum GameMode {
 
 // 各問の回答記録
 model GameAnswer {
-  id            String  @id @default(cuid())
-  sessionId     String
-  elementId     Int
-  isCorrect     Boolean
-  answerTimeSec Int
+  id             String  @id @default(cuid())
+  sessionId      String
+  elementId      Int
+  questionIndex  Int?
+  questionId     String?
+  prompt         String?
+  chosenChoiceId String?
+  isCorrect      Boolean
+  correctAnswer  String?
+  yourAnswer     String?
+  answerTimeSec  Int
+  score          Int?
 
   session GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   element Element     @relation(fields: [elementId], references: [id])
 
   @@index([sessionId, elementId])
+  @@index([sessionId, questionIndex])
   @@map("game_answers")
 }
 
