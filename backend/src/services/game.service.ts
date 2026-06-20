@@ -1,1 +1,224 @@
-// TODO: implement
+import { randomInt } from "node:crypto";
+import type { Element as PrismaElement, GameMode, Prisma } from "@prisma/client";
+import { prisma } from "../lib/prisma.js";
+
+const GAME_QUESTION_COUNT = 10;
+const GAME_CHOICE_COUNT = 4;
+const MIN_WEAK_ELEMENTS_FOR_GAME = 5;
+const QUESTION_SET_EXPIRES_MS = 30 * 60 * 1000;
+
+export type PublicGameChoice = {
+  choiceId: string;
+  text: string;
+};
+
+export type PublicGameQuestion = {
+  questionId: string;
+  prompt: string;
+  choices: PublicGameChoice[];
+};
+
+export type CreateGameQuestionSetResult = {
+  questionSetId: string;
+  expiresAt: Date;
+  questions: PublicGameQuestion[];
+};
+
+type StoredGameChoice = PublicGameChoice & {
+  elementId: number;
+};
+
+type StoredGameQuestion = {
+  questionId: string;
+  prompt: string;
+  elementId: number;
+  correctChoiceId: string;
+  choices: StoredGameChoice[];
+};
+
+type CreateGameQuestionSetParams = {
+  userId: string;
+  mode: GameMode;
+  now?: Date;
+  choiceIndexGenerator?: () => number;
+};
+
+export class InsufficientWeakElementsError extends Error {
+  constructor() {
+    super("苦手モードを始めるには、苦手元素が5件以上必要です");
+    this.name = "InsufficientWeakElementsError";
+  }
+}
+
+function isNameToSymbolMode(mode: GameMode): boolean {
+  return (
+    mode === "NAME_TO_SYMBOL_LV1" || mode === "NAME_TO_SYMBOL_LV2" || mode === "WEAK_NAME_TO_SYMBOL"
+  );
+}
+
+function isWeakGameMode(mode: GameMode): boolean {
+  return mode === "WEAK_SYMBOL_TO_NAME" || mode === "WEAK_NAME_TO_SYMBOL";
+}
+
+function getNormalModeWhere(mode: GameMode): Prisma.ElementWhereInput {
+  if (mode === "SYMBOL_TO_NAME_LV1" || mode === "NAME_TO_SYMBOL_LV1") {
+    return { id: { lte: 20 } };
+  }
+
+  return { id: { gte: 21 } };
+}
+
+async function getCandidateElements(userId: string, mode: GameMode): Promise<PrismaElement[]> {
+  if (!isWeakGameMode(mode)) {
+    return prisma.element.findMany({
+      where: getNormalModeWhere(mode),
+      orderBy: { id: "asc" },
+    });
+  }
+
+  const weakElements = await prisma.weakElement.findMany({
+    where: { userId },
+    orderBy: [{ updatedAt: "desc" }, { addedAt: "desc" }],
+    include: { element: true },
+  });
+
+  if (weakElements.length < MIN_WEAK_ELEMENTS_FOR_GAME) {
+    throw new InsufficientWeakElementsError();
+  }
+
+  return weakElements.map((weakElement) => weakElement.element);
+}
+
+function buildQuestionElements(elements: readonly PrismaElement[]): PrismaElement[] {
+  return Array.from(
+    { length: GAME_QUESTION_COUNT },
+    (_, index) => elements[index % elements.length],
+  );
+}
+
+function getChoiceText(element: PrismaElement, answerWithSymbol: boolean): string {
+  return answerWithSymbol ? element.symbol : element.nameJa;
+}
+
+function getPrompt(element: PrismaElement, answerWithSymbol: boolean): string {
+  return answerWithSymbol ? element.nameJa : element.symbol;
+}
+
+function buildChoices({
+  candidates,
+  correctElement,
+  answerWithSymbol,
+  correctChoiceIndex,
+}: {
+  candidates: readonly PrismaElement[];
+  correctElement: PrismaElement;
+  answerWithSymbol: boolean;
+  correctChoiceIndex: number;
+}): StoredGameChoice[] {
+  const distractors = candidates
+    .filter((element) => element.id !== correctElement.id)
+    .slice(0, GAME_CHOICE_COUNT - 1);
+
+  if (distractors.length < GAME_CHOICE_COUNT - 1) {
+    throw new Error("選択肢を生成できません");
+  }
+
+  if (
+    !Number.isInteger(correctChoiceIndex) ||
+    correctChoiceIndex < 0 ||
+    correctChoiceIndex >= GAME_CHOICE_COUNT
+  ) {
+    throw new Error("選択肢を生成できません");
+  }
+
+  const choiceElements = [...distractors];
+  choiceElements.splice(correctChoiceIndex, 0, correctElement);
+
+  return choiceElements.map((element) => ({
+    choiceId: String(element.id),
+    elementId: element.id,
+    text: getChoiceText(element, answerWithSymbol),
+  }));
+}
+
+function toPublicQuestion(question: StoredGameQuestion): PublicGameQuestion {
+  return {
+    questionId: question.questionId,
+    prompt: question.prompt,
+    choices: question.choices.map((choice) => ({
+      choiceId: choice.choiceId,
+      text: choice.text,
+    })),
+  };
+}
+
+function toQuestionSetJson(questions: readonly StoredGameQuestion[]): Prisma.InputJsonValue {
+  return questions.map((question) => ({
+    questionId: question.questionId,
+    elementId: question.elementId,
+    prompt: question.prompt,
+    correctChoiceId: question.correctChoiceId,
+    choices: question.choices.map((choice) => ({
+      choiceId: choice.choiceId,
+      elementId: choice.elementId,
+      text: choice.text,
+    })),
+  }));
+}
+
+function buildStoredQuestions(
+  mode: GameMode,
+  candidates: readonly PrismaElement[],
+  choiceIndexGenerator: () => number,
+): StoredGameQuestion[] {
+  if (candidates.length < GAME_CHOICE_COUNT) {
+    throw new Error("問題を生成できません");
+  }
+
+  const answerWithSymbol = isNameToSymbolMode(mode);
+  const questionElements = buildQuestionElements(candidates);
+
+  return questionElements.map((element, index) => {
+    const choices = buildChoices({
+      candidates,
+      correctElement: element,
+      answerWithSymbol,
+      correctChoiceIndex: choiceIndexGenerator(),
+    });
+
+    return {
+      questionId: `q${index + 1}`,
+      elementId: element.id,
+      prompt: getPrompt(element, answerWithSymbol),
+      correctChoiceId: String(element.id),
+      choices,
+    };
+  });
+}
+
+export async function createGameQuestionSet({
+  userId,
+  mode,
+  now = new Date(),
+  choiceIndexGenerator = () => randomInt(0, GAME_CHOICE_COUNT),
+}: CreateGameQuestionSetParams): Promise<CreateGameQuestionSetResult> {
+  const candidates = await getCandidateElements(userId, mode);
+  const questions = buildStoredQuestions(mode, candidates, choiceIndexGenerator);
+  const questionsJson = toQuestionSetJson(questions);
+  const expiresAt = new Date(now.getTime() + QUESTION_SET_EXPIRES_MS);
+
+  const questionSet = await prisma.gameQuestionSet.create({
+    data: {
+      userId,
+      mode,
+      questions: questionsJson,
+      expiresAt,
+    },
+  });
+
+  return {
+    questionSetId: questionSet.id,
+    expiresAt: questionSet.expiresAt,
+    questions: questions.map(toPublicQuestion),
+  };
+}

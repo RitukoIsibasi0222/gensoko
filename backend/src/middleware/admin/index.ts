@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from "hono";
-import type { AppVariables } from "../types/index.js";
+import type { AppVariables } from "../../types/index.js";
 
 /**
  * adminMiddleware（Adminロールチェック）

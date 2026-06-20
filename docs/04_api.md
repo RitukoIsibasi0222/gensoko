@@ -163,38 +163,50 @@ Query params:
 
 Response 200:
 {
+  "questionSetId": "cuid",
+  "expiresAt": "2026-06-20T12:30:00.000Z",
   "questions": [
     {
-      "elementId": 1,
-      "question": "H",          // 出題テキスト（記号 or 名前）
-      "choices": [              // 4択の選択肢（シャッフル済み）
-        { "elementId": 1, "text": "水素" },
-        { "elementId": 6, "text": "炭素" },
-        { "elementId": 8, "text": "酸素" },
-        { "elementId": 7, "text": "窒素" }
+      "questionId": "q1",
+      "prompt": "H",            // 出題テキスト（記号 or 名前）
+      "choices": [              // 4択の選択肢（正解位置はランダム）
+        { "choiceId": "1", "text": "水素" },
+        { "choiceId": "6", "text": "炭素" },
+        { "choiceId": "8", "text": "酸素" },
+        { "choiceId": "7", "text": "窒素" }
       ]
     },
     ...  // 10問分
   ]
 }
 
-// ※ 正解情報はサーバーサイドで管理。クライアントに正解を渡さない
-// ※ セッションIDをサーバー側で発行しセッションに紐づける
+// ※ 正解情報（correctChoiceId / 判定用 elementId）は GameQuestionSet.questions に保存し、クライアントに渡さない
+// ※ questionSetId は POST /game/sessions に渡し、サーバー側で正誤判定する
+
+Error:
+400 バリデーションエラー（mode 未指定・不正）
+401 認証が必要 / トークン無効
+403 アカウント停止・メール未確認・ロック中
+409 苦手モードに必要な苦手元素数が不足
+429 レート制限
+500 サーバーエラー
 ```
 
 ### POST `/game/sessions`
 ```
 Request:
 {
+  "questionSetId": "cuid",
   "mode": "SYMBOL_TO_NAME_LV1",
   "answers": [
     {
-      "elementId": 1,
-      "chosenElementId": 1,   // ユーザーが選んだ選択肢のelementId
+      "questionId": "q1",
+      "chosenChoiceId": "1",  // ユーザーが選んだ choiceId。時間切れ時は null
       "answerTimeSec": 5
     },
     ...
-  ]
+  ],
+  "durationSec": 72
 }
 
 // ※ スコア計算・正誤判定はすべてサーバーサイドで実施
