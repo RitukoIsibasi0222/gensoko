@@ -34,6 +34,20 @@ export type GamePlayQuestion = {
   choices: readonly GameChoice[];
 };
 
+export type GameQuestionsResponse = {
+  questionSetId: string;
+  expiresAt: string;
+  questions: GameApiQuestion[];
+};
+
+export type GameApiQuestion = GamePlayQuestion;
+
+export type GameSessionAnswerDraft = {
+  questionId: string;
+  chosenChoiceId: string | null;
+  answerTimeSec: number;
+};
+
 export type MockGamePlayQuestion = GamePlayQuestion & {
   correctChoiceId: string;
 };
