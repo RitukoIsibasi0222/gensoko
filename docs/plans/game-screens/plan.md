@@ -438,28 +438,28 @@ export function createGameQuestionSet(params: {
 | T21 | 手動確認を実施する | ブラウザ | `/game` から開始、問題取得中、成功、API エラー、再読み込み、モバイル表示を確認する | 高 |
 | T22 | 実装完了更新を行う | `docs/05_progress.md`, `docs/plans/game-screens/plan.md` | 進捗を `[x]` にし、実装完了セクションへ変更点・実ファイル・確認結果を記録する | 中 |
 
-- [ ] T1: 既存仕様・既存実装を確認する
-- [ ] T2: 進捗を実装中へ更新する
-- [ ] T3: API 契約を docs に確定する
-- [ ] T4: backend query validation 方針を実装する
-- [ ] T5: backend service 契約を実装する
-- [ ] T6: `GameQuestionSet.questions` 保存形式を実装する
-- [ ] T7: rate limit と route mount を追加する
-- [ ] T8: frontend 型定義を更新する
-- [ ] T9: frontend API client を追加する
-- [ ] T10: API client の runtime validation を実装する
+- [x] T1: 既存仕様・既存実装を確認する
+- [x] T2: 進捗を実装中へ更新する
+- [x] T3: API 契約を docs に確定する
+- [x] T4: backend query validation 方針を実装する
+- [x] T5: backend service 契約を実装する
+- [x] T6: `GameQuestionSet.questions` 保存形式を実装する
+- [x] T7: rate limit と route mount を追加する
+- [x] T8: frontend 型定義を更新する
+- [x] T9: frontend API client を追加する
+- [x] T10: API client の runtime validation を実装する
 - [ ] T11: `/game/play` の状態管理を API 接続向けに整理する
 - [ ] T12: mock 問題と API 問題の切り替え方針を決める
 - [ ] T13: 回答 draft を API 送信用に分離する
 - [ ] T14: ローディング・空状態・エラー状態を実装する
-- [ ] T15: backend route / service テストを作成する
-- [ ] T16: frontend API client テストを作成する
+- [x] T15: backend route / service テストを作成する
+- [x] T16: frontend API client テストを作成する
 - [ ] T17: frontend helper / page 関連テストを更新する
-- [ ] T18: lint を実行する
-- [ ] T19: format を実行する
-- [ ] T20: test を実行する
+- [x] T18: lint を実行する
+- [x] T19: format を実行する
+- [x] T20: test を実行する
 - [ ] T21: 手動確認を実施する
-- [ ] T22: 実装完了更新を行う
+- [x] T22: 実装完了更新を行う
 
 ## 技術的注意点
 
@@ -589,16 +589,17 @@ export function createGameQuestionSet(params: {
 - 設計判断が変わった場合、`## 実装完了` の「計画からの変更点」に記録する。
 - 実行した lint / format / test / 手動確認を `## 実装完了` に記録する。
 
-実装完了セクションのテンプレート:
+## 実装完了（GET /game/questions レスポンス形式確定）
 
-```markdown
-## 実装完了
-- 完了日: YYYY-MM-DD
+- 完了日: 2026-06-20
 - 実装ブランチ: feature/game-questions-response
-- PR: #N
+- PR: 未作成
 
 ### 計画からの変更点
-- なし
+- `GET /game/questions` の契約確定に加え、backend route / service と frontend API client まで実装した。
+- `/game/play` の live API 接続は今回実施しなかった。理由は、正解情報をレスポンスに含めない方針と既存の即時フィードバック UI が衝突するため。画面接続は `POST /game/sessions` の仕様確定と合わせて扱う。
+- `GET /game/questions` は実装したが、フェーズ7の `GET /game/questions（ランダム10問...）` タスクはランダム化・cleanup・画面接続の判断が残るため、本完了記録ではフェーズ6のインターフェース確定のみ完了扱いにした。
+- backend build で既存の `backend/src/middleware/admin/index.ts` の import path 不整合が検出されたため、`../types/index.js` から `../../types/index.js` へ修正した。
 
 ### 実際の変更ファイル
 | ファイル | 変更種別 | 内容 |
@@ -606,28 +607,42 @@ export function createGameQuestionSet(params: {
 | `docs/04_api.md` | 修正 | `GET /game/questions` レスポンス形式を更新 |
 | `docs/05_progress.md` | 修正 | 進捗更新 |
 | `docs/plans/game-screens/plan.md` | 修正 | 実装完了記録 |
+| `backend/src/index.ts` | 修正 | game ルーターを `/api/v1/game` に mount |
+| `backend/src/middleware/admin/index.ts` | 修正 | build で検出された import path を修正 |
+| `backend/src/routes/game/index.ts` | 修正 | `GET /questions` route、認証、rate limit、zod validation、エラー処理を追加 |
+| `backend/src/routes/game/questions.test.ts` | 新規 | `GET /game/questions` route テストを追加 |
+| `backend/src/services/game.service.ts` | 修正 | 問題生成、4択生成、`GameQuestionSet` 保存、公開レスポンス変換を追加 |
+| `backend/src/services/game.service.test.ts` | 新規 | 問題生成・保存形式・正解非露出・苦手不足の service テストを追加 |
+| `frontend/src/lib/api/game.ts` | 新規 | `getGameQuestions()` API client と runtime validation を追加 |
+| `frontend/src/lib/api/game.test.ts` | 新規 | game API client テストを追加 |
+| `frontend/src/lib/game/types.ts` | 修正 | `GameQuestionsResponse`, `GameApiQuestion`, `GameSessionAnswerDraft` を追加 |
 
 ### 品質チェック
 | コマンド | 結果 |
 |---|---|
-| `cd backend && npm run lint` | OK / 未実施 |
-| `cd backend && npm run format:check` | OK / 未実施 |
-| `cd backend && npm run test -- --run` | OK / 未実施 |
-| `cd frontend && npm run lint` | OK / 未実施 |
-| `cd frontend && npm run format` | OK / 未実施 |
-| `cd frontend && npm run test:run` | OK / 未実施 |
-| `cd frontend && npm run check` | OK / 未実施 |
+| `cd backend && npm run test -- --run src/services/game.service.test.ts src/routes/game/questions.test.ts` | Red: `createGameQuestionSet` / `gameRouter` 未実装で失敗 |
+| `cd backend && npm run test -- --run src/services/game.service.test.ts src/routes/game/questions.test.ts` | Green: OK（2 files / 9 tests） |
+| `cd frontend && npm run test:run -- src/lib/api/game.test.ts` | Red: `frontend/src/lib/api/game.ts` 未作成で失敗 |
+| `cd frontend && npm run test:run -- src/lib/api/game.test.ts` | Green: OK（1 file / 6 tests） |
+| `cd backend && npm run format` | OK |
+| `cd frontend && npm run format` | OK |
+| `cd backend && npm run lint` | OK |
+| `cd backend && npm run format:check` | OK |
+| `cd backend && npm run build` | OK |
+| `cd frontend && npm run lint` | OK |
+| `cd frontend && npm run check` | OK（0 errors / 0 warnings） |
+| `cd backend && npm run test -- --run` | OK（21 files / 160 tests） |
+| `cd frontend && npm run test:run` | OK（14 files / 176 tests） |
 
 ### 手動確認
 | 条件 | 結果 |
 |---|---|
-| `/game` から開始 | OK / 未実施 |
-| `/game/play` 問題取得成功 | OK / 未実施 |
-| `questionSetId` 確認 | OK / 未実施 |
-| 正解情報非露出 | OK / 未実施 |
-| API エラー表示 | OK / 未実施 |
-| モバイル幅 390px | OK / 未実施 |
-```
+| `/game` から開始 | 未実施: `/game/play` はまだ mock 問題を利用しており、live API 接続は今回スコープ外 |
+| `/game/play` 問題取得成功 | 未実施: API client と backend route は unit test で確認 |
+| `questionSetId` 確認 | OK: backend route test / frontend API client test で確認 |
+| 正解情報非露出 | OK: service test / API client runtime validation test で確認 |
+| API エラー表示 | 未実施: 画面接続は `POST /game/sessions` 仕様確定後に実施 |
+| モバイル幅 390px | 未実施: 画面変更なし |
 
 ---
 

@@ -109,7 +109,7 @@
 - [x] ゲーム結果画面 `/game/result`（スコア・連続正解・間違え一覧・「もう一度」「ホームへ」） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 
 ### API インターフェース確定
-- [-] `GET /game/questions` のレスポンス形式（問題・選択肢・questionSetId）を決定 — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
+- [x] `GET /game/questions` のレスポンス形式（問題・選択肢・questionSetId）を決定 — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 - [ ] `POST /game/sessions` のリクエスト/レスポンス形式を決定 — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 
 ## フェーズ7: ゲーム API 本実装
