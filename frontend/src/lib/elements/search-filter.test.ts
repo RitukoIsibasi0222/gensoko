@@ -128,12 +128,14 @@ describe('normalizeElementSearchFilters', () => {
     ).toEqual(DEFAULT_ELEMENT_SEARCH_FILTERS);
   });
 
-  it('未知の分類は未指定として扱う', () => {
-    expect(normalizeElementSearchFilters({ category: '未知カテゴリ' }).category).toBe('');
+  it('未知の分類も trim して検索条件として保持する', () => {
+    expect(normalizeElementSearchFilters({ category: '  未知カテゴリ  ' }).category).toBe(
+      '未知カテゴリ'
+    );
   });
 
-  it('prototype 由来のキーは分類として扱わない', () => {
-    expect(normalizeElementSearchFilters({ category: 'toString' }).category).toBe('');
+  it('prototype 由来のキー文字列も検索条件として扱う', () => {
+    expect(normalizeElementSearchFilters({ category: 'toString' }).category).toBe('toString');
   });
 
   it('period は 1 から 7 の整数だけ有効にする', () => {
@@ -208,10 +210,13 @@ describe('readElementSearchFilters', () => {
     });
   });
 
-  it('不正な URLSearchParams は未指定として扱う', () => {
+  it('不正な period は未指定、未知 category は検索条件として扱う', () => {
     const params = new URLSearchParams('category=unknown&period=abc');
 
-    expect(readElementSearchFilters(params)).toEqual(DEFAULT_ELEMENT_SEARCH_FILTERS);
+    expect(readElementSearchFilters(params)).toEqual({
+      ...DEFAULT_ELEMENT_SEARCH_FILTERS,
+      category: 'unknown'
+    });
   });
 });
 
