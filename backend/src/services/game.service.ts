@@ -506,7 +506,8 @@ async function updateUserStatsForSession({
   correctCount,
   totalCount,
   playedAt,
-  masteredCount,
+  masteredCountDelta,
+  masteredCountOnCreate,
 }: {
   tx: Prisma.TransactionClient;
   userId: string;
@@ -514,7 +515,8 @@ async function updateUserStatsForSession({
   correctCount: number;
   totalCount: number;
   playedAt: Date;
-  masteredCount: number;
+  masteredCountDelta: number;
+  masteredCountOnCreate: number;
 }): Promise<void> {
   await tx.userStats.upsert({
     where: { userId },
@@ -523,7 +525,7 @@ async function updateUserStatsForSession({
       totalGames: 1,
       totalCorrect: correctCount,
       totalAnswered: totalCount,
-      masteredCount,
+      masteredCount: masteredCountOnCreate,
       weeklyScore: totalScore,
       allTimeScore: totalScore,
       lastActiveDate: playedAt,
@@ -534,7 +536,7 @@ async function updateUserStatsForSession({
       totalAnswered: { increment: totalCount },
       weeklyScore: { increment: totalScore },
       allTimeScore: { increment: totalScore },
-      masteredCount,
+      masteredCount: { increment: masteredCountDelta },
       lastActiveDate: playedAt,
     },
   });
@@ -543,13 +545,19 @@ async function updateUserStatsForSession({
 async function countMasteredElements({
   tx,
   userId,
+  elementIds,
 }: {
   tx: Prisma.TransactionClient;
   userId: string;
+  elementIds: readonly number[];
 }): Promise<number> {
-  const masteryStatusMap = await getElementMasteryStatusMap(userId, ALL_ELEMENT_IDS, tx);
+  const masteryStatusMap = await getElementMasteryStatusMap(userId, elementIds, tx);
 
   return [...masteryStatusMap.values()].filter((status) => status === "mastered").length;
+}
+
+function getResultElementIds(results: readonly GameSessionResultItem[]): number[] {
+  return [...new Set(results.map((result) => result.elementId))];
 }
 
 function buildStoredQuestions(
@@ -632,12 +640,18 @@ export async function submitGameSession({
       throw new QuestionSetModeMismatchError();
     }
 
-    if (questionSet.expiresAt < now) {
+    if (questionSet.expiresAt <= now) {
       throw new QuestionSetExpiredError();
     }
 
     const questions = parseStoredQuestions(questionSet.questions);
     const results = buildSessionResults({ questions, answers });
+    const resultElementIds = getResultElementIds(results);
+    const masteredCountBefore = await countMasteredElements({
+      tx,
+      userId,
+      elementIds: resultElementIds,
+    });
     const totalScore = results.reduce((sum, result) => sum + result.score, 0);
     const correctCount = results.filter((result) => result.isCorrect).length;
     const maxStreak = calculateMaxStreak(results);
@@ -672,7 +686,19 @@ export async function submitGameSession({
     });
 
     await updateWeakElementsForSession({ tx, userId, results });
-    const masteredCount = await countMasteredElements({ tx, userId });
+    const masteredCountAfter = await countMasteredElements({
+      tx,
+      userId,
+      elementIds: resultElementIds,
+    });
+    const hasUserStats = await tx.userStats.findUnique({
+      where: { userId },
+      select: { userId: true },
+    });
+    const masteredCountOnCreate = hasUserStats
+      ? masteredCountAfter
+      : await countMasteredElements({ tx, userId, elementIds: ALL_ELEMENT_IDS });
+
     await updateUserStatsForSession({
       tx,
       userId,
@@ -680,7 +706,8 @@ export async function submitGameSession({
       correctCount,
       totalCount: questions.length,
       playedAt: now,
-      masteredCount,
+      masteredCountDelta: masteredCountAfter - masteredCountBefore,
+      masteredCountOnCreate,
     });
 
     return {

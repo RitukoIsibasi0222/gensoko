@@ -18,7 +18,7 @@
 | セキュリティ | client が `isCorrect` や `score` を送れる設計にすると改ざん可能。`questionSetId` の存在有無や他ユーザー所有も漏らしやすい | request は `questionId`, `chosenChoiceId`, `answerTimeSec` のみに限定する。他ユーザー・存在しない問題セットはいずれも 404 にする |
 | A11Y | submit 中・保存失敗・結果画面 reload など、ゲーム完了後の状態が未定義。toast だけだと再試行導線が残らない | submit 中は `aria-busy` と persistent な画面内状態を出す。失敗時は画面内エラーと再試行ボタンを主、toast は補助にする |
 | DB 整合性 | `GameSession`, `GameAnswer`, `WeakElement`, `UserStats`, `GameQuestionSet` 削除が複数テーブルにまたがる。二重送信 race で重複 session が作られるリスクがある | Prisma transaction 内で問題セットを読み、先に `deleteMany` で消費権を確保してから session / answer / stats を作成する。削除件数 0 は二重送信として 409 にする |
-| DB 負荷 | 元素は118件で小さいが、`masteredCount` 再計算を毎問・毎回答で行うと無駄が出る。`GameQuestionSet` cleanup を広範囲に毎回走らせるのも重い | 再計算は session 保存後に1回だけ行う。期限切れ cleanup は別タスクを維持し、この API では対象 questionSet の消費・削除に限定する |
+| DB 負荷 | `masteredCount` を毎回全118元素で再計算すると、履歴増加に応じて `POST /game/sessions` が重くなる。`GameQuestionSet` cleanup を広範囲に毎回走らせるのも重い | `masteredCount` は今回セッションで影響したユニーク元素の保存前後差分で更新する。期限切れ cleanup は別タスクを維持し、この API では対象 questionSet の消費・削除に限定する |
 | テスト | route だけのテストでは score、weak 更新、stats 更新、二重送信 race が漏れる | route / service / frontend API client / helper / result store を分けてテストする。DB 更新順と transaction 失敗時のロールバック観点を service test に含める |
 | スコープ整合性 | 依頼文に「検索・フィルターUI（キーワード・分類・周期）」のプレースホルダーが混在しているが、`docs/05_progress.md` では元素検索 UI は完了済み | 本計画は `POST /game/sessions` と `/game/result` の表示元レスポンスに限定する。元素検索 UI は変更しない |
 
@@ -335,8 +335,8 @@ const QUESTION_TIME_LIMIT_SEC = 15;
     - 根拠: `WeakElement.consecutiveHit` の用途を明確にし、苦手モードの卒業条件を自動化できる。
 
 15. **`masteredCount` 更新方針**
-    - 選択: `GameAnswer` 作成後、対象ユーザーの習得済み元素数を `GameAnswer` 集計方式で再計算して `UserStats.masteredCount` を更新する。
-    - 根拠: `docs/05_progress.md` 設計決定1と整合する。元素数は118件のため、session 保存ごとの再計算でも初期規模では負荷が小さい。
+    - 選択: 今回セッションに出たユニーク `elementId` だけを対象に、`GameAnswer` 保存前後の習得状態を比較し、`UserStats.masteredCount` を差分更新する。
+    - 根拠: `docs/05_progress.md` 設計決定1と整合しつつ、ユーザーの過去セッションが増えた場合でも `POST /game/sessions` ごとの全118元素再走査を避けられる。
 
 ## 公開インターフェース案（必要な場合）
 
@@ -494,13 +494,13 @@ export function submitGameSession(
 - `PrismaClient` は既存 `backend/src/lib/prisma.ts` を使う。
 - `GameQuestionSet.questions` は `unknown` として扱い、service 内で runtime validation してから正誤判定する。
 - `questionSetId` が他ユーザーのものでも 404 にし、存在有無を漏らさない。
-- `GameQuestionSet.expiresAt < now` の場合は 409 を返し、該当 set は削除してよい。
+- `GameQuestionSet.expiresAt <= now` の場合は 409 を返し、期限終端時刻ちょうども期限切れとして扱う。
 - `chosenChoiceId` が null の場合は時間切れ。不正解かつ `yourAnswer: null`。
 - `chosenChoiceId` が保存済み choices に存在しない場合は 400。
 - 回答数・questionId 集合が保存済み question 集合と一致しない場合は 400。
 - `GameSession.totalCount` は保存済み question 数を使い、client の値は受け取らない。
 - `UserStats` が存在しない場合は upsert する。
-- `masteredCount` は `GameAnswer` 保存後の状態をもとに更新する。
+- `masteredCount` は今回セッションに出たユニーク元素の保存前後の習得状態差分で更新する。
 - frontend は `response.ok` を JSON parse より先に判定する。
 - frontend runtime validation は `results` の各フィールドまで確認する。
 - `/game/play` の submit 中は回答キー操作・再送信操作を抑止する。
@@ -528,7 +528,7 @@ export function submitGameSession(
 - `GameQuestionSet` 削除件数が 0 の場合は、すでに送信済みまたは race とみなし 409 を返す。
 - `GameAnswer` は保存済み questions の順序で作成し、request の順序には依存しない。
 - `WeakElement` 更新は対象 element ごとに限定し、全 weak list を毎回読み直さない。
-- `masteredCount` 再計算は session 保存ごとに1回だけ行う。118元素規模では許容範囲。
+- `masteredCount` 更新は今回セッションに出たユニーク元素に限定し、全118元素の再走査を毎回行わない。
 - 期限切れ `GameQuestionSet` の広範囲 cleanup はフェーズ7の別タスクに残し、この API で毎回全件 cleanup しない。
 - ranking 用の `weeklyScore` / `allTimeScore` は `totalScore` を加算する。`currentStreak` はこのタスクでは変更しない。
 - DB スキーマ変更は行わないため migration / `prisma migrate deploy` は不要。
@@ -674,6 +674,8 @@ export function submitGameSession(
 - 整合性再確認により、空の `questionSetId`、空配列 `answers`、空の `questionId` / `chosenChoiceId` も service 入口で DB transaction 前に拒否するよう強化した。
 - PRレビュー対応により、`answerTimeSec` / `durationSec` の上限値は service 定数から route validation へ参照する形にし、magic number の重複を避けた。
 - PRレビュー対応により、Abort 判定は `DOMException` だけでなく `Error` の `name === "AbortError"` も受け付ける形にした。
+- 追加PRレビュー対応により、`GameQuestionSet.expiresAt === now` も期限切れとして扱うようにし、境界テストを追加した。
+- 追加PRレビュー対応により、`masteredCount` は全118元素再計算ではなく、今回セッションで影響したユニーク元素の保存前後差分で更新するようにした。
 
 ### 実際の変更ファイル
 
@@ -715,7 +717,7 @@ export function submitGameSession(
 | format check | `cd backend && npm run format:check` | 成功 |
 | prisma | `cd backend && npx prisma validate` | 成功 |
 | migration | `docker compose exec -T hono npx prisma migrate deploy` | 成功 |
-| test | `cd backend && npm run test -- --run` | 成功（22 files / 189 tests） |
+| test | `cd backend && npm run test -- --run` | 成功（22 files / 191 tests） |
 | test | `cd frontend && npm run test:run` | 成功（16 files / 195 tests） |
 | check | `cd frontend && npm run check` | 成功（0 errors / 0 warnings） |
 

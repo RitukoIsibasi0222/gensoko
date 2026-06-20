@@ -26,6 +26,7 @@ vi.mock("../lib/prisma.js", () => ({
       createMany: vi.fn(),
     },
     userStats: {
+      findUnique: vi.fn(),
       upsert: vi.fn(),
       update: vi.fn(),
     },
@@ -362,6 +363,7 @@ describe("submitGameSession", () => {
     vi.mocked(prisma.weakElement.upsert).mockResolvedValue({} as never);
     vi.mocked(prisma.weakElement.update).mockResolvedValue({} as never);
     vi.mocked(prisma.weakElement.delete).mockResolvedValue({} as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue({ userId: "user-1" } as never);
     vi.mocked(prisma.userStats.upsert).mockResolvedValue({} as never);
   });
 
@@ -645,17 +647,22 @@ describe("submitGameSession", () => {
         totalAnswered: { increment: 2 },
         weeklyScore: { increment: 150 },
         allTimeScore: { increment: 150 },
-        masteredCount: 0,
+        masteredCount: { increment: 0 },
         lastActiveDate: new Date("2026-06-20T12:05:00.000Z"),
       },
     });
   });
 
-  it("習得済み元素数を再計算してユーザー統計に反映する", async () => {
-    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([
-      { answers: [{ elementId: 1, isCorrect: true }] },
-      { answers: [{ elementId: 1, isCorrect: true }] },
-    ] as never);
+  it("今回セッションで変化した元素だけを見て習得済み元素数の差分を反映する", async () => {
+    vi.mocked(prisma.gameSession.findMany)
+      .mockResolvedValueOnce([
+        { answers: [{ elementId: 1, isCorrect: true }] },
+        { answers: [] },
+      ] as never)
+      .mockResolvedValueOnce([
+        { answers: [{ elementId: 1, isCorrect: true }] },
+        { answers: [{ elementId: 1, isCorrect: true }] },
+      ] as never);
 
     await submitGameSession({
       userId: "user-1",
@@ -672,9 +679,61 @@ describe("submitGameSession", () => {
     expect(prisma.userStats.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         create: expect.objectContaining({ masteredCount: 1 }),
-        update: expect.objectContaining({ masteredCount: 1 }),
+        update: expect.objectContaining({ masteredCount: { increment: 1 } }),
       }),
     );
+    expect(prisma.gameSession.findMany).toHaveBeenCalledTimes(2);
+    expect(prisma.gameSession.findMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        select: expect.objectContaining({
+          answers: expect.objectContaining({
+            where: { elementId: { in: [1, 2] } },
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("今回セッションで習得状態から外れた元素は習得済み元素数を減らす", async () => {
+    vi.mocked(prisma.gameSession.findMany)
+      .mockResolvedValueOnce([
+        {
+          answers: [
+            { elementId: 1, isCorrect: true },
+            { elementId: 2, isCorrect: false },
+          ],
+        },
+        { answers: [{ elementId: 1, isCorrect: true }] },
+      ] as never)
+      .mockResolvedValueOnce([
+        {
+          answers: [
+            { elementId: 1, isCorrect: false },
+            { elementId: 2, isCorrect: false },
+          ],
+        },
+        { answers: [{ elementId: 1, isCorrect: true }] },
+      ] as never);
+
+    await submitGameSession({
+      userId: "user-1",
+      questionSetId: "question-set-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      answers: [
+        { questionId: "q1", chosenChoiceId: "2", answerTimeSec: 5 },
+        { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+      ],
+      durationSec: 20,
+      now: new Date("2026-06-20T12:05:00.000Z"),
+    });
+
+    expect(prisma.userStats.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ masteredCount: { increment: -1 } }),
+      }),
+    );
+    expect(prisma.gameSession.findMany).toHaveBeenCalledTimes(2);
   });
 
   it("durationSec が上限を超える場合はDBトランザクション前にバリデーションエラーにする", async () => {
@@ -798,6 +857,29 @@ describe("submitGameSession", () => {
       userId: "user-1",
       mode: "SYMBOL_TO_NAME_LV1",
       expiresAt: new Date("2026-06-20T12:00:00.000Z"),
+      createdAt: NOW,
+      questions: [],
+    } as never);
+
+    await expect(
+      submitGameSession({
+        userId: "user-1",
+        questionSetId: "question-set-1",
+        mode: "SYMBOL_TO_NAME_LV1",
+        answers: [{ questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 }],
+        durationSec: 20,
+        now: new Date("2026-06-20T12:05:00.000Z"),
+      }),
+    ).rejects.toBeInstanceOf(QuestionSetExpiredError);
+    expect(prisma.gameSession.create).not.toHaveBeenCalled();
+  });
+
+  it("問題セットの expiresAt と now が同一時刻の場合は期限切れにする", async () => {
+    vi.mocked(prisma.gameQuestionSet.findFirst).mockResolvedValue({
+      id: "question-set-1",
+      userId: "user-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      expiresAt: new Date("2026-06-20T12:05:00.000Z"),
       createdAt: NOW,
       questions: [],
     } as never);
