@@ -593,7 +593,7 @@ export function createGameQuestionSet(params: {
 
 - 完了日: 2026-06-20
 - 実装ブランチ: feature/game-questions-response
-- PR: 未作成
+- PR: #51
 
 ### 計画からの変更点
 - `GET /game/questions` の契約確定に加え、backend route / service と frontend API client まで実装した。

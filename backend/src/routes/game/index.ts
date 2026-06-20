@@ -20,7 +20,6 @@ const GAME_MODE_VALUES = [
 ] as const;
 
 const GAME_MODE_ERROR_MESSAGE = "ゲームモードが正しくありません";
-const INSUFFICIENT_WEAK_ELEMENTS_MESSAGE = "苦手モードを始めるには、苦手元素が5件以上必要です";
 
 export const gameQuestionsQuerySchema = z
   .object({
@@ -67,7 +66,7 @@ gameRouter.get(
       );
     } catch (error) {
       if (error instanceof InsufficientWeakElementsError) {
-        return c.json({ error: INSUFFICIENT_WEAK_ELEMENTS_MESSAGE }, 409);
+        return c.json({ error: error.message }, 409);
       }
 
       return c.json({ error: "サーバーエラーが発生しました" }, 500);

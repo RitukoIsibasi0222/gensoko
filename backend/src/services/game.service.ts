@@ -27,7 +27,9 @@ type StoredGameChoice = PublicGameChoice & {
   elementId: number;
 };
 
-type StoredGameQuestion = PublicGameQuestion & {
+type StoredGameQuestion = {
+  questionId: string;
+  prompt: string;
   elementId: number;
   correctChoiceId: string;
   choices: StoredGameChoice[];
@@ -145,6 +147,20 @@ function toPublicQuestion(question: StoredGameQuestion): PublicGameQuestion {
   };
 }
 
+function toQuestionSetJson(questions: readonly StoredGameQuestion[]): Prisma.InputJsonValue {
+  return questions.map((question) => ({
+    questionId: question.questionId,
+    elementId: question.elementId,
+    prompt: question.prompt,
+    correctChoiceId: question.correctChoiceId,
+    choices: question.choices.map((choice) => ({
+      choiceId: choice.choiceId,
+      elementId: choice.elementId,
+      text: choice.text,
+    })),
+  }));
+}
+
 function buildStoredQuestions(
   mode: GameMode,
   candidates: readonly PrismaElement[],
@@ -177,13 +193,14 @@ export async function createGameQuestionSet({
 }: CreateGameQuestionSetParams): Promise<CreateGameQuestionSetResult> {
   const candidates = await getCandidateElements(userId, mode);
   const questions = buildStoredQuestions(mode, candidates);
+  const questionsJson = toQuestionSetJson(questions);
   const expiresAt = new Date(now.getTime() + QUESTION_SET_EXPIRES_MS);
 
   const questionSet = await prisma.gameQuestionSet.create({
     data: {
       userId,
       mode,
-      questions: questions as unknown as Prisma.InputJsonValue,
+      questions: questionsJson,
       expiresAt,
     },
   });

@@ -13,7 +13,12 @@ vi.mock("../../lib/prisma.js", () => ({
 
 vi.mock("../../services/game.service.js", () => ({
   createGameQuestionSet: vi.fn(),
-  InsufficientWeakElementsError: class InsufficientWeakElementsError extends Error {},
+  InsufficientWeakElementsError: class InsufficientWeakElementsError extends Error {
+    constructor() {
+      super("苦手モードを始めるには、苦手元素が5件以上必要です");
+      this.name = "InsufficientWeakElementsError";
+    }
+  },
 }));
 
 import { prisma } from "../../lib/prisma.js";
