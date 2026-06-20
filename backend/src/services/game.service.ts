@@ -88,10 +88,6 @@ async function getCandidateElements(userId: string, mode: GameMode): Promise<Pri
 }
 
 function buildQuestionElements(elements: readonly PrismaElement[]): PrismaElement[] {
-  if (elements.length === 0) {
-    return [];
-  }
-
   return Array.from(
     { length: GAME_QUESTION_COUNT },
     (_, index) => elements[index % elements.length],
@@ -165,6 +161,10 @@ function buildStoredQuestions(
   mode: GameMode,
   candidates: readonly PrismaElement[],
 ): StoredGameQuestion[] {
+  if (candidates.length < GAME_CHOICE_COUNT) {
+    throw new Error("問題を生成できません");
+  }
+
   const answerWithSymbol = isNameToSymbolMode(mode);
   const questionElements = buildQuestionElements(candidates);
 

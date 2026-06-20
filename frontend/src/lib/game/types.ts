@@ -37,7 +37,7 @@ export type GamePlayQuestion = {
 export type GameQuestionsResponse = {
   questionSetId: string;
   expiresAt: string;
-  questions: GameApiQuestion[];
+  questions: readonly GameApiQuestion[];
 };
 
 export type GameApiQuestion = GamePlayQuestion;

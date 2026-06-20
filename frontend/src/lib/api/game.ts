@@ -18,12 +18,16 @@ type GameQuestionsFetchOptions = {
 };
 
 function isGameChoice(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+
+  const choice = value as Record<string, unknown>;
   return (
-    value !== null &&
-    typeof value === 'object' &&
-    typeof (value as Record<string, unknown>).choiceId === 'string' &&
-    typeof (value as Record<string, unknown>).text === 'string' &&
-    !('elementId' in value)
+    typeof choice.choiceId === 'string' &&
+    typeof choice.text === 'string' &&
+    !('correctChoiceId' in choice) &&
+    !('elementId' in choice)
   );
 }
 

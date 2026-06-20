@@ -230,6 +230,19 @@ describe("createGameQuestionSet", () => {
     });
   });
 
+  it("候補元素が4件未満の場合は問題セットを作成しない", async () => {
+    vi.mocked(prisma.element.findMany).mockResolvedValue(ELEMENTS.slice(0, 3));
+
+    await expect(
+      createGameQuestionSet({
+        userId: "user-1",
+        mode: "SYMBOL_TO_NAME_LV1",
+        now: NOW,
+      }),
+    ).rejects.toThrow("問題を生成できません");
+    expect(prisma.gameQuestionSet.create).not.toHaveBeenCalled();
+  });
+
   it("苦手モードで苦手元素が5件未満の場合はエラーにする", async () => {
     vi.mocked(prisma.weakElement.findMany).mockResolvedValue(
       ELEMENTS.slice(0, 4).map((element) => ({ element })) as never,

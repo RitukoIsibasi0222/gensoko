@@ -167,4 +167,32 @@ describe('getGameQuestions', () => {
       })
     ).rejects.toThrow('ゲーム問題のレスポンス形式が不正です');
   });
+
+  it('レスポンス形式不正: 公開 choices に correctChoiceId が含まれる場合は ApiError(500) を throw する', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...VALID_RESPONSE,
+          questions: [
+            {
+              questionId: 'q1',
+              prompt: 'H',
+              choices: [{ choiceId: '1', correctChoiceId: '1', text: '水素' }]
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    );
+
+    await expect(
+      getGameQuestions({
+        mode: 'SYMBOL_TO_NAME_LV1',
+        accessToken: 'test-access-token'
+      })
+    ).rejects.toThrow('ゲーム問題のレスポンス形式が不正です');
+  });
 });

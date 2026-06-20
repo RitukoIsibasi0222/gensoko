@@ -17,17 +17,13 @@ const GAME_MODE_VALUES = [
   "NAME_TO_SYMBOL_LV2",
   "WEAK_SYMBOL_TO_NAME",
   "WEAK_NAME_TO_SYMBOL",
-] as const;
+] as const satisfies readonly GameMode[];
 
 const GAME_MODE_ERROR_MESSAGE = "ゲームモードが正しくありません";
 
 export const gameQuestionsQuerySchema = z
   .object({
-    mode: z
-      .string({ error: GAME_MODE_ERROR_MESSAGE })
-      .refine((value): value is GameMode => GAME_MODE_VALUES.includes(value as GameMode), {
-        message: GAME_MODE_ERROR_MESSAGE,
-      }),
+    mode: z.enum(GAME_MODE_VALUES, { error: GAME_MODE_ERROR_MESSAGE }),
   })
   .strip();
 

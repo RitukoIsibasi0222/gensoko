@@ -632,8 +632,8 @@ export function createGameQuestionSet(params: {
 | `cd backend && npm run build` | OK |
 | `cd frontend && npm run lint` | OK |
 | `cd frontend && npm run check` | OK（0 errors / 0 warnings） |
-| `cd backend && npm run test -- --run` | OK（21 files / 161 tests） |
-| `cd frontend && npm run test:run` | OK（14 files / 176 tests） |
+| `cd backend && npm run test -- --run` | OK（21 files / 162 tests） |
+| `cd frontend && npm run test:run` | OK（14 files / 177 tests） |
 
 ### 手動確認
 | 条件 | 結果 |
