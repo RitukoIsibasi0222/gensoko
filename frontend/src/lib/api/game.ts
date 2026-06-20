@@ -23,7 +23,22 @@ export type SubmitGameSessionOptions = {
   signal?: AbortSignal;
 };
 
+export type GetGameSessionOptions = {
+  sessionId: string;
+  accessToken: string;
+  signal?: AbortSignal;
+};
+
 type GameQuestionsFetchOptions = {
+  method: 'GET';
+  credentials: 'include';
+  headers: {
+    Authorization: string;
+  };
+  signal?: AbortSignal;
+};
+
+type GetGameSessionFetchOptions = {
   method: 'GET';
   credentials: 'include';
   headers: {
@@ -139,6 +154,10 @@ function buildGameSessionsUrl(): string {
   return `${API_BASE_URL}/game/sessions`;
 }
 
+function buildGameSessionUrl(sessionId: string): string {
+  return `${buildGameSessionsUrl()}/${encodeURIComponent(sessionId)}`;
+}
+
 export async function getGameQuestions({
   mode,
   accessToken,
@@ -165,6 +184,37 @@ export async function getGameQuestions({
   const data = (await response.json()) as unknown;
   if (!isGameQuestionsResponse(data)) {
     throw new ApiError(500, 'ゲーム問題のレスポンス形式が不正です', data);
+  }
+
+  return data;
+}
+
+export async function getGameSession({
+  sessionId,
+  accessToken,
+  signal
+}: GetGameSessionOptions): Promise<GameSessionResponse> {
+  const fetchOptions: GetGameSessionFetchOptions = {
+    method: 'GET',
+    credentials: 'include',
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  };
+
+  if (signal) {
+    fetchOptions.signal = signal;
+  }
+
+  const response = await fetch(buildGameSessionUrl(sessionId), fetchOptions);
+
+  if (!response.ok) {
+    await parseErrorResponse(response, 'ゲーム結果の取得に失敗しました');
+  }
+
+  const data = (await response.json()) as unknown;
+  if (!isGameSessionResponse(data)) {
+    throw new ApiError(500, 'ゲーム結果のレスポンス形式が不正です', data);
   }
 
   return data;
