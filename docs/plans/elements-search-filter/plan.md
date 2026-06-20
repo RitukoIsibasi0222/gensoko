@@ -407,30 +407,30 @@ type Props = {
 | T23 | API 仕様と進捗ドキュメントを更新する | `docs/04_api.md`, `docs/05_progress.md` | 実装と docs の query、ステータスコード、進捗が一致する | 中 |
 | T24 | plan.md の実装完了更新を行う | `docs/plans/elements-search-filter/plan.md` | チェックボックス、対象ファイル一覧、計画からの変更点、実際の変更ファイルが実態と一致する | 中 |
 
-- [ ] T1: 既存仕様・既存実装を確認する
-- [ ] T2: 進捗状態の扱いを決める
-- [ ] T3: backend API の query validation と検索仕様を確認または修正する
-- [ ] T4: backend API テストを確認または追加する
-- [ ] T5: frontend 型定義と API client を確認または修正する
-- [ ] T6: frontend API client テストを確認または追加する
-- [ ] T7: validation / 検索条件 helper を確認または修正する
-- [ ] T8: validation / 検索条件 helper テストを確認または追加する
-- [ ] T9: 検索条件の状態管理を確認または修正する
-- [ ] T10: キーワード検索 UI を確認または修正する
-- [ ] T11: 分類フィルター UI を確認または修正する
-- [ ] T12: 周期フィルター UI を確認または修正する
-- [ ] T13: 検索条件リセットを確認または修正する
-- [ ] T14: ローディング・空状態・エラー状態を整える
-- [ ] T15: 詳細モーダル・習得バッジとの整合を確認する
-- [ ] T16: A11Y を確認する
-- [ ] T17: frontend テストを実行する
-- [ ] T18: frontend lint を実行する
-- [ ] T19: frontend format を実行する
-- [ ] T20: Svelte / TypeScript check を実行する
-- [ ] T21: backend テスト・lint・format check を実行する
-- [ ] T22: 手動確認を行う
-- [ ] T23: API 仕様と進捗ドキュメントを更新する
-- [ ] T24: plan.md の実装完了更新を行う
+- [x] T1: 既存仕様・既存実装を確認する
+- [x] T2: 進捗状態の扱いを決める
+- [x] T3: backend API の query validation と検索仕様を確認または修正する
+- [x] T4: backend API テストを確認または追加する
+- [x] T5: frontend 型定義と API client を確認または修正する
+- [x] T6: frontend API client テストを確認または追加する
+- [x] T7: validation / 検索条件 helper を確認または修正する
+- [x] T8: validation / 検索条件 helper テストを確認または追加する
+- [x] T9: 検索条件の状態管理を確認または修正する
+- [x] T10: キーワード検索 UI を確認または修正する
+- [x] T11: 分類フィルター UI を確認または修正する
+- [x] T12: 周期フィルター UI を確認または修正する
+- [x] T13: 検索条件リセットを確認または修正する
+- [x] T14: ローディング・空状態・エラー状態を整える
+- [x] T15: 詳細モーダル・習得バッジとの整合を確認する
+- [x] T16: A11Y を確認する
+- [x] T17: frontend テストを実行する
+- [x] T18: frontend lint を実行する
+- [x] T19: frontend format を実行する
+- [x] T20: Svelte / TypeScript check を実行する
+- [x] T21: backend テスト・lint・format check を実行する
+- [x] T22: 手動確認を行う
+- [x] T23: API 仕様と進捗ドキュメントを更新する
+- [x] T24: plan.md の実装完了更新を行う
 
 ## 技術的注意点
 
@@ -559,3 +559,57 @@ type Props = {
 
 - 依頼文冒頭には `/game/result` の記載があったが、機能名・品質要件・タスクリスト要件は「検索・フィルターUI（キーワード・分類・周期）」を指している。この plan は `/elements` の検索・フィルターUIを対象にする。
 - `/game/result` の実装計画を扱う場合は、`docs/plans/game-screens/plan.md` に別セクションとして作成する。
+
+## 実装完了
+
+- 完了日: 2026-06-20
+- 実装ブランチ: `feature/elements-search-filter-category-query`
+- PR: 未作成
+
+### 計画からの変更点
+
+- frontend の未知 `category` は未指定へ戻さず、trim 済み検索条件として保持する方針にした。これにより `GET /elements` の「不明な分類は 400 ではなく 0 件」という API 仕様と URL query 復元の挙動が一致する。
+- ページ離脱時に進行中 request を中断できるよう、`/elements` ページで `onDestroy()` による `AbortController.abort()` を追加した。
+- `docs/05_progress.md` は既に該当タスクが `[x]` のため変更しない。
+- DB スキーマ変更は行っていないため、migration と Playwright 必須確認は対象外。
+- ブラウザでの手動確認を実施し、T22 を完了にした。
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `frontend/src/lib/elements/search-filter.ts` | 修正 | 未知分類を未指定化せず、trim 済み検索条件として保持 |
+| `frontend/src/lib/elements/search-filter.test.ts` | 修正 | 未知分類保持、不正 period の未指定化、URL query 復元のテストを更新 |
+| `frontend/src/lib/api/elements.test.ts` | 修正 | 未知分類が query string に含まれることを検証 |
+| `frontend/src/routes/(app)/elements/+page.svelte` | 修正 | ページ離脱時に進行中 request を abort |
+| `docs/plans/elements-search-filter/plan.md` | 修正 | タスク進捗、計画からの変更点、実際の変更ファイルを更新 |
+
+### 実行した確認
+
+| コマンド | 結果 |
+|---|---|
+| `cd frontend && npm run test:run -- src/lib/elements/search-filter.test.ts src/lib/api/elements.test.ts` | 47 tests passed |
+| `cd frontend && npm run lint` | passed |
+| `cd frontend && npm run check` | 0 errors / 0 warnings |
+| `cd frontend && npx prettier --write src/lib/elements/search-filter.ts src/lib/elements/search-filter.test.ts src/lib/api/elements.test.ts src/routes/\\(app\\)/elements/+page.svelte` | unchanged |
+| `cd backend && npm run test -- --run src/lib/elements/search.test.ts src/routes/elements/elements.test.ts` | 20 tests passed |
+
+### ブラウザ手動確認
+
+| 項目 | 結果 |
+|---|---|
+| 初期表示 | `/elements` で 118 件、検索フォーム、件数表示、先頭カードを確認 |
+| キーワード検索 | `  H  ` 入力後に `q=H` へ正規化され、23 件表示 |
+| 分類・周期の複合条件 | `q=H&category=非金属&period=2` で 0 件、空状態とリセット導線を確認 |
+| リセット | URL query、キーワード、分類、周期、件数が初期状態へ復帰 |
+| 未知分類 URL | `/elements?category=UNKNOWN_CATEGORY` で URL を保持し、0 件空状態を確認 |
+| URL 復元 | `/elements?q=Fe&period=4` で入力値・周期・結果 1 件が復元 |
+| Enter 検索 | キーワード入力欄で Enter を押して検索実行 |
+| 詳細モーダル | 元素カードから詳細モーダル表示、`role="dialog"` と閉じるボタン focus を確認 |
+| URL 条件変更時のモーダル | URL 条件変更後に dialog が残らないことを確認 |
+| モバイル幅 | viewport 375x812 で横はみ出し 0 件、フォームとカード表示を確認 |
+| コンソールエラー | browser console error 0 件 |
+
+### 補足
+
+- 初回の `npm run check` は `.svelte-kit/types/src/routes/(app)/game/play/$types.d.ts` が `root:root` 所有の生成ファイルだったため EACCES で失敗した。Git 管理外の生成ファイルを削除し、SvelteKit に再生成させた後は成功した。
