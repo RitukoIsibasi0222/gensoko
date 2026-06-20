@@ -648,6 +648,39 @@ export function createGameQuestionSet(params: {
 | API エラー表示 | 未実施: 画面接続は `POST /game/sessions` 仕様確定後に実施 |
 | モバイル幅 390px | 未実施: 画面変更なし |
 
+## 後続タスク整理（POST /game/sessions と /game/result）
+
+`GET /game/questions` は PR #51 で `questionSetId` を返し、正解情報をクライアントへ渡さない形で確定した。次に実装するべき中核は `POST /game/sessions` であり、ゲーム結果画面 `/game/result` はそのレスポンスを表示元として実装する。
+
+### 実装順序
+
+1. `POST /game/sessions` のリクエスト/レスポンス形式を確定する。
+2. `POST /game/sessions` を実装し、`questionSetId` をもとにサーバー側で正誤判定・スコア計算・DB 更新を行う。
+3. `/game/play` から `POST /game/sessions` へ回答を送信し、成功レスポンスを結果表示へ渡す。
+4. `/game/result` を実装し、`POST /game/sessions` のレスポンスだけを信頼してスコア・最大連続正解・間違え一覧を表示する。
+
+### `/game/result` の前提
+
+- `/game/result` は `POST /game/sessions` の後続タスクとして扱う。
+- `/game/result` は `GET /game/questions` のレスポンスや UI mock の `correctChoiceId` から正誤・スコアを計算しない。
+- 表示元は `POST /game/sessions` の `sessionId`, `correctCount`, `totalScore`, `maxStreak`, `results` とする。
+- 「もう一度」は同じ `mode` で新しい問題セットを取得して `/game/play` を開始する導線にする。
+- 「ホームへ」はトップページ `/` へ戻す導線にする。モード選択へ戻す導線が必要な場合は別ボタンとして検討する。
+- 直接 `/game/result` を開いた場合、表示できる結果がないときは `/game` へ戻る導線を出す。
+
+### `POST /game/sessions` で先に固めるべき点
+
+| 項目 | 方針 |
+|---|---|
+| 入力 | `questionSetId`, `mode`, `answers[].questionId`, `answers[].chosenChoiceId`, `answers[].answerTimeSec`, `durationSec` |
+| 正誤判定 | `GameQuestionSet.questions` の保存済み `correctChoiceId` を使い、サーバー側で行う |
+| スコア計算 | サーバー側で行い、`totalScore` と各問の `score` をレスポンスに含める |
+| 連続正解 | サーバー側で `maxStreak` を計算して返す |
+| 間違え一覧 | `/game/result` が表示できるよう、`results` に `isCorrect`, `correctAnswer`, `yourAnswer`, `elementId` を含める |
+| `GameQuestionSet` | userId, mode, expiresAt を照合し、正誤判定後に削除する |
+| 不正・期限切れ | 別ユーザーの `questionSetId`、期限切れ、不足回答、不正な `questionId` / `chosenChoiceId` を日本語エラーで返す |
+| DB 更新 | `GameSession`, `GameAnswer`, `WeakElement`, `UserStats` をサーバー側トランザクションで更新する |
+
 ---
 
 # ゲームプレイ画面 `/game/play` 実装計画
