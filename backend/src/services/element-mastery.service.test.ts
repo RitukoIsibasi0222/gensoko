@@ -83,6 +83,22 @@ describe("getElementMasteryStatusMap", () => {
     expect(result.get(1)).toBe("mastered");
   });
 
+  it("同一セッション内の同じ元素の複数正解は1回分として扱う", async () => {
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([
+      {
+        playedAt: new Date("2026-06-02T00:00:00.000Z"),
+        answers: [
+          { elementId: 1, isCorrect: true },
+          { elementId: 1, isCorrect: true },
+        ],
+      },
+    ] as never);
+
+    const result = await getElementMasteryStatusMap("user-1", [1]);
+
+    expect(result.get(1)).toBe("learning");
+  });
+
   it("直近2回のどちらかが不正解なら learning を返す", async () => {
     vi.mocked(prisma.gameSession.findMany).mockResolvedValue([
       {

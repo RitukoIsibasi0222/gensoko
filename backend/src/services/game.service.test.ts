@@ -492,6 +492,126 @@ describe("submitGameSession", () => {
     });
   });
 
+  it("同一セッション内で同じ苦手元素に複数回正解してもconsecutiveHitは1回だけ増やす", async () => {
+    vi.mocked(prisma.gameQuestionSet.findFirst).mockResolvedValue({
+      id: "question-set-1",
+      userId: "user-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      expiresAt: new Date("2026-06-20T12:30:00.000Z"),
+      createdAt: NOW,
+      questions: [
+        {
+          questionId: "q1",
+          elementId: 1,
+          prompt: "H",
+          correctChoiceId: "1",
+          choices: [
+            { choiceId: "1", elementId: 1, text: "水素" },
+            { choiceId: "2", elementId: 2, text: "ヘリウム" },
+            { choiceId: "3", elementId: 3, text: "リチウム" },
+            { choiceId: "4", elementId: 4, text: "ベリリウム" },
+          ],
+        },
+        {
+          questionId: "q2",
+          elementId: 1,
+          prompt: "H",
+          correctChoiceId: "1",
+          choices: [
+            { choiceId: "1", elementId: 1, text: "水素" },
+            { choiceId: "2", elementId: 2, text: "ヘリウム" },
+            { choiceId: "3", elementId: 3, text: "リチウム" },
+            { choiceId: "4", elementId: 4, text: "ベリリウム" },
+          ],
+        },
+      ],
+    } as never);
+    vi.mocked(prisma.weakElement.findUnique).mockResolvedValue({
+      id: "weak-1",
+      userId: "user-1",
+      elementId: 1,
+      missCount: 2,
+      consecutiveHit: 0,
+      addedAt: NOW,
+      updatedAt: NOW,
+    } as never);
+
+    await submitGameSession({
+      userId: "user-1",
+      questionSetId: "question-set-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      answers: [
+        { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+        { questionId: "q2", chosenChoiceId: "1", answerTimeSec: 4 },
+      ],
+      durationSec: 20,
+      now: new Date("2026-06-20T12:05:00.000Z"),
+    });
+
+    expect(prisma.weakElement.findUnique).toHaveBeenCalledTimes(1);
+    expect(prisma.weakElement.update).toHaveBeenCalledTimes(1);
+    expect(prisma.weakElement.update).toHaveBeenCalledWith({
+      where: { id: "weak-1" },
+      data: { consecutiveHit: { increment: 1 } },
+    });
+    expect(prisma.weakElement.delete).not.toHaveBeenCalled();
+  });
+
+  it("同一セッション内で同じ元素を複数回不正解した場合はmissCountを不正解数だけ増やす", async () => {
+    vi.mocked(prisma.gameQuestionSet.findFirst).mockResolvedValue({
+      id: "question-set-1",
+      userId: "user-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      expiresAt: new Date("2026-06-20T12:30:00.000Z"),
+      createdAt: NOW,
+      questions: [
+        {
+          questionId: "q1",
+          elementId: 1,
+          prompt: "H",
+          correctChoiceId: "1",
+          choices: [
+            { choiceId: "1", elementId: 1, text: "水素" },
+            { choiceId: "2", elementId: 2, text: "ヘリウム" },
+            { choiceId: "3", elementId: 3, text: "リチウム" },
+            { choiceId: "4", elementId: 4, text: "ベリリウム" },
+          ],
+        },
+        {
+          questionId: "q2",
+          elementId: 1,
+          prompt: "H",
+          correctChoiceId: "1",
+          choices: [
+            { choiceId: "1", elementId: 1, text: "水素" },
+            { choiceId: "2", elementId: 2, text: "ヘリウム" },
+            { choiceId: "3", elementId: 3, text: "リチウム" },
+            { choiceId: "4", elementId: 4, text: "ベリリウム" },
+          ],
+        },
+      ],
+    } as never);
+
+    await submitGameSession({
+      userId: "user-1",
+      questionSetId: "question-set-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      answers: [
+        { questionId: "q1", chosenChoiceId: "2", answerTimeSec: 5 },
+        { questionId: "q2", chosenChoiceId: "2", answerTimeSec: 4 },
+      ],
+      durationSec: 20,
+      now: new Date("2026-06-20T12:05:00.000Z"),
+    });
+
+    expect(prisma.weakElement.upsert).toHaveBeenCalledTimes(1);
+    expect(prisma.weakElement.upsert).toHaveBeenCalledWith({
+      where: { userId_elementId: { userId: "user-1", elementId: 1 } },
+      create: { userId: "user-1", elementId: 1, missCount: 2, consecutiveHit: 0 },
+      update: { missCount: { increment: 2 }, consecutiveHit: 0 },
+    });
+  });
+
   it("ユーザー統計にゲーム回数・正解数・回答数・スコアを反映する", async () => {
     await submitGameSession({
       userId: "user-1",

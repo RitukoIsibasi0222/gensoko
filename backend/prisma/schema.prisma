@@ -10,8 +10,8 @@ datasource db {
 
 // 元素マスター
 model Element {
-  id           Int    @id
-  symbol       String @unique
+  id           Int     @id
+  symbol       String  @unique
   nameJa       String
   nameEn       String
   category     String
@@ -42,13 +42,13 @@ model User {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  refreshTokens       RefreshToken[]
-  weakElements        WeakElement[]
-  gameSessions        GameSession[]
-  gameQuestionSets    GameQuestionSet[]
-  stats               UserStats?
-  emailVerifications  EmailVerification[]
-  passwordResetToken  PasswordResetToken?
+  refreshTokens      RefreshToken[]
+  weakElements       WeakElement[]
+  gameSessions       GameSession[]
+  gameQuestionSets   GameQuestionSet[]
+  stats              UserStats?
+  emailVerifications EmailVerification[]
+  passwordResetToken PasswordResetToken?
 
   @@map("users")
 }
@@ -128,6 +128,7 @@ model GameSession {
   user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   answers GameAnswer[]
 
+  @@index([userId, playedAt, id])
   @@map("game_sessions")
 }
 
@@ -151,6 +152,7 @@ model GameAnswer {
   session GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   element Element     @relation(fields: [elementId], references: [id])
 
+  @@index([sessionId, elementId])
   @@map("game_answers")
 }
 
@@ -168,6 +170,7 @@ model GameQuestionSet {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([expiresAt])
   @@map("game_question_sets")
 }
 

@@ -383,6 +383,37 @@ function validateAnswerSet({
   }
 }
 
+type SessionElementResultSummary = {
+  elementId: number;
+  isCorrect: boolean;
+  incorrectCount: number;
+};
+
+function summarizeResultsByElement(
+  results: readonly GameSessionResultItem[],
+): SessionElementResultSummary[] {
+  const summaries = new Map<number, SessionElementResultSummary>();
+
+  for (const result of results) {
+    const summary = summaries.get(result.elementId);
+    if (!summary) {
+      summaries.set(result.elementId, {
+        elementId: result.elementId,
+        isCorrect: result.isCorrect,
+        incorrectCount: result.isCorrect ? 0 : 1,
+      });
+      continue;
+    }
+
+    summary.isCorrect = summary.isCorrect && result.isCorrect;
+    if (!result.isCorrect) {
+      summary.incorrectCount += 1;
+    }
+  }
+
+  return [...summaries.values()];
+}
+
 async function updateWeakElementsForSession({
   tx,
   userId,
@@ -392,18 +423,28 @@ async function updateWeakElementsForSession({
   userId: string;
   results: readonly GameSessionResultItem[];
 }): Promise<void> {
-  for (const result of results) {
-    if (!result.isCorrect) {
+  const summaries = summarizeResultsByElement(results);
+
+  for (const summary of summaries) {
+    if (!summary.isCorrect) {
       await tx.weakElement.upsert({
-        where: { userId_elementId: { userId, elementId: result.elementId } },
-        create: { userId, elementId: result.elementId, missCount: 1, consecutiveHit: 0 },
-        update: { missCount: { increment: 1 }, consecutiveHit: 0 },
+        where: { userId_elementId: { userId, elementId: summary.elementId } },
+        create: {
+          userId,
+          elementId: summary.elementId,
+          missCount: Math.max(summary.incorrectCount, 1),
+          consecutiveHit: 0,
+        },
+        update: {
+          missCount: { increment: Math.max(summary.incorrectCount, 1) },
+          consecutiveHit: 0,
+        },
       });
       continue;
     }
 
     const weakElement = await tx.weakElement.findUnique({
-      where: { userId_elementId: { userId, elementId: result.elementId } },
+      where: { userId_elementId: { userId, elementId: summary.elementId } },
     });
 
     if (!weakElement) {

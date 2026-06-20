@@ -667,6 +667,8 @@ export function submitGameSession(
 - 結果画面の学習体験を優先し、response item は `correctChoiceId` ではなく `correctAnswer` / `yourAnswer` を返して表示する契約にそろえた。
 - live API 接続後の `/game/play` では正解情報を保持しないため、回答直後の正誤フィードバックは行わず、「回答を記録しました」表示に変更した。正誤・スコアは `/game/result` で API レスポンスを source of truth として表示する。
 - `masteredCount` 再計算のため、`getElementMasteryStatusMap()` は transaction client を任意で受け取れる形に拡張した。
+- DBレビューにより、同一セッション内で同じ元素が複数回出題された場合でも、`WeakElement.consecutiveHit` と習得判定では1セッション分として扱うよう改善した。これにより苦手モードで候補が10件未満の場合の過剰な mastered / weak 削除を防ぐ。
+- `GET /game/sessions` 履歴、習得状態集計、期限切れ `GameQuestionSet` cleanup の負荷を抑えるため、ゲーム関連テーブルに追加 index を付与した。
 
 ### 実際の変更ファイル
 
@@ -675,11 +677,14 @@ export function submitGameSession(
 | `docs/04_api.md` | 修正 | `POST /game/sessions` の request / response / error / score 仕様を実装と整合 |
 | `docs/05_progress.md` | 修正 | `/game/result`、`POST /game/sessions` 仕様確定、`POST /game/sessions` 本実装を完了へ更新 |
 | `docs/plans/game-screens/plan.md` | 修正 | チェックリスト完了化と実装完了記録を追記 |
+| `backend/prisma/schema.prisma` | 修正 | `GameSession`, `GameAnswer`, `GameQuestionSet` に index を追加 |
+| `backend/prisma/migrations/20260620172000_add_game_session_indexes/migration.sql` | 新規 | ゲーム履歴・回答集計・期限切れ cleanup 用 index を追加 |
 | `backend/src/routes/game/index.ts` | 修正 | `POST /game/sessions` route、zod validation、rate limit、service error mapping を追加 |
 | `backend/src/routes/game/sessions.test.ts` | 新規 | 認証、validation、201、400、404、409 の route テストを追加 |
 | `backend/src/services/game.service.ts` | 修正 | session submit、正誤判定、score、streak、transaction 保存、WeakElement / UserStats 更新、GameQuestionSet 消費を追加 |
-| `backend/src/services/game.service.test.ts` | 修正 | submit service の正常系、validation、期限切れ、二重送信、weak / stats / masteredCount 更新テストを追加 |
-| `backend/src/services/element-mastery.service.ts` | 修正 | transaction client 対応を追加 |
+| `backend/src/services/game.service.test.ts` | 修正 | submit service の正常系、validation、期限切れ、二重送信、weak / stats / masteredCount 更新、同一セッション重複元素のテストを追加 |
+| `backend/src/services/element-mastery.service.ts` | 修正 | transaction client 対応と、同一セッション内の同一元素回答を1回分にまとめる集計を追加 |
+| `backend/src/services/element-mastery.service.test.ts` | 修正 | 同一セッション内の同一元素複数正解が1回分として扱われる回帰テストを追加 |
 | `frontend/src/lib/api/game.ts` | 修正 | `submitGameSession()`、request / response runtime validation を追加 |
 | `frontend/src/lib/api/game.test.ts` | 修正 | session submit API client テストを追加 |
 | `frontend/src/lib/components/game/GameChoiceButton.svelte` | 修正 | 正解未判定時の回答済み表示を中立表示へ調整 |
@@ -701,7 +706,9 @@ export function submitGameSession(
 | lint | `cd backend && npm run lint` | 成功 |
 | lint | `cd frontend && npm run lint` | 成功 |
 | format check | `cd backend && npm run format:check` | 成功 |
-| test | `cd backend && npm run test -- --run` | 成功（22 files / 180 tests） |
+| prisma | `cd backend && npx prisma validate` | 成功 |
+| migration | `docker compose exec -T hono npx prisma migrate deploy` | 成功 |
+| test | `cd backend && npm run test -- --run` | 成功（22 files / 183 tests） |
 | test | `cd frontend && npm run test:run` | 成功（16 files / 195 tests） |
 | check | `cd frontend && npm run check` | 成功（0 errors / 0 warnings） |
 
@@ -714,6 +721,7 @@ export function submitGameSession(
 | PC 幅 | OK: `/game/result` / `/game/play` とも横はみ出しなし |
 | モバイル幅 390px | OK: `/game/result` / `/game/play` とも横はみ出しなし |
 | コンソール | OK: error log なし |
+| DB migration 後 `/game/play?mode=SYMBOL_TO_NAME_LV1` | OK: 未ログイン表示、横はみ出しなし、console error なし |
 | ログイン済み `/game/play` 問題取得・回答・結果送信導線 | 未確認: 手動確認環境にログインセッションなし。API client、route / service、Svelte 構文は自動テストで確認済み |
 
 ---

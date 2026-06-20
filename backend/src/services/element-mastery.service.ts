@@ -34,6 +34,19 @@ function resolveMasteryStatus(recentAnswers: boolean[]): ElementMasteryStatus {
   return "learning";
 }
 
+function summarizeSessionAnswersByElement(
+  answers: readonly GameSessionWithAnswers["answers"][number][],
+): Map<number, boolean> {
+  const outcomes = new Map<number, boolean>();
+
+  for (const answer of answers) {
+    const currentOutcome = outcomes.get(answer.elementId) ?? true;
+    outcomes.set(answer.elementId, currentOutcome && answer.isCorrect);
+  }
+
+  return outcomes;
+}
+
 export async function getElementMasteryStatusMap(
   userId: string,
   elementIds: readonly number[],
@@ -77,19 +90,21 @@ export async function getElementMasteryStatusMap(
     skip += sessions.length;
 
     for (const session of sessions) {
-      for (const answer of session.answers) {
-        if (!elementIdsNeedingAnswers.has(answer.elementId)) {
+      const sessionOutcomes = summarizeSessionAnswersByElement(session.answers);
+
+      for (const [elementId, isCorrect] of sessionOutcomes) {
+        if (!elementIdsNeedingAnswers.has(elementId)) {
           continue;
         }
 
-        const recentAnswers = recentAnswersByElement.get(answer.elementId);
+        const recentAnswers = recentAnswersByElement.get(elementId);
         if (!recentAnswers) {
           continue;
         }
 
-        recentAnswers.push(answer.isCorrect);
+        recentAnswers.push(isCorrect);
         if (recentAnswers.length >= REQUIRED_CONSECUTIVE_CORRECT_COUNT) {
-          elementIdsNeedingAnswers.delete(answer.elementId);
+          elementIdsNeedingAnswers.delete(elementId);
 
           if (elementIdsNeedingAnswers.size === 0) {
             break;
