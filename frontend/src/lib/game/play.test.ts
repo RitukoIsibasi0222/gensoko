@@ -1,19 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import { QUESTION_TIME_LIMIT_SEC } from '$lib/game/constants';
 import {
+  buildSessionAnswerDraft,
   buildAnswerDraft,
+  calculateAnswerDurationSec,
   getNextQuestionIndex,
   getProgressLabel,
   getTimerPercent,
   normalizeGameModeParam,
   summarizeAnswers
 } from '$lib/game/play';
-import type { MockGamePlayQuestion } from '$lib/game/types';
+import type { GamePlayQuestion, MockGamePlayQuestion } from '$lib/game/types';
 
 const QUESTION: MockGamePlayQuestion = {
   questionId: 'q1',
   prompt: 'H',
   correctChoiceId: 'c1',
+  choices: [
+    { choiceId: 'c1', text: '水素' },
+    { choiceId: 'c2', text: '炭素' },
+    { choiceId: 'c3', text: '酸素' },
+    { choiceId: 'c4', text: '窒素' }
+  ]
+};
+
+const API_QUESTION: GamePlayQuestion = {
+  questionId: 'q1',
+  prompt: 'H',
   choices: [
     { choiceId: 'c1', text: '水素' },
     { choiceId: 'c2', text: '炭素' },
@@ -133,6 +146,60 @@ describe('buildAnswerDraft', () => {
   });
 });
 
+describe('buildSessionAnswerDraft', () => {
+  it('本番 API 送信用に正誤情報を含まない回答を作成する', () => {
+    const answer = buildSessionAnswerDraft({
+      question: API_QUESTION,
+      chosenChoiceId: 'c1',
+      remainingSec: 11,
+      timeLimitSec: QUESTION_TIME_LIMIT_SEC
+    });
+
+    expect(answer).toEqual({
+      questionId: 'q1',
+      chosenChoiceId: 'c1',
+      answerTimeSec: 4
+    });
+    expect('isCorrect' in answer).toBe(false);
+    expect('correctChoiceId' in answer).toBe(false);
+  });
+
+  it('時間切れ時は chosenChoiceId を null、回答時間を timeLimitSec にする', () => {
+    expect(
+      buildSessionAnswerDraft({
+        question: API_QUESTION,
+        chosenChoiceId: null,
+        remainingSec: 0,
+        timeLimitSec: QUESTION_TIME_LIMIT_SEC
+      })
+    ).toEqual({
+      questionId: 'q1',
+      chosenChoiceId: null,
+      answerTimeSec: QUESTION_TIME_LIMIT_SEC
+    });
+  });
+
+  it('remainingSec が範囲外の場合は回答時間を 0 から timeLimitSec に丸める', () => {
+    expect(
+      buildSessionAnswerDraft({
+        question: API_QUESTION,
+        chosenChoiceId: 'c1',
+        remainingSec: QUESTION_TIME_LIMIT_SEC + 5,
+        timeLimitSec: QUESTION_TIME_LIMIT_SEC
+      }).answerTimeSec
+    ).toBe(0);
+
+    expect(
+      buildSessionAnswerDraft({
+        question: API_QUESTION,
+        chosenChoiceId: 'c1',
+        remainingSec: -5,
+        timeLimitSec: QUESTION_TIME_LIMIT_SEC
+      }).answerTimeSec
+    ).toBe(QUESTION_TIME_LIMIT_SEC);
+  });
+});
+
 describe('getNextQuestionIndex', () => {
   it('次の問題がある場合は次 index を返す', () => {
     expect(getNextQuestionIndex(0, 10)).toBe(1);
@@ -140,6 +207,23 @@ describe('getNextQuestionIndex', () => {
 
   it('最後の問題では null を返す', () => {
     expect(getNextQuestionIndex(9, 10)).toBeNull();
+  });
+});
+
+describe('calculateAnswerDurationSec', () => {
+  it('回答時間の合計を返す', () => {
+    expect(
+      calculateAnswerDurationSec(
+        [{ answerTimeSec: 4 }, { answerTimeSec: 15 }, { answerTimeSec: 3 }],
+        1800
+      )
+    ).toBe(22);
+  });
+
+  it('合計が上限を超える場合は maxDurationSec に丸める', () => {
+    expect(
+      calculateAnswerDurationSec([{ answerTimeSec: 1000 }, { answerTimeSec: 1000 }], 1800)
+    ).toBe(1800);
   });
 });
 

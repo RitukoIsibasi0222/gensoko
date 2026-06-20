@@ -17,14 +17,22 @@
   const isSelected = $derived(selectedChoiceId === choice.choiceId);
   const isCorrectChoice = $derived(correctChoiceId === choice.choiceId);
   const resultLabel = $derived(
-    showResult && isCorrectChoice ? '正解' : showResult && isSelected ? '選択した答え' : null
+    showResult && isCorrectChoice
+      ? '正解'
+      : showResult && isSelected && correctChoiceId === null
+        ? '回答済み'
+        : showResult && isSelected
+          ? '選択した答え'
+          : null
   );
   const buttonClass = $derived(
     showResult && isCorrectChoice
       ? 'border-emerald-500 bg-emerald-50 text-emerald-900'
-      : showResult && isSelected
-        ? 'border-red-400 bg-red-50 text-red-900'
-        : 'border-gray-200 bg-white text-gray-900 hover:border-gray-300 hover:bg-gray-50'
+      : showResult && isSelected && correctChoiceId === null
+        ? 'border-sky-400 bg-sky-50 text-sky-900'
+        : showResult && isSelected
+          ? 'border-red-400 bg-red-50 text-red-900'
+          : 'border-gray-200 bg-white text-gray-900 hover:border-gray-300 hover:bg-gray-50'
   );
 
   function handleClick(): void {

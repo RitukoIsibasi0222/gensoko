@@ -48,6 +48,30 @@ export type GameSessionAnswerDraft = {
   answerTimeSec: number;
 };
 
+export type GameSessionResultItem = {
+  questionId: string;
+  elementId: number;
+  prompt: string;
+  chosenChoiceId: string | null;
+  isCorrect: boolean;
+  correctAnswer: string;
+  yourAnswer: string | null;
+  answerTimeSec: number;
+  score: number;
+};
+
+export type GameSessionResponse = {
+  sessionId: string;
+  mode: GameMode;
+  totalCount: number;
+  correctCount: number;
+  totalScore: number;
+  maxStreak: number;
+  durationSec: number;
+  playedAt: string;
+  results: readonly GameSessionResultItem[];
+};
+
 export type MockGamePlayQuestion = GamePlayQuestion & {
   correctChoiceId: string;
 };

@@ -1,47 +1,65 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { onDestroy, onMount } from 'svelte';
+  import { ApiError } from '$lib/api/errors';
+  import { getGameQuestions, submitGameSession } from '$lib/api/game';
   import GameChoiceButton from '$lib/components/game/GameChoiceButton.svelte';
-  import GameFeedbackPanel from '$lib/components/game/GameFeedbackPanel.svelte';
   import GameProgressIndicator from '$lib/components/game/GameProgressIndicator.svelte';
   import GameTimerBar from '$lib/components/game/GameTimerBar.svelte';
   import { ANSWER_FEEDBACK_MS, QUESTION_TIME_LIMIT_SEC } from '$lib/game/constants';
-  import { getMockGameQuestions } from '$lib/game/mock-questions';
   import {
-    buildAnswerDraft,
+    buildSessionAnswerDraft,
+    calculateAnswerDurationSec,
     getNextQuestionIndex,
-    normalizeGameModeParam,
-    summarizeAnswers
+    normalizeGameModeParam
   } from '$lib/game/play';
-  import type { GameAnswerDraft, GameMode, GamePlayPhase } from '$lib/game/types';
+  import type {
+    GameApiQuestion,
+    GameMode,
+    GamePlayPhase,
+    GameSessionAnswerDraft
+  } from '$lib/game/types';
   import { getGameModeConfig } from '$lib/game/modes';
   import { authStore } from '$lib/stores/auth.svelte';
+  import { gameSessionResultStore } from '$lib/stores/game-session-result.svelte';
+  import { toastStore } from '$lib/stores/toast.svelte';
+
+  type QuestionLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
+  type SubmitStatus = 'idle' | 'submitting' | 'error';
 
   let currentIndex = $state(0);
   let remainingSec = $state(QUESTION_TIME_LIMIT_SEC);
   let phase = $state<GamePlayPhase>('answering');
-  let answers = $state<GameAnswerDraft[]>([]);
-  let selectedAnswer = $state<GameAnswerDraft | null>(null);
+  let answers = $state<GameSessionAnswerDraft[]>([]);
+  let selectedAnswer = $state<GameSessionAnswerDraft | null>(null);
   let lastMode = $state<GameMode | null>(null);
+  let questionSetId = $state<string | null>(null);
+  let questions = $state<GameApiQuestion[]>([]);
+  let questionLoadStatus = $state<QuestionLoadStatus>('idle');
+  let questionLoadError = $state<string | null>(null);
+  let questionRequestKey = $state<string | null>(null);
+  let submitStatus = $state<SubmitStatus>('idle');
+  let submitError = $state<string | null>(null);
   let timerId: ReturnType<typeof setInterval> | null = null;
   let feedbackTimerId: ReturnType<typeof setTimeout> | null = null;
+  let questionAbortController: AbortController | null = null;
+  let submitAbortController: AbortController | null = null;
   let questionStartedAtMs: number | null = null;
 
   const mode = $derived(normalizeGameModeParam(page.url.searchParams.get('mode')));
   const modeConfig = $derived(mode === null ? null : getGameModeConfig(mode));
-  const questions = $derived(mode === null ? [] : getMockGameQuestions(mode));
   const currentQuestion = $derived(questions[currentIndex] ?? null);
-  const summary = $derived(summarizeAnswers(answers));
-  const correctChoiceText = $derived(
-    currentQuestion?.choices.find((choice) => choice.choiceId === currentQuestion.correctChoiceId)
-      ?.text ?? null
-  );
+  const isQuestionLoading = $derived(questionLoadStatus === 'loading');
+  const isSubmitting = $derived(submitStatus === 'submitting');
   const canAnswer = $derived(
     !authStore.isInitializing &&
       authStore.isLoggedIn &&
       mode !== null &&
       currentQuestion !== null &&
-      phase === 'answering'
+      questionLoadStatus === 'loaded' &&
+      phase === 'answering' &&
+      !isSubmitting
   );
 
   $effect(() => {
@@ -51,6 +69,30 @@
 
     lastMode = mode;
     resetGame();
+  });
+
+  $effect(() => {
+    const currentMode = mode;
+    const accessToken = authStore.accessToken;
+
+    if (authStore.isInitializing) {
+      return;
+    }
+
+    if (!authStore.isLoggedIn || currentMode === null || accessToken === null) {
+      questionRequestKey = null;
+      abortQuestionLoad();
+      resetQuestionState();
+      return;
+    }
+
+    const nextRequestKey = `${currentMode}:${accessToken}`;
+    if (questionRequestKey === nextRequestKey) {
+      return;
+    }
+
+    questionRequestKey = nextRequestKey;
+    void loadQuestions(currentMode, accessToken);
   });
 
   $effect(() => {
@@ -69,12 +111,109 @@
   function resetGame(): void {
     stopTimer();
     clearFeedbackTimer();
+    abortSubmit();
     currentIndex = 0;
     remainingSec = QUESTION_TIME_LIMIT_SEC;
     phase = 'answering';
     answers = [];
     selectedAnswer = null;
+    submitStatus = 'idle';
+    submitError = null;
     questionStartedAtMs = null;
+  }
+
+  function resetQuestionState(): void {
+    resetGame();
+    questionSetId = null;
+    questions = [];
+    questionLoadStatus = 'idle';
+    questionLoadError = null;
+  }
+
+  function abortQuestionLoad(): void {
+    questionAbortController?.abort();
+    questionAbortController = null;
+  }
+
+  function abortSubmit(): void {
+    submitAbortController?.abort();
+    submitAbortController = null;
+  }
+
+  function isAbortError(error: unknown): boolean {
+    return error instanceof DOMException && error.name === 'AbortError';
+  }
+
+  function getErrorMessage(error: unknown, fallback: string): string {
+    return error instanceof ApiError ? error.message : fallback;
+  }
+
+  function showErrorToast(error: unknown, fallback: string): void {
+    if (error instanceof ApiError) {
+      toastStore.fromApiError(error);
+      return;
+    }
+
+    toastStore.error(fallback);
+  }
+
+  async function loadQuestions(currentMode: GameMode, accessToken: string): Promise<void> {
+    resetGame();
+    abortQuestionLoad();
+    const controller = new AbortController();
+    questionAbortController = controller;
+    questionSetId = null;
+    questions = [];
+    questionLoadStatus = 'loading';
+    questionLoadError = null;
+
+    try {
+      const response = await getGameQuestions({
+        mode: currentMode,
+        accessToken,
+        signal: controller.signal
+      });
+
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      if (response.questions.length === 0) {
+        questionLoadStatus = 'error';
+        questionLoadError = '出題できる問題がありません。';
+        return;
+      }
+
+      questionSetId = response.questionSetId;
+      questions = [...response.questions];
+      questionLoadStatus = 'loaded';
+    } catch (error) {
+      if (isAbortError(error) || controller.signal.aborted) {
+        return;
+      }
+
+      const message = getErrorMessage(error, 'ゲーム問題の取得に失敗しました');
+      questionLoadStatus = 'error';
+      questionLoadError = message;
+      showErrorToast(error, message);
+    } finally {
+      if (questionAbortController === controller) {
+        questionAbortController = null;
+      }
+    }
+  }
+
+  function retryQuestionLoad(): void {
+    if (mode === null || authStore.accessToken === null) {
+      return;
+    }
+
+    questionRequestKey = null;
+    void loadQuestions(mode, authStore.accessToken);
+  }
+
+  function restartGame(): void {
+    retryQuestionLoad();
   }
 
   function startTimer(): void {
@@ -122,6 +261,7 @@
         phase = 'completed';
         selectedAnswer = null;
         feedbackTimerId = null;
+        void submitCompletedGame();
         return;
       }
 
@@ -142,7 +282,7 @@
     stopTimer();
     const answerRemainingSec = getCurrentRemainingSec();
     remainingSec = answerRemainingSec;
-    const answer = buildAnswerDraft({
+    const answer = buildSessionAnswerDraft({
       question: currentQuestion,
       chosenChoiceId: choiceId,
       remainingSec: answerRemainingSec,
@@ -153,6 +293,61 @@
     questionStartedAtMs = null;
     phase = 'feedback';
     scheduleNextStep();
+  }
+
+  async function submitCompletedGame(): Promise<void> {
+    if (submitStatus === 'submitting') {
+      return;
+    }
+
+    if (mode === null || authStore.accessToken === null || questionSetId === null) {
+      submitStatus = 'error';
+      submitError = 'ゲーム結果の送信に必要な情報が不足しています。';
+      return;
+    }
+
+    if (answers.length !== questions.length) {
+      submitStatus = 'error';
+      submitError = '回答数が問題数と一致していません。もう一度ゲームを開始してください。';
+      return;
+    }
+
+    abortSubmit();
+    const controller = new AbortController();
+    submitAbortController = controller;
+    submitStatus = 'submitting';
+    submitError = null;
+
+    try {
+      const result = await submitGameSession({
+        questionSetId,
+        mode,
+        answers,
+        durationSec: calculateAnswerDurationSec(answers, 1800),
+        accessToken: authStore.accessToken,
+        signal: controller.signal
+      });
+
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      gameSessionResultStore.set(result);
+      await goto(`/game/result?sessionId=${encodeURIComponent(result.sessionId)}`);
+    } catch (error) {
+      if (isAbortError(error) || controller.signal.aborted) {
+        return;
+      }
+
+      const message = getErrorMessage(error, 'ゲーム結果の送信に失敗しました');
+      submitStatus = 'error';
+      submitError = message;
+      showErrorToast(error, message);
+    } finally {
+      if (submitAbortController === controller) {
+        submitAbortController = null;
+      }
+    }
   }
 
   function isEditableTarget(target: EventTarget | null): boolean {
@@ -199,6 +394,8 @@
   onDestroy(() => {
     stopTimer();
     clearFeedbackTimer();
+    abortQuestionLoad();
+    abortSubmit();
   });
 </script>
 
@@ -247,11 +444,50 @@
         モード選択へ戻る
       </a>
     </section>
+  {:else if isQuestionLoading}
+    <section
+      class="rounded border border-gray-200 bg-white p-5"
+      aria-busy="true"
+      aria-live="polite"
+    >
+      <p class="text-sm text-gray-600">ゲーム問題を読み込んでいます...</p>
+    </section>
+  {:else if questionLoadStatus === 'error'}
+    <section class="space-y-4 rounded border border-red-200 bg-red-50 p-6" aria-live="polite">
+      <div>
+        <p class="text-sm font-semibold text-red-700">ゲームを開始できません</p>
+        <h1 class="mt-2 text-2xl font-bold text-red-900">問題の取得に失敗しました</h1>
+        <p class="mt-2 text-sm leading-6 text-red-800">
+          {questionLoadError ?? 'ゲーム問題の取得に失敗しました'}
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <button
+          type="button"
+          onclick={retryQuestionLoad}
+          class="inline-flex items-center justify-center rounded bg-white px-4 py-2 text-sm font-semibold text-red-800 ring-1 ring-red-200 hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+        >
+          もう一度読み込む
+        </button>
+        <a
+          href="/game"
+          class="inline-flex items-center justify-center rounded border border-red-200 px-4 py-2 text-sm font-semibold text-red-800 hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+        >
+          モード選択へ戻る
+        </a>
+      </div>
+    </section>
   {:else if phase === 'completed'}
-    <section class="space-y-5 rounded border border-gray-200 bg-white p-6">
+    <section
+      class="space-y-5 rounded border border-gray-200 bg-white p-6"
+      aria-busy={isSubmitting}
+      aria-live="polite"
+    >
       <div>
         <p class="text-sm font-semibold text-gray-500">4択クイズ</p>
-        <h1 class="mt-2 text-2xl font-bold text-gray-900">ゲーム完了</h1>
+        <h1 class="mt-2 text-2xl font-bold text-gray-900">
+          {submitStatus === 'error' ? '結果を保存できませんでした' : '結果を保存しています'}
+        </h1>
         <p class="mt-2 text-sm leading-6 text-gray-600">
           {modeConfig.title}（{modeConfig.difficultyLabel}）を最後まで回答しました。
         </p>
@@ -259,32 +495,41 @@
 
       <div class="grid gap-3 sm:grid-cols-2">
         <div class="rounded border border-gray-200 bg-gray-50 p-4">
-          <p class="text-sm text-gray-600">正解数</p>
-          <p class="mt-1 text-2xl font-bold text-gray-900">
-            {summary.correctCount} / {summary.totalCount}
-          </p>
+          <p class="text-sm text-gray-600">回答数</p>
+          <p class="mt-1 text-2xl font-bold text-gray-900">{answers.length} / {questions.length}</p>
         </div>
         <div class="rounded border border-gray-200 bg-gray-50 p-4">
-          <p class="text-sm text-gray-600">正答率</p>
+          <p class="text-sm text-gray-600">保存状態</p>
           <p class="mt-1 text-2xl font-bold text-gray-900">
-            {summary.totalCount === 0
-              ? 0
-              : Math.round((summary.correctCount / summary.totalCount) * 100)}%
+            {submitStatus === 'error' ? '失敗' : '送信中'}
           </p>
         </div>
       </div>
 
-      <p class="text-sm text-gray-600">
-        スコア保存と結果画面は後続タスクで API と接続して実装します。
-      </p>
+      {#if submitStatus === 'error'}
+        <div class="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {submitError ?? 'ゲーム結果の送信に失敗しました'}
+        </div>
+      {:else}
+        <p class="text-sm text-gray-600">サーバーで正誤判定とスコア計算を行っています...</p>
+      {/if}
 
       <div class="flex flex-wrap gap-3">
         <button
           type="button"
-          onclick={resetGame}
+          onclick={submitCompletedGame}
+          disabled={isSubmitting}
           class="bg-brand hover:bg-brand-hover focus-visible:outline-brand inline-flex items-center justify-center rounded px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2"
         >
-          もう一度
+          再送信
+        </button>
+        <button
+          type="button"
+          onclick={restartGame}
+          disabled={isSubmitting}
+          class="inline-flex items-center justify-center rounded border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+        >
+          新しく始める
         </button>
         <a
           href="/game"
@@ -335,7 +580,7 @@
               {index}
               disabled={!canAnswer}
               selectedChoiceId={selectedAnswer?.chosenChoiceId ?? null}
-              correctChoiceId={phase === 'feedback' ? currentQuestion.correctChoiceId : null}
+              correctChoiceId={null}
               showResult={phase === 'feedback'}
               onChoose={submitAnswer}
             />
@@ -343,7 +588,20 @@
         </div>
       </section>
 
-      <GameFeedbackPanel answer={selectedAnswer} {correctChoiceText} />
+      {#if selectedAnswer}
+        <section
+          class="rounded border border-sky-200 bg-sky-50 px-4 py-3 text-sky-900"
+          role="status"
+          aria-live="polite"
+        >
+          <p class="text-base font-bold">
+            {selectedAnswer.chosenChoiceId === null
+              ? '未回答として記録しました'
+              : '回答を記録しました'}
+          </p>
+          <p class="mt-1 text-sm">回答時間: {selectedAnswer.answerTimeSec}秒</p>
+        </section>
+      {/if}
     </section>
   {/if}
 </div>
