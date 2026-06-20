@@ -601,6 +601,7 @@ export function createGameQuestionSet(params: {
 - `GET /game/questions` は実装したが、フェーズ7の `GET /game/questions（ランダム10問...）` タスクは問題候補のランダム抽出・cleanup・画面接続の判断が残るため、本完了記録ではフェーズ6のインターフェース確定のみ完了扱いにした。選択肢内の正解位置は本タスクのレビュー対応でランダム化済み。
 - backend build で既存の `backend/src/middleware/admin/index.ts` の import path 不整合が検出されたため、`../types/index.js` から `../../types/index.js` へ修正した。
 - レビューで、選択肢の先頭が常に正解になる実装を検出したため、正解位置を問題ごとに変える生成ロジックと回帰テストを追加した。
+- 実機確認で `/game/play` の UI mock 問題が `1,2,3,4` の固定パターンになっていることを確認したため、`frontend/src/lib/game/mock-questions.ts` も正解位置をランダム化した。
 
 ### 実際の変更ファイル
 | ファイル | 変更種別 | 内容 |
@@ -616,6 +617,8 @@ export function createGameQuestionSet(params: {
 | `backend/src/services/game.service.test.ts` | 新規 | 問題生成・保存形式・正解非露出・正解位置固定防止・苦手不足の service テストを追加 |
 | `frontend/src/lib/api/game.ts` | 新規 | `getGameQuestions()` API client と runtime validation を追加 |
 | `frontend/src/lib/api/game.test.ts` | 新規 | game API client テストを追加 |
+| `frontend/src/lib/game/mock-questions.ts` | 修正 | UI mock 問題の正解位置をランダム化 |
+| `frontend/src/lib/game/mock-questions.test.ts` | 新規 | UI mock 問題の正解位置生成テストを追加 |
 | `frontend/src/lib/game/types.ts` | 修正 | `GameQuestionsResponse`, `GameApiQuestion`, `GameSessionAnswerDraft` を追加 |
 
 ### 品質チェック
@@ -633,7 +636,7 @@ export function createGameQuestionSet(params: {
 | `cd frontend && npm run lint` | OK |
 | `cd frontend && npm run check` | OK（0 errors / 0 warnings） |
 | `cd backend && npm run test -- --run` | OK（21 files / 162 tests） |
-| `cd frontend && npm run test:run` | OK（14 files / 177 tests） |
+| `cd frontend && npm run test:run` | OK（15 files / 179 tests） |
 
 ### 手動確認
 | 条件 | 結果 |

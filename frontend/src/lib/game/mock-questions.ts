@@ -1,6 +1,8 @@
 import { GAME_QUESTION_COUNT } from '$lib/game/constants';
 import type { GameMode, MockGamePlayQuestion } from '$lib/game/types';
 
+const GAME_CHOICE_COUNT = 4;
+
 type MockElement = {
   id: number;
   symbol: string;
@@ -67,14 +69,20 @@ function isNameToSymbolMode(mode: GameMode): boolean {
 function getChoices(
   elements: readonly MockElement[],
   correctElement: MockElement,
-  questionIndex: number,
-  answerWithSymbol: boolean
+  answerWithSymbol: boolean,
+  correctPosition: number
 ) {
+  if (
+    !Number.isInteger(correctPosition) ||
+    correctPosition < 0 ||
+    correctPosition >= GAME_CHOICE_COUNT
+  ) {
+    throw new Error('選択肢を生成できません');
+  }
+
   const distractors = elements.filter((element) => element.id !== correctElement.id).slice(0, 3);
-  const choices = [correctElement, ...distractors];
-  const correctPosition = questionIndex % choices.length;
-  const [correctChoice] = choices.splice(0, 1);
-  choices.splice(correctPosition, 0, correctChoice);
+  const choices = [...distractors];
+  choices.splice(correctPosition, 0, correctElement);
 
   return choices.map((element) => ({
     choiceId: String(element.id),
@@ -82,14 +90,24 @@ function getChoices(
   }));
 }
 
-export function getMockGameQuestions(mode: GameMode): readonly MockGamePlayQuestion[] {
+function getRandomChoiceIndex(): number {
+  const values = new Uint32Array(1);
+  crypto.getRandomValues(values);
+
+  return values[0] % GAME_CHOICE_COUNT;
+}
+
+export function getMockGameQuestions(
+  mode: GameMode,
+  choiceIndexGenerator = getRandomChoiceIndex
+): readonly MockGamePlayQuestion[] {
   const elements = getModeElements(mode);
   const answerWithSymbol = isNameToSymbolMode(mode);
 
-  return elements.slice(0, GAME_QUESTION_COUNT).map((element, index) => ({
+  return elements.slice(0, GAME_QUESTION_COUNT).map((element) => ({
     questionId: `${mode}-${element.id}`,
     prompt: answerWithSymbol ? element.nameJa : element.symbol,
     correctChoiceId: String(element.id),
-    choices: getChoices(elements, element, index, answerWithSymbol)
+    choices: getChoices(elements, element, answerWithSymbol, choiceIndexGenerator())
   }));
 }
