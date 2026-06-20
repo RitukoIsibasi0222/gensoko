@@ -92,16 +92,21 @@ function getChoices(
   }));
 }
 
-function getRandomChoiceIndex(): number {
-  const values = new Uint32Array(1);
-  crypto.getRandomValues(values);
+function createDefaultChoiceIndexGenerator(mode: GameMode): () => number {
+  let questionIndex = 0;
+  const seed = Array.from(mode).reduce((sum, character) => sum + character.charCodeAt(0), 0);
 
-  return values[0] % GAME_CHOICE_COUNT;
+  return () => {
+    const choiceIndex = (seed + questionIndex * 3 + 1) % GAME_CHOICE_COUNT;
+    questionIndex += 1;
+
+    return choiceIndex;
+  };
 }
 
 export function getMockGameQuestions(
   mode: GameMode,
-  choiceIndexGenerator = getRandomChoiceIndex
+  choiceIndexGenerator = createDefaultChoiceIndexGenerator(mode)
 ): readonly MockGamePlayQuestion[] {
   const elements = getModeElements(mode);
   const answerWithSymbol = isNameToSymbolMode(mode);
