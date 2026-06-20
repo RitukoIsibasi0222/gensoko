@@ -2,6 +2,12 @@ import { prisma } from "../lib/prisma.js";
 
 export type ElementMasteryStatus = "unlearned" | "learning" | "mastered";
 
+type ElementMasteryClient = {
+  gameSession: {
+    findMany: typeof prisma.gameSession.findMany;
+  };
+};
+
 type GameSessionWithAnswers = {
   answers: {
     elementId: number;
@@ -31,6 +37,7 @@ function resolveMasteryStatus(recentAnswers: boolean[]): ElementMasteryStatus {
 export async function getElementMasteryStatusMap(
   userId: string,
   elementIds: readonly number[],
+  client: ElementMasteryClient = prisma,
 ): Promise<Map<number, ElementMasteryStatus>> {
   const targetElementIds = [...new Set(elementIds)];
   if (targetElementIds.length === 0) {
@@ -48,7 +55,7 @@ export async function getElementMasteryStatusMap(
   let hasMoreSessions = true;
 
   while (elementIdsNeedingAnswers.size > 0 && hasMoreSessions) {
-    const sessions: GameSessionWithAnswers[] = await prisma.gameSession.findMany({
+    const sessions: GameSessionWithAnswers[] = await client.gameSession.findMany({
       where: { userId },
       orderBy: [{ playedAt: "desc" }, { id: "desc" }],
       skip,

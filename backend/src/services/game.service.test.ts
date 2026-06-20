@@ -2,20 +2,46 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/prisma.js", () => ({
   prisma: {
+    $transaction: vi.fn(),
     element: {
       findMany: vi.fn(),
     },
     weakElement: {
       findMany: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      upsert: vi.fn(),
+      delete: vi.fn(),
     },
     gameQuestionSet: {
       create: vi.fn(),
+      findFirst: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    gameSession: {
+      create: vi.fn(),
+      findMany: vi.fn(),
+    },
+    gameAnswer: {
+      createMany: vi.fn(),
+    },
+    userStats: {
+      upsert: vi.fn(),
+      update: vi.fn(),
     },
   },
 }));
 
 import { prisma } from "../lib/prisma.js";
-import { createGameQuestionSet, InsufficientWeakElementsError } from "./game.service.js";
+import {
+  createGameQuestionSet,
+  GameSessionValidationError,
+  InsufficientWeakElementsError,
+  QuestionSetAlreadySubmittedError,
+  QuestionSetExpiredError,
+  QuestionSetNotFoundError,
+  submitGameSession,
+} from "./game.service.js";
 
 const ELEMENTS = [
   {
@@ -274,5 +300,350 @@ describe("createGameQuestionSet", () => {
       }),
     ).rejects.toBeInstanceOf(InsufficientWeakElementsError);
     expect(prisma.gameQuestionSet.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("submitGameSession", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback) => {
+      return callback(prisma);
+    });
+    vi.mocked(prisma.gameQuestionSet.findFirst).mockResolvedValue({
+      id: "question-set-1",
+      userId: "user-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      expiresAt: new Date("2026-06-20T12:30:00.000Z"),
+      createdAt: NOW,
+      questions: [
+        {
+          questionId: "q1",
+          elementId: 1,
+          prompt: "H",
+          correctChoiceId: "1",
+          choices: [
+            { choiceId: "1", elementId: 1, text: "水素" },
+            { choiceId: "2", elementId: 2, text: "ヘリウム" },
+            { choiceId: "3", elementId: 3, text: "リチウム" },
+            { choiceId: "4", elementId: 4, text: "ベリリウム" },
+          ],
+        },
+        {
+          questionId: "q2",
+          elementId: 2,
+          prompt: "He",
+          correctChoiceId: "2",
+          choices: [
+            { choiceId: "1", elementId: 1, text: "水素" },
+            { choiceId: "2", elementId: 2, text: "ヘリウム" },
+            { choiceId: "3", elementId: 3, text: "リチウム" },
+            { choiceId: "4", elementId: 4, text: "ベリリウム" },
+          ],
+        },
+      ],
+    } as never);
+    vi.mocked(prisma.gameQuestionSet.deleteMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(prisma.gameSession.create).mockResolvedValue({
+      id: "session-1",
+      userId: "user-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      totalScore: 150,
+      correctCount: 1,
+      totalCount: 2,
+      maxStreak: 1,
+      durationSec: 20,
+      playedAt: new Date("2026-06-20T12:05:00.000Z"),
+    } as never);
+    vi.mocked(prisma.gameAnswer.createMany).mockResolvedValue({ count: 2 } as never);
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.weakElement.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.weakElement.upsert).mockResolvedValue({} as never);
+    vi.mocked(prisma.weakElement.update).mockResolvedValue({} as never);
+    vi.mocked(prisma.weakElement.delete).mockResolvedValue({} as never);
+    vi.mocked(prisma.userStats.upsert).mockResolvedValue({} as never);
+  });
+
+  it("保存済み問題セットを使って正誤判定・スコア計算・結果保存を行う", async () => {
+    const result = await submitGameSession({
+      userId: "user-1",
+      questionSetId: "question-set-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      answers: [
+        { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+        { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+      ],
+      durationSec: 20,
+      now: new Date("2026-06-20T12:05:00.000Z"),
+    });
+
+    expect(result).toEqual({
+      sessionId: "session-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      correctCount: 1,
+      totalCount: 2,
+      totalScore: 150,
+      maxStreak: 1,
+      durationSec: 20,
+      playedAt: new Date("2026-06-20T12:05:00.000Z"),
+      results: [
+        {
+          questionId: "q1",
+          elementId: 1,
+          prompt: "H",
+          chosenChoiceId: "1",
+          isCorrect: true,
+          correctAnswer: "水素",
+          yourAnswer: "水素",
+          answerTimeSec: 5,
+          score: 150,
+        },
+        {
+          questionId: "q2",
+          elementId: 2,
+          prompt: "He",
+          chosenChoiceId: null,
+          isCorrect: false,
+          correctAnswer: "ヘリウム",
+          yourAnswer: null,
+          answerTimeSec: 15,
+          score: 0,
+        },
+      ],
+    });
+    expect(prisma.gameQuestionSet.deleteMany).toHaveBeenCalledWith({
+      where: { id: "question-set-1", userId: "user-1" },
+    });
+  });
+
+  it("不正解または時間切れの元素を苦手リストにupsertする", async () => {
+    await submitGameSession({
+      userId: "user-1",
+      questionSetId: "question-set-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      answers: [
+        { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+        { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+      ],
+      durationSec: 20,
+      now: new Date("2026-06-20T12:05:00.000Z"),
+    });
+
+    expect(prisma.weakElement.upsert).toHaveBeenCalledWith({
+      where: { userId_elementId: { userId: "user-1", elementId: 2 } },
+      create: { userId: "user-1", elementId: 2, missCount: 1, consecutiveHit: 0 },
+      update: { missCount: { increment: 1 }, consecutiveHit: 0 },
+    });
+  });
+
+  it("苦手元素に正解した場合はconsecutiveHitを増やす", async () => {
+    vi.mocked(prisma.weakElement.findUnique).mockResolvedValue({
+      id: "weak-1",
+      userId: "user-1",
+      elementId: 1,
+      missCount: 2,
+      consecutiveHit: 0,
+      addedAt: NOW,
+      updatedAt: NOW,
+    } as never);
+
+    await submitGameSession({
+      userId: "user-1",
+      questionSetId: "question-set-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      answers: [
+        { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+        { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+      ],
+      durationSec: 20,
+      now: new Date("2026-06-20T12:05:00.000Z"),
+    });
+
+    expect(prisma.weakElement.update).toHaveBeenCalledWith({
+      where: { id: "weak-1" },
+      data: { consecutiveHit: { increment: 1 } },
+    });
+  });
+
+  it("苦手元素に2回連続正解した場合は苦手リストから削除する", async () => {
+    vi.mocked(prisma.weakElement.findUnique).mockResolvedValue({
+      id: "weak-1",
+      userId: "user-1",
+      elementId: 1,
+      missCount: 2,
+      consecutiveHit: 1,
+      addedAt: NOW,
+      updatedAt: NOW,
+    } as never);
+
+    await submitGameSession({
+      userId: "user-1",
+      questionSetId: "question-set-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      answers: [
+        { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+        { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+      ],
+      durationSec: 20,
+      now: new Date("2026-06-20T12:05:00.000Z"),
+    });
+
+    expect(prisma.weakElement.delete).toHaveBeenCalledWith({
+      where: { id: "weak-1" },
+    });
+  });
+
+  it("ユーザー統計にゲーム回数・正解数・回答数・スコアを反映する", async () => {
+    await submitGameSession({
+      userId: "user-1",
+      questionSetId: "question-set-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      answers: [
+        { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+        { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+      ],
+      durationSec: 20,
+      now: new Date("2026-06-20T12:05:00.000Z"),
+    });
+
+    expect(prisma.userStats.upsert).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      create: {
+        userId: "user-1",
+        totalGames: 1,
+        totalCorrect: 1,
+        totalAnswered: 2,
+        masteredCount: 0,
+        weeklyScore: 150,
+        allTimeScore: 150,
+        lastActiveDate: new Date("2026-06-20T12:05:00.000Z"),
+      },
+      update: {
+        totalGames: { increment: 1 },
+        totalCorrect: { increment: 1 },
+        totalAnswered: { increment: 2 },
+        weeklyScore: { increment: 150 },
+        allTimeScore: { increment: 150 },
+        masteredCount: 0,
+        lastActiveDate: new Date("2026-06-20T12:05:00.000Z"),
+      },
+    });
+  });
+
+  it("習得済み元素数を再計算してユーザー統計に反映する", async () => {
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([
+      { answers: [{ elementId: 1, isCorrect: true }] },
+      { answers: [{ elementId: 1, isCorrect: true }] },
+    ] as never);
+
+    await submitGameSession({
+      userId: "user-1",
+      questionSetId: "question-set-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      answers: [
+        { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+        { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+      ],
+      durationSec: 20,
+      now: new Date("2026-06-20T12:05:00.000Z"),
+    });
+
+    expect(prisma.userStats.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ masteredCount: 1 }),
+        update: expect.objectContaining({ masteredCount: 1 }),
+      }),
+    );
+  });
+
+  it("問題セットが見つからない場合は専用エラーにする", async () => {
+    vi.mocked(prisma.gameQuestionSet.findFirst).mockResolvedValue(null);
+
+    await expect(
+      submitGameSession({
+        userId: "user-1",
+        questionSetId: "missing-question-set",
+        mode: "SYMBOL_TO_NAME_LV1",
+        answers: [{ questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 }],
+        durationSec: 20,
+        now: new Date("2026-06-20T12:05:00.000Z"),
+      }),
+    ).rejects.toBeInstanceOf(QuestionSetNotFoundError);
+    expect(prisma.gameSession.create).not.toHaveBeenCalled();
+  });
+
+  it("問題セットが期限切れの場合は専用エラーにする", async () => {
+    vi.mocked(prisma.gameQuestionSet.findFirst).mockResolvedValue({
+      id: "question-set-1",
+      userId: "user-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      expiresAt: new Date("2026-06-20T12:00:00.000Z"),
+      createdAt: NOW,
+      questions: [],
+    } as never);
+
+    await expect(
+      submitGameSession({
+        userId: "user-1",
+        questionSetId: "question-set-1",
+        mode: "SYMBOL_TO_NAME_LV1",
+        answers: [{ questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 }],
+        durationSec: 20,
+        now: new Date("2026-06-20T12:05:00.000Z"),
+      }),
+    ).rejects.toBeInstanceOf(QuestionSetExpiredError);
+    expect(prisma.gameSession.create).not.toHaveBeenCalled();
+  });
+
+  it("未知の questionId が含まれる場合はバリデーションエラーにする", async () => {
+    await expect(
+      submitGameSession({
+        userId: "user-1",
+        questionSetId: "question-set-1",
+        mode: "SYMBOL_TO_NAME_LV1",
+        answers: [
+          { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+          { questionId: "unknown", chosenChoiceId: "2", answerTimeSec: 5 },
+        ],
+        durationSec: 20,
+        now: new Date("2026-06-20T12:05:00.000Z"),
+      }),
+    ).rejects.toBeInstanceOf(GameSessionValidationError);
+    expect(prisma.gameSession.create).not.toHaveBeenCalled();
+  });
+
+  it("未知の choiceId が含まれる場合はバリデーションエラーにする", async () => {
+    await expect(
+      submitGameSession({
+        userId: "user-1",
+        questionSetId: "question-set-1",
+        mode: "SYMBOL_TO_NAME_LV1",
+        answers: [
+          { questionId: "q1", chosenChoiceId: "999", answerTimeSec: 5 },
+          { questionId: "q2", chosenChoiceId: "2", answerTimeSec: 5 },
+        ],
+        durationSec: 20,
+        now: new Date("2026-06-20T12:05:00.000Z"),
+      }),
+    ).rejects.toBeInstanceOf(GameSessionValidationError);
+    expect(prisma.gameSession.create).not.toHaveBeenCalled();
+  });
+
+  it("問題セットを消費できなかった場合は二重送信エラーにする", async () => {
+    vi.mocked(prisma.gameQuestionSet.deleteMany).mockResolvedValue({ count: 0 } as never);
+
+    await expect(
+      submitGameSession({
+        userId: "user-1",
+        questionSetId: "question-set-1",
+        mode: "SYMBOL_TO_NAME_LV1",
+        answers: [
+          { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+          { questionId: "q2", chosenChoiceId: "2", answerTimeSec: 5 },
+        ],
+        durationSec: 20,
+        now: new Date("2026-06-20T12:05:00.000Z"),
+      }),
+    ).rejects.toBeInstanceOf(QuestionSetAlreadySubmittedError);
+    expect(prisma.gameSession.create).not.toHaveBeenCalled();
   });
 });
