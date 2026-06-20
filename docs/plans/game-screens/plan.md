@@ -657,7 +657,7 @@ export function createGameQuestionSet(params: {
 1. `POST /game/sessions` のリクエスト/レスポンス形式を確定する。
 2. `POST /game/sessions` を実装し、`questionSetId` をもとにサーバー側で正誤判定・スコア計算・DB 更新を行う。
 3. `/game/play` から `POST /game/sessions` へ回答を送信し、成功レスポンスを結果表示へ渡す。
-4. `/game/result` を実装し、`POST /game/sessions` のレスポンスだけを信頼してスコア・最大連続正解・間違え一覧を表示する。
+4. `/game/result` を実装し、フロントエンドではスコア・最大連続正解・間違え一覧を計算せず、`POST /game/sessions` が返した結果を表示する。
 
 ### `/game/result` の前提
 
