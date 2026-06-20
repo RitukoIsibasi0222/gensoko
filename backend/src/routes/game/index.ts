@@ -21,6 +21,12 @@ const GAME_MODE_VALUES = [
 
 const GAME_MODE_ERROR_MESSAGE = "ゲームモードが正しくありません";
 
+const gameQuestionsRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  trustProxy: process.env.TRUST_PROXY === "true",
+});
+
 export const gameQuestionsQuerySchema = z
   .object({
     mode: z.enum(GAME_MODE_VALUES, { error: GAME_MODE_ERROR_MESSAGE }),
@@ -31,7 +37,7 @@ export const gameRouter = new Hono<{ Variables: AppVariables }>();
 
 gameRouter.get(
   "/questions",
-  rateLimit({ windowMs: 60 * 1000, max: 30 }),
+  gameQuestionsRateLimit,
   authMiddleware,
   zValidator("query", gameQuestionsQuerySchema, (result, c) => {
     if (!result.success) {
