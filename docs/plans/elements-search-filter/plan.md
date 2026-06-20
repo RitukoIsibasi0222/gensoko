@@ -564,11 +564,12 @@ type Props = {
 
 - 完了日: 2026-06-20
 - 実装ブランチ: `feature/elements-search-filter-category-query`
-- PR: 未作成
+- PR: #50
 
 ### 計画からの変更点
 
 - frontend の未知 `category` は未指定へ戻さず、trim 済み検索条件として保持する方針にした。これにより `GET /elements` の「不明な分類は 400 ではなく 0 件」という API 仕様と URL query 復元の挙動が一致する。
+- 未知 `category` が select の既存 options に存在しない場合は、現在値専用の option を差し込んで選択状態を可視化する方針にした。これにより URL query と UI 表示のズレを避ける。
 - ページ離脱時に進行中 request を中断できるよう、`/elements` ページで `onDestroy()` による `AbortController.abort()` を追加した。
 - `docs/05_progress.md` は既に該当タスクが `[x]` のため変更しない。
 - DB スキーマ変更は行っていないため、migration と Playwright 必須確認は対象外。
@@ -581,6 +582,7 @@ type Props = {
 | `frontend/src/lib/elements/search-filter.ts` | 修正 | 未知分類を未指定化せず、trim 済み検索条件として保持 |
 | `frontend/src/lib/elements/search-filter.test.ts` | 修正 | 未知分類保持、不正 period の未指定化、URL query 復元のテストを更新 |
 | `frontend/src/lib/api/elements.test.ts` | 修正 | 未知分類が query string に含まれることを検証 |
+| `frontend/src/lib/components/elements/ElementSearchFilters.svelte` | 修正 | 未知分類の現在値 option を表示し、select 表示と適用条件を一致 |
 | `frontend/src/routes/(app)/elements/+page.svelte` | 修正 | ページ離脱時に進行中 request を abort |
 | `docs/plans/elements-search-filter/plan.md` | 修正 | タスク進捗、計画からの変更点、実際の変更ファイルを更新 |
 
@@ -592,6 +594,7 @@ type Props = {
 | `cd frontend && npm run lint` | passed |
 | `cd frontend && npm run check` | 0 errors / 0 warnings |
 | `cd frontend && npx prettier --write src/lib/elements/search-filter.ts src/lib/elements/search-filter.test.ts src/lib/api/elements.test.ts src/routes/\\(app\\)/elements/+page.svelte` | unchanged |
+| `git diff --check` | passed |
 | `cd backend && npm run test -- --run src/lib/elements/search.test.ts src/routes/elements/elements.test.ts` | 20 tests passed |
 
 ### ブラウザ手動確認
@@ -603,6 +606,8 @@ type Props = {
 | 分類・周期の複合条件 | `q=H&category=非金属&period=2` で 0 件、空状態とリセット導線を確認 |
 | リセット | URL query、キーワード、分類、周期、件数が初期状態へ復帰 |
 | 未知分類 URL | `/elements?category=UNKNOWN_CATEGORY` で URL を保持し、0 件空状態を確認 |
+| 未知分類 select 表示 | `現在の分類: UNKNOWN_CATEGORY` が選択表示され、適用中条件が可視化される |
+| 未知分類解除 | `すべての分類` 選択で `/elements` に戻り、118 件表示になる |
 | URL 復元 | `/elements?q=Fe&period=4` で入力値・周期・結果 1 件が復元 |
 | Enter 検索 | キーワード入力欄で Enter を押して検索実行 |
 | 詳細モーダル | 元素カードから詳細モーダル表示、`role="dialog"` と閉じるボタン focus を確認 |

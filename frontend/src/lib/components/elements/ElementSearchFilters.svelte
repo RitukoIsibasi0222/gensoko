@@ -31,6 +31,9 @@
   let draftKeyword = $state('');
 
   const categoryOptions = getElementCategoryOptions();
+  const selectedCategoryIsUnknown = $derived(
+    filters.category !== '' && !categoryOptions.includes(filters.category)
+  );
 
   $effect(() => {
     draftKeyword = filters.q;
@@ -139,6 +142,9 @@
         class="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
       >
         <option value="">すべての分類</option>
+        {#if selectedCategoryIsUnknown}
+          <option value={filters.category}>現在の分類: {filters.category}</option>
+        {/if}
         {#each categoryOptions as category}
           <option value={category}>{category}</option>
         {/each}
