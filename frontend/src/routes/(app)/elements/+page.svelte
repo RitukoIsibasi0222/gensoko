@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { untrack } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import ElementDetailModal from '$lib/components/elements/ElementDetailModal.svelte';
   import ElementMasteryBadge from '$lib/components/elements/ElementMasteryBadge.svelte';
   import ElementSearchFilters from '$lib/components/elements/ElementSearchFilters.svelte';
@@ -81,6 +81,10 @@
     });
 
     void loadElements({ accessToken, filters: nextFilters });
+  });
+
+  onDestroy(() => {
+    activeAbortController?.abort();
   });
 
   function isAbortError(error: unknown): boolean {
