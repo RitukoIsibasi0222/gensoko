@@ -155,6 +155,7 @@ Error:
 | GET | `/game/questions` | 問題セット取得（10問） | 🔒 |
 | POST | `/game/sessions` | ゲーム結果を保存 | 🔒 |
 | GET | `/game/sessions` | ゲーム履歴一覧 | 🔒 |
+| GET | `/game/sessions/:sessionId` | ゲーム結果詳細取得 | 🔒 |
 
 ### GET `/game/questions`
 ```
@@ -272,6 +273,62 @@ Error:
 403 アカウント停止・メール未確認・ロック中
 404 問題セットが見つからない（存在しない、または他ユーザーの questionSetId）
 409 問題セット期限切れ・mode 不一致・すでに送信済み
+429 レート制限
+500 サーバーエラー
+```
+
+### GET `/game/sessions/:sessionId`
+```
+Path params:
+  sessionId: string  // 必須、trim 後に空文字不可
+
+Response 200:
+{
+  "sessionId": "cuid",
+  "mode": "SYMBOL_TO_NAME_LV1",
+  "correctCount": 8,
+  "totalCount": 10,
+  "totalScore": 800,
+  "maxStreak": 5,
+  "durationSec": 72,
+  "playedAt": "2026-06-20T12:35:00.000Z",
+  "results": [
+    {
+      "questionId": "q1",
+      "elementId": 1,
+      "prompt": "H",
+      "chosenChoiceId": "1",
+      "isCorrect": true,
+      "correctAnswer": "水素",
+      "yourAnswer": "水素",
+      "answerTimeSec": 5,
+      "score": 100
+    },
+    {
+      "questionId": "q2",
+      "elementId": 2,
+      "prompt": "He",
+      "chosenChoiceId": null,
+      "isCorrect": false,
+      "correctAnswer": "ヘリウム",
+      "yourAnswer": null,
+      "answerTimeSec": 15,
+      "score": 0
+    },
+    ...
+  ]
+}
+
+// ※ /game/result?sessionId=... の再読み込み・直接アクセス時の表示元にする
+// ※ POST /game/sessions の 201 response と同じ表示用形式を返す
+// ※ フロントエンドではスコア・正誤・連続正解を計算せず、サーバーが返した結果を表示する
+// ※ sessionId が存在しない場合と他ユーザー所有の場合はいずれも 404 とし、存在有無を漏らさない
+
+Error:
+400 バリデーションエラー（sessionId が空文字等）
+401 認証が必要 / トークン無効
+403 アカウント停止・メール未確認・ロック中
+404 ゲーム結果が見つからない（存在しない、または他ユーザーの sessionId）
 429 レート制限
 500 サーバーエラー
 ```

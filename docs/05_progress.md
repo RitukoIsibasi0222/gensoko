@@ -1,6 +1,6 @@
 # Gensoko 実装タスク一覧
 
-> 更新日: 2026-06-14
+> 更新日: 2026-06-20
 > ステータス: `[ ]` 未実装 / `[-]` 実装中 / `[x]` 完了
 
 ---
@@ -120,7 +120,7 @@
 - [x] POST /game/sessions（questionSetId受信・正誤判定・スコア計算・苦手自動更新・consecutiveHit・masteredCount更新【設計決定1・2】）
 - [ ] 期限切れ GameQuestionSet クリーンアップ処理（手動実行 + Cron Trigger 想定）
 - [ ] GET /game/sessions（ゲーム履歴一覧）
-- [ ] GET /game/sessions/:sessionId（ゲーム結果詳細取得・/game/result 再読み込み復元） — 計画書: [`docs/plans/game-result-session-restore/plan.md`](plans/game-result-session-restore/plan.md)
+- [x] GET /game/sessions/:sessionId（ゲーム結果詳細取得・/game/result 再読み込み復元） — 計画書: [`docs/plans/game-result-session-restore/plan.md`](plans/game-result-session-restore/plan.md)
 - [ ] ゲーム API のテスト
 
 ## フェーズ8: UI モック（苦手・マイページ・ランキング）
