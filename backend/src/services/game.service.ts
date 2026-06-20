@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import type { Element as PrismaElement, GameMode, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 
@@ -39,6 +40,7 @@ type CreateGameQuestionSetParams = {
   userId: string;
   mode: GameMode;
   now?: Date;
+  choiceIndexGenerator?: () => number;
 };
 
 export class InsufficientWeakElementsError extends Error {
@@ -106,12 +108,12 @@ function buildChoices({
   candidates,
   correctElement,
   answerWithSymbol,
-  questionIndex,
+  correctChoiceIndex,
 }: {
   candidates: readonly PrismaElement[];
   correctElement: PrismaElement;
   answerWithSymbol: boolean;
-  questionIndex: number;
+  correctChoiceIndex: number;
 }): StoredGameChoice[] {
   const distractors = candidates
     .filter((element) => element.id !== correctElement.id)
@@ -121,7 +123,14 @@ function buildChoices({
     throw new Error("選択肢を生成できません");
   }
 
-  const correctChoiceIndex = questionIndex % GAME_CHOICE_COUNT;
+  if (
+    !Number.isInteger(correctChoiceIndex) ||
+    correctChoiceIndex < 0 ||
+    correctChoiceIndex >= GAME_CHOICE_COUNT
+  ) {
+    throw new Error("選択肢を生成できません");
+  }
+
   const choiceElements = [...distractors];
   choiceElements.splice(correctChoiceIndex, 0, correctElement);
 
@@ -160,6 +169,7 @@ function toQuestionSetJson(questions: readonly StoredGameQuestion[]): Prisma.Inp
 function buildStoredQuestions(
   mode: GameMode,
   candidates: readonly PrismaElement[],
+  choiceIndexGenerator: () => number,
 ): StoredGameQuestion[] {
   if (candidates.length < GAME_CHOICE_COUNT) {
     throw new Error("問題を生成できません");
@@ -173,7 +183,7 @@ function buildStoredQuestions(
       candidates,
       correctElement: element,
       answerWithSymbol,
-      questionIndex: index,
+      correctChoiceIndex: choiceIndexGenerator(),
     });
 
     return {
@@ -190,9 +200,10 @@ export async function createGameQuestionSet({
   userId,
   mode,
   now = new Date(),
+  choiceIndexGenerator = () => randomInt(0, GAME_CHOICE_COUNT),
 }: CreateGameQuestionSetParams): Promise<CreateGameQuestionSetResult> {
   const candidates = await getCandidateElements(userId, mode);
-  const questions = buildStoredQuestions(mode, candidates);
+  const questions = buildStoredQuestions(mode, candidates, choiceIndexGenerator);
   const questionsJson = toQuestionSetJson(questions);
   const expiresAt = new Date(now.getTime() + QUESTION_SET_EXPIRES_MS);
 

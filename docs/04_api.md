@@ -169,7 +169,7 @@ Response 200:
     {
       "questionId": "q1",
       "prompt": "H",            // 出題テキスト（記号 or 名前）
-      "choices": [              // 4択の選択肢（正解位置は固定しない）
+      "choices": [              // 4択の選択肢（正解位置はランダム）
         { "choiceId": "1", "text": "水素" },
         { "choiceId": "6", "text": "炭素" },
         { "choiceId": "8", "text": "酸素" },

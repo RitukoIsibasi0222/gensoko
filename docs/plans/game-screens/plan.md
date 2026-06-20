@@ -598,7 +598,7 @@ export function createGameQuestionSet(params: {
 ### 計画からの変更点
 - `GET /game/questions` の契約確定に加え、backend route / service と frontend API client まで実装した。
 - `/game/play` の live API 接続は今回実施しなかった。理由は、正解情報をレスポンスに含めない方針と既存の即時フィードバック UI が衝突するため。画面接続は `POST /game/sessions` の仕様確定と合わせて扱う。
-- `GET /game/questions` は実装したが、フェーズ7の `GET /game/questions（ランダム10問...）` タスクはランダム化・cleanup・画面接続の判断が残るため、本完了記録ではフェーズ6のインターフェース確定のみ完了扱いにした。
+- `GET /game/questions` は実装したが、フェーズ7の `GET /game/questions（ランダム10問...）` タスクは問題候補のランダム抽出・cleanup・画面接続の判断が残るため、本完了記録ではフェーズ6のインターフェース確定のみ完了扱いにした。選択肢内の正解位置は本タスクのレビュー対応でランダム化済み。
 - backend build で既存の `backend/src/middleware/admin/index.ts` の import path 不整合が検出されたため、`../types/index.js` から `../../types/index.js` へ修正した。
 - レビューで、選択肢の先頭が常に正解になる実装を検出したため、正解位置を問題ごとに変える生成ロジックと回帰テストを追加した。
 

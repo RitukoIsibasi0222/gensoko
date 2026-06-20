@@ -131,6 +131,18 @@ const ELEMENTS = [
 ];
 
 const NOW = new Date("2026-06-20T12:00:00.000Z");
+const FIRST_CHOICE_INDEX_GENERATOR = () => 0;
+
+function createChoiceIndexGenerator(indexes: readonly number[]): () => number {
+  let currentIndex = 0;
+
+  return () => {
+    const choiceIndex = indexes[currentIndex % indexes.length];
+    currentIndex += 1;
+
+    return choiceIndex;
+  };
+}
 
 describe("createGameQuestionSet", () => {
   beforeEach(() => {
@@ -151,6 +163,7 @@ describe("createGameQuestionSet", () => {
       userId: "user-1",
       mode: "SYMBOL_TO_NAME_LV1",
       now: NOW,
+      choiceIndexGenerator: FIRST_CHOICE_INDEX_GENERATOR,
     });
 
     expect(result.questionSetId).toBe("question-set-1");
@@ -175,6 +188,7 @@ describe("createGameQuestionSet", () => {
       userId: "user-1",
       mode: "SYMBOL_TO_NAME_LV1",
       now: NOW,
+      choiceIndexGenerator: FIRST_CHOICE_INDEX_GENERATOR,
     });
 
     expect(prisma.gameQuestionSet.create).toHaveBeenCalledWith({
@@ -201,6 +215,7 @@ describe("createGameQuestionSet", () => {
       userId: "user-1",
       mode: "SYMBOL_TO_NAME_LV1",
       now: NOW,
+      choiceIndexGenerator: createChoiceIndexGenerator([0, 1, 2, 3]),
     });
 
     const correctChoiceIndexes = result.questions.slice(0, 4).map((question, index) => {
@@ -217,6 +232,7 @@ describe("createGameQuestionSet", () => {
       userId: "user-1",
       mode: "NAME_TO_SYMBOL_LV1",
       now: NOW,
+      choiceIndexGenerator: FIRST_CHOICE_INDEX_GENERATOR,
     });
 
     expect(result.questions[0]).toMatchObject({
@@ -238,6 +254,7 @@ describe("createGameQuestionSet", () => {
         userId: "user-1",
         mode: "SYMBOL_TO_NAME_LV1",
         now: NOW,
+        choiceIndexGenerator: FIRST_CHOICE_INDEX_GENERATOR,
       }),
     ).rejects.toThrow("問題を生成できません");
     expect(prisma.gameQuestionSet.create).not.toHaveBeenCalled();
@@ -253,6 +270,7 @@ describe("createGameQuestionSet", () => {
         userId: "user-1",
         mode: "WEAK_SYMBOL_TO_NAME",
         now: NOW,
+        choiceIndexGenerator: FIRST_CHOICE_INDEX_GENERATOR,
       }),
     ).rejects.toBeInstanceOf(InsufficientWeakElementsError);
     expect(prisma.gameQuestionSet.create).not.toHaveBeenCalled();
