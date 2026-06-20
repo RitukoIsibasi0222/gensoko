@@ -106,11 +106,11 @@
 ### 画面
 - [x] ゲームモード選択画面 `/game`（モード一覧・苦手5問未満ガード表示） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 - [x] ゲームプレイ画面 `/game/play`（インジケーター・15秒タイマー・4択・正誤フィードバック・1〜4キー操作・A11Y 読み上げ順考慮） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
-- [ ] ゲーム結果画面 `/game/result`（スコア・連続正解・間違え一覧・「もう一度」「ホームへ」） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
+- [ ] ゲーム結果画面 `/game/result`（スコア・連続正解・間違え一覧・「もう一度」「ホームへ」。`POST /game/sessions` の仕様確定・実装後に着手） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 
 ### API インターフェース確定
 - [x] `GET /game/questions` のレスポンス形式（問題・選択肢・questionSetId）を決定 — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
-- [ ] `POST /game/sessions` のリクエスト/レスポンス形式を決定 — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
+- [ ] `POST /game/sessions` のリクエスト/レスポンス形式を決定（`/game/result` の表示元レスポンスを含む） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 
 ## フェーズ7: ゲーム API 本実装
 
