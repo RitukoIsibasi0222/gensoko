@@ -1,3 +1,662 @@
+# `POST /game/sessions` リクエスト/レスポンス形式確定 実装計画
+
+> 設計者ロール: シニアフロントエンドエンジニア（SvelteKit v2 / Svelte 5 Runes、API 契約設計・ゲーム結果画面状態設計・A11Y レビュー）
+> 対象実装者: Codex
+
+## 概要
+
+`docs/05_progress.md` フェーズ6「`POST /game/sessions` のリクエスト/レスポンス形式を決定」を完了する。既存の `GET /game/questions` が作成する `GameQuestionSet` を使い、クライアントは回答内容だけを送信し、正誤判定・スコア計算・苦手リスト更新・統計更新は backend で行う API 契約に確定する。
+
+`/game/result` は `POST /game/sessions` のレスポンスを表示元にする。フロントエンドは正解・スコア・連続正解を計算せず、API レスポンスを同一タブ内の一時 store に保持して結果画面へ遷移する。
+
+### レビュー結果と改善方針
+
+| 観点 | レビュー結果 | 改善方針 |
+|---|---|---|
+| 既存コード整合性 | `GET /game/questions`、`frontend/src/lib/api/game.ts`、`GameSessionAnswerDraft` は実装済み。一方 `/game/play` は mock の `correctChoiceId` で即時正誤表示をしており、live API の正解非露出方針と衝突する | 本番 API 接続時は `GameSessionAnswerDraft` を送信用型として使い、mock 用 `GameAnswerDraft` と分離する。正誤表示は `POST /game/sessions` レスポンス後の `/game/result` に寄せる |
+| 仕様整合性 | `docs/04_api.md` の現行案は 200 response かつ result item の情報が少なく、結果画面で必要な mode / totalCount / duration / playedAt / questionId / prompt が不足する | 作成 API として 201 を採用し、結果画面が追加 fetch なしで描画できる response に拡張する。docs 更新を実装タスクに含める |
+| セキュリティ | client が `isCorrect` や `score` を送れる設計にすると改ざん可能。`questionSetId` の存在有無や他ユーザー所有も漏らしやすい | request は `questionId`, `chosenChoiceId`, `answerTimeSec` のみに限定する。他ユーザー・存在しない問題セットはいずれも 404 にする |
+| A11Y | submit 中・保存失敗・結果画面 reload など、ゲーム完了後の状態が未定義。toast だけだと再試行導線が残らない | submit 中は `aria-busy` と persistent な画面内状態を出す。失敗時は画面内エラーと再試行ボタンを主、toast は補助にする |
+| DB 整合性 | `GameSession`, `GameAnswer`, `WeakElement`, `UserStats`, `GameQuestionSet` 削除が複数テーブルにまたがる。二重送信 race で重複 session が作られるリスクがある | Prisma transaction 内で問題セットを読み、先に `deleteMany` で消費権を確保してから session / answer / stats を作成する。削除件数 0 は二重送信として 409 にする |
+| DB 負荷 | 元素は118件で小さいが、`masteredCount` 再計算を毎問・毎回答で行うと無駄が出る。`GameQuestionSet` cleanup を広範囲に毎回走らせるのも重い | 再計算は session 保存後に1回だけ行う。期限切れ cleanup は別タスクを維持し、この API では対象 questionSet の消費・削除に限定する |
+| テスト | route だけのテストでは score、weak 更新、stats 更新、二重送信 race が漏れる | route / service / frontend API client / helper / result store を分けてテストする。DB 更新順と transaction 失敗時のロールバック観点を service test に含める |
+| スコープ整合性 | 依頼文に「検索・フィルターUI（キーワード・分類・周期）」のプレースホルダーが混在しているが、`docs/05_progress.md` では元素検索 UI は完了済み | 本計画は `POST /game/sessions` と `/game/result` の表示元レスポンスに限定する。元素検索 UI は変更しない |
+
+## 前提条件・依存関係
+
+### 既存の実装（公開インターフェース）
+
+**`docs/05_progress.md`**
+- フェーズ6: `ゲーム結果画面 /game/result` は未実装。
+- フェーズ6: `POST /game/sessions` のリクエスト/レスポンス形式確定は未実装。
+- 設計決定1: 習得状態は `GameAnswer` 集計方式。`POST /game/sessions` 時の `UserStats.masteredCount` 更新はフェーズ7で実装する。
+- 設計決定2: `GET /game/questions` で `GameQuestionSet` を保存し、`POST /game/sessions` で正誤判定後に削除する。
+- 設計決定4: `POST /game/sessions` はユーザーID/IP単位で厳しめの rate limit 対象。
+
+**`docs/04_api.md`**
+- `POST /game/sessions` は認証必須。
+- 現行案は `questionSetId`, `mode`, `answers`, `durationSec` を受け取り、`sessionId`, `correctCount`, `totalScore`, `maxStreak`, `results` を返す。
+- 現行案は結果画面に必要な `mode`, `totalCount`, `durationSec`, `playedAt`, `questionId`, `prompt`, `answerTimeSec` が不足している。
+
+**`backend/prisma/schema.prisma`**
+- `GameQuestionSet`: `id`, `userId`, `mode`, `questions`, `expiresAt`, `createdAt`。
+- `GameSession`: `id`, `userId`, `mode`, `totalScore`, `correctCount`, `totalCount`, `maxStreak`, `durationSec`, `playedAt`。
+- `GameAnswer`: `sessionId`, `elementId`, `isCorrect`, `answerTimeSec`。
+- `WeakElement`: `missCount`, `consecutiveHit`。
+- `UserStats`: `totalGames`, `totalCorrect`, `totalAnswered`, `masteredCount`, `weeklyScore`, `allTimeScore` など。
+- DB スキーマ変更はこの計画では不要。
+
+**`backend/src/routes/game/index.ts`**
+- `GET /questions` 実装済み。
+- `gameQuestionsQuerySchema` と同じ `GameMode` enum 値を使える。
+- `authMiddleware` と `rateLimit()` の利用パターンがある。
+- 500 は `{ error: "サーバーエラーが発生しました" }`。
+
+**`backend/src/services/game.service.ts`**
+- `createGameQuestionSet({ userId, mode })` 実装済み。
+- `GameQuestionSet.questions` は DB 内に `elementId`, `correctChoiceId`, `choices[].elementId` を保持し、公開レスポンスには含めない。
+- `InsufficientWeakElementsError` は日本語 message を持つ。
+
+**`backend/src/services/element-mastery.service.ts`**
+- `getElementMasteryStatusMap(userId, elementIds): Promise<Map<number, ElementMasteryStatus>>`。
+- 直近2回連続正解で `"mastered"` と判定する。
+- transaction client を受け取る公開インターフェースは現状ないため、`masteredCount` を transaction 内で更新する場合は helper の引数拡張または game service 内の transaction 対応 helper が必要。
+
+**`frontend/src/lib/game/types.ts`**
+- `GameMode`
+- `GamePlayQuestion`
+- `GameQuestionsResponse`
+- `GameSessionAnswerDraft`: `{ questionId, chosenChoiceId, answerTimeSec }`
+- `GameAnswerDraft`: mock 用に `isCorrect`, `timedOut` を持つ。
+
+**`frontend/src/lib/api/game.ts`**
+- `getGameQuestions({ mode, accessToken, signal }): Promise<GameQuestionsResponse>`
+- `API_BASE_URL` と `parseErrorResponse()` を使用。
+- 公開レスポンスに `elementId` / `correctChoiceId` が混入した場合は `ApiError(500, ...)`。
+
+**`frontend/src/routes/(app)/game/play/+page.svelte`**
+- 現状は `getMockGameQuestions(mode)` を使い、完了時に画面内で mock 集計を表示する。
+- `mode` は URL query から `normalizeGameModeParam()` で復元する。
+- `authStore.isInitializing`, `authStore.isLoggedIn` を見て表示を分岐する。
+- 回答操作、15秒タイマー、1〜4キー操作、フィードバック UI がある。
+
+**`frontend/src/lib/api/config.ts`**
+- `API_BASE_URL: string`。
+- API ベース URL はここから import し、各ファイルで再定義しない。
+
+**`frontend/src/lib/api/errors.ts`**
+- `ApiError`
+- `parseErrorBody(response)`
+- `parseErrorResponse(response, defaultMessage?)`
+- `response.ok` を JSON parse 前に確認する既存方針。
+
+**`frontend/src/lib/stores/auth.svelte.ts`**
+- `authStore.accessToken`
+- `authStore.isLoggedIn`
+- `authStore.isInitializing`
+
+**`frontend/src/lib/stores/toast.svelte.ts`**
+- `toastStore.error(message)`
+- `toastStore.fromApiError(error)`
+
+### 重要な制約
+
+- クライアントは `isCorrect`, `score`, `correctChoiceId`, `elementId` を request に含めない。
+- 正誤判定・スコア計算・連続正解数計算は backend のみで行う。
+- `questionSetId` はログインユーザー本人の未期限切れセットだけ受け付ける。
+- `GameQuestionSet` は正常保存後に削除し、二重送信を防ぐ。
+- `answers` は `questionId` で照合し、配列順だけに依存しない。
+- `chosenChoiceId: null` は時間切れとして扱う。
+- `answerTimeSec` は 0〜15 の整数だけ許可する。丸めは frontend helper で行い、backend validation は範囲外を弾く。
+- `durationSec` は 0〜1800 の整数だけ許可する。
+- DB アクセスは Prisma ORM 経由。生 SQL は使わない。
+- 複数テーブル更新は Prisma transaction で整合性を保つ。
+- バックエンドのエラー文言は日本語に統一する。
+- フロントエンドは `API_BASE_URL` と `parseErrorResponse()` を再定義しない。
+- `/game/result` は `POST /game/sessions` のレスポンスを source of truth とする。
+- 結果レスポンスは `localStorage` に保存しない。同一タブ内の一時 store に限定する。
+- 依頼文に含まれる「検索・フィルターUI（キーワード・分類・周期）」は本計画の対象外。元素検索 UI は変更しない。
+
+### 確認事項
+
+- `POST /game/sessions` の成功ステータスは本計画では 201 に確定する。既存 `docs/04_api.md` の 200 表記は実装時に更新する。
+- `/game/result` 再読み込み時に結果を復元したい場合は `GET /game/sessions/:sessionId` が必要だが、現行進捗では `GET /game/sessions` 履歴一覧が後続タスクのため、本計画では一時 store 空状態の表示に留める。
+- `UserStats.currentStreak` はログイン streak と混同しやすいため、このタスクでは変更しない。ゲームの連続正解は `GameSession.maxStreak` に保存する。
+
+## 対象ファイル一覧（変更種別つき）
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `docs/04_api.md` | 修正 | `POST /game/sessions` の request / response / error / 結果画面表示元仕様を確定 |
+| `docs/05_progress.md` | 修正 | `POST /game/sessions` 仕様確定タスクを実装中・完了へ更新 |
+| `docs/plans/game-screens/plan.md` | 修正 | 本計画、チェックボックス、実装完了記録を追加 |
+| `backend/src/routes/game/index.ts` | 修正 | `POST /sessions` route、zod body validation、認証、rate limit、エラー処理 |
+| `backend/src/services/game.service.ts` | 修正 | session submit 処理、正誤判定、スコア計算、DB 保存、苦手リスト・統計更新 |
+| `backend/src/routes/game/sessions.test.ts` | 新規 | `POST /game/sessions` route テスト |
+| `backend/src/services/game.service.test.ts` | 修正 | session submit service テスト追加 |
+| `backend/src/services/element-mastery.service.ts` | 修正 | 必要に応じて transaction client 対応 helper を追加 |
+| `backend/src/services/element-mastery.service.test.ts` | 修正 | transaction client 対応または masteredCount 再計算の回帰テスト |
+| `frontend/src/lib/game/types.ts` | 修正 | session request / response / result 表示用型を追加 |
+| `frontend/src/lib/game/play.ts` | 修正 | API 送信用 answer draft 生成・duration 計算 helper を追加 |
+| `frontend/src/lib/game/play.test.ts` | 修正 | 送信用 answer draft、時間境界、duration のテスト追加 |
+| `frontend/src/lib/api/game.ts` | 修正 | `submitGameSession()` API client と runtime validation を追加 |
+| `frontend/src/lib/api/game.test.ts` | 修正 | session submit の URL、body、Authorization、error、validation テスト追加 |
+| `frontend/src/lib/stores/game-session-result.svelte.ts` | 新規 | `/game/result` 表示用の同一タブ内一時 store |
+| `frontend/src/lib/stores/game-session-result.svelte.test.ts` | 新規 | result 保存、sessionId 照合、clear のテスト |
+| `frontend/src/routes/(app)/game/play/+page.svelte` | 修正 | 完了時に `POST /game/sessions` を呼び、成功後 `/game/result?sessionId=...` へ遷移 |
+| `frontend/src/routes/(app)/game/result/+page.svelte` | 新規 | スコア、連続正解、間違え一覧、「もう一度」「ホームへ」表示 |
+| `frontend/src/routes/(app)/game/result/+page.ts` | 新規 | `ssr = true`, `prerender = false` を明示 |
+
+## API 仕様（この機能で使う範囲のみ）
+
+### エラーレスポンス共通形式
+
+```json
+{ "error": "メッセージ文字列" }
+```
+
+バリデーションエラー時:
+
+```json
+{
+  "error": "バリデーションエラー",
+  "details": [
+    { "message": "回答形式が正しくありません" }
+  ]
+}
+```
+
+### POST `/api/v1/game/sessions`
+
+| 項目 | 内容 |
+|---|---|
+| 認証 | 必須。`Authorization: Bearer <accessToken>` |
+| 成功 | 201 |
+| 用途 | `GameQuestionSet` と回答を照合し、ゲーム結果を保存して結果画面用レスポンスを返す |
+| 副作用 | `GameSession` / `GameAnswer` 作成、`WeakElement` 更新、`UserStats` 更新、`GameQuestionSet` 削除 |
+| 正解判定 | server-side only |
+| rate limit | 適用する |
+
+#### Request
+
+```json
+{
+  "questionSetId": "clx_question_set_id",
+  "mode": "SYMBOL_TO_NAME_LV1",
+  "answers": [
+    {
+      "questionId": "q1",
+      "chosenChoiceId": "1",
+      "answerTimeSec": 5
+    },
+    {
+      "questionId": "q2",
+      "chosenChoiceId": null,
+      "answerTimeSec": 15
+    }
+  ],
+  "durationSec": 72
+}
+```
+
+#### Request validation
+
+| フィールド | 型 | 検証 |
+|---|---|---|
+| `questionSetId` | string | 必須、trim 後に空文字不可 |
+| `mode` | `GameMode` | 必須、6種類の enum のみ |
+| `answers` | array | 必須、1件以上。保存済み question 数と一致すること |
+| `answers[].questionId` | string | 必須、trim 後に空文字不可。重複不可。保存済み questionId と一致すること |
+| `answers[].chosenChoiceId` | string \| null | string の場合は trim 後に空文字不可。null は時間切れ |
+| `answers[].answerTimeSec` | number | 0〜15 の整数 |
+| `durationSec` | number | 0〜1800 の整数 |
+
+#### Response 201
+
+```json
+{
+  "sessionId": "clx_game_session_id",
+  "mode": "SYMBOL_TO_NAME_LV1",
+  "correctCount": 8,
+  "totalCount": 10,
+  "totalScore": 1120,
+  "maxStreak": 5,
+  "durationSec": 72,
+  "playedAt": "2026-06-20T12:35:00.000Z",
+  "results": [
+    {
+      "questionId": "q1",
+      "elementId": 1,
+      "prompt": "H",
+      "chosenChoiceId": "1",
+      "isCorrect": true,
+      "correctAnswer": "水素",
+      "yourAnswer": "水素",
+      "answerTimeSec": 5,
+      "score": 150
+    },
+    {
+      "questionId": "q2",
+      "elementId": 2,
+      "prompt": "He",
+      "chosenChoiceId": null,
+      "isCorrect": false,
+      "correctAnswer": "ヘリウム",
+      "yourAnswer": null,
+      "answerTimeSec": 15,
+      "score": 0
+    }
+  ]
+}
+```
+
+#### Error
+
+| ステータス | 条件 | body |
+|---|---|---|
+| 400 | request body 不正、回答数不一致、questionId 重複、未知 questionId、未知 choiceId | `{ "error": "バリデーションエラー", "details": [...] }` |
+| 401 | 未ログイン・token 不正 | `{ "error": "認証が必要です" }` または `{ "error": "トークンが無効です" }` |
+| 403 | 停止・メール未確認・ロック中 | 既存 auth middleware の日本語エラー |
+| 404 | `questionSetId` が存在しない、または他ユーザーの問題セット | `{ "error": "問題セットが見つかりません" }` |
+| 409 | 問題セット期限切れ、mode 不一致、すでに送信済み相当 | `{ "error": "問題セットの有効期限が切れています。もう一度ゲームを開始してください" }` |
+| 429 | レート制限 | `{ "error": "リクエストが多すぎます。しばらく待ってから再試行してください" }` |
+| 500 | DB / 集計失敗 | `{ "error": "サーバーエラーが発生しました" }` |
+
+### スコア計算仕様
+
+```ts
+const BASE_CORRECT_SCORE = 100;
+const TIME_BONUS_PER_SEC = 5;
+const QUESTION_TIME_LIMIT_SEC = 15;
+```
+
+- 不正解・時間切れは `score = 0`。
+- 正解は `score = 100 + (15 - answerTimeSec) * 5`。
+- `answerTimeSec` は整数のため、1問あたりの最大スコアは175、最小正解スコアは100。
+- `totalScore` は各問 `score` の合計。
+- `maxStreak` は request の配列順ではなく、保存済み `GameQuestionSet.questions` の順序に沿って計算する。
+
+## 設計上の決定事項（判断理由つき）
+
+1. **検索条件を URL クエリに反映するか**
+   - 選択: 本機能では検索条件は扱わない。ゲームでは `/game/play?mode=...` と `/game/result?sessionId=...` のみ URL に反映する。
+   - 根拠: 元素検索 UI は完了済み別タスク。ゲーム結果の URL には結果識別子だけを置き、回答内容やスコアを query に載せない。
+
+2. **初期表示時に検索条件をどこから復元するか**
+   - 選択: 検索条件は対象外。`/game/play` は URL query の `mode`、`/game/result` は URL query の `sessionId` と一時 store から復元する。
+   - 根拠: `mode` は再読み込み時も復元可能。結果詳細取得 API がまだないため、`/game/result` 再読み込み時は一時 store がなければ再プレイ導線を表示する。
+
+3. **キーワード入力の反映タイミングをどうするか**
+   - 選択: 対象外。
+   - 根拠: `POST /game/sessions` にキーワード入力は存在しない。回答送信は全問完了後に1回だけ行う。
+
+4. **分類・周期の選択 UI をどう表現するか**
+   - 選択: 対象外。
+   - 根拠: ゲームは `GameMode` で出題範囲を決める。分類・周期フィルターは `/elements` の責務。
+
+5. **検索条件リセット時に API 再取得するか**
+   - 選択: 対象外。ゲームでは「もう一度」で `/game/play?mode=...` に戻り、新しい `GET /game/questions` を取得する。
+   - 根拠: `GameQuestionSet` は1回のゲーム開始につき1つ作成するため、再取得操作は明示的にする。
+
+6. **API パラメータの組み立てをどの層で行うか**
+   - 選択: `frontend/src/lib/api/game.ts` で行う。
+   - 根拠: page / component に API URL や body 変換を埋め込まず、`getGameQuestions()` と同じ API client 層へ集約する。
+
+7. **正規化済みの検索条件をどこで保持するか**
+   - 選択: 検索条件は対象外。正規化済み `mode`、`questionSetId`、送信用 `answers` は `/game/play` の state と helper で一度だけ生成して再利用する。
+   - 根拠: trim や変換処理の重複を防ぐ。送信 body は API client 呼び出し前に確定した値をそのまま使う。
+
+8. **エラー表示に toast を使うか、画面内表示にするか**
+   - 選択: `POST /game/sessions` 失敗時は画面内エラーを主、toast を補助にする。
+   - 根拠: 結果保存失敗はユーザーが次に何をすべきか判断する主状態。toast だけだと再試行導線が残らない。
+
+9. **既存コンポーネントを再利用するか、新規作成するか**
+   - 選択: プレイ画面の既存 `GameProgressIndicator`, `GameTimerBar`, `GameChoiceButton` は再利用する。結果画面は新規 `/game/result/+page.svelte` とし、必要なら小さな表示 helper だけ追加する。
+   - 根拠: プレイ UI は既に整っている。結果画面は表示責務が異なるため page として分離する。
+
+10. **`POST /game/sessions` の成功ステータス**
+    - 選択: 201 Created。
+    - 根拠: `GameSession` を新規作成する API であり、Hono ルート規約の作成系例とも整合する。frontend は `response.ok` で扱うため 200 固定に依存しない。
+
+11. **結果画面へのデータ受け渡し**
+    - 選択: `game-session-result.svelte.ts` の一時 store に API レスポンスを保持し、`/game/result?sessionId=...` へ遷移する。
+    - 根拠: `localStorage` に保存しない。現時点で session detail API がないため、再読み込み時は「結果を表示できません」状態と再プレイ導線を出す。
+
+12. **即時フィードバックの扱い**
+    - 選択: live API 接続後は、プレイ中に正解・不正解を断定表示しない。回答済みフィードバックは「回答を記録しました」程度に留め、正誤は結果画面で表示する。
+    - 根拠: 正解情報をクライアントへ渡さない方針と整合する。mock 専用 `correctChoiceId` を本番型に混ぜない。
+
+13. **問題セット削除タイミング**
+    - 選択: transaction 内で保存前に `deleteMany({ id, userId })` を実行して消費権を確保し、削除件数が1件の場合だけ session 作成へ進む。
+    - 根拠: 二重送信 race を抑えるため。transaction が失敗すれば削除も rollback される。
+
+14. **苦手リスト更新方針**
+    - 選択: 不正解・時間切れは `WeakElement` を upsert して `missCount + 1`, `consecutiveHit = 0`。正解時は既存 `WeakElement` があれば `consecutiveHit + 1`、2連続正解到達で削除する。
+    - 根拠: `WeakElement.consecutiveHit` の用途を明確にし、苦手モードの卒業条件を自動化できる。
+
+15. **`masteredCount` 更新方針**
+    - 選択: `GameAnswer` 作成後、対象ユーザーの習得済み元素数を `GameAnswer` 集計方式で再計算して `UserStats.masteredCount` を更新する。
+    - 根拠: `docs/05_progress.md` 設計決定1と整合する。元素数は118件のため、session 保存ごとの再計算でも初期規模では負荷が小さい。
+
+## 公開インターフェース案（必要な場合）
+
+### `frontend/src/lib/game/types.ts`
+
+```ts
+export type SubmitGameSessionRequest = {
+  questionSetId: string;
+  mode: GameMode;
+  answers: GameSessionAnswerDraft[];
+  durationSec: number;
+};
+
+export type GameSessionResultItem = {
+  questionId: string;
+  elementId: number;
+  prompt: string;
+  chosenChoiceId: string | null;
+  isCorrect: boolean;
+  correctAnswer: string;
+  yourAnswer: string | null;
+  answerTimeSec: number;
+  score: number;
+};
+
+export type GameSessionResultResponse = {
+  sessionId: string;
+  mode: GameMode;
+  correctCount: number;
+  totalCount: number;
+  totalScore: number;
+  maxStreak: number;
+  durationSec: number;
+  playedAt: string;
+  results: GameSessionResultItem[];
+};
+```
+
+### `frontend/src/lib/api/game.ts`
+
+```ts
+export type SubmitGameSessionOptions = {
+  accessToken: string;
+  request: SubmitGameSessionRequest;
+  signal?: AbortSignal;
+};
+
+export function submitGameSession(
+  options: SubmitGameSessionOptions
+): Promise<GameSessionResultResponse>;
+```
+
+### `frontend/src/lib/stores/game-session-result.svelte.ts`
+
+```ts
+export const gameSessionResultStore: {
+  result: GameSessionResultResponse | null;
+  set(result: GameSessionResultResponse): void;
+  clear(): void;
+  matches(sessionId: string | null): boolean;
+};
+```
+
+### `backend/src/services/game.service.ts`
+
+```ts
+export type SubmitGameSessionParams = {
+  userId: string;
+  questionSetId: string;
+  mode: GameMode;
+  answers: {
+    questionId: string;
+    chosenChoiceId: string | null;
+    answerTimeSec: number;
+  }[];
+  durationSec: number;
+  now?: Date;
+};
+
+export type SubmitGameSessionResult = {
+  sessionId: string;
+  mode: GameMode;
+  correctCount: number;
+  totalCount: number;
+  totalScore: number;
+  maxStreak: number;
+  durationSec: number;
+  playedAt: Date;
+  results: GameSessionResultItem[];
+};
+
+export function submitGameSession(
+  params: SubmitGameSessionParams
+): Promise<SubmitGameSessionResult>;
+```
+
+## タスクリスト（進捗管理）
+
+| タスクID | 内容 | ファイル | 完了条件 | 優先度 |
+|---|---|---|---|---|
+| T1 | 既存仕様・既存実装を確認する | `docs/05_progress.md`, `docs/04_api.md`, `docs/plans/game-screens/plan.md`, game 関連 backend/frontend | `GET /game/questions` との接続点、mock UI、`GameQuestionSet` 保存形式を把握する | 高 |
+| T2 | API 契約を docs に確定する | `docs/04_api.md` | request / response / status / error / scoring / `/game/result` 表示元仕様が記載される | 高 |
+| T3 | 進捗を実装中へ更新する | `docs/05_progress.md` | `POST /game/sessions` 仕様確定タスクを `[-]` にする | 中 |
+| T4 | backend body validation を実装する | `backend/src/routes/game/index.ts` | `questionSetId`, `mode`, `answers`, `durationSec` を zod で検証し、日本語 400 を返す | 高 |
+| T5 | backend route を追加する | `backend/src/routes/game/index.ts` | `POST /sessions` が認証・rate limit・service 呼び出し・エラー変換を行う | 高 |
+| T6 | session submit service を実装する | `backend/src/services/game.service.ts` | `GameQuestionSet` 取得、所有者・期限・mode・回答整合性を検証する | 高 |
+| T7 | 正誤判定・スコア計算を実装する | `backend/src/services/game.service.ts` | `correctCount`, `totalScore`, `maxStreak`, 各問結果が server-side で計算される | 高 |
+| T8 | DB 保存 transaction を実装する | `backend/src/services/game.service.ts` | `GameSession`, `GameAnswer`, `WeakElement`, `UserStats`, `GameQuestionSet` 削除が整合する | 高 |
+| T9 | frontend 型定義を追加する | `frontend/src/lib/game/types.ts` | request / response / result item 型が mock 型と分離される | 高 |
+| T10 | API client を実装する | `frontend/src/lib/api/game.ts` | `submitGameSession()` が `API_BASE_URL`, `parseErrorResponse()`, runtime validation を使う | 高 |
+| T11 | 回答送信用 helper を実装する | `frontend/src/lib/game/play.ts` | 本番送信用 `GameSessionAnswerDraft` を `isCorrect` なしで生成できる | 高 |
+| T12 | 結果一時 store を追加する | `frontend/src/lib/stores/game-session-result.svelte.ts` | 同一タブ内で result を保持し、sessionId 照合と clear ができる | 高 |
+| T13 | `/game/play` から submit する | `frontend/src/routes/(app)/game/play/+page.svelte` | 全問完了後に1回だけ submit し、成功時 `/game/result?sessionId=...` へ遷移する | 高 |
+| T14 | submit 中・失敗状態を実装する | `frontend/src/routes/(app)/game/play/+page.svelte` | 二重送信防止、画面内エラー、再試行導線、toast 補助がある | 高 |
+| T15 | 結果画面を実装する | `frontend/src/routes/(app)/game/result/+page.svelte` | スコア、正解数、maxStreak、間違え一覧、「もう一度」「ホームへ」を表示する | 高 |
+| T16 | backend route テストを作成する | `backend/src/routes/game/sessions.test.ts` | 201、400、401、404、409、429相当、500 の主要分岐を検証する | 高 |
+| T17 | backend service テストを追加する | `backend/src/services/game.service.test.ts` | 正誤判定、score、streak、timeout、weak 更新、stats 更新、questionSet 削除を検証する | 高 |
+| T18 | frontend API client テストを追加する | `frontend/src/lib/api/game.test.ts` | POST body、Authorization、AbortSignal、非 JSON エラー、レスポンス形式不正を検証する | 高 |
+| T19 | frontend helper / store テストを追加する | `frontend/src/lib/game/play.test.ts`, `frontend/src/lib/stores/game-session-result.svelte.test.ts` | answer draft、duration、result store の sessionId 照合を検証する | 高 |
+| T20 | lint を実行する | `backend/`, `frontend/` | `npm run lint` が通る | 高 |
+| T21 | format を実行する | `backend/`, `frontend/` | backend は `npm run format:check`、frontend は `npm run format` 後に差分確認 | 高 |
+| T22 | test を実行する | `backend/`, `frontend/` | backend `npm run test -- --run`、frontend `npm run test:run` が通る | 高 |
+| T23 | 手動確認を実施する | ブラウザ | `/game` -> `/game/play` -> `/game/result` の主要導線を確認する | 高 |
+| T24 | 実装完了更新を行う | `docs/05_progress.md`, `docs/plans/game-screens/plan.md` | 進捗を `[x]` にし、実装完了セクションへ変更点・実ファイル・確認結果を記録する | 中 |
+
+- [ ] T1: 既存仕様・既存実装を確認する
+- [ ] T2: API 契約を docs に確定する
+- [ ] T3: 進捗を実装中へ更新する
+- [ ] T4: backend body validation を実装する
+- [ ] T5: backend route を追加する
+- [ ] T6: session submit service を実装する
+- [ ] T7: 正誤判定・スコア計算を実装する
+- [ ] T8: DB 保存 transaction を実装する
+- [ ] T9: frontend 型定義を追加する
+- [ ] T10: API client を実装する
+- [ ] T11: 回答送信用 helper を実装する
+- [ ] T12: 結果一時 store を追加する
+- [ ] T13: `/game/play` から submit する
+- [ ] T14: submit 中・失敗状態を実装する
+- [ ] T15: 結果画面を実装する
+- [ ] T16: backend route テストを作成する
+- [ ] T17: backend service テストを追加する
+- [ ] T18: frontend API client テストを追加する
+- [ ] T19: frontend helper / store テストを追加する
+- [ ] T20: lint を実行する
+- [ ] T21: format を実行する
+- [ ] T22: test を実行する
+- [ ] T23: 手動確認を実施する
+- [ ] T24: 実装完了更新を行う
+
+## 技術的注意点
+
+- route 入口で zod validation を行い、service に未検証値を渡さない。
+- backend import path は `.js` 拡張子を付ける。
+- `PrismaClient` は既存 `backend/src/lib/prisma.ts` を使う。
+- `GameQuestionSet.questions` は `unknown` として扱い、service 内で runtime validation してから正誤判定する。
+- `questionSetId` が他ユーザーのものでも 404 にし、存在有無を漏らさない。
+- `GameQuestionSet.expiresAt < now` の場合は 409 を返し、該当 set は削除してよい。
+- `chosenChoiceId` が null の場合は時間切れ。不正解かつ `yourAnswer: null`。
+- `chosenChoiceId` が保存済み choices に存在しない場合は 400。
+- 回答数・questionId 集合が保存済み question 集合と一致しない場合は 400。
+- `GameSession.totalCount` は保存済み question 数を使い、client の値は受け取らない。
+- `UserStats` が存在しない場合は upsert する。
+- `masteredCount` は `GameAnswer` 保存後の状態をもとに更新する。
+- frontend は `response.ok` を JSON parse より先に判定する。
+- frontend runtime validation は `results` の各フィールドまで確認する。
+- `/game/play` の submit 中は回答キー操作・再送信操作を抑止する。
+- `/game/result` は reload で store が空の場合、クラッシュせず「結果を表示できません」と再プレイ導線を表示する。
+- mock 用 `GameAnswerDraft.isCorrect` を本番送信型に混ぜない。
+- API 仕様や変換ロジックを Svelte component に過剰に埋め込まない。
+
+## A11Y要件
+
+| 対象 | 要件 |
+|---|---|
+| submit 中 | `aria-busy="true"` を使い、保存中であることを画面内テキストで表示する |
+| submit 失敗 | toast だけに依存せず、画面内にエラー本文と再試行導線を残す |
+| 結果画面 | 結果サマリーを見出し直後に置き、正解数・スコア・連続正解をテキストで読めるようにする |
+| 間違え一覧 | 色だけに依存せず、「あなたの回答」「正解」を明示する |
+| 時間切れ | `yourAnswer: null` を「未回答」と表示する |
+| キーボード | submit 中・結果画面で 1〜4 キーが誤回答として扱われない |
+| focus | submit 成功後は結果見出しへ自然に移動できる構成にする。失敗時は再試行ボタンへ到達しやすくする |
+| レスポンシブ | 390px 幅で score cards、結果一覧、長い元素名が横にはみ出さない |
+
+## DB整合性・負荷に関する注意
+
+- `POST /game/sessions` は1回のゲームにつき1回だけ呼ぶ。
+- transaction 内では、問題セットを読み取った後、session 作成より前に `deleteMany` で消費権を確保する。
+- `GameQuestionSet` 削除件数が 0 の場合は、すでに送信済みまたは race とみなし 409 を返す。
+- `GameAnswer` は保存済み questions の順序で作成し、request の順序には依存しない。
+- `WeakElement` 更新は対象 element ごとに限定し、全 weak list を毎回読み直さない。
+- `masteredCount` 再計算は session 保存ごとに1回だけ行う。118元素規模では許容範囲。
+- 期限切れ `GameQuestionSet` の広範囲 cleanup はフェーズ7の別タスクに残し、この API で毎回全件 cleanup しない。
+- ranking 用の `weeklyScore` / `allTimeScore` は `totalScore` を加算する。`currentStreak` はこのタスクでは変更しない。
+- DB スキーマ変更は行わないため migration / `prisma migrate deploy` は不要。
+
+## テストケース一覧
+
+| ケース | 期待結果 |
+|---|---|
+| 初期表示で一覧が取得される | 対象外。元素検索 UI の既存テストで扱う |
+| キーワードで検索できる | 対象外。元素検索 UI の既存テストで扱う |
+| キーワード前後の空白が正規化される | 対象外。元素検索 UI の既存テストで扱う |
+| 空文字キーワードは未指定として扱われる | 対象外。元素検索 UI の既存テストで扱う |
+| 分類で絞り込める | 対象外。元素検索 UI の既存テストで扱う |
+| 周期で絞り込める | 対象外。元素検索 UI の既存テストで扱う |
+| キーワード・分類・周期を組み合わせて絞り込める | 対象外。元素検索 UI の既存テストで扱う |
+| 条件リセットで初期状態に戻る | ゲームでは「もう一度」で同じ mode の新しい問題セットを取得する |
+| 有効な request | 201 で session result response を返す |
+| 未ログイン | 401 の日本語エラー |
+| token 不正 | 401 の日本語エラー |
+| request body 不正 | 400 バリデーションエラー |
+| `questionSetId` 不存在 | 404 `問題セットが見つかりません` |
+| 他ユーザーの `questionSetId` | 404 `問題セットが見つかりません` |
+| 期限切れ問題セット | 409 の日本語エラー |
+| mode 不一致 | 409 の日本語エラー |
+| answers が不足 | 400 バリデーションエラー |
+| answers に重複 questionId | 400 バリデーションエラー |
+| unknown questionId | 400 バリデーションエラー |
+| unknown chosenChoiceId | 400 バリデーションエラー |
+| chosenChoiceId null | 時間切れとして不正解、`yourAnswer: null`, `score: 0` |
+| 正解回答 | `isCorrect: true`、score が計算される |
+| 不正解回答 | `isCorrect: false`、score 0 |
+| maxStreak | 保存済み question 順で最大連続正解数が計算される |
+| GameSession 保存 | userId, mode, totalScore, correctCount, totalCount, durationSec が保存される |
+| GameAnswer 保存 | 各問の elementId, isCorrect, answerTimeSec が保存される |
+| WeakElement 不正解 | upsert され、missCount 増加、consecutiveHit 0 |
+| WeakElement 正解 | 既存 weak の consecutiveHit が増加し、2到達で削除される |
+| UserStats 更新 | totalGames, totalCorrect, totalAnswered, weeklyScore, allTimeScore, masteredCount が更新される |
+| GameQuestionSet 削除 | 成功後に該当 questionSet が削除され、二重送信できない |
+| API エラー時に既存規約に沿ってエラー表示される | backend の日本語 message を frontend が上書きしない |
+| ローディング中に不自然な二重送信や UI 破綻が起きない | submit 中はボタン・キー操作が抑止される |
+| 検索結果 0 件時の空状態が表示される | 対象外。ゲーム result では store 空時・結果なし時の空状態を表示する |
+| URL クエリを使う設計の場合、再読み込み後に条件が復元される | `/game/play?mode=...` は復元される。`/game/result?sessionId=...` は store が空なら再プレイ導線を表示する |
+| API client の非 JSON エラー | default message の `ApiError` を throw する |
+| API client のレスポンス形式不正 | `ApiError(500, "ゲーム結果のレスポンス形式が不正です", data)` |
+| `/game/result` 表示 | スコア、正解数、maxStreak、間違え一覧、「もう一度」「ホームへ」が表示される |
+| lint | backend / frontend の lint が通る |
+| format | Prettier が通る |
+| test | backend / frontend の対象テストが通る |
+
+## 実装リスクと回避策
+
+| リスク | 影響 | 回避策 |
+|---|---|---|
+| client が `isCorrect` や `score` を送る設計になる | 改ざん可能になる | request 型に含めず、backend validation でも未知 key を strip または拒否する |
+| `GameQuestionSet.questions` の JSON 形式崩れ | 500 や誤判定につながる | service 内 runtime validation とテストを追加する |
+| 二重送信で複数 session が保存される | スコア・統計が重複する | transaction 内で先に questionSet の消費権を確保し、削除件数 0 は 409 にする |
+| 結果画面 reload で表示不能 | ユーザーが混乱する | store 空状態専用 UI と再プレイ導線を用意する |
+| 即時正誤フィードバックを維持しようとして正解を公開する | セキュリティ方針と矛盾する | live API では正誤は結果画面で表示する |
+| WeakElement 更新と GameAnswer 保存がズレる | 苦手リストが不正確になる | Prisma transaction でまとめる |
+| masteredCount の再計算漏れ | 習得バッジ・統計がズレる | service test に masteredCount 更新ケースを入れる |
+| 非 JSON 502/504 で画面がクラッシュする | エラー表示できない | `parseErrorResponse()` を使い、JSON parse を try-catch する |
+| API docs と実装の status がズレる | frontend test が不安定になる | `docs/04_api.md` と `game.test.ts` の期待値を同じタスクで更新する |
+| 依頼文の検索 UI プレースホルダーを実装対象と誤認する | 不要な変更が入る | 計画内で対象外と明記し、タスクを `POST /game/sessions` に限定する |
+
+## 手動確認項目
+
+| 項目 | 確認内容 |
+|---|---|
+| `/game` から開始 | モード選択後 `/game/play?mode=...` に遷移する |
+| 問題取得 | `GET /game/questions` が成功し、10問が表示される |
+| 全問回答 | 全問回答後に `POST /game/sessions` が1回だけ送信される |
+| 時間切れ | 時間切れ回答が `chosenChoiceId: null` で送信される |
+| submit 中 | 二重クリック・1〜4キー連打で二重送信されない |
+| 結果遷移 | 成功後 `/game/result?sessionId=...` に遷移する |
+| 結果表示 | スコア、正解数、maxStreak、間違え一覧が API レスポンス通りに表示される |
+| もう一度 | 同じ mode で新しいゲームを開始できる |
+| ホームへ | `/` または `/game` へ戻れる |
+| 未ログイン | ログイン導線または 401 エラーが日本語で表示される |
+| 期限切れ | 409 エラーと再開始導線が表示される |
+| API 500 | 画面内エラーと再試行導線が表示される |
+| 非 JSON エラー | クラッシュせず fallback message が表示される |
+| result reload | store 空状態で「結果を表示できません」と再プレイ導線が表示される |
+| PC 幅 | 結果カード・間違え一覧が既存 layout 内に収まる |
+| モバイル幅 390px | スコア、ボタン、長い元素名がはみ出さない |
+| キーボード | submit 中・結果画面で不自然なフォーカス移動がない |
+| コンソール | hydration mismatch や未処理 promise rejection が出ない |
+
+## 実装完了時の更新ルール
+
+実装完了時は以下を必ず行う。
+
+- `docs/05_progress.md` の `POST /game/sessions のリクエスト/レスポンス形式を決定` を `[x]` に更新する。
+- `/game/result` 画面まで実装した場合は、`ゲーム結果画面 /game/result` も `[x]` に更新する。
+- `docs/plans/game-screens/plan.md` の該当チェックボックスを `[x]` に更新する。
+- `docs/04_api.md` の `POST /game/sessions` が実装と一致していることを確認する。
+- API status、エラー文言、request / response field が変更された場合は必ず docs と tests を同時に更新する。
+- 計画と実装で変更ファイルが異なった場合、対象ファイル一覧を実態に合わせて更新する。
+- 設計判断が変わった場合、`## 実装完了` の「計画からの変更点」に記録する。
+- 実行した lint / format / test / 手動確認を `## 実装完了` に記録する。
+
+```markdown
+## 実装完了
+- 完了日: YYYY-MM-DD
+- 実装ブランチ: feature/game-sessions
+- PR: #N
+
+### 計画からの変更点
+- なし
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `docs/04_api.md` | 修正 | `POST /game/sessions` 仕様を確定 |
+
+### 実行した確認
+| 種別 | コマンド / 手順 | 結果 |
+|---|---|---|
+| lint | `cd backend && npm run lint` | 未実行 / 成功 |
+| lint | `cd frontend && npm run lint` | 未実行 / 成功 |
+| format | `cd backend && npm run format:check` | 未実行 / 成功 |
+| format | `cd frontend && npm run format` | 未実行 / 成功 |
+| test | `cd backend && npm run test -- --run` | 未実行 / 成功 |
+| test | `cd frontend && npm run test:run` | 未実行 / 成功 |
+| 手動確認 | `/game` -> `/game/play` -> `/game/result` | 未実行 / 成功 |
+```
+
+---
+
 # `GET /game/questions` レスポンス形式確定 実装計画
 
 > 設計者ロール: シニアフルスタックエンジニア（Hono v4 / Prisma v7 / SvelteKit v2、API 契約設計・ゲーム状態設計・A11Y レビュー）
