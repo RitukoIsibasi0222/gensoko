@@ -196,6 +196,22 @@ describe("createGameQuestionSet", () => {
     });
   });
 
+  it("正解選択肢の位置を先頭に固定しない", async () => {
+    const result = await createGameQuestionSet({
+      userId: "user-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      now: NOW,
+    });
+
+    const correctChoiceIndexes = result.questions.slice(0, 4).map((question, index) => {
+      const correctChoiceId = String(index + 1);
+
+      return question.choices.findIndex((choice) => choice.choiceId === correctChoiceId);
+    });
+
+    expect(correctChoiceIndexes).toEqual([0, 1, 2, 3]);
+  });
+
   it("名前→記号モードでは日本語名を prompt にし、選択肢を記号にする", async () => {
     const result = await createGameQuestionSet({
       userId: "user-1",

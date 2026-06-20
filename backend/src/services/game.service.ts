@@ -108,10 +108,12 @@ function buildChoices({
   candidates,
   correctElement,
   answerWithSymbol,
+  questionIndex,
 }: {
   candidates: readonly PrismaElement[];
   correctElement: PrismaElement;
   answerWithSymbol: boolean;
+  questionIndex: number;
 }): StoredGameChoice[] {
   const distractors = candidates
     .filter((element) => element.id !== correctElement.id)
@@ -121,7 +123,11 @@ function buildChoices({
     throw new Error("選択肢を生成できません");
   }
 
-  return [correctElement, ...distractors].map((element) => ({
+  const correctChoiceIndex = questionIndex % GAME_CHOICE_COUNT;
+  const choiceElements = [...distractors];
+  choiceElements.splice(correctChoiceIndex, 0, correctElement);
+
+  return choiceElements.map((element) => ({
     choiceId: String(element.id),
     elementId: element.id,
     text: getChoiceText(element, answerWithSymbol),
@@ -151,6 +157,7 @@ function buildStoredQuestions(
       candidates,
       correctElement: element,
       answerWithSymbol,
+      questionIndex: index,
     });
 
     return {

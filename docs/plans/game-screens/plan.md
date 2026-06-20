@@ -178,7 +178,7 @@
 | 用途 | 指定 mode の10問・4択と `questionSetId` を取得する |
 | 副作用 | `GameQuestionSet` を作成し、30分後の `expiresAt` を設定する |
 | 正解情報 | レスポンスに含めない |
-| 並び順 | questions と choices は生成済みの順序をそのまま使う |
+| 並び順 | questions は生成済みの順序、choices はサーバー生成順。正解位置は固定しない |
 
 #### Query params
 
@@ -600,6 +600,7 @@ export function createGameQuestionSet(params: {
 - `/game/play` の live API 接続は今回実施しなかった。理由は、正解情報をレスポンスに含めない方針と既存の即時フィードバック UI が衝突するため。画面接続は `POST /game/sessions` の仕様確定と合わせて扱う。
 - `GET /game/questions` は実装したが、フェーズ7の `GET /game/questions（ランダム10問...）` タスクはランダム化・cleanup・画面接続の判断が残るため、本完了記録ではフェーズ6のインターフェース確定のみ完了扱いにした。
 - backend build で既存の `backend/src/middleware/admin/index.ts` の import path 不整合が検出されたため、`../types/index.js` から `../../types/index.js` へ修正した。
+- レビューで、選択肢の先頭が常に正解になる実装を検出したため、正解位置を問題ごとに変える生成ロジックと回帰テストを追加した。
 
 ### 実際の変更ファイル
 | ファイル | 変更種別 | 内容 |
@@ -612,7 +613,7 @@ export function createGameQuestionSet(params: {
 | `backend/src/routes/game/index.ts` | 修正 | `GET /questions` route、認証、rate limit、zod validation、エラー処理を追加 |
 | `backend/src/routes/game/questions.test.ts` | 新規 | `GET /game/questions` route テストを追加 |
 | `backend/src/services/game.service.ts` | 修正 | 問題生成、4択生成、`GameQuestionSet` 保存、公開レスポンス変換を追加 |
-| `backend/src/services/game.service.test.ts` | 新規 | 問題生成・保存形式・正解非露出・苦手不足の service テストを追加 |
+| `backend/src/services/game.service.test.ts` | 新規 | 問題生成・保存形式・正解非露出・正解位置固定防止・苦手不足の service テストを追加 |
 | `frontend/src/lib/api/game.ts` | 新規 | `getGameQuestions()` API client と runtime validation を追加 |
 | `frontend/src/lib/api/game.test.ts` | 新規 | game API client テストを追加 |
 | `frontend/src/lib/game/types.ts` | 修正 | `GameQuestionsResponse`, `GameApiQuestion`, `GameSessionAnswerDraft` を追加 |
@@ -621,7 +622,7 @@ export function createGameQuestionSet(params: {
 | コマンド | 結果 |
 |---|---|
 | `cd backend && npm run test -- --run src/services/game.service.test.ts src/routes/game/questions.test.ts` | Red: `createGameQuestionSet` / `gameRouter` 未実装で失敗 |
-| `cd backend && npm run test -- --run src/services/game.service.test.ts src/routes/game/questions.test.ts` | Green: OK（2 files / 9 tests） |
+| `cd backend && npm run test -- --run src/services/game.service.test.ts src/routes/game/questions.test.ts` | Green: OK（2 files / 10 tests） |
 | `cd frontend && npm run test:run -- src/lib/api/game.test.ts` | Red: `frontend/src/lib/api/game.ts` 未作成で失敗 |
 | `cd frontend && npm run test:run -- src/lib/api/game.test.ts` | Green: OK（1 file / 6 tests） |
 | `cd backend && npm run format` | OK |
@@ -631,7 +632,7 @@ export function createGameQuestionSet(params: {
 | `cd backend && npm run build` | OK |
 | `cd frontend && npm run lint` | OK |
 | `cd frontend && npm run check` | OK（0 errors / 0 warnings） |
-| `cd backend && npm run test -- --run` | OK（21 files / 160 tests） |
+| `cd backend && npm run test -- --run` | OK（21 files / 161 tests） |
 | `cd frontend && npm run test:run` | OK（14 files / 176 tests） |
 
 ### 手動確認
