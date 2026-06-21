@@ -116,7 +116,7 @@
 | `frontend/src/routes/(app)/game/play/+page.svelte` | 確認           | 期限切れ時の再開始・再取得導線が壊れないことを確認                                        |
 | `docs/04_api.md`                                   | 確認           | 公開 API 変更がないため更新不要であることを確認                                           |
 | `docs/05_progress.md`                              | 修正           | 対象タスクに本計画書リンクを追加し、実装完了時に `[x]` へ更新                             |
-| `docs/plans/game-question-set-cleanup/plan.md`     | 新規           | 本計画。実装完了時にチェックボックスと `## 実装完了` を更新                               |
+| `docs/plans/game-question-set-cleanup/plan.md`     | 修正           | 本計画。実装完了時にチェックボックスと `## 実装完了` を更新                               |
 
 ## API 仕様（この機能で使う範囲のみ）
 
@@ -250,24 +250,24 @@ export function cleanupExpiredGameQuestionSets(
 | T17      | 手動確認を行う                                        | `backend`, `/game/play`, `/game/result`                                                                                                  | 手動 cleanup、削除0件、既存ゲーム導線、期限切れ導線を確認する                           | 高     |
 | T18      | docs 更新要否を確認し、完了記録を残す                 | `docs/04_api.md`, `docs/05_progress.md`, 本計画                                                                                          | API 変更なしなら `docs/04_api.md` は未変更、進捗と plan は実装完了更新される            | 高     |
 
-- [ ] T1: 既存仕様・既存実装を確認する（`docs/05_progress.md`, `docs/04_api.md`, `docs/12_task_guide.md`, `backend/src/services/game.service.ts`, `backend/prisma/schema.prisma`）
-- [ ] T2: job の型・公開インターフェースを実装する（`backend/src/jobs/cleanupGameQuestionSets.ts`）
-- [ ] T3: Prisma `deleteMany` による削除処理を実装する（`backend/src/jobs/cleanupGameQuestionSets.ts`）
-- [ ] T4: 構造化ログ方針を実装する（`backend/src/jobs/cleanupGameQuestionSets.ts`）
-- [ ] T5: 手動実行 entrypoint を追加する（`backend/src/jobs/cleanupGameQuestionSets.cli.ts`, `backend/package.json`）
-- [ ] T6: Cron Trigger 想定の再利用性を確認する（`backend/src/jobs/cleanupGameQuestionSets.ts`）
-- [ ] T7: API client / 型定義 / validation の変更要否を確認する（`backend/src/types/index.ts`, `frontend/src/lib/api/game.ts`, `frontend/src/lib/api/errors.ts`）
-- [ ] T8: 状態管理・UI 影響を確認する（`frontend/src/routes/(app)/game/play/+page.svelte`, `frontend/src/lib/stores/toast.svelte.ts`）
-- [ ] T9: reload / 戻る / 直接アクセス時の扱いを確認する（`frontend/src/routes/(app)/game/play/+page.svelte`, `frontend/src/routes/(app)/game/result/+page.svelte`）
-- [ ] T10: ローディング・空状態・エラー状態を確認する（CLI, 既存 game 画面）
-- [ ] T11: job テストを作成する（`backend/src/jobs/cleanupGameQuestionSets.test.ts`）
-- [ ] T12: 既存ゲーム系テストとの整合を確認する（`backend/src/services/game.service.test.ts`, `backend/src/routes/game/sessions.test.ts`）
-- [ ] T13: DB index / migration 要否を確認する（`backend/prisma/schema.prisma`, `backend/prisma/migrations/`）
-- [ ] T14: backend lint を実行する（`backend`）
-- [ ] T15: backend format を実行・確認する（`backend`）
-- [ ] T16: backend test を実行する（`backend`）
-- [ ] T17: 手動確認を行う（`backend`, `/game/play`, `/game/result`）
-- [ ] T18: docs 更新要否を確認し、完了記録を残す（`docs/04_api.md`, `docs/05_progress.md`, 本計画）
+- [x] T1: 既存仕様・既存実装を確認する（`docs/05_progress.md`, `docs/04_api.md`, `docs/12_task_guide.md`, `backend/src/services/game.service.ts`, `backend/prisma/schema.prisma`）
+- [x] T2: job の型・公開インターフェースを実装する（`backend/src/jobs/cleanupGameQuestionSets.ts`）
+- [x] T3: Prisma `deleteMany` による削除処理を実装する（`backend/src/jobs/cleanupGameQuestionSets.ts`）
+- [x] T4: 構造化ログ方針を実装する（`backend/src/jobs/cleanupGameQuestionSets.ts`）
+- [x] T5: 手動実行 entrypoint を追加する（`backend/src/jobs/cleanupGameQuestionSets.cli.ts`, `backend/package.json`）
+- [x] T6: Cron Trigger 想定の再利用性を確認する（`backend/src/jobs/cleanupGameQuestionSets.ts`）
+- [x] T7: API client / 型定義 / validation の変更要否を確認する（`backend/src/types/index.ts`, `frontend/src/lib/api/game.ts`, `frontend/src/lib/api/errors.ts`）
+- [x] T8: 状態管理・UI 影響を確認する（`frontend/src/routes/(app)/game/play/+page.svelte`, `frontend/src/lib/stores/toast.svelte.ts`）
+- [x] T9: reload / 戻る / 直接アクセス時の扱いを確認する（`frontend/src/routes/(app)/game/play/+page.svelte`, `frontend/src/routes/(app)/game/result/+page.svelte`）
+- [x] T10: ローディング・空状態・エラー状態を確認する（CLI, 既存 game 画面）
+- [x] T11: job テストを作成する（`backend/src/jobs/cleanupGameQuestionSets.test.ts`）
+- [x] T12: 既存ゲーム系テストとの整合を確認する（`backend/src/services/game.service.test.ts`, `backend/src/routes/game/sessions.test.ts`）
+- [x] T13: DB index / migration 要否を確認する（`backend/prisma/schema.prisma`, `backend/prisma/migrations/`）
+- [x] T14: backend lint を実行する（`backend`）
+- [x] T15: backend format を実行・確認する（`backend`）
+- [x] T16: backend test を実行する（`backend`）
+- [x] T17: 手動確認を行う（`backend`, `/game/play`, `/game/result`）
+- [x] T18: docs 更新要否を確認し、完了記録を残す（`docs/04_api.md`, `docs/05_progress.md`, 本計画）
 
 ## 技術的注意点
 
@@ -363,3 +363,41 @@ export function cleanupExpiredGameQuestionSets(
 | `backend/src/jobs/cleanupGameQuestionSets.cli.ts`  | 新規     | 手動実行 entrypoint                  |
 | `backend/package.json`                             | 修正     | 手動実行 script 追加                 |
 ```
+
+## 実装完了
+
+- 完了日: 2026-06-21
+- 実装ブランチ: feature/game-question-set-cleanup
+- PR: 作成前（PR 作成後に追記）
+
+### 計画からの変更点
+
+- `docs/04_api.md` は公開 API 変更がないため更新しなかった。
+- DB schema / migration は変更しなかった。`@@index([expiresAt])` と migration `20260620172000_add_game_session_indexes` の `game_question_sets_expiresAt_idx` を確認した。
+- WSL ホスト直実行の `npm run cleanup:game-question-sets` は DB 接続に失敗したが、Docker backend コンテナ内の同コマンドは成功した。失敗時ログは内部エラー詳細を出さず、非0終了になることを確認した。
+- Cloudflare Workers の `scheduled` handler / wrangler 設定 / 失敗通知は計画どおり後続の定期バッチ運用設計タスクで扱う。
+
+### 実際の変更ファイル
+
+| ファイル                                           | 変更種別 | 内容                                 |
+| -------------------------------------------------- | -------- | ------------------------------------ |
+| `backend/src/jobs/cleanupGameQuestionSets.ts`      | 新規     | 期限切れ GameQuestionSet cleanup job |
+| `backend/src/jobs/cleanupGameQuestionSets.test.ts` | 新規     | cleanup job テスト                   |
+| `backend/src/jobs/cleanupGameQuestionSets.cli.ts`  | 新規     | 手動実行 entrypoint                  |
+| `backend/package.json`                             | 修正     | 手動実行 script 追加                 |
+| `docs/05_progress.md`                              | 修正     | 対象タスクの進捗を更新               |
+| `docs/plans/game-question-set-cleanup/plan.md`     | 修正     | チェックボックスと実装完了記録       |
+
+### 検証結果
+
+| 確認 | 結果 |
+| ---- | ---- |
+| Red: `npm run test -- src/jobs/cleanupGameQuestionSets.test.ts --run` | 実装前に `Cannot find module './cleanupGameQuestionSets.js'` で失敗することを確認 |
+| Green: `npm run test -- src/jobs/cleanupGameQuestionSets.test.ts --run` | 4 tests passed |
+| `npm run format` | 成功 |
+| `npm run lint` | 成功 |
+| `npm run format:check` | 成功 |
+| `npm run test -- --run` | 成功（26 files / 213 tests） |
+| `docker compose exec -T hono npm run cleanup:game-question-sets` | 成功（`deletedCount=17`） |
+| WSL host: `npm run cleanup:game-question-sets` | DB 接続に失敗し、詳細を漏らさない失敗ログと非0終了を確認 |
+
