@@ -74,6 +74,7 @@
     if (authStore.isInitializing) {
       restoreStatus = 'loading';
       restoreMessage = null;
+      activeRequestKey = null;
       return;
     }
 
@@ -122,6 +123,9 @@
 
     return () => {
       controller.abort();
+      if (activeRequestKey === requestKey) {
+        activeRequestKey = null;
+      }
     };
   });
 

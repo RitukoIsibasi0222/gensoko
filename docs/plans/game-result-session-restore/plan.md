@@ -515,7 +515,7 @@ export function normalizeGameSessionIdParam(value: string | null | undefined): s
 
 - 完了日: 2026-06-20
 - 実装ブランチ: feature/game-result-session-restore
-- PR: 未作成
+- PR: [#54](https://github.com/RitukoIsibasi0222/gensoko/pull/54)
 
 ### 計画からの変更点
 
