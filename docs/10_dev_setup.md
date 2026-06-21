@@ -169,7 +169,7 @@ services:
     volumes:
       - ./frontend:/app
     environment:
-      - VITE_API_URL=http://localhost:3000
+      - VITE_API_BASE_URL=http://localhost:3000/api/v1
     command: sh -c "npm install && npm run dev -- --host"
 
   postgres:
@@ -299,7 +299,7 @@ docker compose exec sveltekit npm install -D @sveltejs/adapter-static
 
 `frontend/.env` を作成：
 ```env
-VITE_API_URL=http://localhost:3000
+VITE_API_BASE_URL=http://localhost:3000/api/v1
 ```
 
 ---
