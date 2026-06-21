@@ -87,7 +87,7 @@
 
       weakCount = null;
       weakLoadStatus = 'error';
-      loadedWeakRequestKey = requestKey;
+      loadedWeakRequestKey = null;
 
       if (error instanceof ApiError) {
         weakLoadError = error.message;
