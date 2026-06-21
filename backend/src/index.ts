@@ -6,6 +6,7 @@ import { authRouter } from "./routes/auth/index.js";
 import { elementsRouter } from "./routes/elements/index.js";
 import { gameRouter } from "./routes/game/index.js";
 import { usersRouter } from "./routes/users/index.js";
+import { weakRouter } from "./routes/weak/index.js";
 import type { AppVariables } from "./types/index.js";
 
 const app = new Hono<{ Variables: AppVariables }>();
@@ -36,6 +37,7 @@ app.route("/api/v1/auth", authRouter);
 app.route("/api/v1/elements", elementsRouter);
 app.route("/api/v1/game", gameRouter);
 app.route("/api/v1/users", usersRouter);
+app.route("/api/v1/weak", weakRouter);
 
 // サーバー起動
 const port = Number(process.env.PORT ?? 3000);
