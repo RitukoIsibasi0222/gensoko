@@ -2,8 +2,7 @@ import { prisma } from "../lib/prisma.js";
 
 const CLEANUP_COMPLETED_EVENT = "game_question_sets.cleanup.completed";
 const CLEANUP_FAILED_EVENT = "game_question_sets.cleanup.failed";
-const CLEANUP_FAILED_MESSAGE =
-  "\u671f\u9650\u5207\u308c\u554f\u984c\u30bb\u30c3\u30c8\u306e\u524a\u9664\u306b\u5931\u6557\u3057\u307e\u3057\u305f";
+const CLEANUP_FAILED_MESSAGE = "期限切れ問題セットの削除に失敗しました";
 
 export type CleanupGameQuestionSetsResult = {
   deletedCount: number;
@@ -36,12 +35,12 @@ export async function cleanupExpiredGameQuestionSets({
     });
 
     return result;
-  } catch (error) {
+  } catch {
     logger.error({
       event: CLEANUP_FAILED_EVENT,
       message: CLEANUP_FAILED_MESSAGE,
       cutoff: cutoff.toISOString(),
     });
-    throw error;
+    throw new Error(CLEANUP_FAILED_MESSAGE);
   }
 }

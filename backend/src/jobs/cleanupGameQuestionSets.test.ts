@@ -12,8 +12,7 @@ import { prisma } from "../lib/prisma.js";
 import { cleanupExpiredGameQuestionSets } from "./cleanupGameQuestionSets.js";
 
 const NOW = new Date("2026-06-21T09:00:00.000Z");
-const FAILURE_MESSAGE =
-  "\u671f\u9650\u5207\u308c\u554f\u984c\u30bb\u30c3\u30c8\u306e\u524a\u9664\u306b\u5931\u6557\u3057\u307e\u3057\u305f";
+const FAILURE_MESSAGE = "期限切れ問題セットの削除に失敗しました";
 
 describe("cleanupExpiredGameQuestionSets", () => {
   beforeEach(() => {
@@ -58,12 +57,14 @@ describe("cleanupExpiredGameQuestionSets", () => {
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain("questions");
   });
 
-  it("logs a safe failure message and rethrows Prisma errors", async () => {
+  it("logs a safe failure message and throws a sanitized error", async () => {
     const logger = { info: vi.fn(), error: vi.fn() };
     const error = new Error("database unavailable");
     vi.mocked(prisma.gameQuestionSet.deleteMany).mockRejectedValue(error as never);
 
-    await expect(cleanupExpiredGameQuestionSets({ now: NOW, logger })).rejects.toThrow(error);
+    await expect(cleanupExpiredGameQuestionSets({ now: NOW, logger })).rejects.toThrow(
+      FAILURE_MESSAGE,
+    );
 
     expect(logger.error).toHaveBeenCalledWith({
       event: "game_question_sets.cleanup.failed",
