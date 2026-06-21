@@ -268,7 +268,7 @@ export async function getWeakElements(options: GetWeakElementsOptions): Promise<
 | T9 | `/game` の状態設計を実装する | `frontend/src/routes/(app)/game/+page.svelte` | 固定 `PREVIEW_WEAK_ELEMENT_COUNT` を削除し、auth 完了後に `GET /weak` を取得する | 高 |
 | T10 | `/game` の UI 状態を実装する | `frontend/src/routes/(app)/game/+page.svelte`, `frontend/src/lib/components/game/GameModeCard.svelte` | loading / error / retry / 空状態 / 5件境界が画面上で分かる。既存カードの責務を崩さない | 高 |
 | T11 | reload / 戻る / 二重取得を整える | `frontend/src/routes/(app)/game/+page.svelte` | AbortController と request key で古い取得結果の上書き・二重取得を防ぐ | 中 |
-| T12 | フロント既存テストを補強する | `frontend/src/lib/game/modes.test.ts` または必要な helper test | `weakCount null / 4 / 5` の開始可否が維持される | 中 |
+| T12 | フロント既存テストを確認する | `frontend/src/lib/game/modes.test.ts` または必要な helper test | `weakCount null / 4 / 5` の開始可否が維持される | 中 |
 | T13 | API 仕様ドキュメントを確認・更新する | `docs/04_api.md` | `GET /weak` の response / error が実装と一致する。`DELETE` 未実装の扱いが明記される | 中 |
 | T14 | plan.md を実装実態に合わせて更新する | `docs/plans/game-weak-count-sync/plan.md` | チェックボックス、対象ファイル、変更点、実装完了セクションが実態と一致する | 中 |
 | T15 | 品質チェックを実行する | backend / frontend | backend lint / format:check / test、frontend lint / format / test:run / check が通る | 高 |
@@ -284,9 +284,8 @@ export async function getWeakElements(options: GetWeakElementsOptions): Promise<
 - [x] T8: frontend API client と型を実装する（`frontend/src/lib/api/weak.ts`）
 - [x] T9: `/game` の状態設計を実装する（`frontend/src/routes/(app)/game/+page.svelte`）
 - [x] T10: `/game` の UI 状態を実装する（`frontend/src/routes/(app)/game/+page.svelte`）
-rontend/src/routes/(app)/game/+page.svelte）
 - [x] T11: reload / 戻る / 二重取得を整える（`frontend/src/routes/(app)/game/+page.svelte`）
-- [x] T12: フロント既存テストを補強する（`frontend/src/lib/game/modes.test.ts` または必要な helper test）
+- [x] T12: フロント既存テストを確認する（`frontend/src/lib/game/modes.test.ts` または必要な helper test）
 - [x] T13: API 仕様ドキュメントを確認・更新する（`docs/04_api.md`）
 - [x] T14: plan.md を実装実態に合わせて更新する（`docs/plans/game-weak-count-sync/plan.md`）
 - [x] T15: 品質チェックを実行する（backend / frontend）
@@ -431,7 +430,7 @@ rontend/src/routes/(app)/game/+page.svelte）
 
 - 完了日: 2026-06-21
 - 実装ブランチ: feature/game-weak-count-sync
-- PR: 未作成
+- PR: #55
 
 ### 計画からの変更点
 
@@ -439,23 +438,26 @@ rontend/src/routes/(app)/game/+page.svelte）
 - frontend/src/lib/components/game/GameModeCard.svelte は変更せず、既存の weakCount props と開始可否判定をそのまま利用した。
 - frontend/src/lib/game/modes.test.ts は変更せず、既存の weakCount null / 4 / 5 境界テストを実行して維持を確認した。
 - DB スキーマ変更・migration は行わなかった。
+- レビュー時に Docker / 開発手順の frontend 環境変数名が古い `VITE_API_URL` のままだったため、コード側の `VITE_API_BASE_URL` に統一した。
 - DELETE /weak/:elementId は計画どおり対象外とし、後続タスクに残した。
 
 ### 実際の変更ファイル
 
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
-| backend/src/services/weak.service.ts | 修正 | ログインユーザーの苦手リスト取得 service を実装 |
-| backend/src/services/weak.service.test.ts | 新規 | 苦手リスト取得 service テストを追加 |
-| backend/src/routes/weak/index.ts | 修正 | GET /weak route を実装 |
-| backend/src/routes/weak/weak.test.ts | 新規 | GET /weak route テストを追加 |
-| backend/src/index.ts | 修正 | /api/v1/weak router を mount |
-| frontend/src/lib/api/weak.ts | 新規 | weak API client と runtime validation を追加 |
-| frontend/src/lib/api/weak.test.ts | 新規 | weak API client テストを追加 |
-| frontend/src/routes/(app)/game/+page.svelte | 修正 | 固定4件表示を削除し、GET /weak の実件数で表示・開始可否を同期 |
-| docs/04_api.md | 修正 | GET /weak のエラー仕様と DELETE 後続タスク注記を追加 |
-| docs/05_progress.md | 修正 | 対象タスクを完了に更新 |
-| docs/plans/game-weak-count-sync/plan.md | 修正 | スコープ明確化、チェックボックス、実装完了記録を更新 |
+| `backend/src/services/weak.service.ts` | 修正 | ログインユーザーの苦手リスト取得 service を実装 |
+| `backend/src/services/weak.service.test.ts` | 新規 | 苦手リスト取得 service テストを追加 |
+| `backend/src/routes/weak/index.ts` | 修正 | GET /weak route を実装 |
+| `backend/src/routes/weak/weak.test.ts` | 新規 | GET /weak route テストを追加 |
+| `backend/src/index.ts` | 修正 | /api/v1/weak router を mount |
+| `frontend/src/lib/api/weak.ts` | 新規 | weak API client と runtime validation を追加 |
+| `frontend/src/lib/api/weak.test.ts` | 新規 | weak API client テストを追加 |
+| `frontend/src/routes/(app)/game/+page.svelte` | 修正 | 固定4件表示を削除し、GET /weak の実件数で表示・開始可否を同期 |
+| `docs/04_api.md` | 修正 | GET /weak のエラー仕様と DELETE 後続タスク注記を追加 |
+| `docs/05_progress.md` | 修正 | 対象タスクを完了に更新 |
+| `docker-compose.yml` | 修正 | frontend の環境変数名を `VITE_API_BASE_URL` に統一 |
+| `docs/10_dev_setup.md` | 修正 | Docker / frontend .env の環境変数名を `VITE_API_BASE_URL` に統一 |
+| `docs/plans/game-weak-count-sync/plan.md` | 修正 | スコープ明確化、チェックボックス、実装完了記録を更新 |
 
 ### 品質チェック
 
@@ -474,12 +476,12 @@ rontend/src/routes/(app)/game/+page.svelte）
 
 | 条件 | 結果 |
 |---|---|
-| 未ログイン /game | 未実施 |
+| 未ログイン /game | HTTP 200（SSR応答）を確認 |
 | 苦手0件 /game | 未実施 |
 | 苦手4件 /game | 未実施 |
 | 苦手5件 /game | 未実施 |
 | POST /game/sessions 後に /game へ戻る | 未実施 |
-| weak API エラー時 | 未実施 |
+| weak API エラー時 | 未認証時に `GET /api/v1/weak` が 401 と日本語エラーを返すことを確認 |
 | モバイル幅 | 未実施 |
 
-手動確認は Docker / ブラウザ環境でログイン済みデータを用意して実施する必要があるため、このブランチでは自動チェックまで実施した。
+ログイン済みでの苦手0件 / 4件 / 5件表示、`POST /game/sessions` 後の戻り導線、モバイル幅は未実施。未認証 API と `/game` SSR 応答はレビュー時に確認した。
