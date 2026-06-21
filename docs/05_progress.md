@@ -119,7 +119,7 @@
 - [x] GET /game/questions（ランダム10問・4択生成・GameQuestionSet保存・苦手5問未満チェック【設計決定2】） — 計画書: [docs/plans/game-questions/plan.md](plans/game-questions/plan.md)
 - [x] POST /game/sessions（questionSetId受信・正誤判定・スコア計算・苦手自動更新・consecutiveHit・masteredCount更新【設計決定1・2】）
 - [x] `/game` 苦手件数実データ反映（固定4件表示の解消・`GET /weak` 先行実装） — 計画書: [`docs/plans/game-weak-count-sync/plan.md`](plans/game-weak-count-sync/plan.md)
-- [ ] 期限切れ GameQuestionSet クリーンアップ処理（手動実行 + Cron Trigger 想定）
+- [ ] 期限切れ GameQuestionSet クリーンアップ処理（手動実行 + Cron Trigger 想定） — 計画書: [`docs/plans/game-question-set-cleanup/plan.md`](plans/game-question-set-cleanup/plan.md)
 - [ ] GET /game/sessions（ゲーム履歴一覧）
 - [x] GET /game/sessions/:sessionId（ゲーム結果詳細取得・/game/result 再読み込み復元） — 計画書: [`docs/plans/game-result-session-restore/plan.md`](plans/game-result-session-restore/plan.md)
 - [ ] ゲーム API のテスト
