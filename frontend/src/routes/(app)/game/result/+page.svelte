@@ -43,6 +43,7 @@
   const unavailableTitle = $derived(getUnavailableTitle());
   const unavailableMessage = $derived(getUnavailableMessage());
   const unavailableRole = $derived(restoreStatus === 'error' ? 'alert' : 'status');
+  const unavailableAriaLive = $derived(restoreStatus === 'error' ? 'assertive' : 'polite');
   const accuracy = $derived(
     result === null || result.totalCount === 0
       ? 0
@@ -213,7 +214,7 @@
     <section
       class="space-y-4 rounded border border-gray-200 bg-white p-6"
       aria-busy={isRestoreLoading}
-      aria-live="polite"
+      aria-live={unavailableAriaLive}
       role={unavailableRole}
     >
       <div>
