@@ -299,21 +299,21 @@ export function getGameQuestions(options: {
 | T14 | 手動確認 | `/game`, `/game/play`, `/game/result` | 通常モード、苦手不足、reload、戻る、キーボード操作、エラー再試行を確認 | 高 |
 | T15 | 進捗と計画書の実装完了更新 | `docs/05_progress.md`, `docs/plans/game-questions/plan.md` | 進捗を `[x]` にし、チェックボックスと `## 実装完了` を実態に合わせる | 高 |
 
-- [ ] T1: 既存仕様・既存実装の再確認
-- [ ] T2: ランダム10問選定 helper のテストを先に追加
-- [ ] T3: 候補10件未満の苦手モード補充テストを追加
-- [ ] T4: ランダム10問選定 helper を実装
-- [ ] T5: 4択 distractor の偏りを確認・必要なら改善
-- [ ] T6: route validation / error mapping の回帰確認
-- [ ] T7: GameQuestionSet 保存形式の回帰確認
-- [ ] T8: frontend API client の回帰確認
-- [ ] T9: `/game/play` 状態管理と A11Y の確認
-- [ ] T10: `POST /game/sessions` との接続整合確認
-- [ ] T11: `docs/04_api.md` 更新要否確認
-- [ ] T12: backend 品質チェック
-- [ ] T13: frontend 品質チェック
-- [ ] T14: 手動確認
-- [ ] T15: `docs/05_progress.md` と plan.md の実装完了更新
+- [x] T1: 既存仕様・既存実装の再確認
+- [x] T2: ランダム10問選定 helper のテストを先に追加
+- [x] T3: 候補10件未満の苦手モード補充テストを追加
+- [x] T4: ランダム10問選定 helper を実装
+- [x] T5: 4択 distractor の偏りを確認・必要なら改善
+- [x] T6: route validation / error mapping の回帰確認
+- [x] T7: GameQuestionSet 保存形式の回帰確認
+- [x] T8: frontend API client の回帰確認
+- [x] T9: `/game/play` 状態管理と A11Y の確認
+- [x] T10: `POST /game/sessions` との接続整合確認
+- [x] T11: `docs/04_api.md` 更新要否確認
+- [x] T12: backend 品質チェック
+- [x] T13: frontend 品質チェック
+- [ ] T14: 手動確認（未実施・自動テストで主要契約を確認）
+- [x] T15: `docs/05_progress.md` と plan.md の実装完了更新
 
 ## 技術的注意点
 
@@ -427,3 +427,39 @@ export function getGameQuestions(options: {
 | `cd frontend && npm run test:run` |  |
 | 手動確認 `/game` → `/game/play` → `/game/result` |  |
 ```
+
+
+## 実装完了（実績）
+- 完了日: 2026-06-21
+- 実装ブランチ: feature/game-questions
+- PR: 作成後に追記予定
+
+### 計画からの変更点
+- route と frontend API client は既存実装・既存テストで仕様を満たしていたため、コード変更は行わず回帰テストで確認した
+- docs/04_api.md は既に正解情報非公開、苦手5件未満 409、4択の正解位置ランダムを記載しており、仕様差分がなかったため変更しなかった
+- DB schema / migration は変更していないため、migration 適用確認と DB 変更起因の Playwright 確認は対象外
+- 手動確認はローカル dev server 未起動のため未実施。代わりに backend service / route と frontend API client の自動テストで主要契約を確認した
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| backend/src/services/game.service.ts | 修正 | 候補元素からランダム10問を選定し、候補10件未満ではランダム順を循環補充する処理を追加 |
+| backend/src/services/game.service.test.ts | 修正 | ランダム10問選定、通常モード重複なし、苦手5〜9件の循環補充テストを追加 |
+| docs/05_progress.md | 修正 | 対象タスクを完了に更新 |
+| docs/plans/game-questions/plan.md | 修正 | タスクリストと実装完了記録を更新 |
+
+### 検証結果
+| コマンド/確認 | 結果 |
+|---|---|
+| cd backend && npm run test -- src/services/game.service.test.ts --run | 成功（33 tests） |
+| cd backend && npm run test -- src/routes/game/questions.test.ts --run | 成功（5 tests） |
+| cd frontend && npm run test:run -- src/lib/api/game.test.ts | 成功（18 tests） |
+| cd backend && npm run format | 成功 |
+| cd frontend && npm run format | 成功 |
+| cd backend && npm run lint | 成功 |
+| cd backend && npm run format:check | 成功 |
+| cd backend && npm run test -- --run | 成功（25 files / 209 tests） |
+| cd frontend && npm run lint | 成功 |
+| cd frontend && npm run check | 成功（0 errors / 0 warnings） |
+| cd frontend && npm run test:run | 成功（18 files / 211 tests） |
+| 手動確認 /game → /game/play → /game/result | 未実施（dev server 未起動。UI変更なし） |

@@ -164,6 +164,7 @@ const ELEMENTS = [
 
 const NOW = new Date("2026-06-20T12:00:00.000Z");
 const FIRST_CHOICE_INDEX_GENERATOR = () => 0;
+const FIRST_QUESTION_ELEMENT_INDEX_GENERATOR = () => 0;
 
 function createChoiceIndexGenerator(indexes: readonly number[]): () => number {
   let currentIndex = 0;
@@ -175,6 +176,43 @@ function createChoiceIndexGenerator(indexes: readonly number[]): () => number {
     return choiceIndex;
   };
 }
+
+type CreateGameQuestionSetTestParams = Parameters<typeof createGameQuestionSet>[0] & {
+  questionElementIndexGenerator: (maxExclusive: number) => number;
+};
+
+function createQuestionElementIndexGenerator(
+  indexes: readonly number[],
+): (maxExclusive: number) => number {
+  let currentIndex = 0;
+
+  return (maxExclusive) => {
+    const elementIndex = indexes[currentIndex % indexes.length];
+    currentIndex += 1;
+
+    if (elementIndex < 0 || elementIndex >= maxExclusive) {
+      throw new Error("テスト用の問題選定インデックスが範囲外です");
+    }
+
+    return elementIndex;
+  };
+}
+
+function createTestElement(id: number): (typeof ELEMENTS)[number] {
+  return {
+    id,
+    symbol: "E" + id,
+    nameJa: "Element " + id,
+    nameEn: "Element " + id,
+    category: "test",
+    period: 1,
+    group: 1,
+    atomicWeight: id,
+    etymology: null,
+  };
+}
+
+const TWENTY_ELEMENTS = Array.from({ length: 20 }, (_, index) => createTestElement(index + 1));
 
 describe("createGameQuestionSet", () => {
   beforeEach(() => {
@@ -196,6 +234,7 @@ describe("createGameQuestionSet", () => {
       mode: "SYMBOL_TO_NAME_LV1",
       now: NOW,
       choiceIndexGenerator: FIRST_CHOICE_INDEX_GENERATOR,
+      questionElementIndexGenerator: FIRST_QUESTION_ELEMENT_INDEX_GENERATOR,
     });
 
     expect(result.questionSetId).toBe("question-set-1");
@@ -221,6 +260,7 @@ describe("createGameQuestionSet", () => {
       mode: "SYMBOL_TO_NAME_LV1",
       now: NOW,
       choiceIndexGenerator: FIRST_CHOICE_INDEX_GENERATOR,
+      questionElementIndexGenerator: FIRST_QUESTION_ELEMENT_INDEX_GENERATOR,
     });
 
     expect(prisma.gameQuestionSet.create).toHaveBeenCalledWith({
@@ -248,6 +288,7 @@ describe("createGameQuestionSet", () => {
       mode: "SYMBOL_TO_NAME_LV1",
       now: NOW,
       choiceIndexGenerator: createChoiceIndexGenerator([0, 1, 2, 3]),
+      questionElementIndexGenerator: FIRST_QUESTION_ELEMENT_INDEX_GENERATOR,
     });
 
     const correctChoiceIndexes = result.questions.slice(0, 4).map((question, index) => {
@@ -259,12 +300,70 @@ describe("createGameQuestionSet", () => {
     expect(correctChoiceIndexes).toEqual([0, 1, 2, 3]);
   });
 
+  it("selects 10 unique questions from 20 candidates using injected indexes", async () => {
+    vi.mocked(prisma.element.findMany).mockResolvedValue(TWENTY_ELEMENTS);
+    const params: CreateGameQuestionSetTestParams = {
+      userId: "user-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      now: NOW,
+      choiceIndexGenerator: FIRST_CHOICE_INDEX_GENERATOR,
+      questionElementIndexGenerator: createQuestionElementIndexGenerator([
+        19, 18, 17, 16, 15, 14, 13, 12, 11, 10,
+      ]),
+    };
+
+    const result = await createGameQuestionSet(params);
+
+    expect(result.questions.map((question) => question.prompt)).toEqual([
+      "E20",
+      "E19",
+      "E18",
+      "E17",
+      "E16",
+      "E15",
+      "E14",
+      "E13",
+      "E12",
+      "E11",
+    ]);
+    expect(new Set(result.questions.map((question) => question.prompt)).size).toBe(10);
+  });
+
+  it("cycles shuffled weak candidates when there are at least 5 but fewer than 10", async () => {
+    vi.mocked(prisma.weakElement.findMany).mockResolvedValue(
+      ELEMENTS.slice(0, 5).map((element) => ({ element })) as never,
+    );
+    const params: CreateGameQuestionSetTestParams = {
+      userId: "user-1",
+      mode: "WEAK_SYMBOL_TO_NAME",
+      now: NOW,
+      choiceIndexGenerator: FIRST_CHOICE_INDEX_GENERATOR,
+      questionElementIndexGenerator: createQuestionElementIndexGenerator([4, 3, 2, 1, 0]),
+    };
+
+    const result = await createGameQuestionSet(params);
+
+    expect(result.questions.map((question) => question.prompt)).toEqual([
+      "B",
+      "Be",
+      "Li",
+      "He",
+      "H",
+      "B",
+      "Be",
+      "Li",
+      "He",
+      "H",
+    ]);
+  });
+
   it("名前→記号モードでは日本語名を prompt にし、選択肢を記号にする", async () => {
     const result = await createGameQuestionSet({
       userId: "user-1",
       mode: "NAME_TO_SYMBOL_LV1",
       now: NOW,
       choiceIndexGenerator: FIRST_CHOICE_INDEX_GENERATOR,
+      questionElementIndexGenerator: FIRST_QUESTION_ELEMENT_INDEX_GENERATOR,
     });
 
     expect(result.questions[0]).toMatchObject({

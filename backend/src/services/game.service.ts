@@ -96,6 +96,7 @@ type CreateGameQuestionSetParams = {
   mode: GameMode;
   now?: Date;
   choiceIndexGenerator?: () => number;
+  questionElementIndexGenerator?: (maxExclusive: number) => number;
 };
 
 type RestorableGameAnswer = {
@@ -213,10 +214,34 @@ async function getCandidateElements(userId: string, mode: GameMode): Promise<Pri
   return weakElements.map((weakElement) => weakElement.element);
 }
 
-function buildQuestionElements(elements: readonly PrismaElement[]): PrismaElement[] {
+function getRandomIndex(maxExclusive: number): number {
+  return randomInt(0, maxExclusive);
+}
+
+function buildQuestionElements(
+  elements: readonly PrismaElement[],
+  questionElementIndexGenerator: (maxExclusive: number) => number,
+): PrismaElement[] {
+  const remainingElements = [...elements];
+  const shuffledElements: PrismaElement[] = [];
+
+  while (remainingElements.length > 0 && shuffledElements.length < GAME_QUESTION_COUNT) {
+    const selectedIndex = questionElementIndexGenerator(remainingElements.length);
+    if (
+      !Number.isInteger(selectedIndex) ||
+      selectedIndex < 0 ||
+      selectedIndex >= remainingElements.length
+    ) {
+      throw new Error("問題選定のインデックスが範囲外です");
+    }
+
+    const [selectedElement] = remainingElements.splice(selectedIndex, 1);
+    shuffledElements.push(selectedElement);
+  }
+
   return Array.from(
     { length: GAME_QUESTION_COUNT },
-    (_, index) => elements[index % elements.length],
+    (_, index) => shuffledElements[index % shuffledElements.length],
   );
 }
 
@@ -631,13 +656,14 @@ function buildStoredQuestions(
   mode: GameMode,
   candidates: readonly PrismaElement[],
   choiceIndexGenerator: () => number,
+  questionElementIndexGenerator: (maxExclusive: number) => number,
 ): StoredGameQuestion[] {
   if (candidates.length < GAME_CHOICE_COUNT) {
     throw new Error("問題を生成できません");
   }
 
   const answerWithSymbol = isNameToSymbolMode(mode);
-  const questionElements = buildQuestionElements(candidates);
+  const questionElements = buildQuestionElements(candidates, questionElementIndexGenerator);
 
   return questionElements.map((element, index) => {
     const choices = buildChoices({
@@ -662,9 +688,15 @@ export async function createGameQuestionSet({
   mode,
   now = new Date(),
   choiceIndexGenerator = () => randomInt(0, GAME_CHOICE_COUNT),
+  questionElementIndexGenerator = getRandomIndex,
 }: CreateGameQuestionSetParams): Promise<CreateGameQuestionSetResult> {
   const candidates = await getCandidateElements(userId, mode);
-  const questions = buildStoredQuestions(mode, candidates, choiceIndexGenerator);
+  const questions = buildStoredQuestions(
+    mode,
+    candidates,
+    choiceIndexGenerator,
+    questionElementIndexGenerator,
+  );
   const questionsJson = toQuestionSetJson(questions);
   const expiresAt = new Date(now.getTime() + QUESTION_SET_EXPIRES_MS);
 
