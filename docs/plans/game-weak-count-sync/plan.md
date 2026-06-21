@@ -102,6 +102,8 @@
 - 既存 `docs/plans/game-screens/plan.md` には「苦手5件相当は backend weak API 未実装のため実データ確認なし」と記録されている。本計画はその未接続部分を解消する。
 - `docs/05_progress.md` の既存タスクは `GET /weak + DELETE /weak/:elementId` だが、本タスクでは `/game` の開放判定に必要な `GET /weak` のみを先行実装する。`DELETE` は後続の苦手リスト画面タスクで扱う。
 - `GET /weak` response に `updatedAt` や `consecutiveHit` を含めるかは既存 `docs/04_api.md` では未定義。本タスクで画面表示に必要なのは件数のみだが、将来の `/weak` 画面と整合する形で必要最小限の公開フィールドを決める。
+- `docs/05_progress.md` では `GET /game/questions（ランダム10問・4択生成・GameQuestionSet保存・苦手5問未満チェック）` と `/game` 苦手件数実データ反映は別タスクとして並んでいる。本計画は後者を対象にする。
+- `GET /game/questions` の苦手5件未満チェックは backend の最終 guard として扱う。本計画ではその guard を置き換えず、frontend の `/game` 画面が同じ `WeakElement` 実データを参照するようにして、表示・開始可否と backend guard のズレをなくす。
 
 ## 対象ファイル一覧（変更種別つき）
 
@@ -118,7 +120,7 @@
 | `frontend/src/lib/game/modes.test.ts` | 確認または修正 | 既存の5件境界テストを維持し、必要なら null/error ケースを補強 |
 | `docs/04_api.md` | 確認または修正 | `GET /weak` の実装 response とエラー仕様が一致するよう更新 |
 | `docs/05_progress.md` | 修正 | 本タスクを追加または `GET /weak` 先行実装として分割・完了更新 |
-| `docs/plans/game-weak-count-sync/plan.md` | 新規 | 本計画。実装完了時に実態へ更新 |
+| `docs/plans/game-weak-count-sync/plan.md` | 修正 | 本計画。実装範囲の明確化と実装完了時の実態更新 |
 
 ## API 仕様（この機能で使う範囲のみ）
 
@@ -272,21 +274,22 @@ export async function getWeakElements(options: GetWeakElementsOptions): Promise<
 | T15 | 品質チェックを実行する | backend / frontend | backend lint / format:check / test、frontend lint / format / test:run / check が通る | 高 |
 | T16 | 手動確認を実施する | browser / Docker 環境 | 苦手0件、4件、5件以上、API失敗、未ログインの `/game` 表示を確認する | 高 |
 
-- [ ] T1: 既存仕様・既存実装を確認する（`docs/05_progress.md`, `docs/04_api.md`, `docs/plans/game-screens/plan.md`, game / weak 関連 backend/frontend）
-- [ ] T2: 進捗タスクを整理する（`docs/05_progress.md`）
-- [ ] T3: backend service テストを先に追加する（`backend/src/services/weak.service.test.ts`）
-- [ ] T4: backend service を実装する（`backend/src/services/weak.service.ts`）
-- [ ] T5: backend route テストを先に追加する（`backend/src/routes/weak/weak.test.ts`）
-- [ ] T6: backend route と mount を実装する（`backend/src/routes/weak/index.ts`, `backend/src/index.ts`）
-- [ ] T7: frontend API client テストを先に追加する（`frontend/src/lib/api/weak.test.ts`）
-- [ ] T8: frontend API client と型を実装する（`frontend/src/lib/api/weak.ts`）
-- [ ] T9: `/game` の状態設計を実装する（`frontend/src/routes/(app)/game/+page.svelte`）
-- [ ] T10: `/game` の UI 状態を実装する（`frontend/src/routes/(app)/game/+page.svelte`, `frontend/src/lib/components/game/GameModeCard.svelte`）
-- [ ] T11: reload / 戻る / 二重取得を整える（`frontend/src/routes/(app)/game/+page.svelte`）
-- [ ] T12: フロント既存テストを補強する（`frontend/src/lib/game/modes.test.ts` または必要な helper test）
-- [ ] T13: API 仕様ドキュメントを確認・更新する（`docs/04_api.md`）
-- [ ] T14: plan.md を実装実態に合わせて更新する（`docs/plans/game-weak-count-sync/plan.md`）
-- [ ] T15: 品質チェックを実行する（backend / frontend）
+- [x] T1: 既存仕様・既存実装を確認する（`docs/05_progress.md`, `docs/04_api.md`, `docs/plans/game-screens/plan.md`, game / weak 関連 backend/frontend）
+- [x] T2: 進捗タスクを整理する（`docs/05_progress.md`）
+- [x] T3: backend service テストを先に追加する（`backend/src/services/weak.service.test.ts`）
+- [x] T4: backend service を実装する（`backend/src/services/weak.service.ts`）
+- [x] T5: backend route テストを先に追加する（`backend/src/routes/weak/weak.test.ts`）
+- [x] T6: backend route と mount を実装する（`backend/src/routes/weak/index.ts`, `backend/src/index.ts`）
+- [x] T7: frontend API client テストを先に追加する（`frontend/src/lib/api/weak.test.ts`）
+- [x] T8: frontend API client と型を実装する（`frontend/src/lib/api/weak.ts`）
+- [x] T9: `/game` の状態設計を実装する（`frontend/src/routes/(app)/game/+page.svelte`）
+- [x] T10: `/game` の UI 状態を実装する（`frontend/src/routes/(app)/game/+page.svelte`）
+rontend/src/routes/(app)/game/+page.svelte）
+- [x] T11: reload / 戻る / 二重取得を整える（`frontend/src/routes/(app)/game/+page.svelte`）
+- [x] T12: フロント既存テストを補強する（`frontend/src/lib/game/modes.test.ts` または必要な helper test）
+- [x] T13: API 仕様ドキュメントを確認・更新する（`docs/04_api.md`）
+- [x] T14: plan.md を実装実態に合わせて更新する（`docs/plans/game-weak-count-sync/plan.md`）
+- [x] T15: 品質チェックを実行する（backend / frontend）
 - [ ] T16: 手動確認を実施する（browser / Docker 環境）
 
 ## 技術的注意点
@@ -423,3 +426,60 @@ export async function getWeakElements(options: GetWeakElementsOptions): Promise<
 | weak API エラー時 |  |
 | モバイル幅 |  |
 ```
+
+## 実装完了
+
+- 完了日: 2026-06-21
+- 実装ブランチ: feature/game-weak-count-sync
+- PR: 未作成
+
+### 計画からの変更点
+
+- GET /weak service では include ではなく select を使い、公開に必要な elementId, missCount, addedAt, element.symbol, element.nameJa のみを取得した。
+- frontend/src/lib/components/game/GameModeCard.svelte は変更せず、既存の weakCount props と開始可否判定をそのまま利用した。
+- frontend/src/lib/game/modes.test.ts は変更せず、既存の weakCount null / 4 / 5 境界テストを実行して維持を確認した。
+- DB スキーマ変更・migration は行わなかった。
+- DELETE /weak/:elementId は計画どおり対象外とし、後続タスクに残した。
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| backend/src/services/weak.service.ts | 修正 | ログインユーザーの苦手リスト取得 service を実装 |
+| backend/src/services/weak.service.test.ts | 新規 | 苦手リスト取得 service テストを追加 |
+| backend/src/routes/weak/index.ts | 修正 | GET /weak route を実装 |
+| backend/src/routes/weak/weak.test.ts | 新規 | GET /weak route テストを追加 |
+| backend/src/index.ts | 修正 | /api/v1/weak router を mount |
+| frontend/src/lib/api/weak.ts | 新規 | weak API client と runtime validation を追加 |
+| frontend/src/lib/api/weak.test.ts | 新規 | weak API client テストを追加 |
+| frontend/src/routes/(app)/game/+page.svelte | 修正 | 固定4件表示を削除し、GET /weak の実件数で表示・開始可否を同期 |
+| docs/04_api.md | 修正 | GET /weak のエラー仕様と DELETE 後続タスク注記を追加 |
+| docs/05_progress.md | 修正 | 対象タスクを完了に更新 |
+| docs/plans/game-weak-count-sync/plan.md | 修正 | スコープ明確化、チェックボックス、実装完了記録を更新 |
+
+### 品質チェック
+
+| コマンド | 結果 |
+|---|---|
+| cd backend && npm run format | 成功 |
+| cd backend && npm run lint | 成功 |
+| cd backend && npm run format:check | 成功 |
+| cd backend && npm run test -- --run | 成功: 25 files / 207 tests |
+| cd frontend && npm run format | 成功 |
+| cd frontend && npm run lint | 成功 |
+| cd frontend && npm run test:run | 成功: 18 files / 211 tests |
+| cd frontend && npm run check | 成功: 0 errors / 0 warnings |
+
+### 手動確認
+
+| 条件 | 結果 |
+|---|---|
+| 未ログイン /game | 未実施 |
+| 苦手0件 /game | 未実施 |
+| 苦手4件 /game | 未実施 |
+| 苦手5件 /game | 未実施 |
+| POST /game/sessions 後に /game へ戻る | 未実施 |
+| weak API エラー時 | 未実施 |
+| モバイル幅 | 未実施 |
+
+手動確認は Docker / ブラウザ環境でログイン済みデータを用意して実施する必要があるため、このブランチでは自動チェックまで実施した。
