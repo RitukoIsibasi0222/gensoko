@@ -368,7 +368,7 @@ export function cleanupExpiredGameQuestionSets(
 
 - 完了日: 2026-06-21
 - 実装ブランチ: feature/game-question-set-cleanup
-- PR: 作成前（PR 作成後に追記）
+- PR: #57
 
 ### 計画からの変更点
 
