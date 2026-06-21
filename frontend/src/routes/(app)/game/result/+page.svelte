@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
+  import { ApiError } from '$lib/api/errors';
   import { getGameSession } from '$lib/api/game';
   import { getGameModeConfig } from '$lib/game/modes';
   import { normalizeGameSessionIdParam } from '$lib/game/session-result';
@@ -118,7 +119,8 @@
         }
 
         restoreStatus = 'error';
-        restoreMessage = error instanceof Error ? error.message : 'ゲーム結果の取得に失敗しました';
+        restoreMessage =
+          error instanceof ApiError ? error.message : 'ゲーム結果の取得に失敗しました';
         activeRequestKey = null;
       });
 
