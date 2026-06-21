@@ -191,7 +191,7 @@ function createQuestionElementIndexGenerator(
     currentIndex += 1;
 
     if (elementIndex < 0 || elementIndex >= maxExclusive) {
-      throw new Error("test question index is out of range");
+      throw new Error("テスト用の問題選定インデックスが範囲外です");
     }
 
     return elementIndex;

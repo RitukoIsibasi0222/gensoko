@@ -232,7 +232,7 @@ function buildQuestionElements(
       selectedIndex < 0 ||
       selectedIndex >= remainingElements.length
     ) {
-      throw new Error("question selection index is out of range");
+      throw new Error("問題選定のインデックスが範囲外です");
     }
 
     const [selectedElement] = remainingElements.splice(selectedIndex, 1);
