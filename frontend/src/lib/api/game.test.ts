@@ -5,7 +5,7 @@ vi.mock('$lib/api/config', () => ({
   API_BASE_URL: 'http://localhost:3000/api/v1'
 }));
 
-const { getGameQuestions, submitGameSession } = await import('./game');
+const { getGameQuestions, getGameSession, submitGameSession } = await import('./game');
 
 const VALID_RESPONSE = {
   questionSetId: 'question-set-1',
@@ -414,6 +414,136 @@ describe('submitGameSession', () => {
             answerTimeSec: 4
           }
         ]
+      });
+      expect.fail('ApiError が throw されるべき');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(500);
+      expect((error as ApiError).message).toBe('ゲーム結果のレスポンス形式が不正です');
+    }
+  });
+});
+
+describe('getGameSession', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('正常系: encoded sessionId と Authorization を付けてゲーム結果を返す', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(VALID_SESSION_RESPONSE), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    const result = await getGameSession({
+      sessionId: 'session id/1',
+      accessToken: 'test-access-token'
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/game/sessions/session%20id%2F1',
+      {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          Authorization: 'Bearer test-access-token'
+        }
+      }
+    );
+    expect(result).toEqual(VALID_SESSION_RESPONSE);
+  });
+
+  it('正常系: AbortSignal を fetch に渡す', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(VALID_SESSION_RESPONSE), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+    const controller = new AbortController();
+
+    await getGameSession({
+      sessionId: 'session-1',
+      accessToken: 'test-access-token',
+      signal: controller.signal
+    });
+
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3000/api/v1/game/sessions/session-1', {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        Authorization: 'Bearer test-access-token'
+      },
+      signal: controller.signal
+    });
+  });
+
+  it('HTTPエラー: 401 の日本語 error を ApiError に保持する', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ error: '認証が必要です' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    await expect(
+      getGameSession({
+        sessionId: 'session-1',
+        accessToken: 'test-access-token'
+      })
+    ).rejects.toThrow('認証が必要です');
+  });
+
+  it('HTTPエラー: 404 の日本語 error を ApiError に保持する', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ error: 'ゲーム結果が見つかりません' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    await expect(
+      getGameSession({
+        sessionId: 'missing-session',
+        accessToken: 'test-access-token'
+      })
+    ).rejects.toThrow('ゲーム結果が見つかりません');
+  });
+
+  it('HTTPエラー: 非 JSON レスポンスの場合はデフォルトメッセージを使う', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response('Bad Gateway', {
+        status: 502,
+        headers: { 'Content-Type': 'text/html' }
+      })
+    );
+
+    await expect(
+      getGameSession({
+        sessionId: 'session-1',
+        accessToken: 'test-access-token'
+      })
+    ).rejects.toThrow('ゲーム結果の取得に失敗しました');
+  });
+
+  it('レスポンス形式不正: results がない場合は ApiError(500) を throw する', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ ...VALID_SESSION_RESPONSE, results: undefined }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    try {
+      await getGameSession({
+        sessionId: 'session-1',
+        accessToken: 'test-access-token'
       });
       expect.fail('ApiError が throw されるべき');
     } catch (error) {

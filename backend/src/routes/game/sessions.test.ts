@@ -13,6 +13,7 @@ vi.mock("../../lib/prisma.js", () => ({
 
 vi.mock("../../services/game.service.js", () => ({
   createGameQuestionSet: vi.fn(),
+  getGameSessionResult: vi.fn(),
   submitGameSession: vi.fn(),
   GAME_SESSION_DURATION_LIMIT_SEC: 1800,
   QUESTION_TIME_LIMIT_SEC: 15,
@@ -20,6 +21,12 @@ vi.mock("../../services/game.service.js", () => ({
     constructor() {
       super("苦手モードを始めるには、苦手元素が5件以上必要です");
       this.name = "InsufficientWeakElementsError";
+    }
+  },
+  GameSessionNotFoundError: class GameSessionNotFoundError extends Error {
+    constructor() {
+      super("ゲーム結果が見つかりません");
+      this.name = "GameSessionNotFoundError";
     }
   },
   GameSessionValidationError: class GameSessionValidationError extends Error {

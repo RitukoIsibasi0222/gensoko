@@ -7,7 +7,9 @@ import { rateLimit } from "../../middleware/rateLimit/index.js";
 import {
   createGameQuestionSet,
   GAME_SESSION_DURATION_LIMIT_SEC,
+  GameSessionNotFoundError,
   GameSessionValidationError,
+  getGameSessionResult,
   InsufficientWeakElementsError,
   QUESTION_TIME_LIMIT_SEC,
   QuestionSetAlreadySubmittedError,
@@ -29,6 +31,7 @@ const GAME_MODE_VALUES = [
 
 const GAME_MODE_ERROR_MESSAGE = "ゲームモードが正しくありません";
 const QUESTION_SET_ID_ERROR_MESSAGE = "問題セットIDが正しくありません";
+const SESSION_ID_ERROR_MESSAGE = "セッションIDが正しくありません";
 const ANSWER_FORMAT_ERROR_MESSAGE = "回答形式が正しくありません";
 const DURATION_ERROR_MESSAGE = "回答時間が正しくありません";
 
@@ -81,6 +84,12 @@ export const gameSessionBodySchema = z
   })
   .strip();
 
+export const gameSessionParamsSchema = z
+  .object({
+    sessionId: z.string().trim().min(1, { message: SESSION_ID_ERROR_MESSAGE }),
+  })
+  .strip();
+
 export const gameRouter = new Hono<{ Variables: AppVariables }>();
 
 gameRouter.get(
@@ -113,6 +122,42 @@ gameRouter.get(
     } catch (error) {
       if (error instanceof InsufficientWeakElementsError) {
         return c.json({ error: error.message }, 409);
+      }
+
+      return c.json({ error: "サーバーエラーが発生しました" }, 500);
+    }
+  },
+);
+
+gameRouter.get(
+  "/sessions/:sessionId",
+  gameSessionsRateLimit,
+  authMiddleware,
+  zValidator("param", gameSessionParamsSchema, (result, c) => {
+    if (!result.success) {
+      return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
+    }
+  }),
+  async (c) => {
+    const { sessionId } = c.req.valid("param");
+    const user = c.get("user")!;
+
+    try {
+      const session = await getGameSessionResult({
+        userId: user.id,
+        sessionId,
+      });
+
+      return c.json(
+        {
+          ...session,
+          playedAt: session.playedAt.toISOString(),
+        },
+        200,
+      );
+    } catch (error) {
+      if (error instanceof GameSessionNotFoundError) {
+        return c.json({ error: error.message }, 404);
       }
 
       return c.json({ error: "サーバーエラーが発生しました" }, 500);

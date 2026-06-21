@@ -20,6 +20,7 @@ vi.mock("../lib/prisma.js", () => ({
     },
     gameSession: {
       create: vi.fn(),
+      findFirst: vi.fn(),
       findMany: vi.fn(),
     },
     gameAnswer: {
@@ -37,7 +38,9 @@ import { prisma } from "../lib/prisma.js";
 import {
   createGameQuestionSet,
   GAME_SESSION_DURATION_LIMIT_SEC,
+  GameSessionNotFoundError,
   GameSessionValidationError,
+  getGameSessionResult,
   InsufficientWeakElementsError,
   QUESTION_TIME_LIMIT_SEC,
   QuestionSetAlreadySubmittedError,
@@ -416,6 +419,51 @@ describe("submitGameSession", () => {
     });
     expect(prisma.gameQuestionSet.deleteMany).toHaveBeenCalledWith({
       where: { id: "question-set-1", userId: "user-1" },
+    });
+  });
+
+  it("結果画面の再読み込み復元に必要な表示用フィールドをGameAnswerへ保存する", async () => {
+    await submitGameSession({
+      userId: "user-1",
+      questionSetId: "question-set-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      answers: [
+        { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+        { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+      ],
+      durationSec: 20,
+      now: new Date("2026-06-20T12:05:00.000Z"),
+    });
+
+    expect(prisma.gameAnswer.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          sessionId: "session-1",
+          elementId: 1,
+          questionIndex: 0,
+          questionId: "q1",
+          prompt: "H",
+          chosenChoiceId: "1",
+          isCorrect: true,
+          correctAnswer: "水素",
+          yourAnswer: "水素",
+          answerTimeSec: 5,
+          score: 100,
+        },
+        {
+          sessionId: "session-1",
+          elementId: 2,
+          questionIndex: 1,
+          questionId: "q2",
+          prompt: "He",
+          chosenChoiceId: null,
+          isCorrect: false,
+          correctAnswer: "ヘリウム",
+          yourAnswer: null,
+          answerTimeSec: 15,
+          score: 0,
+        },
+      ],
     });
   });
 
@@ -948,5 +996,182 @@ describe("submitGameSession", () => {
       }),
     ).rejects.toBeInstanceOf(QuestionSetAlreadySubmittedError);
     expect(prisma.gameSession.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("getGameSessionResult", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("所有ユーザーの保存済みゲーム結果を結果画面用レスポンスで返す", async () => {
+    vi.mocked(prisma.gameSession.findFirst).mockResolvedValue({
+      id: "session-1",
+      userId: "user-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      totalScore: 100,
+      correctCount: 1,
+      totalCount: 2,
+      maxStreak: 1,
+      durationSec: 20,
+      playedAt: new Date("2026-06-20T12:05:00.000Z"),
+      answers: [
+        {
+          id: "answer-2",
+          sessionId: "session-1",
+          elementId: 2,
+          questionIndex: 1,
+          questionId: "q2",
+          prompt: "He",
+          chosenChoiceId: null,
+          isCorrect: false,
+          correctAnswer: "ヘリウム",
+          yourAnswer: null,
+          answerTimeSec: 15,
+          score: 0,
+          element: ELEMENTS[1],
+        },
+        {
+          id: "answer-1",
+          sessionId: "session-1",
+          elementId: 1,
+          questionIndex: 0,
+          questionId: "q1",
+          prompt: "H",
+          chosenChoiceId: "1",
+          isCorrect: true,
+          correctAnswer: "水素",
+          yourAnswer: "水素",
+          answerTimeSec: 5,
+          score: 100,
+          element: ELEMENTS[0],
+        },
+      ],
+    } as never);
+
+    const result = await getGameSessionResult({
+      userId: "user-1",
+      sessionId: "session-1",
+    });
+
+    expect(prisma.gameSession.findFirst).toHaveBeenCalledWith({
+      where: { id: "session-1", userId: "user-1" },
+      include: {
+        answers: {
+          include: { element: true },
+          orderBy: [{ questionIndex: "asc" }, { id: "asc" }],
+        },
+      },
+    });
+    expect(result).toEqual({
+      sessionId: "session-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      correctCount: 1,
+      totalCount: 2,
+      totalScore: 100,
+      maxStreak: 1,
+      durationSec: 20,
+      playedAt: new Date("2026-06-20T12:05:00.000Z"),
+      results: [
+        {
+          questionId: "q1",
+          elementId: 1,
+          prompt: "H",
+          chosenChoiceId: "1",
+          isCorrect: true,
+          correctAnswer: "水素",
+          yourAnswer: "水素",
+          answerTimeSec: 5,
+          score: 100,
+        },
+        {
+          questionId: "q2",
+          elementId: 2,
+          prompt: "He",
+          chosenChoiceId: null,
+          isCorrect: false,
+          correctAnswer: "ヘリウム",
+          yourAnswer: null,
+          answerTimeSec: 15,
+          score: 0,
+        },
+      ],
+    });
+  });
+
+  it("session が見つからない場合は専用エラーにする", async () => {
+    vi.mocked(prisma.gameSession.findFirst).mockResolvedValue(null);
+
+    await expect(
+      getGameSessionResult({
+        userId: "user-1",
+        sessionId: "missing-session",
+      }),
+    ).rejects.toBeInstanceOf(GameSessionNotFoundError);
+    expect(prisma.gameSession.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "missing-session", userId: "user-1" },
+      }),
+    );
+  });
+
+  it("旧データで表示用フィールドが不足している場合は element と mode から復元する", async () => {
+    vi.mocked(prisma.gameSession.findFirst).mockResolvedValue({
+      id: "session-legacy",
+      userId: "user-1",
+      mode: "NAME_TO_SYMBOL_LV1",
+      totalScore: 100,
+      correctCount: 1,
+      totalCount: 1,
+      maxStreak: 1,
+      durationSec: 4,
+      playedAt: new Date("2026-06-20T12:10:00.000Z"),
+      answers: [
+        {
+          id: "answer-legacy",
+          sessionId: "session-legacy",
+          elementId: 1,
+          questionIndex: null,
+          questionId: null,
+          prompt: null,
+          chosenChoiceId: null,
+          isCorrect: true,
+          correctAnswer: null,
+          yourAnswer: null,
+          answerTimeSec: 4,
+          score: null,
+          element: ELEMENTS[0],
+        },
+      ],
+    } as never);
+
+    const result = await getGameSessionResult({
+      userId: "user-1",
+      sessionId: "session-legacy",
+    });
+
+    expect(result).toEqual({
+      sessionId: "session-legacy",
+      mode: "NAME_TO_SYMBOL_LV1",
+      correctCount: 1,
+      totalCount: 1,
+      totalScore: 100,
+      maxStreak: 1,
+      durationSec: 4,
+      playedAt: new Date("2026-06-20T12:10:00.000Z"),
+      results: [
+        {
+          questionId: "answer-legacy",
+          elementId: 1,
+          prompt: "水素",
+          chosenChoiceId: null,
+          isCorrect: true,
+          correctAnswer: "H",
+          yourAnswer: null,
+          answerTimeSec: 4,
+          score: 100,
+        },
+      ],
+    });
   });
 });

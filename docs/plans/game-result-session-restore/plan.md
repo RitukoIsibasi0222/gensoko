@@ -136,24 +136,27 @@
 
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
+| `.gitignore` | 修正 | backend build 出力 `backend/dist/` を管理対象外にする |
 | `backend/prisma/schema.prisma` | 修正 | `GameAnswer` に結果復元用フィールドと index を追加 |
 | `backend/prisma/migrations/{timestamp}_add_game_answer_result_fields/migration.sql` | 新規 | 結果復元用 nullable カラムと index を追加 |
 | `backend/src/services/game.service.ts` | 修正 | `submitGameSession()` で復元用フィールドを保存し、`getGameSessionResult()` を追加 |
 | `backend/src/routes/game/index.ts` | 修正 | `GET /sessions/:sessionId` route、param validation、認証、rate limit、error mapping を追加 |
 | `backend/src/routes/game/session-detail.test.ts` | 新規 | 単一結果取得 route テスト |
+| `backend/src/routes/game/questions.test.ts` | 修正 | `game.service.ts` の追加 export に合わせて mock を更新 |
+| `backend/src/routes/game/sessions.test.ts` | 修正 | `game.service.ts` の追加 export に合わせて mock を更新 |
 | `backend/src/services/game.service.test.ts` | 修正 | 結果詳細取得、保存フィールド、legacy fallback の service テスト追加 |
-| `frontend/src/lib/game/types.ts` | 修正 | 必要に応じて detail API 用型 alias を追加 |
+| `frontend/src/lib/game/types.ts` | 確認（変更なし） | 既存 `GameSessionResponse` / `GameSessionResultItem` を GET 詳細にも再利用できることを確認 |
 | `frontend/src/lib/game/session-result.ts` | 新規 | `sessionId` 正規化と result 表示 helper を切り出し |
 | `frontend/src/lib/game/session-result.test.ts` | 新規 | `sessionId` 正規化、空 / null / undefined の扱いテスト |
 | `frontend/src/lib/api/game.ts` | 修正 | `getGameSession()` API client と runtime validation を追加 |
 | `frontend/src/lib/api/game.test.ts` | 修正 | `getGameSession()` の URL、Authorization、error、非 JSON、validation テスト |
-| `frontend/src/lib/stores/game-session-result.svelte.ts` | 確認または修正 | API 復元後も `set()` / `matches()` を再利用。必要なら `hasResult` getter を追加 |
-| `frontend/src/lib/stores/game-session-result.svelte.test.ts` | 確認または修正 | userId + sessionId 照合の回帰を維持 |
+| `frontend/src/lib/stores/game-session-result.svelte.ts` | 確認（変更なし） | API 復元後も既存 `set()` / `matches()` を再利用できることを確認 |
+| `frontend/src/lib/stores/game-session-result.svelte.test.ts` | 確認（変更なし） | 既存の userId + sessionId 照合テストを維持 |
 | `frontend/src/routes/(app)/game/result/+page.svelte` | 修正 | store miss 時の API 復元、loading / error / retry / 未ログイン / 404 状態を追加 |
-| `frontend/src/routes/(app)/game/result/+page.ts` | 確認 | `ssr = true`, `prerender = false` を維持 |
+| `frontend/src/routes/(app)/game/result/+page.ts` | 確認（変更なし） | `ssr = true`, `prerender = false` を維持 |
 | `docs/04_api.md` | 修正 | `GET /game/sessions/:sessionId` 仕様を追加 |
 | `docs/05_progress.md` | 修正 | 詳細取得・結果復元タスクを追加または分割し、完了へ更新 |
-| `docs/plans/game-result-session-restore/plan.md` | 新規 | 本計画。実装完了時に実態へ更新 |
+| `docs/plans/game-result-session-restore/plan.md` | 修正 | 本計画。実装完了時に実態へ更新 |
 
 ## API 仕様（この機能で使う範囲のみ）
 
@@ -344,28 +347,28 @@ export function normalizeGameSessionIdParam(value: string | null | undefined): s
 
 ## タスクリスト（チェックボックス）
 
-- [ ] T1: 既存仕様・既存実装の最終確認
-- [ ] T2: API 仕様を確定する
-- [ ] T3: DB schema と migration を追加する
-- [ ] T4: backend service テストを先に追加する
-- [ ] T5: backend service を実装する
-- [ ] T6: backend route テストを追加する
-- [ ] T7: backend route を実装する
-- [ ] T8: frontend 型・helper テストを追加する
-- [ ] T9: frontend helper を実装する
-- [ ] T10: frontend API client テストを追加する
-- [ ] T11: frontend API client を実装する
-- [ ] T12: `/game/result` の復元状態設計を実装する
-- [ ] T13: store 連携を確認・必要なら拡張する
-- [ ] T14: reload / 戻る操作の扱いを調整する
-- [ ] T15: loading / empty / error UI を磨く
-- [ ] T16: `docs/05_progress.md` の更新を反映する
-- [ ] T17: format を実行する
-- [ ] T18: lint / format check を実行する
-- [ ] T19: test / check を実行する
-- [ ] T20: DB 変更確認を実行する
-- [ ] T21: 手動確認を実行する
-- [ ] T22: 実装完了更新を行う
+- [x] T1: 既存仕様・既存実装の最終確認
+- [x] T2: API 仕様を確定する
+- [x] T3: DB schema と migration を追加する
+- [x] T4: backend service テストを先に追加する
+- [x] T5: backend service を実装する
+- [x] T6: backend route テストを追加する
+- [x] T7: backend route を実装する
+- [x] T8: frontend 型・helper テストを追加する
+- [x] T9: frontend helper を実装する
+- [x] T10: frontend API client テストを追加する
+- [x] T11: frontend API client を実装する
+- [x] T12: `/game/result` の復元状態設計を実装する
+- [x] T13: store 連携を確認・必要なら拡張する
+- [x] T14: reload / 戻る操作の扱いを調整する
+- [x] T15: loading / empty / error UI を磨く
+- [x] T16: `docs/05_progress.md` の更新を反映する
+- [x] T17: format を実行する
+- [x] T18: lint / format check を実行する
+- [x] T19: test / check を実行する
+- [x] T20: DB 変更確認を実行する
+- [x] T21: 手動確認を実行する
+- [x] T22: 実装完了更新を行う
 
 ## 技術的注意点
 
@@ -507,3 +510,77 @@ export function normalizeGameSessionIdParam(value: string | null | undefined): s
 | PC 幅 | 未実行 / OK |
 | モバイル幅 390px | 未実行 / OK |
 ```
+
+## 実装完了
+
+- 完了日: 2026-06-20
+- 実装ブランチ: feature/game-result-session-restore
+- PR: [#54](https://github.com/RitukoIsibasi0222/gensoko/pull/54)
+
+### 計画からの変更点
+
+- `frontend/src/lib/game/types.ts` は新規 alias を追加せず、既存の `GameSessionResponse` / `GameSessionResultItem` を `GET /game/sessions/:sessionId` でも再利用した。
+- `frontend/src/lib/stores/game-session-result.svelte.ts` は変更せず、既存の `set(result, userId)` / `matches(sessionId, userId)` で store hit と API 復元後の表示経路を統一した。
+- `backend/src/routes/game/questions.test.ts` と `backend/src/routes/game/sessions.test.ts` は、`game.service.ts` の追加 export に合わせて mock を更新した。
+- `backend/dist/` が build 出力として作成されたため、`.gitignore` に追加した。
+- Docker 手動確認時、DB migration 適用後も Hono コンテナ内の Prisma Client が古いままだと詳細取得が 500 になることを確認した。`docker compose exec -T hono npx prisma generate` と `docker compose restart hono` 後に復元導線が成功したため、DB 変更を伴うローカル確認では Prisma Client 再生成を明示的に行う。
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `.gitignore` | 修正 | `backend/dist/` を管理対象外に追加 |
+| `backend/prisma/schema.prisma` | 修正 | `GameAnswer` に結果復元用 nullable フィールドと `@@index([sessionId, questionIndex])` を追加 |
+| `backend/prisma/migrations/20260620210000_add_game_answer_result_fields/migration.sql` | 新規 | 結果復元用カラムと index を追加 |
+| `backend/src/services/game.service.ts` | 修正 | `submitGameSession()` の復元用フィールド保存と `getGameSessionResult()` を追加 |
+| `backend/src/services/game.service.test.ts` | 修正 | 保存フィールド、詳細取得、404、legacy fallback の service テストを追加 |
+| `backend/src/routes/game/index.ts` | 修正 | `GET /sessions/:sessionId` route、param validation、認証、rate limit、error mapping を追加 |
+| `backend/src/routes/game/session-detail.test.ts` | 新規 | 詳細取得 route の 401 / 400 / 200 / 404 / 500 テストを追加 |
+| `backend/src/routes/game/questions.test.ts` | 修正 | service mock を追加 export と整合 |
+| `backend/src/routes/game/sessions.test.ts` | 修正 | service mock を追加 export と整合 |
+| `frontend/src/lib/game/session-result.ts` | 新規 | `sessionId` query の正規化 helper を追加 |
+| `frontend/src/lib/game/session-result.test.ts` | 新規 | trim、空文字、null、undefined の扱いをテスト |
+| `frontend/src/lib/api/game.ts` | 修正 | `getGameSession()` API client と runtime validation を追加 |
+| `frontend/src/lib/api/game.test.ts` | 修正 | 詳細取得 API client の URL、Authorization、error、非 JSON、validation テストを追加 |
+| `frontend/src/routes/(app)/game/result/+page.svelte` | 修正 | store miss 時の API 復元、loading / error / retry / 未ログイン / 404 状態を追加 |
+| `docs/04_api.md` | 修正 | `GET /game/sessions/:sessionId` の API 仕様を追加 |
+| `docs/05_progress.md` | 修正 | 詳細取得・結果復元タスクを完了へ更新 |
+| `docs/plans/game-result-session-restore/plan.md` | 修正 | タスク完了と実装完了記録を追記 |
+
+### 実行した確認
+
+| 種別 | コマンド / 手順 | 結果 |
+|---|---|---|
+| prisma | `cd backend && npx prisma validate` | 成功 |
+| migration | `docker compose exec -T hono npx prisma migrate deploy` | 成功 |
+| migration status | `docker compose exec -T hono npx prisma migrate status` | 成功。DB schema は最新 |
+| prisma generate | `docker compose exec -T hono npx prisma generate` | 成功。手動確認時の Docker 内 Prisma Client 更新として実行 |
+| lint | `cd backend && npm run lint` | 成功 |
+| format check | `cd backend && npm run format:check` | 成功 |
+| build | `cd backend && npm run build` | 成功 |
+| test | `cd backend && npm run test -- --run` | 成功。23 files / 200 tests |
+| format | `cd frontend && npm run format` | 成功 |
+| lint | `cd frontend && npm run lint` | 成功 |
+| check | `cd frontend && npm run check` | 成功 |
+| test | `cd frontend && npm run test:run` | 成功。17 files / 205 tests |
+| diff check | `git diff --check` | 成功 |
+| 手動確認 | `/game/play` -> `/game/result?sessionId=...` -> reload | 成功 |
+
+### 手動確認
+
+| 条件 | 結果 |
+|---|---|
+| 投稿直後の結果表示 | OK。`/game/play` 完了後に `/game/result?sessionId=...` へ遷移し、score / correctCount / answer details を表示 |
+| reload 復元 | OK。新規保存セッション `cmqmfv9dh00010tq6kxfqj08o` で reload 後も API から復元 |
+| 復元用カラム | OK。reload 後も `あなたの回答` に保存済み回答（例: ヘリウム）を表示 |
+| 直接アクセス復元 | OK。store 空状態相当の reload / URL 直接指定で復元 |
+| sessionId なし | OK。「結果を表示できません」とゲーム / ホーム導線を表示 |
+| 不存在 sessionId | OK。「ゲーム結果が見つかりません」と再試行 / ゲーム / ホーム導線を表示 |
+| 未ログイン | OK。「ログインが必要です」とログイン / ホーム導線を表示し、結果は表示しない |
+| PC 幅 | OK。結果カード、回答詳細、復習ポイントを表示 |
+| モバイル幅 390px | OK。結果本文と主要導線は表示可能。共通ヘッダーのナビが縦に折れる既存レイアウト課題は別タスク候補 |
+
+### 残課題
+
+- 390px 幅では共通ヘッダーのナビが縦に折れる。`/game/result` 固有ではなく共通レイアウトのレスポンシブ課題として別途扱う。
+- `GET /game/sessions` の履歴一覧 API と履歴 UI は本計画のスコープ外で未実装。
