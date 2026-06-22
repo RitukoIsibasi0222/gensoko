@@ -49,6 +49,12 @@ const gameSessionsRateLimit = rateLimit({
   trustProxy: process.env.TRUST_PROXY === "true",
 });
 
+const gameSessionHistoryRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  trustProxy: process.env.TRUST_PROXY === "true",
+});
+
 export const gameQuestionsQuerySchema = z
   .object({
     mode: z.enum(GAME_MODE_VALUES, { message: GAME_MODE_ERROR_MESSAGE }),
@@ -223,13 +229,16 @@ const SESSION_HISTORY_MAX_LIMIT = 50;
 const SESSION_HISTORY_LIMIT_ERROR_MESSAGE = "取得件数が正しくありません";
 const SESSION_HISTORY_CURSOR_ERROR_MESSAGE = "カーソルが正しくありません";
 
-const optionalTrimmedString = z.preprocess((value) => {
-  if (typeof value !== "string") {
-    return value;
-  }
+const optionalTrimmedString = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") {
+      return value;
+    }
 
-  return value.trim();
-}, z.string());
+    return value.trim();
+  },
+  z.string({ message: SESSION_HISTORY_CURSOR_ERROR_MESSAGE }),
+);
 
 export const gameSessionHistoryQuerySchema = z
   .object({
@@ -265,7 +274,7 @@ export const gameSessionHistoryQuerySchema = z
 
 gameRouter.get(
   "/sessions",
-  gameSessionsRateLimit,
+  gameSessionHistoryRateLimit,
   authMiddleware,
   zValidator("query", gameSessionHistoryQuerySchema, (result, c) => {
     if (!result.success) {

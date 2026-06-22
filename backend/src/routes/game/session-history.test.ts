@@ -34,7 +34,7 @@ import {
   GameSessionHistoryCursorError,
   getGameSessionHistory,
 } from "../../services/game.service.js";
-import { gameRouter } from "./index.js";
+import { gameRouter, gameSessionHistoryQuerySchema } from "./index.js";
 
 const app = new Hono<{ Variables: AppVariables }>();
 app.route("/game", gameRouter);
@@ -104,6 +104,18 @@ describe("GET /game/sessions", () => {
     expect(getGameSessionHistory).not.toHaveBeenCalled();
   });
 
+  it("cursor が文字列でない場合は日本語のバリデーションエラーにする", () => {
+    const result = gameSessionHistoryQuerySchema.safeParse({
+      limit: 20,
+      cursor: ["session-1"],
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe("カーソルが正しくありません");
+    }
+  });
+
   it("認証済みユーザーの履歴一覧を200で返す", async () => {
     const token = await createToken();
     const res = await app.request(
@@ -157,6 +169,21 @@ describe("GET /game/sessions", () => {
       cursor: undefined,
       mode: undefined,
     });
+  });
+
+  it("一覧取得はPOSTより緩い rate limit を使う", async () => {
+    const token = await createToken();
+    const statuses: number[] = [];
+
+    for (let i = 0; i < 11; i += 1) {
+      const res = await app.request("/game/sessions", {
+        method: "GET",
+        headers: { Authorization: "Bearer " + token },
+      });
+      statuses.push(res.status);
+    }
+
+    expect(statuses).toEqual(Array.from({ length: 11 }, () => 200));
   });
 
   it("service が cursor error を投げたら400を返す", async () => {
