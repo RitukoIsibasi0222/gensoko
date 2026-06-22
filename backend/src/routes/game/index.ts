@@ -235,8 +235,17 @@ export const gameSessionHistoryQuerySchema = z
   .object({
     limit: z.preprocess(
       (value) => {
-        if (value === undefined || value === "") {
+        if (value === undefined) {
           return SESSION_HISTORY_DEFAULT_LIMIT;
+        }
+
+        if (typeof value === "string") {
+          const normalizedLimit = value.trim();
+          if (normalizedLimit.length === 0) {
+            return SESSION_HISTORY_DEFAULT_LIMIT;
+          }
+
+          return Number(normalizedLimit);
         }
 
         return Number(value);

@@ -143,6 +143,22 @@ describe("GET /game/sessions", () => {
     });
   });
 
+  it("limit が空白だけなら既定値で取得する", async () => {
+    const token = await createToken();
+    const res = await app.request("/game/sessions?limit=%20", {
+      method: "GET",
+      headers: { Authorization: "Bearer " + token },
+    });
+
+    expect(res.status).toBe(200);
+    expect(getGameSessionHistory).toHaveBeenCalledWith({
+      userId: "user-1",
+      limit: 20,
+      cursor: undefined,
+      mode: undefined,
+    });
+  });
+
   it("service が cursor error を投げたら400を返す", async () => {
     vi.mocked(getGameSessionHistory).mockRejectedValue(new GameSessionHistoryCursorError());
     const token = await createToken();

@@ -3,6 +3,10 @@ import type { GameMode, GameSessionHistoryQuery } from './types';
 
 export const DEFAULT_GAME_SESSION_HISTORY_LIMIT = 20;
 const MAX_GAME_SESSION_HISTORY_LIMIT = 50;
+const gameSessionPlayedAtFormatter = new Intl.DateTimeFormat('ja-JP', {
+  dateStyle: 'medium',
+  timeStyle: 'short'
+});
 
 type RawGameSessionHistoryQuery = {
   limit?: string | number | null;
@@ -71,8 +75,5 @@ export function formatGameSessionPlayedAt(playedAt: string): string {
     return playedAt;
   }
 
-  return new Intl.DateTimeFormat('ja-JP', {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  }).format(date);
+  return gameSessionPlayedAtFormatter.format(date);
 }
