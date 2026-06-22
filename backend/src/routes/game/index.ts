@@ -7,8 +7,10 @@ import { rateLimit } from "../../middleware/rateLimit/index.js";
 import {
   createGameQuestionSet,
   GAME_SESSION_DURATION_LIMIT_SEC,
+  GameSessionHistoryCursorError,
   GameSessionNotFoundError,
   GameSessionValidationError,
+  getGameSessionHistory,
   getGameSessionResult,
   InsufficientWeakElementsError,
   QUESTION_TIME_LIMIT_SEC,
@@ -209,6 +211,89 @@ gameRouter.post(
         error instanceof QuestionSetModeMismatchError
       ) {
         return c.json({ error: error.message }, 409);
+      }
+
+      return c.json({ error: "サーバーエラーが発生しました" }, 500);
+    }
+  },
+);
+
+const SESSION_HISTORY_DEFAULT_LIMIT = 20;
+const SESSION_HISTORY_MAX_LIMIT = 50;
+const SESSION_HISTORY_LIMIT_ERROR_MESSAGE = "取得件数が正しくありません";
+const SESSION_HISTORY_CURSOR_ERROR_MESSAGE = "カーソルが正しくありません";
+
+const optionalTrimmedString = z.preprocess((value) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  return value.trim();
+}, z.string());
+
+export const gameSessionHistoryQuerySchema = z
+  .object({
+    limit: z.preprocess(
+      (value) => {
+        if (value === undefined || value === "") {
+          return SESSION_HISTORY_DEFAULT_LIMIT;
+        }
+
+        return Number(value);
+      },
+      z
+        .number({ message: SESSION_HISTORY_LIMIT_ERROR_MESSAGE })
+        .int({ message: SESSION_HISTORY_LIMIT_ERROR_MESSAGE })
+        .min(1, { message: SESSION_HISTORY_LIMIT_ERROR_MESSAGE })
+        .max(SESSION_HISTORY_MAX_LIMIT, { message: SESSION_HISTORY_LIMIT_ERROR_MESSAGE }),
+    ),
+    cursor: optionalTrimmedString
+      .pipe(z.string().min(1, { message: SESSION_HISTORY_CURSOR_ERROR_MESSAGE }))
+      .optional(),
+    mode: z.enum(GAME_MODE_VALUES, { message: GAME_MODE_ERROR_MESSAGE }).optional(),
+  })
+  .strip();
+
+gameRouter.get(
+  "/sessions",
+  gameSessionsRateLimit,
+  authMiddleware,
+  zValidator("query", gameSessionHistoryQuerySchema, (result, c) => {
+    if (!result.success) {
+      return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
+    }
+  }),
+  async (c) => {
+    const query = c.req.valid("query");
+    const user = c.get("user")!;
+
+    try {
+      const history = await getGameSessionHistory({
+        userId: user.id,
+        limit: query.limit,
+        cursor: query.cursor,
+        mode: query.mode,
+      });
+
+      return c.json(
+        {
+          sessions: history.sessions.map((session) => ({
+            ...session,
+            playedAt: session.playedAt.toISOString(),
+          })),
+          nextCursor: history.nextCursor,
+        },
+        200,
+      );
+    } catch (error) {
+      if (error instanceof GameSessionHistoryCursorError) {
+        return c.json(
+          {
+            error: "バリデーションエラー",
+            details: [{ message: error.message }],
+          },
+          400,
+        );
       }
 
       return c.json({ error: "サーバーエラーが発生しました" }, 500);
