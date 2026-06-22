@@ -926,12 +926,14 @@ function toGameSessionHistoryItem(row: GameSessionHistoryRow): GameSessionHistor
 async function getGameSessionHistoryCursorWhere({
   userId,
   cursor,
+  mode,
 }: {
   userId: string;
   cursor: string;
+  mode?: GameMode;
 }): Promise<Prisma.GameSessionWhereInput> {
   const cursorSession = await prisma.gameSession.findFirst({
-    where: { id: cursor, userId },
+    where: { id: cursor, userId, ...(mode ? { mode } : {}) },
     select: { id: true, playedAt: true },
   });
 
@@ -954,7 +956,7 @@ export async function getGameSessionHistory({
   mode,
 }: GetGameSessionHistoryParams): Promise<GetGameSessionHistoryResult> {
   const cursorWhere = cursor
-    ? await getGameSessionHistoryCursorWhere({ userId, cursor })
+    ? await getGameSessionHistoryCursorWhere({ userId, cursor, mode })
     : undefined;
   const where: Prisma.GameSessionWhereInput = {
     userId,

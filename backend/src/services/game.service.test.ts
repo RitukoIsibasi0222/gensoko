@@ -1384,6 +1384,38 @@ describe("getGameSessionHistory", () => {
     );
   });
 
+  it("mode filter 指定時は cursor session も同じ mode で lookup する", async () => {
+    vi.mocked(prisma.gameSession.findFirst).mockResolvedValue({
+      id: "session-2",
+      playedAt: new Date("2026-06-20T12:35:00.000Z"),
+    } as never);
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([historyRows[2]] as never);
+
+    await getGameSessionHistory({
+      userId: "user-1",
+      limit: 20,
+      cursor: "session-2",
+      mode: "NAME_TO_SYMBOL_LV1",
+    });
+
+    expect(prisma.gameSession.findFirst).toHaveBeenCalledWith({
+      where: { id: "session-2", userId: "user-1", mode: "NAME_TO_SYMBOL_LV1" },
+      select: { id: true, playedAt: true },
+    });
+    expect(prisma.gameSession.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: "user-1",
+          mode: "NAME_TO_SYMBOL_LV1",
+          OR: [
+            { playedAt: { lt: new Date("2026-06-20T12:35:00.000Z") } },
+            { playedAt: new Date("2026-06-20T12:35:00.000Z"), id: { lt: "session-2" } },
+          ],
+        },
+      }),
+    );
+  });
+
   it("cursor session が本人に存在しなければ cursor error を投げる", async () => {
     vi.mocked(prisma.gameSession.findFirst).mockResolvedValue(null);
 
