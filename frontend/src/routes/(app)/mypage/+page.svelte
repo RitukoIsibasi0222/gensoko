@@ -188,8 +188,10 @@
       <p class="mt-2 text-sm text-gray-600">ゲーム履歴を見るにはログインしてください。</p>
       <a
         class="mt-4 inline-flex rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
-        href="/login">ログインへ</a
+        href={'/login'}
       >
+        ログインへ
+      </a>
     </section>
   {:else}
     <section
@@ -228,16 +230,19 @@
             type="button"
             onclick={retryHistory}
             class="mt-3 rounded border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500"
-            >再試行</button
           >
+            再試行
+          </button>
         </div>
       {:else if !hasSessions}
         <div class="rounded border border-gray-200 bg-white p-5">
           <p class="text-sm text-gray-600">まだゲーム履歴がありません。</p>
           <a
             class="mt-4 inline-flex rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
-            href="/game">ゲームを始める</a
+            href={'/game'}
           >
+            ゲームを始める
+          </a>
         </div>
       {:else}
         <div class="space-y-3" aria-live="polite">
@@ -268,8 +273,9 @@
                   <a
                     class="inline-flex shrink-0 items-center justify-center rounded border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
                     href={'/game/result?sessionId=' + encodeURIComponent(session.sessionId)}
-                    >詳細を見る</a
                   >
+                    詳細を見る
+                  </a>
                 </div>
               </li>
             {/each}
@@ -280,8 +286,13 @@
               onclick={loadMore}
               disabled={isLoadingMore}
               class="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:bg-gray-400"
-              >{isLoadingMore ? '読み込み中...' : 'さらに表示'}</button
             >
+              {#if isLoadingMore}
+                読み込み中...
+              {:else}
+                さらに表示
+              {/if}
+            </button>
           {/if}
         </div>
       {/if}
