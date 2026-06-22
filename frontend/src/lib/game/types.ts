@@ -87,3 +87,25 @@ export type GameAnswerDraft = {
 export type GamePlayPhase = 'answering' | 'feedback' | 'completed';
 
 export type GameChoiceHandler = (choiceId: string) => void;
+
+export type GameSessionHistoryItem = {
+  sessionId: string;
+  mode: GameMode;
+  correctCount: number;
+  totalCount: number;
+  totalScore: number;
+  maxStreak: number;
+  durationSec: number;
+  playedAt: string;
+};
+
+export type GameSessionsResponse = {
+  sessions: readonly GameSessionHistoryItem[];
+  nextCursor: string | null;
+};
+
+export type GameSessionHistoryQuery = {
+  limit: number;
+  cursor: string | null;
+  mode: GameMode | null;
+};

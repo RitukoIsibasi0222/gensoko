@@ -5,7 +5,9 @@ import type {
   GameMode,
   GameQuestionsResponse,
   GameSessionAnswerDraft,
-  GameSessionResponse
+  GameSessionHistoryItem,
+  GameSessionResponse,
+  GameSessionsResponse
 } from '$lib/game/types';
 
 export type GetGameQuestionsOptions = {
@@ -256,6 +258,106 @@ export async function submitGameSession({
   const data = (await response.json()) as unknown;
   if (!isGameSessionResponse(data)) {
     throw new ApiError(500, 'ゲーム結果のレスポンス形式が不正です', data);
+  }
+
+  return data;
+}
+
+export type GetGameSessionsOptions = {
+  accessToken: string;
+  limit?: number;
+  cursor?: string | null;
+  mode?: GameMode | null;
+  signal?: AbortSignal;
+};
+
+type GetGameSessionsFetchOptions = {
+  method: 'GET';
+  credentials: 'include';
+  headers: {
+    Authorization: string;
+  };
+  signal?: AbortSignal;
+};
+
+function isGameSessionHistoryItem(value: unknown): value is GameSessionHistoryItem {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+
+  const session = value as Record<string, unknown>;
+  return (
+    typeof session.sessionId === 'string' &&
+    isGameMode(session.mode) &&
+    typeof session.totalCount === 'number' &&
+    typeof session.correctCount === 'number' &&
+    typeof session.totalScore === 'number' &&
+    typeof session.maxStreak === 'number' &&
+    typeof session.durationSec === 'number' &&
+    typeof session.playedAt === 'string' &&
+    !('results' in session)
+  );
+}
+
+function isGameSessionsResponse(value: unknown): value is GameSessionsResponse {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+
+  const response = value as Record<string, unknown>;
+  return (
+    Array.isArray(response.sessions) &&
+    response.sessions.every(isGameSessionHistoryItem) &&
+    (response.nextCursor === null || typeof response.nextCursor === 'string')
+  );
+}
+
+function buildGameSessionHistoryUrl({ limit, cursor, mode }: GetGameSessionsOptions): string {
+  const searchParams = new URLSearchParams();
+
+  if (limit !== undefined) {
+    searchParams.set('limit', String(limit));
+  }
+
+  const normalizedCursor = cursor?.trim() ?? '';
+  if (normalizedCursor.length > 0) {
+    searchParams.set('cursor', normalizedCursor);
+  }
+
+  if (mode) {
+    searchParams.set('mode', mode);
+  }
+
+  const queryString = searchParams.toString();
+  return queryString.length > 0
+    ? buildGameSessionsUrl() + '?' + queryString
+    : buildGameSessionsUrl();
+}
+
+export async function getGameSessions(
+  options: GetGameSessionsOptions
+): Promise<GameSessionsResponse> {
+  const fetchOptions: GetGameSessionsFetchOptions = {
+    method: 'GET',
+    credentials: 'include',
+    headers: {
+      Authorization: 'Bearer ' + options.accessToken
+    }
+  };
+
+  if (options.signal) {
+    fetchOptions.signal = options.signal;
+  }
+
+  const response = await fetch(buildGameSessionHistoryUrl(options), fetchOptions);
+
+  if (!response.ok) {
+    await parseErrorResponse(response, 'ゲーム履歴の取得に失敗しました');
+  }
+
+  const data = (await response.json()) as unknown;
+  if (!isGameSessionsResponse(data)) {
+    throw new ApiError(500, 'ゲーム履歴のレスポンス形式が不正です', data);
   }
 
   return data;

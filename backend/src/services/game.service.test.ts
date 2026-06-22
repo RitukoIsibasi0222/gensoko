@@ -38,8 +38,10 @@ import { prisma } from "../lib/prisma.js";
 import {
   createGameQuestionSet,
   GAME_SESSION_DURATION_LIMIT_SEC,
+  GameSessionHistoryCursorError,
   GameSessionNotFoundError,
   GameSessionValidationError,
+  getGameSessionHistory,
   getGameSessionResult,
   InsufficientWeakElementsError,
   QUESTION_TIME_LIMIT_SEC,
@@ -1272,5 +1274,153 @@ describe("getGameSessionResult", () => {
         },
       ],
     });
+  });
+});
+
+describe("getGameSessionHistory", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const historyRows = [
+    {
+      id: "session-3",
+      mode: "SYMBOL_TO_NAME_LV1" as const,
+      correctCount: 10,
+      totalCount: 10,
+      totalScore: 1000,
+      maxStreak: 10,
+      durationSec: 55,
+      playedAt: new Date("2026-06-21T10:00:00.000Z"),
+    },
+    {
+      id: "session-2",
+      mode: "NAME_TO_SYMBOL_LV1" as const,
+      correctCount: 8,
+      totalCount: 10,
+      totalScore: 800,
+      maxStreak: 5,
+      durationSec: 72,
+      playedAt: new Date("2026-06-20T12:35:00.000Z"),
+    },
+    {
+      id: "session-1",
+      mode: "SYMBOL_TO_NAME_LV1" as const,
+      correctCount: 6,
+      totalCount: 10,
+      totalScore: 600,
+      maxStreak: 3,
+      durationSec: 81,
+      playedAt: new Date("2026-06-19T12:35:00.000Z"),
+    },
+  ];
+
+  it("userId で絞り、summary fields だけを新しい順に取得する", async () => {
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue(historyRows.slice(0, 2) as never);
+
+    const result = await getGameSessionHistory({ userId: "user-1", limit: 2 });
+
+    expect(prisma.gameSession.findMany).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      orderBy: [{ playedAt: "desc" }, { id: "desc" }],
+      take: 3,
+      select: {
+        id: true,
+        mode: true,
+        correctCount: true,
+        totalCount: true,
+        totalScore: true,
+        maxStreak: true,
+        durationSec: true,
+        playedAt: true,
+      },
+    });
+    expect(result.sessions.map((session) => session.sessionId)).toEqual(["session-3", "session-2"]);
+    expect(result.nextCursor).toBeNull();
+  });
+
+  it("limit+1 件取得できたら返却は limit 件に丸めて nextCursor を返す", async () => {
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue(historyRows as never);
+
+    const result = await getGameSessionHistory({ userId: "user-1", limit: 2 });
+
+    expect(result.sessions).toHaveLength(2);
+    expect(result.nextCursor).toBe("session-2");
+  });
+
+  it("mode filter を where に含める", async () => {
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([]);
+
+    await getGameSessionHistory({ userId: "user-1", limit: 20, mode: "NAME_TO_SYMBOL_LV1" });
+
+    expect(prisma.gameSession.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: "user-1", mode: "NAME_TO_SYMBOL_LV1" } }),
+    );
+  });
+
+  it("cursor があれば本人の cursor session を lookup して続きだけ取得する", async () => {
+    vi.mocked(prisma.gameSession.findFirst).mockResolvedValue({
+      id: "session-2",
+      playedAt: new Date("2026-06-20T12:35:00.000Z"),
+    } as never);
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([historyRows[2]] as never);
+
+    await getGameSessionHistory({ userId: "user-1", limit: 20, cursor: "session-2" });
+
+    expect(prisma.gameSession.findFirst).toHaveBeenCalledWith({
+      where: { id: "session-2", userId: "user-1" },
+      select: { id: true, playedAt: true },
+    });
+    expect(prisma.gameSession.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: "user-1",
+          OR: [
+            { playedAt: { lt: new Date("2026-06-20T12:35:00.000Z") } },
+            { playedAt: new Date("2026-06-20T12:35:00.000Z"), id: { lt: "session-2" } },
+          ],
+        },
+      }),
+    );
+  });
+
+  it("mode filter 指定時は cursor session も同じ mode で lookup する", async () => {
+    vi.mocked(prisma.gameSession.findFirst).mockResolvedValue({
+      id: "session-2",
+      playedAt: new Date("2026-06-20T12:35:00.000Z"),
+    } as never);
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([historyRows[2]] as never);
+
+    await getGameSessionHistory({
+      userId: "user-1",
+      limit: 20,
+      cursor: "session-2",
+      mode: "NAME_TO_SYMBOL_LV1",
+    });
+
+    expect(prisma.gameSession.findFirst).toHaveBeenCalledWith({
+      where: { id: "session-2", userId: "user-1", mode: "NAME_TO_SYMBOL_LV1" },
+      select: { id: true, playedAt: true },
+    });
+    expect(prisma.gameSession.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: "user-1",
+          mode: "NAME_TO_SYMBOL_LV1",
+          OR: [
+            { playedAt: { lt: new Date("2026-06-20T12:35:00.000Z") } },
+            { playedAt: new Date("2026-06-20T12:35:00.000Z"), id: { lt: "session-2" } },
+          ],
+        },
+      }),
+    );
+  });
+
+  it("cursor session が本人に存在しなければ cursor error を投げる", async () => {
+    vi.mocked(prisma.gameSession.findFirst).mockResolvedValue(null);
+
+    await expect(
+      getGameSessionHistory({ userId: "user-1", limit: 20, cursor: "missing" }),
+    ).rejects.toThrow(GameSessionHistoryCursorError);
   });
 });

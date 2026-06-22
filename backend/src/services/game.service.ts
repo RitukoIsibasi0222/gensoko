@@ -864,3 +864,116 @@ export async function getGameSessionResult({
     results,
   };
 }
+
+export type GameSessionHistoryItem = {
+  sessionId: string;
+  mode: GameMode;
+  correctCount: number;
+  totalCount: number;
+  totalScore: number;
+  maxStreak: number;
+  durationSec: number;
+  playedAt: Date;
+};
+
+export type GetGameSessionHistoryParams = {
+  userId: string;
+  limit: number;
+  cursor?: string;
+  mode?: GameMode;
+};
+
+export type GetGameSessionHistoryResult = {
+  sessions: GameSessionHistoryItem[];
+  nextCursor: string | null;
+};
+
+export class GameSessionHistoryCursorError extends Error {
+  constructor() {
+    super("カーソルが正しくありません");
+    this.name = "GameSessionHistoryCursorError";
+  }
+}
+
+const gameSessionHistorySelect = {
+  id: true,
+  mode: true,
+  correctCount: true,
+  totalCount: true,
+  totalScore: true,
+  maxStreak: true,
+  durationSec: true,
+  playedAt: true,
+} satisfies Prisma.GameSessionSelect;
+
+type GameSessionHistoryRow = Prisma.GameSessionGetPayload<{
+  select: typeof gameSessionHistorySelect;
+}>;
+
+function toGameSessionHistoryItem(row: GameSessionHistoryRow): GameSessionHistoryItem {
+  return {
+    sessionId: row.id,
+    mode: row.mode,
+    correctCount: row.correctCount,
+    totalCount: row.totalCount,
+    totalScore: row.totalScore,
+    maxStreak: row.maxStreak,
+    durationSec: row.durationSec,
+    playedAt: row.playedAt,
+  };
+}
+
+async function getGameSessionHistoryCursorWhere({
+  userId,
+  cursor,
+  mode,
+}: {
+  userId: string;
+  cursor: string;
+  mode?: GameMode;
+}): Promise<Prisma.GameSessionWhereInput> {
+  const cursorSession = await prisma.gameSession.findFirst({
+    where: { id: cursor, userId, ...(mode ? { mode } : {}) },
+    select: { id: true, playedAt: true },
+  });
+
+  if (!cursorSession) {
+    throw new GameSessionHistoryCursorError();
+  }
+
+  return {
+    OR: [
+      { playedAt: { lt: cursorSession.playedAt } },
+      { playedAt: cursorSession.playedAt, id: { lt: cursorSession.id } },
+    ],
+  };
+}
+
+export async function getGameSessionHistory({
+  userId,
+  limit,
+  cursor,
+  mode,
+}: GetGameSessionHistoryParams): Promise<GetGameSessionHistoryResult> {
+  const cursorWhere = cursor
+    ? await getGameSessionHistoryCursorWhere({ userId, cursor, mode })
+    : undefined;
+  const where: Prisma.GameSessionWhereInput = {
+    userId,
+    ...(mode ? { mode } : {}),
+    ...(cursorWhere ?? {}),
+  };
+
+  const rows = await prisma.gameSession.findMany({
+    where,
+    orderBy: [{ playedAt: "desc" }, { id: "desc" }],
+    take: limit + 1,
+    select: gameSessionHistorySelect,
+  });
+  const visibleRows = rows.slice(0, limit);
+
+  return {
+    sessions: visibleRows.map(toGameSessionHistoryItem),
+    nextCursor: rows.length > limit ? (visibleRows[visibleRows.length - 1]?.id ?? null) : null,
+  };
+}
