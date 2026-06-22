@@ -553,3 +553,107 @@ describe('getGameSession', () => {
     }
   });
 });
+
+describe('getGameSessions', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const validSessionsResponse = {
+    sessions: [
+      {
+        sessionId: 'session-1',
+        mode: 'SYMBOL_TO_NAME_LV1',
+        totalCount: 10,
+        correctCount: 8,
+        totalScore: 800,
+        maxStreak: 5,
+        durationSec: 72,
+        playedAt: '2026-06-20T12:35:00.000Z'
+      }
+    ],
+    nextCursor: 'session-next'
+  };
+
+  it('正常系: query と Authorization を付けて履歴一覧を返す', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(validSessionsResponse), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+    const { getGameSessions } = await import('./game');
+
+    const result = await getGameSessions({
+      accessToken: 'test-access-token',
+      limit: 10,
+      cursor: 'session-cursor',
+      mode: 'SYMBOL_TO_NAME_LV1'
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/game/sessions?limit=10&cursor=session-cursor&mode=SYMBOL_TO_NAME_LV1',
+      {
+        method: 'GET',
+        credentials: 'include',
+        headers: { Authorization: 'Bearer test-access-token' }
+      }
+    );
+    expect(result).toEqual(validSessionsResponse);
+  });
+
+  it('正常系: null / undefined / 空文字 query は URL から省略する', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ sessions: [], nextCursor: null }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+    const { getGameSessions } = await import('./game');
+
+    await getGameSessions({ accessToken: 'test-access-token', cursor: '   ', mode: null });
+
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3000/api/v1/game/sessions', {
+      method: 'GET',
+      credentials: 'include',
+      headers: { Authorization: 'Bearer test-access-token' }
+    });
+  });
+
+  it('HTTPエラー: 非 JSON レスポンスの場合はデフォルトメッセージを使う', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response('Bad Gateway', {
+        status: 502,
+        headers: { 'Content-Type': 'text/html' }
+      })
+    );
+    const { getGameSessions } = await import('./game');
+
+    await expect(getGameSessions({ accessToken: 'test-access-token' })).rejects.toThrow(
+      'ゲーム履歴の取得に失敗しました'
+    );
+  });
+
+  it('レスポンス形式不正: nextCursor が string|null でなければ ApiError(500) を throw する', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ sessions: [], nextCursor: 1 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+    const { getGameSessions } = await import('./game');
+
+    try {
+      await getGameSessions({ accessToken: 'test-access-token' });
+      expect.fail('ApiError が throw されるべき');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(500);
+      expect((error as ApiError).message).toBe('ゲーム履歴のレスポンス形式が不正です');
+    }
+  });
+});
