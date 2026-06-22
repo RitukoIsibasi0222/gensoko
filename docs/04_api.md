@@ -277,6 +277,44 @@ Error:
 500 error: サーバーエラーが発生しました
 ```
 
+### GET `/game/sessions`
+```
+Query params:
+  limit?: number  // 1〜50 の整数。未指定・空文字は 20
+  cursor?: string // 前回 response の nextCursor。trim 後に空文字は 400
+  mode?: GameMode // 未指定なら全モード
+
+Response 200:
+{
+  "sessions": [
+    {
+      "sessionId": "cuid",
+      "mode": "SYMBOL_TO_NAME_LV1",
+      "correctCount": 8,
+      "totalCount": 10,
+      "totalScore": 800,
+      "maxStreak": 5,
+      "durationSec": 72,
+      "playedAt": "2026-06-20T12:35:00.000Z"
+    }
+  ],
+  "nextCursor": "cuid-or-null"
+}
+
+Pagination:
+  - 並び順は playedAt desc, id desc
+  - nextCursor は次ページがある場合だけ、最後に表示した sessionId
+  - cursor が存在しない、または本人のセッションでない場合は 400
+  - 一覧は summary のみを返し、回答詳細 results は返さない
+
+Error:
+400 error: バリデーションエラー（details に 取得件数が正しくありません / カーソルが正しくありません / ゲームモードが正しくありません）
+401 error: 認証が必要です / トークンが無効です / ユーザーが見つかりません
+403 error: アカウントが停止されています / メールアドレスが確認されていません / アカウントがロックされています
+429 error: リクエストが多すぎます。しばらく待ってから再試行してください
+500 error: サーバーエラーが発生しました
+```
+
 ### GET `/game/sessions/:sessionId`
 ```
 Path params:

@@ -139,7 +139,7 @@
 | `frontend/src/routes/(app)/mypage/+page.svelte` | 新規 | ゲーム履歴一覧セクション、状態表示、詳細リンク、追加読み込み |
 | `docs/04_api.md` | 修正 | `GET /game/sessions` の query / response / error を追加 |
 | `docs/05_progress.md` | 修正 | 該当タスクに計画書リンク、実装中・完了マークを反映 |
-| `docs/plans/game-session-history/plan.md` | 新規 | 本計画。実装完了時に実態へ更新 |
+| `docs/plans/game-session-history/plan.md` | 修正 | 実装完了情報と実態に合わせた記録を追加 |
 
 ## API 仕様（この機能で使う範囲のみ）
 
@@ -355,20 +355,20 @@ export function getGameSessions(options: GetGameSessionsOptions): Promise<GameSe
 | T13 | 手動確認 | ブラウザ / API | ログイン後の履歴一覧、空状態、詳細遷移、未ログイン、API エラー時の表示を確認 | 高 |
 | T14 | 実装完了更新 | `docs/05_progress.md`, `docs/plans/game-session-history/plan.md` | チェックボックス、対象ファイル一覧、実装完了セクションが実態と一致 | 高 |
 
-- [ ] T1: 既存仕様・既存実装の最終確認（`docs/04_api.md`, `docs/05_progress.md`, game 関連ファイル）
-- [ ] T2: backend 履歴一覧 service 型と取得処理を追加（`backend/src/services/game.service.ts`）
-- [ ] T3: backend route と query validation を追加（`backend/src/routes/game/index.ts`）
-- [ ] T4: backend route / service テストを追加（`backend/src/routes/game/session-history.test.ts`, `backend/src/services/game.service.test.ts`）
-- [ ] T5: frontend 型定義と query helper を追加（`frontend/src/lib/game/types.ts`, `frontend/src/lib/game/session-history.ts`）
-- [ ] T6: frontend API client を追加（`frontend/src/lib/api/game.ts`）
-- [ ] T7: frontend API / helper テストを追加（`frontend/src/lib/api/game.test.ts`, `frontend/src/lib/game/session-history.test.ts`）
-- [ ] T8: `/mypage` のゲーム履歴セクションを実装（`frontend/src/routes/(app)/mypage/+page.svelte`, `+page.ts`）
-- [ ] T9: loading / empty / error / retry / unauthenticated 状態を実装（`frontend/src/routes/(app)/mypage/+page.svelte`）
-- [ ] T10: reload / 戻る操作 / URL query 復元を実装（`frontend/src/routes/(app)/mypage/+page.svelte`）
-- [ ] T11: `docs/04_api.md` 更新要否確認と更新
-- [ ] T12: lint / format / test / frontend check
-- [ ] T13: 手動確認
-- [ ] T14: `docs/05_progress.md` と plan.md の実装完了更新
+- [x] T1: 既存仕様・既存実装の最終確認（`docs/04_api.md`, `docs/05_progress.md`, game 関連ファイル）
+- [x] T2: backend 履歴一覧 service 型と取得処理を追加（`backend/src/services/game.service.ts`）
+- [x] T3: backend route と query validation を追加（`backend/src/routes/game/index.ts`）
+- [x] T4: backend route / service テストを追加（`backend/src/routes/game/session-history.test.ts`, `backend/src/services/game.service.test.ts`）
+- [x] T5: frontend 型定義と query helper を追加（`frontend/src/lib/game/types.ts`, `frontend/src/lib/game/session-history.ts`）
+- [x] T6: frontend API client を追加（`frontend/src/lib/api/game.ts`）
+- [x] T7: frontend API / helper テストを追加（`frontend/src/lib/api/game.test.ts`, `frontend/src/lib/game/session-history.test.ts`）
+- [x] T8: `/mypage` のゲーム履歴セクションを実装（`frontend/src/routes/(app)/mypage/+page.svelte`, `+page.ts`）
+- [x] T9: loading / empty / error / retry / unauthenticated 状態を実装（`frontend/src/routes/(app)/mypage/+page.svelte`）
+- [x] T10: reload / 戻る操作 / URL query 復元を実装（`frontend/src/routes/(app)/mypage/+page.svelte`）
+- [x] T11: `docs/04_api.md` 更新要否確認と更新
+- [x] T12: lint / format / test / frontend check
+- [x] T13: 手動確認
+- [x] T14: `docs/05_progress.md` と plan.md の実装完了更新
 
 ## 技術的注意点
 
@@ -474,3 +474,42 @@ export function getGameSessions(options: GetGameSessionsOptions): Promise<GameSe
 |---|---|---|
 | `backend/src/services/game.service.ts` | 修正 | ゲーム履歴一覧取得 service を追加 |
 ```
+
+## 実装完了
+- 完了日: 2026-06-22
+- 実装ブランチ: feature/game-session-history
+- PR: 作成後に本作業報告へ記載
+
+### 計画からの変更点
+- `GET /game/sessions` route は exact path のため、既存 `GET /game/sessions/:sessionId` と衝突しないことを確認したうえで既存 router 内に追加した。
+- `/mypage` は計画どおりゲーム履歴セクションに限定し、統計グラフ・サマリーカードは後続フェーズに残した。
+- DB schema / migration は変更していないため、追加の migration deploy / Playwright DB 影響確認は不要。
+- 手動ブラウザ確認は未実施。代替として `svelte-check` と frontend 全テストで型・画面コンパイル・API helper を確認した。
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `backend/src/services/game.service.ts` | 修正 | ゲーム履歴一覧取得 service、summary select、cursor pagination、cursor error を追加 |
+| `backend/src/services/game.service.test.ts` | 修正 | userId 絞り込み、limit+1、mode filter、cursor、他ユーザー cursor 除外テストを追加 |
+| `backend/src/routes/game/index.ts` | 修正 | `GET /sessions` route、query validation、cursor error mapping を追加 |
+| `backend/src/routes/game/session-history.test.ts` | 新規 | `GET /game/sessions` route テストを追加 |
+| `frontend/src/lib/game/types.ts` | 修正 | 履歴一覧 summary / response / query 型を追加 |
+| `frontend/src/lib/game/session-history.ts` | 新規 | query 正規化、正答率、日時表示 helper を追加 |
+| `frontend/src/lib/game/session-history.test.ts` | 新規 | query 正規化と表示 helper テストを追加 |
+| `frontend/src/lib/api/game.ts` | 修正 | `getGameSessions()` API client と runtime validation を追加 |
+| `frontend/src/lib/api/game.test.ts` | 修正 | 履歴一覧 API client テストを追加 |
+| `frontend/src/routes/(app)/mypage/+page.ts` | 新規 | SSR / prerender 設定を追加 |
+| `frontend/src/routes/(app)/mypage/+page.svelte` | 新規 | ゲーム履歴一覧、mode filter、追加読み込み、状態表示、詳細リンクを追加 |
+| `docs/04_api.md` | 修正 | `GET /game/sessions` の query / response / error 仕様を追加 |
+| `docs/05_progress.md` | 修正 | 対象タスクを実装中から完了へ更新 |
+| `docs/plans/game-session-history/plan.md` | 修正 | タスク完了マークと実装完了記録を追加 |
+
+### 検証結果
+| コマンド | 結果 |
+|---|---|
+| `cd backend && npm run lint` | 成功 |
+| `cd backend && npm run format:check` | 成功 |
+| `cd backend && npm run test -- --run` | 成功（27 files / 223 tests） |
+| `cd frontend && npm run lint` | 成功 |
+| `cd frontend && npm run check` | 成功（0 errors / 0 warnings） |
+| `cd frontend && npm run test:run` | 成功（19 files / 221 tests） |
