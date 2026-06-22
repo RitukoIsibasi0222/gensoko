@@ -478,7 +478,7 @@ export function getGameSessions(options: GetGameSessionsOptions): Promise<GameSe
 ## 実装完了
 - 完了日: 2026-06-22
 - 実装ブランチ: feature/game-session-history
-- PR: 作成後に本作業報告へ記載
+- PR: #58
 
 ### 計画からの変更点
 - `GET /game/sessions` route は exact path のため、既存 `GET /game/sessions/:sessionId` と衝突しないことを確認したうえで既存 router 内に追加した。
