@@ -98,6 +98,7 @@
 
 ### 計画からの変更点
 - API 追加は行わず、ヘッダー導線と /weak 仮ページ追加に限定した。
+- 追加調整として、SPメニューは上から滑らかに展開する形にした。
 - docs/05_progress.md の計画書パスはプレーンテキストで記載した。
 
 ### 実際の変更ファイル
@@ -115,4 +116,4 @@
 | frontend lint | OK: docker exec gensoko-sveltekit-1 npm run lint |
 | svelte-check | OK: docker exec gensoko-sveltekit-1 npm run check |
 | frontend test | OK: docker exec gensoko-sveltekit-1 npm run test:run（19 files / 221 tests） |
-| ブラウザ確認 | OK: /weak が 404 ではなく仮ページ表示。スマホ幅でロゴ + メニューボタンのみ、開閉時 aria-expanded=true を確認 |
+| ブラウザ確認 | OK: /weak が 404 ではなく仮ページ表示。スマホ幅でロゴ + メニューボタンのみ、開閉時 aria-expanded=true、閉状態 opacity=0/grid rows=0px、開状態 opacity=1/grid rows>0 を確認 |
