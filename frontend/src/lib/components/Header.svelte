@@ -86,6 +86,7 @@
         <span class="text-gray-600">こんにちは、{authStore.user?.username} さん</span>
         <a href="/settings" class="hover:text-brand rounded px-3 py-1.5 text-gray-600">設定</a>
         <button
+          type="button"
           onclick={handleLogout}
           class="hover:bg-brand-hover bg-brand rounded px-3 py-1.5 text-white"
         >
