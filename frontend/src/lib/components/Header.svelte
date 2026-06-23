@@ -18,6 +18,7 @@
   ];
 
   let isMobileMenuOpen = $state(false);
+  const showAuthenticatedNav = $derived(!authStore.isInitializing && authStore.isLoggedIn);
 
   function closeMobileMenu(): void {
     isMobileMenuOpen = false;
@@ -71,7 +72,7 @@
       {#each primaryNavItems as item (item.href)}
         <li><a href={item.href} class="hover:text-brand">{item.label}</a></li>
       {/each}
-      {#if authStore.isLoggedIn}
+      {#if showAuthenticatedNav}
         {#each authenticatedNavItems as item (item.href)}
           <li><a href={item.href} class="hover:text-brand">{item.label}</a></li>
         {/each}
@@ -123,7 +124,7 @@
               </a>
             </li>
           {/each}
-          {#if authStore.isLoggedIn}
+          {#if showAuthenticatedNav}
             {#each authenticatedNavItems as item (item.href)}
               <li>
                 <a
