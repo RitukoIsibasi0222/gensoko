@@ -47,10 +47,22 @@
       onclick={toggleMobileMenu}
     >
       <span class="sr-only">メニュー</span>
-      <span class="flex flex-col gap-1.5" aria-hidden="true">
-        <span class="block h-0.5 w-5 rounded bg-current"></span>
-        <span class="block h-0.5 w-5 rounded bg-current"></span>
-        <span class="block h-0.5 w-5 rounded bg-current"></span>
+      <span class="relative block h-5 w-5" aria-hidden="true">
+        <span
+          class={isMobileMenuOpen
+            ? 'absolute top-1/2 left-0 block h-0.5 w-5 -translate-y-1/2 rotate-45 rounded bg-current transition-transform duration-300 ease-out'
+            : 'absolute top-1 left-0 block h-0.5 w-5 translate-y-0 rotate-0 rounded bg-current transition-transform duration-300 ease-out'}
+        ></span>
+        <span
+          class={isMobileMenuOpen
+            ? 'absolute top-1/2 left-0 block h-0.5 w-5 -translate-y-1/2 rounded bg-current opacity-0 transition-opacity duration-200 ease-out'
+            : 'absolute top-1/2 left-0 block h-0.5 w-5 -translate-y-1/2 rounded bg-current opacity-100 transition-opacity duration-200 ease-out'}
+        ></span>
+        <span
+          class={isMobileMenuOpen
+            ? 'absolute top-1/2 left-0 block h-0.5 w-5 -translate-y-1/2 -rotate-45 rounded bg-current transition-transform duration-300 ease-out'
+            : 'absolute bottom-1 left-0 block h-0.5 w-5 translate-y-0 rotate-0 rounded bg-current transition-transform duration-300 ease-out'}
+        ></span>
       </span>
     </button>
 
