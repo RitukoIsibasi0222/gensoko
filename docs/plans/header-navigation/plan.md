@@ -116,4 +116,4 @@
 | frontend lint | OK: docker exec gensoko-sveltekit-1 npm run lint |
 | svelte-check | OK: docker exec gensoko-sveltekit-1 npm run check |
 | frontend test | OK: docker exec gensoko-sveltekit-1 npm run test:run（19 files / 221 tests） |
-| ブラウザ確認 | OK: /weak が 404 ではなく仮ページ表示。スマホ幅でロゴ + メニューボタンのみ、開閉時 aria-expanded=true、閉状態 opacity=0/grid rows=0px、開状態 opacity=1/grid rows>0、開閉時のハンバーガー/バツ変形を確認 |
+| ブラウザ確認 | OK: /weak が 404 ではなく仮ページ表示。スマホ幅でロゴ + メニューボタンのみ、開閉時 aria-expanded=true、閉状態 opacity=0/grid rows=0px、開状態 opacity=1/grid rows>0、開閉時のハンバーガー/バツ変形、閉状態 aria-hidden=true/inert 付与を確認 |

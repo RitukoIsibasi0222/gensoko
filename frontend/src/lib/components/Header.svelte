@@ -103,6 +103,8 @@
 
   <div
     id="mobile-navigation"
+    aria-hidden={!isMobileMenuOpen}
+    inert={!isMobileMenuOpen}
     class={isMobileMenuOpen
       ? 'grid grid-rows-[1fr] border-t border-gray-200 opacity-100 transition-[grid-template-rows,opacity] duration-300 ease-out md:hidden'
       : 'grid grid-rows-[0fr] border-t border-transparent opacity-0 transition-[grid-template-rows,opacity] duration-300 ease-out md:hidden'}
