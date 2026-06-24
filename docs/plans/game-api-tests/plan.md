@@ -420,6 +420,8 @@ function createValidGameSessionBody(overrides?: Partial<GameSessionBody>): GameS
 - 当初の `ゲーム API のテスト` 全体ではなく、依頼対象の `GET /game/questions` に範囲を絞って実装した。
 - Red フェーズで、サービスが余分な `correctChoiceId` / `elementId` を持つ問題データを返した場合にルートレスポンスへ漏れることを検出した。
 - Green フェーズで `backend/src/routes/game/index.ts` に公開レスポンス整形を追加し、HTTP境界で許可フィールドだけを返すようにした。
+- レビュー指摘を受け、通常モードの候補元素範囲を Lv1 は1〜20、Lv2 は21〜118の両端で明示するようにした。
+- 追加のA11Y確認で、ゲームプレイ画面のエラー状態に `role="alert"` を追加した。
 - API 仕様・ステータスコード・エラーメッセージの変更はないため、`docs/04_api.md` は更新不要と判断した。
 
 ### 実際の変更ファイル
@@ -427,7 +429,9 @@ function createValidGameSessionBody(overrides?: Partial<GameSessionBody>): GameS
 |---|---|---|
 | `backend/src/routes/game/index.ts` | 修正 | `GET /game/questions` のレスポンスで問題・選択肢を公開フィールドに整形 |
 | `backend/src/routes/game/questions.test.ts` | 修正 | mode 未指定時の400 details、正解情報非公開のルート回帰を追加 |
+| `backend/src/services/game.service.ts` | 修正 | 通常モードの候補元素範囲を Lv1/Lv2 とも上下限で明示 |
 | `backend/src/services/game.service.test.ts` | 修正 | Lv1/Lv2通常モードの候補元素範囲テストを追加 |
+| `frontend/src/routes/(app)/game/play/+page.svelte` | 修正 | APIエラー・不正モード・送信失敗の表示に `role="alert"` を追加 |
 | `docs/05_progress.md` | 修正 | `ゲーム API のテスト` を実装中にし、GET /game/questions 補強完了を追記 |
 | `docs/plans/game-api-tests/plan.md` | 修正 | GET /game/questions の部分完了記録を追記 |
 
@@ -454,6 +458,7 @@ function createValidGameSessionBody(overrides?: Partial<GameSessionBody>): GameS
 | 項目 | 結果 |
 |---|---|
 | DB migration | DB schema / migration 未変更のため対象外 |
-| Playwright | DB schema / migration 未変更、UI 未変更のため対象外 |
+| Playwright | DB schema / migration 未変更のため追加必須チェック対象外。UI変更はA11Y属性追加のみ |
 | API 手動確認 | ユニットテストで `GET /game/questions` の認証・validation・409・500・正解情報非公開を確認 |
+| A11Y 回帰 | ゲームプレイ画面のエラー状態を `role="alert"` で通知するように改善 |
 | frontend 生成物 | `.svelte-kit` を再生成し、`nobody:nogroup` 所有の古い生成物は削除済み |

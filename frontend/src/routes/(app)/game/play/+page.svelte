@@ -439,7 +439,7 @@
       </div>
     </section>
   {:else if mode === null || modeConfig === null}
-    <section class="space-y-4 rounded border border-red-200 bg-red-50 p-6">
+    <section class="space-y-4 rounded border border-red-200 bg-red-50 p-6" role="alert">
       <div>
         <p class="text-sm font-semibold text-red-700">ゲームを開始できません</p>
         <h1 class="mt-2 text-2xl font-bold text-red-900">ゲームモードが正しくありません</h1>
@@ -463,7 +463,7 @@
       <p class="text-sm text-gray-600">ゲーム問題を読み込んでいます...</p>
     </section>
   {:else if questionLoadStatus === 'error'}
-    <section class="space-y-4 rounded border border-red-200 bg-red-50 p-6" aria-live="polite">
+    <section class="space-y-4 rounded border border-red-200 bg-red-50 p-6" role="alert">
       <div>
         <p class="text-sm font-semibold text-red-700">ゲームを開始できません</p>
         <h1 class="mt-2 text-2xl font-bold text-red-900">問題の取得に失敗しました</h1>
@@ -491,7 +491,8 @@
     <section
       class="space-y-5 rounded border border-gray-200 bg-white p-6"
       aria-busy={isSubmitting}
-      aria-live="polite"
+      aria-live={submitStatus === 'error' ? 'assertive' : 'polite'}
+      role={submitStatus === 'error' ? 'alert' : 'status'}
     >
       <div>
         <p class="text-sm font-semibold text-gray-500">4択クイズ</p>

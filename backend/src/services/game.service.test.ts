@@ -266,7 +266,7 @@ describe("createGameQuestionSet", () => {
     });
 
     expect(prisma.element.findMany).toHaveBeenCalledWith({
-      where: { id: { lte: 20 } },
+      where: { id: { gte: 1, lte: 20 } },
       orderBy: { id: "asc" },
     });
   });
@@ -284,7 +284,7 @@ describe("createGameQuestionSet", () => {
     });
 
     expect(prisma.element.findMany).toHaveBeenCalledWith({
-      where: { id: { gte: 21 } },
+      where: { id: { gte: 21, lte: 118 } },
       orderBy: { id: "asc" },
     });
   });

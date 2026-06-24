@@ -61,7 +61,9 @@
 |---|---|
 | ルート修正 | `GET /game/questions` のレスポンスで `questionId`, `prompt`, `choices[].choiceId`, `choices[].text` のみを返すよう整形 |
 | ルートテスト | mode 未指定時の400 details、正解情報非公開の回帰テストを追加 |
+| サービス修正 | 通常モードの候補元素範囲を Lv1 は1〜20、Lv2 は21〜118の両端で明示 |
 | サービステスト | Lv1 は原子番号1〜20、Lv2 は21〜118を候補にすることを追加検証 |
+| A11Y改善 | ゲームプレイ画面のAPIエラー・不正モード・送信失敗表示に `role="alert"` を追加 |
 | ドキュメント | `docs/05_progress.md` と `docs/plans/game-api-tests/plan.md` に部分完了を記録 |
 
 ## TDD 実施記録
@@ -80,8 +82,8 @@
 | route | 正解情報を含む service 結果 | 200、レスポンスから `correctChoiceId` / `elementId` を除外 |
 | route | 苦手元素が不足 | 409、`苦手モードを始めるには、苦手元素が5件以上必要です` |
 | route | 想定外エラー | 500、`サーバーエラーが発生しました` |
-| service | Lv1通常モード | `prisma.element.findMany` が `id <= 20` で呼ばれる |
-| service | Lv2通常モード | `prisma.element.findMany` が `id >= 21` で呼ばれる |
+| service | Lv1通常モード | `prisma.element.findMany` が `1 <= id <= 20` で呼ばれる |
+| service | Lv2通常モード | `prisma.element.findMany` が `21 <= id <= 118` で呼ばれる |
 
 ## セキュリティ・仕様面の確認
 
@@ -93,6 +95,7 @@
 | エラーメッセージ | 既存どおり日本語レスポンスを維持 |
 | DBアクセス | 追加のDBアクセス・生SQLなし |
 | レート制限 | 既存の `gameQuestionsRateLimit` を維持 |
+| A11Y | ゲームプレイ画面のエラー状態を `role="alert"` で通知 |
 
 ## 品質チェック
 
@@ -112,7 +115,7 @@
 - `GET /game/questions` のレスポンス形状は既存API仕様どおりです。
 - クライアントが受け取るデータは、これまで期待されていた公開フィールドに限定されます。
 - DB schema / migration は変更していません。
-- UI は変更していません。
+- UIの見た目・導線は変更していません。エラー状態のA11Y属性のみ追加しています。
 - `POST /game/sessions`、履歴一覧、結果詳細の実装は変更していません。
 
 ## 補足
