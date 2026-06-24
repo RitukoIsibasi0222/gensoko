@@ -456,4 +456,4 @@ function createValidGameSessionBody(overrides?: Partial<GameSessionBody>): GameS
 | DB migration | DB schema / migration 未変更のため対象外 |
 | Playwright | DB schema / migration 未変更、UI 未変更のため対象外 |
 | API 手動確認 | ユニットテストで `GET /game/questions` の認証・validation・409・500・正解情報非公開を確認 |
-| frontend 生成物 | `.svelte-kit` を再生成し、`nobody:nogroup` 所有の生成物は ignored 配下へ退避済み |
+| frontend 生成物 | `.svelte-kit` を再生成し、`nobody:nogroup` 所有の古い生成物は削除済み |
