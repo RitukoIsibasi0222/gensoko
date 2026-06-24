@@ -130,7 +130,7 @@
 
 ### 画面
 - [x] 共通ナビ導線・モバイルメニュー整備（/weak 仮ページ、ログイン後 /weak・/mypage 導線、スマホハンバーガーメニュー） — 計画書: docs/plans/header-navigation/plan.md
-- [ ] 苦手リスト画面 `/weak`（ソート・手動削除ボタン）
+- [ ] 苦手リスト画面 `/weak`（ソート・手動削除ボタン） — 計画書: [`docs/plans/weak-list-page/plan.md`](plans/weak-list-page/plan.md)
 - [ ] マイページ・統計画面 `/mypage`（正答率グラフ・サマリーカード）
 - [ ] ランキングページ `/ranking`（週間・全期間・自分の順位）
 
