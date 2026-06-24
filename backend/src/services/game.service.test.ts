@@ -256,6 +256,39 @@ describe("createGameQuestionSet", () => {
     expect(result.questions[0].choices[0]).not.toHaveProperty("elementId");
   });
 
+  it("Lv1通常モードでは原子番号1〜20を候補にする", async () => {
+    await createGameQuestionSet({
+      userId: "user-1",
+      mode: "NAME_TO_SYMBOL_LV1",
+      now: NOW,
+      choiceIndexGenerator: FIRST_CHOICE_INDEX_GENERATOR,
+      questionElementIndexGenerator: FIRST_QUESTION_ELEMENT_INDEX_GENERATOR,
+    });
+
+    expect(prisma.element.findMany).toHaveBeenCalledWith({
+      where: { id: { lte: 20 } },
+      orderBy: { id: "asc" },
+    });
+  });
+
+  it("Lv2通常モードでは原子番号21〜118を候補にする", async () => {
+    const lv2Elements = Array.from({ length: 20 }, (_, index) => createTestElement(index + 21));
+    vi.mocked(prisma.element.findMany).mockResolvedValue(lv2Elements);
+
+    await createGameQuestionSet({
+      userId: "user-1",
+      mode: "SYMBOL_TO_NAME_LV2",
+      now: NOW,
+      choiceIndexGenerator: FIRST_CHOICE_INDEX_GENERATOR,
+      questionElementIndexGenerator: FIRST_QUESTION_ELEMENT_INDEX_GENERATOR,
+    });
+
+    expect(prisma.element.findMany).toHaveBeenCalledWith({
+      where: { id: { gte: 21 } },
+      orderBy: { id: "asc" },
+    });
+  });
+
   it("DB保存用 JSON にはサーバー正誤判定に必要な elementId と correctChoiceId を含める", async () => {
     await createGameQuestionSet({
       userId: "user-1",

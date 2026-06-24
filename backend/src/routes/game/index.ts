@@ -13,6 +13,7 @@ import {
   getGameSessionHistory,
   getGameSessionResult,
   InsufficientWeakElementsError,
+  type PublicGameQuestion,
   QUESTION_TIME_LIMIT_SEC,
   QuestionSetAlreadySubmittedError,
   QuestionSetExpiredError,
@@ -60,6 +61,17 @@ export const gameQuestionsQuerySchema = z
     mode: z.enum(GAME_MODE_VALUES, { message: GAME_MODE_ERROR_MESSAGE }),
   })
   .strip();
+
+function toPublicGameQuestionResponse(question: PublicGameQuestion): PublicGameQuestion {
+  return {
+    questionId: question.questionId,
+    prompt: question.prompt,
+    choices: question.choices.map((choice) => ({
+      choiceId: choice.choiceId,
+      text: choice.text,
+    })),
+  };
+}
 
 export const gameSessionBodySchema = z
   .object({
@@ -123,7 +135,7 @@ gameRouter.get(
         {
           questionSetId: questionSet.questionSetId,
           expiresAt: questionSet.expiresAt.toISOString(),
-          questions: questionSet.questions,
+          questions: questionSet.questions.map(toPublicGameQuestionResponse),
         },
         200,
       );

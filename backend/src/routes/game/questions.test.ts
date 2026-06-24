@@ -164,6 +164,62 @@ describe("GET /game/questions", () => {
     expect(createGameQuestionSet).not.toHaveBeenCalled();
   });
 
+  it("mode が未指定なら400で具体的なバリデーションメッセージを返す", async () => {
+    const token = await createToken();
+    const res = await app.request("/game/questions", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("バリデーションエラー");
+    expect(body.details[0].message).toBe("ゲームモードが正しくありません");
+    expect(createGameQuestionSet).not.toHaveBeenCalled();
+  });
+
+  it("レスポンスの問題と選択肢から正解情報を公開しない", async () => {
+    vi.mocked(createGameQuestionSet).mockResolvedValue({
+      ...mockQuestionSet,
+      questions: [
+        {
+          questionId: "q1",
+          prompt: "H",
+          correctChoiceId: "1",
+          elementId: 1,
+          choices: [
+            { choiceId: "1", elementId: 1, text: "水素" },
+            { choiceId: "6", elementId: 6, text: "炭素" },
+            { choiceId: "8", elementId: 8, text: "酸素" },
+            { choiceId: "7", elementId: 7, text: "窒素" },
+          ],
+        },
+      ],
+    } as never);
+    const token = await createToken();
+
+    const res = await app.request("/game/questions?mode=SYMBOL_TO_NAME_LV1", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.questions[0]).toEqual({
+      questionId: "q1",
+      prompt: "H",
+      choices: [
+        { choiceId: "1", text: "水素" },
+        { choiceId: "6", text: "炭素" },
+        { choiceId: "8", text: "酸素" },
+        { choiceId: "7", text: "窒素" },
+      ],
+    });
+    expect(body.questions[0]).not.toHaveProperty("correctChoiceId");
+    expect(body.questions[0]).not.toHaveProperty("elementId");
+    expect(body.questions[0].choices[0]).not.toHaveProperty("elementId");
+  });
+
   it("苦手元素が不足している場合は409を返す", async () => {
     vi.mocked(createGameQuestionSet).mockRejectedValue(new InsufficientWeakElementsError());
     const token = await createToken();
