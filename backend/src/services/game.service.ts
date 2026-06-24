@@ -187,10 +187,10 @@ function isWeakGameMode(mode: GameMode): boolean {
 
 function getNormalModeWhere(mode: GameMode): Prisma.ElementWhereInput {
   if (mode === "SYMBOL_TO_NAME_LV1" || mode === "NAME_TO_SYMBOL_LV1") {
-    return { id: { lte: 20 } };
+    return { id: { gte: ELEMENT_ID_MIN, lte: 20 } };
   }
 
-  return { id: { gte: 21 } };
+  return { id: { gte: 21, lte: ELEMENT_ID_MAX } };
 }
 
 async function getCandidateElements(userId: string, mode: GameMode): Promise<PrismaElement[]> {

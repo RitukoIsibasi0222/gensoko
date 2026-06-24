@@ -122,7 +122,7 @@
 - [x] 期限切れ GameQuestionSet クリーンアップ処理（手動実行 + Cron Trigger 想定） — 計画書: [`docs/plans/game-question-set-cleanup/plan.md`](plans/game-question-set-cleanup/plan.md)
 - [x] GET /game/sessions（ゲーム履歴一覧） — 計画書: [docs/plans/game-session-history/plan.md](plans/game-session-history/plan.md)
 - [x] GET /game/sessions/:sessionId（ゲーム結果詳細取得・/game/result 再読み込み復元） — 計画書: [`docs/plans/game-result-session-restore/plan.md`](plans/game-result-session-restore/plan.md)
-- [ ] ゲーム API のテスト — 計画書: [`docs/plans/game-api-tests/plan.md`](plans/game-api-tests/plan.md)
+- [-] ゲーム API のテスト — 計画書: [`docs/plans/game-api-tests/plan.md`](plans/game-api-tests/plan.md)（GET /game/questions テスト補強完了）
 
 ## フェーズ8: UI モック（苦手・マイページ・ランキング）
 

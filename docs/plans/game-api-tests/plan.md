@@ -112,6 +112,7 @@
 
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
+| `backend/src/routes/game/index.ts` | 修正 | `GET /game/questions` の公開レスポンスを許可フィールドに整形し、正解情報の漏えいを防ぐ |
 | `backend/src/routes/game/questions.test.ts` | 修正 | `GET /game/questions` の未指定 mode、rate limit 境界、正解情報非公開のルート回帰を補強 |
 | `backend/src/routes/game/sessions.test.ts` | 修正 | `POST /game/sessions` の mode mismatch、already submitted、想定外エラー、duration 境界、余分なクライアント送信項目の無視を補強 |
 | `backend/src/routes/game/session-history.test.ts` | 修正 | 履歴一覧の空状態、500、limit 上限、mode filter、cursor validation の route 回帰を補強 |
@@ -235,19 +236,19 @@ function createValidGameSessionBody(overrides?: Partial<GameSessionBody>): GameS
 | T12 | 手動確認を実施 | API / 既存 game 画面 | ゲーム開始、結果保存、結果復元、履歴一覧に回帰がない | 中 |
 | T13 | 実装完了更新 | `docs/05_progress.md`, `docs/plans/game-api-tests/plan.md` | チェックボックス、対象ファイル一覧、実装完了セクションが実態と一致 | 高 |
 
-- [ ] T1: 既存仕様・既存実装・既存テストの最終確認
-- [ ] T2: `GET /game/questions` ルートテストを補強
+- [x] T1: 既存仕様・既存実装・既存テストの最終確認
+- [x] T2: `GET /game/questions` ルートテストを補強
 - [ ] T3: `POST /game/sessions` ルートテストを補強
 - [ ] T4: `GET /game/sessions` ルートテストを補強
 - [ ] T5: `GET /game/sessions/:sessionId` ルートテストを補強
 - [ ] T6: `game.service.ts` のサービステストを補強
 - [ ] T7: GameQuestionSet cleanup テストの要否確認
 - [ ] T8: フロントエンド API クライアントテストを補強
-- [ ] T9: 追加テストで見つかった仕様不一致を最小修正
-- [ ] T10: `docs/04_api.md` 更新要否を確認
-- [ ] T11: lint / format / test を実行
+- [x] T9: 追加テストで見つかった仕様不一致を最小修正
+- [x] T10: `docs/04_api.md` 更新要否を確認
+- [x] T11: lint / format / test を実行
 - [ ] T12: 手動確認を実施
-- [ ] T13: `docs/05_progress.md` と plan.md の実装完了更新
+- [x] T13: `docs/05_progress.md` と plan.md の実装完了更新
 
 ## 技術的注意点
 
@@ -409,3 +410,55 @@ function createValidGameSessionBody(overrides?: Partial<GameSessionBody>): GameS
 | 結果詳細 | |
 | 既存画面 A11Y 回帰 | |
 ```
+
+## 実装完了（GET /game/questions）
+- 完了日: 2026-06-24
+- 実装ブランチ: feature/game-api-tests-questions
+- PR: 確認中
+
+### 計画からの変更点
+- 当初の `ゲーム API のテスト` 全体ではなく、依頼対象の `GET /game/questions` に範囲を絞って実装した。
+- Red フェーズで、サービスが余分な `correctChoiceId` / `elementId` を持つ問題データを返した場合にルートレスポンスへ漏れることを検出した。
+- Green フェーズで `backend/src/routes/game/index.ts` に公開レスポンス整形を追加し、HTTP境界で許可フィールドだけを返すようにした。
+- レビュー指摘を受け、通常モードの候補元素範囲を Lv1 は1〜20、Lv2 は21〜118の両端で明示するようにした。
+- 追加のA11Y確認で、ゲームプレイ画面のエラー状態に `role="alert"` を追加した。
+- API 仕様・ステータスコード・エラーメッセージの変更はないため、`docs/04_api.md` は更新不要と判断した。
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `backend/src/routes/game/index.ts` | 修正 | `GET /game/questions` のレスポンスで問題・選択肢を公開フィールドに整形 |
+| `backend/src/routes/game/questions.test.ts` | 修正 | mode 未指定時の400 details、正解情報非公開のルート回帰を追加 |
+| `backend/src/services/game.service.ts` | 修正 | 通常モードの候補元素範囲を Lv1/Lv2 とも上下限で明示 |
+| `backend/src/services/game.service.test.ts` | 修正 | Lv1/Lv2通常モードの候補元素範囲テストを追加 |
+| `frontend/src/routes/(app)/game/play/+page.svelte` | 修正 | APIエラー・不正モード・送信失敗の表示に `role="alert"` を追加 |
+| `docs/05_progress.md` | 修正 | `ゲーム API のテスト` を実装中にし、GET /game/questions 補強完了を追記 |
+| `docs/plans/game-api-tests/plan.md` | 修正 | GET /game/questions の部分完了記録を追記 |
+
+### TDD 実施記録
+| フェーズ | 内容 | 結果 |
+|---|---|---|
+| Red | `GET /game/questions` の正解情報非公開テストを追加 | 1件失敗。`correctChoiceId` / `elementId` がレスポンスへ残ることを確認 |
+| Green | ルートレスポンスを `questionId`, `prompt`, `choices[].choiceId`, `choices[].text` に整形 | 追加テストを含む対象48件が通過 |
+| Refactor | backend Prettier を実行 | 変更なし |
+
+### 品質チェック
+| コマンド | 結果 |
+|---|---|
+| `cd backend && npm run format` | 成功 |
+| `cd backend && npm run lint` | 成功 |
+| `cd backend && npm run format:check` | 成功 |
+| `cd backend && npm run test -- --run src/routes/game/questions.test.ts src/services/game.service.test.ts` | 成功（48 tests） |
+| `cd backend && npm run test -- --run` | 成功（231 tests） |
+| `cd frontend && npm run lint` | 成功 |
+| `cd frontend && npm run test:run` | 成功（221 tests） |
+| `cd frontend && npm run check` | 成功（0 errors / 0 warnings） |
+
+### 手動確認
+| 項目 | 結果 |
+|---|---|
+| DB migration | DB schema / migration 未変更のため対象外 |
+| Playwright | DB schema / migration 未変更のため追加必須チェック対象外。UI変更はA11Y属性追加のみ |
+| API 手動確認 | ユニットテストで `GET /game/questions` の認証・validation・409・500・正解情報非公開を確認 |
+| A11Y 回帰 | ゲームプレイ画面のエラー状態を `role="alert"` で通知するように改善 |
+| frontend 生成物 | `.svelte-kit` を再生成し、`nobody:nogroup` 所有の古い生成物は削除済み |
