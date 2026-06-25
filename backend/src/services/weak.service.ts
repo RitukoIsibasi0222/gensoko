@@ -8,6 +8,18 @@ export type WeakElementListItem = {
   addedAt: Date;
 };
 
+export type DeleteWeakElementParams = {
+  userId: string;
+  elementId: number;
+};
+
+export class WeakElementNotFoundError extends Error {
+  constructor() {
+    super("苦手元素が見つかりません");
+    this.name = "WeakElementNotFoundError";
+  }
+}
+
 export async function getWeakElements(userId: string): Promise<WeakElementListItem[]> {
   const weakElements = await prisma.weakElement.findMany({
     where: { userId },
@@ -32,4 +44,16 @@ export async function getWeakElements(userId: string): Promise<WeakElementListIt
     missCount: weakElement.missCount,
     addedAt: weakElement.addedAt,
   }));
+}
+export async function deleteWeakElement({
+  userId,
+  elementId,
+}: DeleteWeakElementParams): Promise<void> {
+  const result = await prisma.weakElement.deleteMany({
+    where: { userId, elementId },
+  });
+
+  if (result.count === 0) {
+    throw new WeakElementNotFoundError();
+  }
 }

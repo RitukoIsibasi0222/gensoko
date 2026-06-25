@@ -13,10 +13,21 @@ vi.mock("../../lib/prisma.js", () => ({
 
 vi.mock("../../services/weak.service.js", () => ({
   getWeakElements: vi.fn(),
+  deleteWeakElement: vi.fn(),
+  WeakElementNotFoundError: class WeakElementNotFoundError extends Error {
+    constructor() {
+      super("苦手元素が見つかりません");
+      this.name = "WeakElementNotFoundError";
+    }
+  },
 }));
 
 import { prisma } from "../../lib/prisma.js";
-import { getWeakElements } from "../../services/weak.service.js";
+import {
+  deleteWeakElement,
+  getWeakElements,
+  WeakElementNotFoundError,
+} from "../../services/weak.service.js";
 import { weakRouter } from "./index.js";
 
 const app = new Hono<{ Variables: AppVariables }>();
@@ -113,6 +124,77 @@ describe("GET /weak", () => {
     const token = await createToken();
     const res = await app.request("/weak", {
       method: "GET",
+      headers: { Authorization: "Bearer " + token },
+    });
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "サーバーエラーが発生しました" });
+  });
+});
+
+describe("DELETE /weak/:elementId", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv("JWT_SECRET", TEST_SECRET);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(mockActiveUser as never);
+    vi.mocked(deleteWeakElement).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("未認証なら401を返す", async () => {
+    const res = await app.request("/weak/26", { method: "DELETE" });
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "認証が必要です" });
+    expect(deleteWeakElement).not.toHaveBeenCalled();
+  });
+
+  it("elementId が不正なら400を返す", async () => {
+    const token = await createToken();
+    const res = await app.request("/weak/abc", {
+      method: "DELETE",
+      headers: { Authorization: "Bearer " + token },
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("バリデーションエラー");
+    expect(body.details[0].message).toBe("元素IDは1から118の整数で指定してください");
+    expect(deleteWeakElement).not.toHaveBeenCalled();
+  });
+
+  it("認証済みユーザーの苦手元素を削除して200を返す", async () => {
+    const token = await createToken();
+    const res = await app.request("/weak/26", {
+      method: "DELETE",
+      headers: { Authorization: "Bearer " + token },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ message: "苦手リストから削除しました" });
+    expect(deleteWeakElement).toHaveBeenCalledWith({ userId: "user-1", elementId: 26 });
+  });
+
+  it("削除対象がない場合は404を返す", async () => {
+    vi.mocked(deleteWeakElement).mockRejectedValue(new WeakElementNotFoundError());
+    const token = await createToken();
+    const res = await app.request("/weak/26", {
+      method: "DELETE",
+      headers: { Authorization: "Bearer " + token },
+    });
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "苦手元素が見つかりません" });
+  });
+
+  it("予期しないエラーでは500を返す", async () => {
+    vi.mocked(deleteWeakElement).mockRejectedValue(new Error("db error"));
+    const token = await createToken();
+    const res = await app.request("/weak/26", {
+      method: "DELETE",
       headers: { Authorization: "Bearer " + token },
     });
 
