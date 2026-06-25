@@ -28,8 +28,9 @@
   );
   const polylinePoints = $derived(points.map((point) => point.x + ',' + point.y).join(' '));
   const latestItem = $derived(items.at(-1) ?? null);
-  const chartTitleId = 'mypage-accuracy-trend-title';
-  const chartDescriptionId = 'mypage-accuracy-trend-description';
+  const chartIdPrefix = $props.id();
+  const chartTitleId = chartIdPrefix + '-accuracy-trend-title';
+  const chartDescriptionId = chartIdPrefix + '-accuracy-trend-description';
   const chartTitle = $derived('直近' + items.length + 'ゲームの正答率推移');
   const chartDescription = $derived(
     latestItem
