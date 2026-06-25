@@ -49,6 +49,14 @@ function isAccuracyRate(value: unknown): value is number {
   return isNonNegativeInteger(value) && value <= 100;
 }
 
+function isValidCountPair(correctCount: unknown, totalCount: unknown): boolean {
+  return (
+    isNonNegativeInteger(correctCount) &&
+    isNonNegativeInteger(totalCount) &&
+    correctCount <= totalCount
+  );
+}
+
 function isValidDateString(value: unknown): value is string {
   return typeof value === 'string' && !Number.isNaN(Date.parse(value));
 }
@@ -65,8 +73,7 @@ function isMyStatsSummary(value: unknown): value is MyStatsSummary {
   const stats = value as Record<string, unknown>;
   return (
     isNonNegativeInteger(stats.totalGames) &&
-    isNonNegativeInteger(stats.totalCorrect) &&
-    isNonNegativeInteger(stats.totalAnswered) &&
+    isValidCountPair(stats.totalCorrect, stats.totalAnswered) &&
     isAccuracyRate(stats.averageAccuracyRate) &&
     isNonNegativeInteger(stats.masteredCount) &&
     isNonNegativeInteger(stats.currentStreak) &&
@@ -86,8 +93,7 @@ function isMyAccuracyTrendItem(value: unknown): value is MyAccuracyTrendItem {
   return (
     typeof item.sessionId === 'string' &&
     isValidDateString(item.playedAt) &&
-    isNonNegativeInteger(item.correctCount) &&
-    isNonNegativeInteger(item.totalCount) &&
+    isValidCountPair(item.correctCount, item.totalCount) &&
     isAccuracyRate(item.accuracyRate)
   );
 }

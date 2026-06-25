@@ -28,6 +28,14 @@
   );
   const polylinePoints = $derived(points.map((point) => point.x + ',' + point.y).join(' '));
   const latestItem = $derived(items.at(-1) ?? null);
+  const chartTitleId = 'mypage-accuracy-trend-title';
+  const chartDescriptionId = 'mypage-accuracy-trend-description';
+  const chartTitle = $derived('直近' + items.length + 'ゲームの正答率推移');
+  const chartDescription = $derived(
+    latestItem
+      ? '最新ゲームの正答率は' + formatAccuracyRate(latestItem.accuracyRate) + 'です。'
+      : '正答率推移のグラフです。'
+  );
 </script>
 
 <figure class="space-y-3">
@@ -45,8 +53,10 @@
         viewBox={'0 0 ' + chartWidth + ' ' + chartHeight}
         class="h-56 min-w-[520px] text-blue-600"
         role="img"
-        aria-label={'直近' + items.length + 'ゲームの正答率推移'}
+        aria-labelledby={chartTitleId + ' ' + chartDescriptionId}
       >
+        <title id={chartTitleId}>{chartTitle}</title>
+        <desc id={chartDescriptionId}>{chartDescription}</desc>
         <line
           x1={chartPadding}
           y1={chartPadding}

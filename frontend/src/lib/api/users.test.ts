@@ -170,4 +170,52 @@ describe('getMyStats', () => {
       '統計情報のレスポンス形式が不正です'
     );
   });
+
+  it('レスポンス形式不正: 累計正解数が累計回答数を超える場合は ApiError(500) を throw する', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...VALID_STATS_RESPONSE,
+          stats: {
+            ...VALID_STATS_RESPONSE.stats,
+            totalCorrect: 121,
+            totalAnswered: 120
+          }
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    );
+
+    await expect(getMyStats({ accessToken: 'test-access-token' })).rejects.toThrow(
+      '統計情報のレスポンス形式が不正です'
+    );
+  });
+
+  it('レスポンス形式不正: ゲーム単位の正解数が問題数を超える場合は ApiError(500) を throw する', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...VALID_STATS_RESPONSE,
+          recentAccuracyTrend: [
+            {
+              ...VALID_STATS_RESPONSE.recentAccuracyTrend[0],
+              correctCount: 11,
+              totalCount: 10
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    );
+
+    await expect(getMyStats({ accessToken: 'test-access-token' })).rejects.toThrow(
+      '統計情報のレスポンス形式が不正です'
+    );
+  });
 });
