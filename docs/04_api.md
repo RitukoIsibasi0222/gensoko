@@ -700,31 +700,74 @@ Error:
 403 error: アカウントが停止されています / メールアドレスが確認されていません / アカウントがロックされています / ユーザーが見つかりません（サービス層で検出した場合）
 500 error: サーバーエラーが発生しました
 
+
 ---
 
 ## ランキング `/api/v1/ranking`
 
 | メソッド | パス | 説明 | 認証 |
 |---------|------|------|------|
-| GET | `/ranking/weekly` | 週間ランキング（上位50件） | なし |
-| GET | `/ranking/alltime` | 全期間ランキング（上位50件） | なし |
+| GET | `/ranking/weekly` | 週間ランキング（上位50件・自分の順位） | 任意 |
+| GET | `/ranking/alltime` | 全期間ランキング（上位50件・自分の順位） | 任意 |
+
+認証:
+- 未ログインでも閲覧可能
+- `Authorization: Bearer <accessToken>` がある場合のみ `myRank` を返す
+- Authorization ヘッダー形式不正・token 無効時は 401
+
+ランキング対象:
+- `UserStats.totalGames > 0`
+- `User.isActive = true`
+- `User.deletedAt = null`
+- 同点は同順位。次順位はスキップする（例: 1位、1位、3位）
 
 ### GET `/ranking/weekly`
-```
+
 Response 200:
-{
-  "ranking": [
+
     {
-      "rank": 1,
-      "username": "taro123",
-      "weeklyScore": 15000,
-      "totalGames": 30
-    },
-    ...
-  ],
-  "myRank": 42         // ログイン時のみ。未ログインは null
-}
-```
+      "ranking": [
+        {
+          "rank": 1,
+          "username": "taro123",
+          "weeklyScore": 15000,
+          "totalGames": 30,
+          "accuracyRate": 86
+        }
+      ],
+      "myRank": 42
+    }
+
+### GET `/ranking/alltime`
+
+Response 200:
+
+    {
+      "ranking": [
+        {
+          "rank": 1,
+          "username": "hanako",
+          "allTimeScore": 92000,
+          "totalGames": 180,
+          "accuracyRate": 91
+        }
+      ],
+      "myRank": null
+    }
+
+Response fields:
+- ranking: 最大50件
+- ranking[].rank: score 降順の順位。同点は同順位
+- ranking[].username: 表示名
+- ranking[].weeklyScore: 週間ランキングのスコア。0 以上の整数
+- ranking[].allTimeScore: 全期間ランキングのスコア。0 以上の整数
+- ranking[].totalGames: 累計ゲーム回数。0 以上の整数
+- ranking[].accuracyRate: totalCorrect / totalAnswered の整数パーセント。0〜100。totalAnswered が 0 の場合は 0
+- myRank: ログイン済みユーザーの順位。未ログイン、統計なし、未プレイ、ランキング対象外なら null
+
+Error:
+401 error: 認証形式が正しくありません / トークンが無効です
+500 error: サーバーエラーが発生しました
 
 ---
 
@@ -751,7 +794,3 @@ Response 200:
   "message": "アカウントを停止しました"
 }
 ```
-
----
-
-## ランキング `/api/v1/ranking`

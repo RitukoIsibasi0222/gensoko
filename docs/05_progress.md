@@ -132,7 +132,7 @@
 - [x] 共通ナビ導線・モバイルメニュー整備（/weak 仮ページ、ログイン後 /weak・/mypage 導線、スマホハンバーガーメニュー） — 計画書: docs/plans/header-navigation/plan.md
 - [x] 苦手リスト画面 `/weak`（ソート・手動削除ボタン） — 計画書: [`docs/plans/weak-list-page/plan.md`](plans/weak-list-page/plan.md)
 - [x] マイページ・統計画面 `/mypage`（正答率グラフ・サマリーカード） — 計画書: [docs/plans/mypage-stats/plan.md](plans/mypage-stats/plan.md)
-- [ ] ランキングページ `/ranking`（週間・全期間・自分の順位） — 計画書: [`docs/plans/ranking-page/plan.md`](plans/ranking-page/plan.md)
+- [x] ランキングページ `/ranking`（週間・全期間・自分の順位） — 計画書: [`docs/plans/ranking-page/plan.md`](plans/ranking-page/plan.md)
 
 ### API インターフェース確定
 - [ ] 苦手 / ユーザー / ランキング / 統計 各 API のインターフェースを確定
@@ -144,7 +144,7 @@
 - [x] GET /weak + DELETE /weak/:elementId
 - [ ] GET /users/me + PATCH /users/me + DELETE /users/me
 - [x] GET /users/me/stats — 計画書: [docs/plans/mypage-stats/plan.md](plans/mypage-stats/plan.md)
-- [ ] GET /ranking/weekly + /alltime（myRank フィールド・Top50） — 計画書: [`docs/plans/ranking-page/plan.md`](plans/ranking-page/plan.md)
+- [x] GET /ranking/weekly + /alltime（myRank フィールド・Top50） — 計画書: [`docs/plans/ranking-page/plan.md`](plans/ranking-page/plan.md)
 - [ ] 週間スコアリセットバッチ処理（weeklyScore リセット）
 - [ ] 定期バッチ運用設計（週間リセット・GameQuestionSet cleanup の Cron Trigger 設定）
 - [ ] 残 API のテスト
