@@ -759,8 +759,8 @@ Response fields:
 - ranking: 最大50件
 - ranking[].rank: score 降順の順位。同点は同順位
 - ranking[].username: 表示名
-- ranking[].weeklyScore: 週間ランキングのスコア。0 以上の整数
-- ranking[].allTimeScore: 全期間ランキングのスコア。0 以上の整数
+- ranking[].weeklyScore: 週間ランキングレスポンス（`GET /ranking/weekly`）で返すスコア。0 以上の整数
+- ranking[].allTimeScore: 全期間ランキングレスポンス（`GET /ranking/alltime`）で返すスコア。0 以上の整数
 - ranking[].totalGames: 累計ゲーム回数。0 以上の整数
 - ranking[].accuracyRate: totalCorrect / totalAnswered の整数パーセント。0〜100。totalAnswered が 0 の場合は 0
 - myRank: ログイン済みユーザーの順位。未ログイン、統計なし、未プレイ、ランキング対象外なら null

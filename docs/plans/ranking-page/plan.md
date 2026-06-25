@@ -491,7 +491,7 @@ export function formatRankingAccuracy(value: number): string;
 ## 実装完了
 - 完了日: 2026-06-25
 - 実装ブランチ: feature/ranking-page
-- PR: 未作成
+- PR: #64
 
 ### 計画からの変更点
 - `backend/src/lib/stats.ts` を追加し、ランキング service と既存 user service で統計値の正規化・正答率計算を共有した。計画時は ranking service 内で完結する想定だったが、同じ計算が重複するため共通 helper に切り出した。
