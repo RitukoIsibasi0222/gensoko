@@ -579,6 +579,7 @@ export function toAccuracyChartValues(items: readonly MyAccuracyTrendItem[]): nu
 - 追加レビューで、正答率だけでなく API レスポンスの元データも frontend validation と同じ制約にそろえる必要があると分かったため、統計レスポンス値を 0 以上、正解数は回答数以下に正規化した。
 - docs/13_codex_editing.md に個人環境の絶対パスが残っていたため、他の開発者にも適用できる例示パスへ一般化した。
 - 追加確認で docs/09_startup_commands.md にも同種の個人環境パスが残っていたため、同じ例示パスへ一般化した。
+- 追加レビュー対応として、docs/04_api.md の Authorization ヘッダー例で `<accessToken>` が HTML タグ扱いにならないよう、ヘッダー例全体をインラインコード化した。
 
 ### 実際の変更ファイル
 | ファイル | 変更種別 | 内容 |
@@ -594,7 +595,7 @@ export function toAccuracyChartValues(items: readonly MyAccuracyTrendItem[]): nu
 | frontend/src/lib/components/mypage/StatsSummaryCards.svelte | 新規 | 統計サマリーカード component を追加 |
 | frontend/src/lib/components/mypage/AccuracyTrendChart.svelte | 新規 | 軽量 SVG の正答率推移グラフ component を追加 |
 | frontend/src/routes/(app)/mypage/+page.svelte | 修正 | 統計セクション、取得状態、再試行導線を追加 |
-| docs/04_api.md | 修正 | GET /users/me/stats の詳細仕様と統計値の正規化ルールを追加 |
+| docs/04_api.md | 修正 | GET /users/me/stats の詳細仕様、統計値の正規化ルール、Authorization ヘッダー例の表示を更新 |
 | docs/05_progress.md | 修正 | /mypage 統計画面と GET /users/me/stats を完了に更新 |
 | docs/09_startup_commands.md | 修正 | 起動手順に残っていた個人環境の絶対パスを一般化 |
 | docs/13_codex_editing.md | 修正 | PowerShell + WSL 環境で失敗しやすい編集パターンと対処を追加し、個人環境の絶対パスを一般化 |

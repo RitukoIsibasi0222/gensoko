@@ -632,7 +632,7 @@ async function handleSubmit() {
 ### GET /users/me/stats
 
 Headers:
-  Authorization: Bearer <accessToken>
+- `Authorization: Bearer <accessToken>`
 
 Response 200:
 
