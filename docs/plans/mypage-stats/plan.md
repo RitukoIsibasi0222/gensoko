@@ -568,7 +568,7 @@ export function toAccuracyChartValues(items: readonly MyAccuracyTrendItem[]): nu
 ## 実装完了
 - 完了日: 2026-06-25
 - 実装ブランチ: feature/mypage-stats
-- PR: 未作成
+- PR: #62
 
 ### 計画からの変更点
 - Chart.js は導入せず、軽量 SVG component で正答率グラフを実装した。
