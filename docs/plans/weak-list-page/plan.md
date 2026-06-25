@@ -500,7 +500,7 @@ export function sortWeakElements(
 
 - 完了日: 2026-06-25
 - 実装ブランチ: feature/weak-list-page
-- PR: 作成後に追記予定
+- PR: #61
 
 ### 計画からの変更点
 
