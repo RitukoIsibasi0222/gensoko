@@ -356,13 +356,18 @@
 
             <div class="mt-4">
               {#if isConfirming}
-                <div class="space-y-3 rounded border border-amber-200 bg-amber-50 p-3">
+                <div
+                  class="space-y-3 rounded border border-amber-200 bg-amber-50 p-3"
+                  aria-busy={isDeleting}
+                  aria-live="polite"
+                >
                   <p class="text-sm text-amber-900">
                     {element.nameJa}を苦手リストから削除しますか？
                   </p>
                   <div class="flex flex-wrap gap-2">
                     <button
                       type="button"
+                      aria-label={element.nameJa + 'を苦手リストから削除する'}
                       disabled={isDeleting}
                       onclick={() => confirmDelete(element)}
                       class="rounded bg-red-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:cursor-not-allowed disabled:opacity-60"
@@ -371,6 +376,7 @@
                     </button>
                     <button
                       type="button"
+                      aria-label={element.nameJa + 'の削除をキャンセル'}
                       disabled={isDeleting}
                       onclick={() => cancelDelete(element.elementId)}
                       class="rounded border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
@@ -382,6 +388,7 @@
               {:else}
                 <button
                   type="button"
+                  aria-label={element.nameJa + 'を苦手リストから削除'}
                   disabled={isDeleting}
                   onclick={() => requestDelete(element.elementId)}
                   class="rounded border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-60"

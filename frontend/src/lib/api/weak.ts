@@ -46,18 +46,30 @@ type WeakElementsResponse = {
   weakElements: WeakElement[];
 };
 
+function isInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value);
+}
+
+function isValidDateString(value: unknown): value is string {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value));
+}
+
 function isWeakElement(value: unknown): value is WeakElement {
   if (value === null || typeof value !== 'object') {
     return false;
   }
 
   const weakElement = value as Record<string, unknown>;
+  const elementId = weakElement.elementId;
+  const missCount = weakElement.missCount;
+
   return (
-    typeof weakElement.elementId === 'number' &&
+    isInteger(elementId) &&
     typeof weakElement.symbol === 'string' &&
     typeof weakElement.nameJa === 'string' &&
-    typeof weakElement.missCount === 'number' &&
-    typeof weakElement.addedAt === 'string'
+    isInteger(missCount) &&
+    missCount >= 0 &&
+    isValidDateString(weakElement.addedAt)
   );
 }
 

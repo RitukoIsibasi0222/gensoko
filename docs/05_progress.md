@@ -141,7 +141,7 @@
 
 > フェーズ8 の確認で確定したインターフェースを実装する。
 
-- [ ] GET /weak + DELETE /weak/:elementId
+- [x] GET /weak + DELETE /weak/:elementId
 - [ ] GET /users/me + PATCH /users/me + DELETE /users/me
 - [ ] GET /users/me/stats
 - [ ] GET /ranking/weekly + /alltime（myRank フィールド・Top50）

@@ -348,7 +348,7 @@ export function sortWeakElements(
 - [x] T16: API 仕様ドキュメントを更新する
 - [x] T17: frontend 品質チェックを実行する
 - [x] T18: backend 品質チェックを実行する
-- [x] T19: 手動確認を実施する
+- [ ] T19: 手動確認を実施する
 - [x] T20: 実装完了ドキュメントを更新する
 
 ## 技術的注意点
@@ -505,8 +505,10 @@ export function sortWeakElements(
 ### 計画からの変更点
 
 - sort query はデフォルト状態では空 query にし、デフォルト以外のみ sort/order を URL に反映する実装にした。
-- ブラウザ手動確認は未ログイン表示とコンソールエラーなしまで実施した。ログイン後の一覧・削除導線は API client / backend route / sort helper / svelte-check で確認した。
+- ブラウザ手動確認は未ログイン表示とコンソールエラーなしまで実施した。ログイン後の一覧・削除導線は API client / backend route / sort helper / svelte-check で確認した。未実施項目が残るため、T19 は未完了として残す。
 - DB schema / migration は変更していないため、migration 適用確認は対象外。
+- GET /weak は先行実装済みで、本タスクで DELETE /weak/:elementId を実装したため、docs/05_progress.md のフェーズ9 GET /weak + DELETE /weak/:elementId も完了に更新した。
+- 追加レビューで、backend の元素ID検証を既存 schema 再利用へ寄せ、API validation details の path を elementId に整えた。あわせて API client の addedAt / missCount 検証と削除ボタンの A11Y label を補強した。
 
 ### 実際の変更ファイル
 
@@ -536,7 +538,7 @@ export function sortWeakElements(
 | cd frontend && npm run format | 成功 |
 | cd frontend && npm run lint | 成功 |
 | cd frontend && npm run check | 成功（0 errors / 0 warnings） |
-| cd frontend && npm run test:run | 成功（20 files / 236 tests） |
+| cd frontend && npm run test:run | 成功（20 files / 238 tests） |
 
 ### 手動確認
 

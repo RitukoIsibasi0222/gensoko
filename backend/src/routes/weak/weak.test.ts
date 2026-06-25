@@ -163,6 +163,7 @@ describe("DELETE /weak/:elementId", () => {
     const body = await res.json();
     expect(body.error).toBe("バリデーションエラー");
     expect(body.details[0].message).toBe("元素IDは1から118の整数で指定してください");
+    expect(body.details[0].path).toEqual(["elementId"]);
     expect(deleteWeakElement).not.toHaveBeenCalled();
   });
 

@@ -138,6 +138,52 @@ describe('getWeakElements', () => {
       '苦手リストのレスポンス形式が不正です'
     );
   });
+
+  it('レスポンス形式不正: addedAt が日付として解釈できない場合は ApiError(500) を throw する', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          weakElements: [
+            {
+              ...VALID_RESPONSE.weakElements[0],
+              addedAt: 'invalid-date'
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    );
+
+    await expect(getWeakElements({ accessToken: 'test-access-token' })).rejects.toThrow(
+      '苦手リストのレスポンス形式が不正です'
+    );
+  });
+
+  it('レスポンス形式不正: missCount が整数でない場合は ApiError(500) を throw する', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          weakElements: [
+            {
+              ...VALID_RESPONSE.weakElements[0],
+              missCount: 1.5
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    );
+
+    await expect(getWeakElements({ accessToken: 'test-access-token' })).rejects.toThrow(
+      '苦手リストのレスポンス形式が不正です'
+    );
+  });
 });
 
 describe('deleteWeakElement', () => {
