@@ -174,3 +174,119 @@ export async function deleteCurrentUser(input: {
     await tx.emailVerification.deleteMany({ where: { userId: input.userId } });
   });
 }
+
+const RECENT_ACCURACY_TREND_LIMIT = 10;
+
+export type CurrentUserStatsSummary = {
+  totalGames: number;
+  totalCorrect: number;
+  totalAnswered: number;
+  averageAccuracyRate: number;
+  masteredCount: number;
+  currentStreak: number;
+  weeklyScore: number;
+  allTimeScore: number;
+  lastActiveDate: Date | null;
+  updatedAt: Date | null;
+};
+
+export type CurrentUserAccuracyTrendItem = {
+  sessionId: string;
+  playedAt: Date;
+  correctCount: number;
+  totalCount: number;
+  accuracyRate: number;
+};
+
+export type CurrentUserStats = {
+  stats: CurrentUserStatsSummary;
+  recentAccuracyTrend: CurrentUserAccuracyTrendItem[];
+};
+
+function calculateAccuracyRate(correctCount: number, totalCount: number): number {
+  if (totalCount <= 0) {
+    return 0;
+  }
+
+  return Math.round((correctCount / totalCount) * 100);
+}
+
+function getEmptyCurrentUserStatsSummary(): CurrentUserStatsSummary {
+  return {
+    totalGames: 0,
+    totalCorrect: 0,
+    totalAnswered: 0,
+    averageAccuracyRate: 0,
+    masteredCount: 0,
+    currentStreak: 0,
+    weeklyScore: 0,
+    allTimeScore: 0,
+    lastActiveDate: null,
+    updatedAt: null,
+  };
+}
+
+export async function getCurrentUserStats(userId: string): Promise<CurrentUserStats> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  });
+
+  if (!user) {
+    throw new UserError(403, "ユーザーが見つかりません");
+  }
+
+  const [stats, recentSessions] = await Promise.all([
+    prisma.userStats.findUnique({
+      where: { userId },
+      select: {
+        totalGames: true,
+        totalCorrect: true,
+        totalAnswered: true,
+        masteredCount: true,
+        currentStreak: true,
+        weeklyScore: true,
+        allTimeScore: true,
+        lastActiveDate: true,
+        updatedAt: true,
+      },
+    }),
+    prisma.gameSession.findMany({
+      where: { userId },
+      orderBy: [{ playedAt: "desc" }, { id: "desc" }],
+      take: RECENT_ACCURACY_TREND_LIMIT,
+      select: {
+        id: true,
+        playedAt: true,
+        correctCount: true,
+        totalCount: true,
+      },
+    }),
+  ]);
+
+  const statsSummary: CurrentUserStatsSummary = stats
+    ? {
+        totalGames: stats.totalGames,
+        totalCorrect: stats.totalCorrect,
+        totalAnswered: stats.totalAnswered,
+        averageAccuracyRate: calculateAccuracyRate(stats.totalCorrect, stats.totalAnswered),
+        masteredCount: stats.masteredCount,
+        currentStreak: stats.currentStreak,
+        weeklyScore: stats.weeklyScore,
+        allTimeScore: stats.allTimeScore,
+        lastActiveDate: stats.lastActiveDate,
+        updatedAt: stats.updatedAt,
+      }
+    : getEmptyCurrentUserStatsSummary();
+
+  return {
+    stats: statsSummary,
+    recentAccuracyTrend: [...recentSessions].reverse().map((session) => ({
+      sessionId: session.id,
+      playedAt: session.playedAt,
+      correctCount: session.correctCount,
+      totalCount: session.totalCount,
+      accuracyRate: calculateAccuracyRate(session.correctCount, session.totalCount),
+    })),
+  };
+}
