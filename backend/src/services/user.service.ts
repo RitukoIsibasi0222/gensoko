@@ -208,7 +208,7 @@ function calculateAccuracyRate(correctCount: number, totalCount: number): number
     return 0;
   }
 
-  return Math.round((correctCount / totalCount) * 100);
+  return Math.min(100, Math.max(0, Math.round((correctCount / totalCount) * 100)));
 }
 
 function getEmptyCurrentUserStatsSummary(): CurrentUserStatsSummary {

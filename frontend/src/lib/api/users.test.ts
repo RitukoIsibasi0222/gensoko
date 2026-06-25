@@ -107,6 +107,25 @@ describe('getMyStats', () => {
     );
   });
 
+  it('レスポンス形式不正: 200 OK でも JSON パースに失敗した場合は ApiError(500) を throw する', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response('{ invalid json', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    try {
+      await getMyStats({ accessToken: 'test-access-token' });
+      expect.fail('ApiError が throw されるべき');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(500);
+      expect((error as ApiError).message).toBe('統計情報のレスポンス形式が不正です');
+      expect((error as ApiError).body).toBeNull();
+    }
+  });
+
   it('レスポンス形式不正: stats がない場合は ApiError(500) を throw する', async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify({ recentAccuracyTrend: [] }), {

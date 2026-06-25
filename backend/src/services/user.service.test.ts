@@ -232,6 +232,36 @@ describe("getCurrentUserStats", () => {
     vi.clearAllMocks();
   });
 
+  it("正常系: 不整合な正解数でも正答率を 0 から 100 に丸める", async () => {
+    const playedAt = new Date("2026-06-20T12:35:00.000Z");
+
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "user-1" } as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue({
+      totalGames: 1,
+      totalCorrect: 12,
+      totalAnswered: 10,
+      masteredCount: 0,
+      currentStreak: 1,
+      weeklyScore: 0,
+      allTimeScore: 0,
+      lastActiveDate: null,
+      updatedAt: playedAt,
+    } as never);
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([
+      {
+        id: "session-1",
+        playedAt,
+        correctCount: 12,
+        totalCount: 10,
+      },
+    ] as never);
+
+    const result = await getCurrentUserStats("user-1");
+
+    expect(result.stats.averageAccuracyRate).toBe(100);
+    expect(result.recentAccuracyTrend[0]?.accuracyRate).toBe(100);
+  });
+
   it("正常系: ユーザー統計と直近10件の正答率推移を返す", async () => {
     const statsUpdatedAt = new Date("2026-06-20T12:35:00.000Z");
     const lastActiveDate = new Date("2026-06-20T00:00:00.000Z");

@@ -137,7 +137,13 @@ export async function getMyStats({
     await parseErrorResponse(response, '統計情報の取得に失敗しました');
   }
 
-  const data = (await response.json()) as unknown;
+  let data: unknown;
+  try {
+    data = (await response.json()) as unknown;
+  } catch {
+    throw new ApiError(500, '統計情報のレスポンス形式が不正です', null);
+  }
+
   if (!isMyStatsResponse(data)) {
     throw new ApiError(500, '統計情報のレスポンス形式が不正です', data);
   }

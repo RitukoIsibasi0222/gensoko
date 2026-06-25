@@ -575,6 +575,7 @@ export function toAccuracyChartValues(items: readonly MyAccuracyTrendItem[]): nu
 - 理由: 直近10ゲームの推移表示には軽量 SVG で十分であり、依存追加を避けつつ SSR と A11Y の扱いを簡潔にできるため。
 - docs/13_codex_editing.md の PowerShell + WSL 編集ガイド更新をコミット対象に含める。
 - レビュー改善として、frontend API client で正解数が回答数/問題数を超えないことを検証し、SVG グラフへ title/desc を追加した。
+- 追加レビュー対応として、backend の正答率計算を 0〜100 に丸め、frontend API client で 200 OK の JSON パース失敗を ApiError(500) に変換した。
 
 ### 実際の変更ファイル
 | ファイル | 変更種別 | 内容 |
@@ -600,8 +601,8 @@ export function toAccuracyChartValues(items: readonly MyAccuracyTrendItem[]): nu
 |---|---|
 | cd backend && npm run lint | 成功 |
 | cd backend && npm run format:check | 成功 |
-| cd backend && npm run test -- --run | 成功。28 files / 247 tests passed。既存の forgot-password 異常系テストで想定内の stderr 出力あり |
+| cd backend && npm run test -- --run | 成功。28 files / 248 tests passed。既存の forgot-password 異常系テストで想定内の stderr 出力あり |
 | cd frontend && npm run lint | 成功 |
 | cd frontend && npm run check | 成功。0 errors / 0 warnings |
-| cd frontend && npm run test:run | 成功。22 files / 254 tests passed |
+| cd frontend && npm run test:run | 成功。22 files / 255 tests passed |
 | 手動確認 | ブラウザでの手動確認は未実施。DB schema / migration 変更なしのため Playwright 必須対象外 |
