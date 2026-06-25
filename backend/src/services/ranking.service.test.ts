@@ -13,6 +13,17 @@ vi.mock("../lib/prisma.js", () => ({
 import { prisma } from "../lib/prisma.js";
 import { getAllTimeRanking, getWeeklyRanking } from "./ranking.service.js";
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return { promise, resolve, reject };
+}
+
 describe("ranking service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -181,6 +192,35 @@ describe("ranking service", () => {
     await expect(getWeeklyRanking("deleted")).resolves.toMatchObject({ myRank: null });
 
     expect(prisma.userStats.count).not.toHaveBeenCalled();
+  });
+
+  it("ログイン時はランキング一覧と自分の順位取得を並列に開始する", async () => {
+    const findManyDeferred = createDeferred<never[]>();
+    vi.mocked(prisma.userStats.findMany).mockReturnValue(findManyDeferred.promise as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue({
+      userId: "user-me",
+      weeklyScore: 12000,
+      allTimeScore: 70000,
+      totalGames: 8,
+      user: { isActive: true, deletedAt: null },
+    } as never);
+    vi.mocked(prisma.userStats.count).mockResolvedValue(5 as never);
+
+    const resultPromise = getWeeklyRanking("user-me");
+    await Promise.resolve();
+
+    expect(prisma.userStats.findUnique).toHaveBeenCalledWith({
+      where: { userId: "user-me" },
+      select: {
+        weeklyScore: true,
+        allTimeScore: true,
+        totalGames: true,
+        user: { select: { isActive: true, deletedAt: true } },
+      },
+    });
+
+    findManyDeferred.resolve([]);
+    await expect(resultPromise).resolves.toEqual({ ranking: [], myRank: 6 });
   });
 
   it("保存済み統計値に不整合があってもレスポンスでは表示範囲へ正規化する", async () => {

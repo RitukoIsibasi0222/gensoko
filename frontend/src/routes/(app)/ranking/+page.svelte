@@ -23,6 +23,7 @@
 
   const currentPeriod = $derived(normalizeRankingPeriod(page.url.searchParams.get('period')));
   const isLoading = $derived(loadStatus === 'loading');
+  const isRankingBusy = $derived(authStore.isInitializing || isLoading);
   const hasRankingEntries = $derived((rankingResponse?.ranking.length ?? 0) > 0);
 
   $effect(() => {
@@ -133,7 +134,11 @@
     </p>
   </section>
 
-  <section class="space-y-4" aria-labelledby="ranking-heading" aria-busy={isLoading}>
+  <section
+    class="space-y-4"
+    aria-labelledby="ranking-heading"
+    aria-busy={isRankingBusy ? 'true' : undefined}
+  >
     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <h2 id="ranking-heading" class="text-lg font-bold text-gray-900">
@@ -156,7 +161,7 @@
           class={currentPeriod === 'weekly'
             ? 'rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white'
             : 'rounded px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500'}
-          aria-current={currentPeriod === 'weekly' ? 'page' : undefined}
+          aria-pressed={currentPeriod === 'weekly'}
           onclick={() => updatePeriod('weekly')}
         >
           週間
@@ -166,7 +171,7 @@
           class={currentPeriod === 'alltime'
             ? 'rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white'
             : 'rounded px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500'}
-          aria-current={currentPeriod === 'alltime' ? 'page' : undefined}
+          aria-pressed={currentPeriod === 'alltime'}
           onclick={() => updatePeriod('alltime')}
         >
           全期間
@@ -174,7 +179,7 @@
       </div>
     </div>
 
-    {#if authStore.isInitializing || loadStatus === 'loading'}
+    {#if isRankingBusy}
       <div class="rounded border border-gray-200 bg-white p-5" aria-live="polite">
         <p class="text-sm text-gray-600">ランキングを読み込んでいます...</p>
       </div>

@@ -159,29 +159,35 @@ async function getMyRank(period: RankingPeriod, userId?: string): Promise<number
 }
 
 export async function getWeeklyRanking(userId?: string): Promise<WeeklyRankingResponse> {
-  const rows = await prisma.userStats.findMany({
-    where: activeRankingTargetWhere,
-    orderBy: getRankingOrderBy("weekly"),
-    take: RANKING_LIMIT,
-    select: rankingSelect,
-  });
+  const [rows, myRank] = await Promise.all([
+    prisma.userStats.findMany({
+      where: activeRankingTargetWhere,
+      orderBy: getRankingOrderBy("weekly"),
+      take: RANKING_LIMIT,
+      select: rankingSelect,
+    }),
+    getMyRank("weekly", userId),
+  ]);
 
   return {
     ranking: buildRankingEntries("weekly", rows),
-    myRank: await getMyRank("weekly", userId),
+    myRank,
   };
 }
 
 export async function getAllTimeRanking(userId?: string): Promise<AllTimeRankingResponse> {
-  const rows = await prisma.userStats.findMany({
-    where: activeRankingTargetWhere,
-    orderBy: getRankingOrderBy("alltime"),
-    take: RANKING_LIMIT,
-    select: rankingSelect,
-  });
+  const [rows, myRank] = await Promise.all([
+    prisma.userStats.findMany({
+      where: activeRankingTargetWhere,
+      orderBy: getRankingOrderBy("alltime"),
+      take: RANKING_LIMIT,
+      select: rankingSelect,
+    }),
+    getMyRank("alltime", userId),
+  ]);
 
   return {
     ranking: buildRankingEntries("alltime", rows),
-    myRank: await getMyRank("alltime", userId),
+    myRank,
   };
 }

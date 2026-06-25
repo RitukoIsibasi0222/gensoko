@@ -496,6 +496,7 @@ export function formatRankingAccuracy(value: number): string;
 ### 計画からの変更点
 - `backend/src/lib/stats.ts` を追加し、ランキング service と既存 user service で統計値の正規化・正答率計算を共有した。計画時は ranking service 内で完結する想定だったが、同じ計算が重複するため共通 helper に切り出した。
 - Playwright の手動確認は、既存データが入っている開発 DB で未ログイン表示、週間/全期間切替、API 200、console error なしを確認した。ログイン済み `myRank`・空状態・エラー系は自動テストで確認した。
+- レビュー改善として、ログイン時の ranking 一覧取得と `myRank` 取得を並列化し、`aria-busy` と ranking 種別ボタンの `aria-pressed` を実際の UI 状態に合わせた。
 
 ### 実際の変更ファイル
 | ファイル | 変更種別 | 内容 |
@@ -524,7 +525,7 @@ export function formatRankingAccuracy(value: number): string;
 ### 確認結果
 - backend lint: `npm run lint` 成功
 - backend format:check: `npm run format:check` 成功
-- backend test: `npm run test -- --run` 成功（30 files / 258 tests）
+- backend test: `npm run test -- --run` 成功（30 files / 259 tests）
 - frontend check: `npm run check` 成功
 - frontend lint: `npm run lint` 成功
 - frontend test: `npm run test:run` 成功（24 files / 267 tests）
