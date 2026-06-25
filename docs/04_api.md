@@ -712,7 +712,7 @@ Error:
 
 認証:
 - 未ログインでも閲覧可能
-- `Authorization: Bearer <accessToken>` がある場合のみ `myRank` を返す
+- `myRank` フィールドは常に返す。`Authorization: Bearer <accessToken>` がある場合のみ順位を算出し、未ログイン・ランキング対象外の場合は `null` を返す
 - Authorization ヘッダー形式不正・token 無効時は 401
 
 ランキング対象:
