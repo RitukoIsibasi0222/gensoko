@@ -7,6 +7,12 @@ vi.mock("../lib/prisma.js", () => ({
       findFirst: vi.fn(),
       update: vi.fn(),
     },
+    userStats: {
+      findUnique: vi.fn(),
+    },
+    gameSession: {
+      findMany: vi.fn(),
+    },
     refreshToken: {
       deleteMany: vi.fn(),
     },
@@ -33,6 +39,7 @@ import {
   changeCurrentPassword,
   deleteCurrentUser,
   getCurrentUserProfile,
+  getCurrentUserStats,
   updateCurrentUsername,
 } from "./user.service.js";
 
@@ -217,5 +224,239 @@ describe("getCurrentUserProfile", () => {
       status: 403,
       message: "ユーザーが見つかりません",
     });
+  });
+});
+
+describe("getCurrentUserStats", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("正常系: 不整合な正解数でも正答率を 0 から 100 に丸める", async () => {
+    const playedAt = new Date("2026-06-20T12:35:00.000Z");
+
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "user-1" } as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue({
+      totalGames: 1,
+      totalCorrect: 12,
+      totalAnswered: 10,
+      masteredCount: 0,
+      currentStreak: 1,
+      weeklyScore: 0,
+      allTimeScore: 0,
+      lastActiveDate: null,
+      updatedAt: playedAt,
+    } as never);
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([
+      {
+        id: "session-1",
+        playedAt,
+        correctCount: 12,
+        totalCount: 10,
+      },
+    ] as never);
+
+    const result = await getCurrentUserStats("user-1");
+
+    expect(result.stats.totalCorrect).toBe(10);
+    expect(result.stats.totalAnswered).toBe(10);
+    expect(result.stats.averageAccuracyRate).toBe(100);
+    expect(result.recentAccuracyTrend[0]).toMatchObject({
+      correctCount: 10,
+      totalCount: 10,
+      accuracyRate: 100,
+    });
+  });
+
+  it("正常系: 負の統計値はレスポンスで 0 に丸める", async () => {
+    const playedAt = new Date("2026-06-20T12:35:00.000Z");
+
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "user-1" } as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue({
+      totalGames: -1,
+      totalCorrect: -3,
+      totalAnswered: -2,
+      masteredCount: -4,
+      currentStreak: -5,
+      weeklyScore: -6,
+      allTimeScore: -7,
+      lastActiveDate: null,
+      updatedAt: playedAt,
+    } as never);
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([
+      {
+        id: "session-1",
+        playedAt,
+        correctCount: -1,
+        totalCount: -10,
+      },
+    ] as never);
+
+    const result = await getCurrentUserStats("user-1");
+
+    expect(result.stats).toMatchObject({
+      totalGames: 0,
+      totalCorrect: 0,
+      totalAnswered: 0,
+      averageAccuracyRate: 0,
+      masteredCount: 0,
+      currentStreak: 0,
+      weeklyScore: 0,
+      allTimeScore: 0,
+    });
+    expect(result.recentAccuracyTrend[0]).toMatchObject({
+      correctCount: 0,
+      totalCount: 0,
+      accuracyRate: 0,
+    });
+  });
+
+  it("正常系: ユーザー統計と直近10件の正答率推移を返す", async () => {
+    const statsUpdatedAt = new Date("2026-06-20T12:35:00.000Z");
+    const lastActiveDate = new Date("2026-06-20T00:00:00.000Z");
+    const recentSessions = [
+      {
+        id: "session-new",
+        playedAt: new Date("2026-06-20T12:35:00.000Z"),
+        correctCount: 8,
+        totalCount: 10,
+      },
+      {
+        id: "session-old",
+        playedAt: new Date("2026-06-19T12:35:00.000Z"),
+        correctCount: 5,
+        totalCount: 10,
+      },
+    ];
+
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "user-1" } as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue({
+      userId: "user-1",
+      totalGames: 12,
+      totalCorrect: 91,
+      totalAnswered: 120,
+      masteredCount: 18,
+      currentStreak: 5,
+      weeklyScore: 2400,
+      allTimeScore: 9200,
+      lastActiveDate,
+      updatedAt: statsUpdatedAt,
+    } as never);
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue(recentSessions as never);
+
+    const result = await getCurrentUserStats("user-1");
+
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: { id: true },
+    });
+    expect(prisma.userStats.findUnique).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      select: {
+        totalGames: true,
+        totalCorrect: true,
+        totalAnswered: true,
+        masteredCount: true,
+        currentStreak: true,
+        weeklyScore: true,
+        allTimeScore: true,
+        lastActiveDate: true,
+        updatedAt: true,
+      },
+    });
+    expect(prisma.gameSession.findMany).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      orderBy: [{ playedAt: "desc" }, { id: "desc" }],
+      take: 10,
+      select: {
+        id: true,
+        playedAt: true,
+        correctCount: true,
+        totalCount: true,
+      },
+    });
+    expect(result).toEqual({
+      stats: {
+        totalGames: 12,
+        totalCorrect: 91,
+        totalAnswered: 120,
+        averageAccuracyRate: 76,
+        masteredCount: 18,
+        currentStreak: 5,
+        weeklyScore: 2400,
+        allTimeScore: 9200,
+        lastActiveDate,
+        updatedAt: statsUpdatedAt,
+      },
+      recentAccuracyTrend: [
+        {
+          sessionId: "session-old",
+          playedAt: new Date("2026-06-19T12:35:00.000Z"),
+          correctCount: 5,
+          totalCount: 10,
+          accuracyRate: 50,
+        },
+        {
+          sessionId: "session-new",
+          playedAt: new Date("2026-06-20T12:35:00.000Z"),
+          correctCount: 8,
+          totalCount: 10,
+          accuracyRate: 80,
+        },
+      ],
+    });
+  });
+
+  it("正常系: ユーザー統計が未作成ならゼロ値と空の推移を返す", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "user-1" } as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([] as never);
+
+    await expect(getCurrentUserStats("user-1")).resolves.toEqual({
+      stats: {
+        totalGames: 0,
+        totalCorrect: 0,
+        totalAnswered: 0,
+        averageAccuracyRate: 0,
+        masteredCount: 0,
+        currentStreak: 0,
+        weeklyScore: 0,
+        allTimeScore: 0,
+        lastActiveDate: null,
+        updatedAt: null,
+      },
+      recentAccuracyTrend: [],
+    });
+  });
+
+  it("正常系: totalAnswered が 0 の場合は平均正答率を 0 にする", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "user-1" } as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue({
+      totalGames: 1,
+      totalCorrect: 0,
+      totalAnswered: 0,
+      masteredCount: 0,
+      currentStreak: 1,
+      weeklyScore: 0,
+      allTimeScore: 0,
+      lastActiveDate: null,
+      updatedAt: new Date("2026-06-20T12:35:00.000Z"),
+    } as never);
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([] as never);
+
+    const result = await getCurrentUserStats("user-1");
+
+    expect(result.stats.averageAccuracyRate).toBe(0);
+  });
+
+  it("異常系: ユーザーが見つからなければ UserError(403) を投げる", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(null as never);
+
+    await expect(getCurrentUserStats("missing-user")).rejects.toMatchObject({
+      status: 403,
+      message: "ユーザーが見つかりません",
+    });
+    expect(prisma.userStats.findUnique).not.toHaveBeenCalled();
+    expect(prisma.gameSession.findMany).not.toHaveBeenCalled();
   });
 });

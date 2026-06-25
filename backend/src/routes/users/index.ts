@@ -10,6 +10,7 @@ import {
   changeCurrentPassword,
   deleteCurrentUser,
   getCurrentUserProfile,
+  getCurrentUserStats,
   updateCurrentUsername,
 } from "../../services/user.service.js";
 import type { AppVariables } from "../../types/index.js";
@@ -57,6 +58,20 @@ function handleUserError(err: unknown, c: { json: (body: unknown, status: number
 }
 
 export const usersRouter = new Hono<{ Variables: AppVariables }>();
+
+usersRouter.get("/me/stats", authMiddleware, async (c) => {
+  const authUser = c.get("user");
+  if (!authUser) {
+    return c.json({ error: "認証が必要です" }, 401);
+  }
+
+  try {
+    const stats = await getCurrentUserStats(authUser.id);
+    return c.json(stats, 200);
+  } catch (err) {
+    return handleUserError(err, c);
+  }
+});
 
 usersRouter.get("/me", authMiddleware, async (c) => {
   const authUser = c.get("user");

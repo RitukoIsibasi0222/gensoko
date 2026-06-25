@@ -174,3 +174,149 @@ export async function deleteCurrentUser(input: {
     await tx.emailVerification.deleteMany({ where: { userId: input.userId } });
   });
 }
+
+const RECENT_ACCURACY_TREND_LIMIT = 10;
+
+export type CurrentUserStatsSummary = {
+  totalGames: number;
+  totalCorrect: number;
+  totalAnswered: number;
+  averageAccuracyRate: number;
+  masteredCount: number;
+  currentStreak: number;
+  weeklyScore: number;
+  allTimeScore: number;
+  lastActiveDate: Date | null;
+  updatedAt: Date | null;
+};
+
+export type CurrentUserAccuracyTrendItem = {
+  sessionId: string;
+  playedAt: Date;
+  correctCount: number;
+  totalCount: number;
+  accuracyRate: number;
+};
+
+export type CurrentUserStats = {
+  stats: CurrentUserStatsSummary;
+  recentAccuracyTrend: CurrentUserAccuracyTrendItem[];
+};
+
+type NormalizedCountPair = {
+  correctCount: number;
+  totalCount: number;
+};
+
+function normalizeNonNegativeCount(value: number): number {
+  return Math.max(0, value);
+}
+
+function normalizeCountPair(correctCount: number, totalCount: number): NormalizedCountPair {
+  const normalizedTotalCount = normalizeNonNegativeCount(totalCount);
+
+  return {
+    correctCount: Math.min(normalizeNonNegativeCount(correctCount), normalizedTotalCount),
+    totalCount: normalizedTotalCount,
+  };
+}
+
+function calculateAccuracyRate(correctCount: number, totalCount: number): number {
+  const normalized = normalizeCountPair(correctCount, totalCount);
+
+  if (normalized.totalCount <= 0) {
+    return 0;
+  }
+
+  return Math.round((normalized.correctCount / normalized.totalCount) * 100);
+}
+
+function getEmptyCurrentUserStatsSummary(): CurrentUserStatsSummary {
+  return {
+    totalGames: 0,
+    totalCorrect: 0,
+    totalAnswered: 0,
+    averageAccuracyRate: 0,
+    masteredCount: 0,
+    currentStreak: 0,
+    weeklyScore: 0,
+    allTimeScore: 0,
+    lastActiveDate: null,
+    updatedAt: null,
+  };
+}
+
+export async function getCurrentUserStats(userId: string): Promise<CurrentUserStats> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  });
+
+  if (!user) {
+    throw new UserError(403, "ユーザーが見つかりません");
+  }
+
+  const [stats, recentSessions] = await Promise.all([
+    prisma.userStats.findUnique({
+      where: { userId },
+      select: {
+        totalGames: true,
+        totalCorrect: true,
+        totalAnswered: true,
+        masteredCount: true,
+        currentStreak: true,
+        weeklyScore: true,
+        allTimeScore: true,
+        lastActiveDate: true,
+        updatedAt: true,
+      },
+    }),
+    prisma.gameSession.findMany({
+      where: { userId },
+      orderBy: [{ playedAt: "desc" }, { id: "desc" }],
+      take: RECENT_ACCURACY_TREND_LIMIT,
+      select: {
+        id: true,
+        playedAt: true,
+        correctCount: true,
+        totalCount: true,
+      },
+    }),
+  ]);
+
+  const statsAnswerCounts = stats
+    ? normalizeCountPair(stats.totalCorrect, stats.totalAnswered)
+    : null;
+  const statsSummary: CurrentUserStatsSummary = stats
+    ? {
+        totalGames: normalizeNonNegativeCount(stats.totalGames),
+        totalCorrect: statsAnswerCounts?.correctCount ?? 0,
+        totalAnswered: statsAnswerCounts?.totalCount ?? 0,
+        averageAccuracyRate: calculateAccuracyRate(
+          statsAnswerCounts?.correctCount ?? 0,
+          statsAnswerCounts?.totalCount ?? 0,
+        ),
+        masteredCount: normalizeNonNegativeCount(stats.masteredCount),
+        currentStreak: normalizeNonNegativeCount(stats.currentStreak),
+        weeklyScore: normalizeNonNegativeCount(stats.weeklyScore),
+        allTimeScore: normalizeNonNegativeCount(stats.allTimeScore),
+        lastActiveDate: stats.lastActiveDate,
+        updatedAt: stats.updatedAt,
+      }
+    : getEmptyCurrentUserStatsSummary();
+
+  return {
+    stats: statsSummary,
+    recentAccuracyTrend: [...recentSessions].reverse().map((session) => {
+      const sessionCounts = normalizeCountPair(session.correctCount, session.totalCount);
+
+      return {
+        sessionId: session.id,
+        playedAt: session.playedAt,
+        correctCount: sessionCounts.correctCount,
+        totalCount: sessionCounts.totalCount,
+        accuracyRate: calculateAccuracyRate(sessionCounts.correctCount, sessionCounts.totalCount),
+      };
+    }),
+  };
+}

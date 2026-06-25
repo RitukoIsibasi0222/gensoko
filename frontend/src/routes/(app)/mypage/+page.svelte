@@ -4,6 +4,9 @@
   import { onDestroy } from 'svelte';
   import { ApiError } from '$lib/api/errors';
   import { getGameSessions } from '$lib/api/game';
+  import { getMyStats, type MyStatsResponse } from '$lib/api/users';
+  import AccuracyTrendChart from '$lib/components/mypage/AccuracyTrendChart.svelte';
+  import StatsSummaryCards from '$lib/components/mypage/StatsSummaryCards.svelte';
   import { GAME_MODE_CONFIGS, getGameModeConfig } from '$lib/game/modes';
   import {
     DEFAULT_GAME_SESSION_HISTORY_LIMIT,
@@ -16,6 +19,15 @@
   import { toastStore } from '$lib/stores/toast.svelte';
 
   const NETWORK_ERROR_MESSAGE = 'ネットワークエラーが発生しました。接続を確認してください';
+
+  type LoadStatus = 'idle' | 'loading' | 'success' | 'error';
+
+  let statsResponse = $state<MyStatsResponse | null>(null);
+  let statsLoadStatus = $state<LoadStatus>('idle');
+  let statsErrorMessage = $state<string | null>(null);
+  let activeStatsAbortController: AbortController | null = null;
+  let activeStatsRequestKey: string | null = null;
+  let loadedStatsRequestKey: string | null = null;
 
   let sessions = $state<GameSessionHistoryItem[]>([]);
   let nextCursor = $state<string | null>(null);
@@ -35,15 +47,19 @@
 
   const hasSessions = $derived(sessions.length > 0);
   const selectedModeValue = $derived(appliedQuery.mode ?? '');
+  const isStatsLoading = $derived(statsLoadStatus === 'loading');
 
   $effect(() => {
     if (authStore.isInitializing) return;
 
     if (!authStore.isLoggedIn || !authStore.accessToken) {
+      resetStatsState();
       resetHistoryState();
       isInitialLoading = false;
       return;
     }
+
+    void loadStats(authStore.accessToken, false, false);
 
     const nextQuery = normalizeGameSessionHistoryQuery({
       limit: page.url.searchParams.get('limit'),
@@ -63,7 +79,20 @@
     void loadHistory(nextQuery, false, false);
   });
 
-  onDestroy(() => activeAbortController?.abort());
+  onDestroy(() => {
+    activeStatsAbortController?.abort();
+    activeAbortController?.abort();
+  });
+
+  function resetStatsState(): void {
+    activeStatsAbortController?.abort();
+    activeStatsAbortController = null;
+    activeStatsRequestKey = null;
+    loadedStatsRequestKey = null;
+    statsResponse = null;
+    statsLoadStatus = 'idle';
+    statsErrorMessage = null;
+  }
 
   function resetHistoryState(): void {
     activeAbortController?.abort();
@@ -77,6 +106,63 @@
 
   function isAbortError(error: unknown): boolean {
     return error instanceof Error && error.name === 'AbortError';
+  }
+
+  async function loadStats(accessToken: string, force: boolean, showToast: boolean): Promise<void> {
+    const requestKey = accessToken;
+    if (!force && (activeStatsRequestKey === requestKey || loadedStatsRequestKey === requestKey)) {
+      return;
+    }
+
+    activeStatsAbortController?.abort();
+    const abortController = new AbortController();
+    activeStatsAbortController = abortController;
+    activeStatsRequestKey = requestKey;
+
+    if (force) {
+      loadedStatsRequestKey = null;
+    }
+
+    statsLoadStatus = 'loading';
+    statsErrorMessage = null;
+
+    try {
+      const response = await getMyStats({
+        accessToken,
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted || activeStatsRequestKey !== requestKey) {
+        return;
+      }
+
+      statsResponse = response;
+      statsLoadStatus = 'success';
+      loadedStatsRequestKey = requestKey;
+    } catch (error) {
+      if (
+        isAbortError(error) ||
+        abortController.signal.aborted ||
+        activeStatsRequestKey !== requestKey
+      ) {
+        return;
+      }
+
+      const message = error instanceof ApiError ? error.message : NETWORK_ERROR_MESSAGE;
+      statsResponse = null;
+      statsLoadStatus = 'error';
+      loadedStatsRequestKey = null;
+      statsErrorMessage = message;
+      if (showToast) toastStore.error(message);
+    } finally {
+      if (activeStatsRequestKey === requestKey) {
+        activeStatsRequestKey = null;
+      }
+
+      if (activeStatsAbortController === abortController) {
+        activeStatsAbortController = null;
+      }
+    }
   }
 
   async function loadHistory(
@@ -152,6 +238,11 @@
     void updateQuery({ limit: appliedQuery.limit, cursor: null, mode });
   }
 
+  function retryStats(): void {
+    if (!authStore.accessToken || isStatsLoading) return;
+    void loadStats(authStore.accessToken, true, true);
+  }
+
   function retryHistory(): void {
     void loadHistory(appliedQuery, false, true);
   }
@@ -171,7 +262,9 @@
   <section class="space-y-2">
     <p class="text-sm font-semibold text-gray-500">学習記録</p>
     <h1 class="text-2xl font-bold text-gray-900">マイページ</h1>
-    <p class="max-w-2xl text-sm leading-6 text-gray-600">保存されたゲーム履歴を確認できます。</p>
+    <p class="max-w-2xl text-sm leading-6 text-gray-600">
+      統計サマリーと保存されたゲーム履歴を確認できます。
+    </p>
   </section>
 
   {#if authStore.isInitializing}
@@ -185,7 +278,7 @@
   {:else if !authStore.isLoggedIn}
     <section class="rounded border border-gray-200 bg-white p-5">
       <h2 class="text-lg font-bold text-gray-900">ログインが必要です</h2>
-      <p class="mt-2 text-sm text-gray-600">ゲーム履歴を見るにはログインしてください。</p>
+      <p class="mt-2 text-sm text-gray-600">統計情報とゲーム履歴を見るにはログインしてください。</p>
       <a
         class="mt-4 inline-flex rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
         href={'/login'}
@@ -194,6 +287,34 @@
       </a>
     </section>
   {:else}
+    <section class="space-y-4" aria-labelledby="stats-heading" aria-busy={isStatsLoading}>
+      <div>
+        <h2 id="stats-heading" class="text-lg font-bold text-gray-900">統計サマリー</h2>
+        <p class="mt-1 text-sm text-gray-600">累計成績と直近10ゲームの正答率推移です。</p>
+      </div>
+
+      {#if statsLoadStatus === 'loading'}
+        <div class="rounded border border-gray-200 bg-white p-5" aria-live="polite">
+          <p class="text-sm text-gray-600">統計情報を読み込んでいます...</p>
+        </div>
+      {:else if statsLoadStatus === 'error'}
+        <div class="rounded border border-red-200 bg-red-50 p-5 text-red-700" role="alert">
+          <p class="text-sm font-semibold">{statsErrorMessage}</p>
+          <button
+            type="button"
+            onclick={retryStats}
+            disabled={isStatsLoading}
+            class="mt-3 rounded border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:cursor-not-allowed disabled:bg-red-100"
+          >
+            再試行
+          </button>
+        </div>
+      {:else if statsResponse}
+        <StatsSummaryCards stats={statsResponse.stats} />
+        <AccuracyTrendChart items={statsResponse.recentAccuracyTrend} />
+      {/if}
+    </section>
+
     <section
       class="space-y-4"
       aria-labelledby="game-history-heading"

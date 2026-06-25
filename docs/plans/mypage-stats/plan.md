@@ -418,24 +418,24 @@ export function toAccuracyChartValues(items: readonly MyAccuracyTrendItem[]): nu
 | T17 | 手動確認を実施 | ブラウザ / dev server | ログイン、未ログイン、空状態、履歴あり、API エラー、mobile、keyboard を確認 | 高 |
 | T18 | 実装完了更新 | `docs/05_progress.md`, `docs/plans/mypage-stats/plan.md` | チェックボックス、対象ファイル一覧、実装完了セクションが実態と一致する | 高 |
 
-- [ ] T1: 既存仕様・既存実装の最終確認（`docs/01_features.md`, `docs/04_api.md`, `docs/05_progress.md`, `/mypage`, users 関連ファイル）
-- [ ] T2: backend stats service の Red テストを追加（`backend/src/services/user.service.test.ts`）
-- [ ] T3: backend stats service を実装（`backend/src/services/user.service.ts`）
-- [ ] T4: backend route の Red テストを追加（`backend/src/routes/users/get-me-stats.test.ts`）
-- [ ] T5: backend route を実装（`backend/src/routes/users/index.ts`）
-- [ ] T6: frontend stats API client の Red テストを追加（`frontend/src/lib/api/users.test.ts`）
-- [ ] T7: frontend stats API client を実装（`frontend/src/lib/api/users.ts`）
-- [ ] T8: stats helper と Red テストを追加（`frontend/src/lib/mypage/stats.ts`, `frontend/src/lib/mypage/stats.test.ts`）
-- [ ] T9: Chart.js 依存追加要否を最終判断して反映（`frontend/package.json`, `frontend/package-lock.json`）
-- [ ] T10: サマリーカード component を作成（`frontend/src/lib/components/mypage/StatsSummaryCards.svelte`）
-- [ ] T11: 正答率グラフ component を作成（`frontend/src/lib/components/mypage/AccuracyTrendChart.svelte`）
-- [ ] T12: `/mypage` に統計取得・表示を接続（`frontend/src/routes/(app)/mypage/+page.svelte`）
-- [ ] T13: loading / empty / error / retry を実装（`frontend/src/routes/(app)/mypage/+page.svelte`）
-- [ ] T14: reload / 戻る / 直接アクセスの挙動を確認（`frontend/src/routes/(app)/mypage/+page.svelte`）
-- [ ] T15: `docs/04_api.md` を更新
-- [ ] T16: backend / frontend 品質チェック
+- [x] T1: 既存仕様・既存実装の最終確認（`docs/01_features.md`, `docs/04_api.md`, `docs/05_progress.md`, `/mypage`, users 関連ファイル）
+- [x] T2: backend stats service の Red テストを追加（`backend/src/services/user.service.test.ts`）
+- [x] T3: backend stats service を実装（`backend/src/services/user.service.ts`）
+- [x] T4: backend route の Red テストを追加（`backend/src/routes/users/get-me-stats.test.ts`）
+- [x] T5: backend route を実装（`backend/src/routes/users/index.ts`）
+- [x] T6: frontend stats API client の Red テストを追加（`frontend/src/lib/api/users.test.ts`）
+- [x] T7: frontend stats API client を実装（`frontend/src/lib/api/users.ts`）
+- [x] T8: stats helper と Red テストを追加（`frontend/src/lib/mypage/stats.ts`, `frontend/src/lib/mypage/stats.test.ts`）
+- [x] T9: Chart.js 依存追加要否を最終判断して反映（`frontend/package.json`, `frontend/package-lock.json`）
+- [x] T10: サマリーカード component を作成（`frontend/src/lib/components/mypage/StatsSummaryCards.svelte`）
+- [x] T11: 正答率グラフ component を作成（`frontend/src/lib/components/mypage/AccuracyTrendChart.svelte`）
+- [x] T12: `/mypage` に統計取得・表示を接続（`frontend/src/routes/(app)/mypage/+page.svelte`）
+- [x] T13: loading / empty / error / retry を実装（`frontend/src/routes/(app)/mypage/+page.svelte`）
+- [x] T14: reload / 戻る / 直接アクセスの挙動を確認（`frontend/src/routes/(app)/mypage/+page.svelte`）
+- [x] T15: `docs/04_api.md` を更新
+- [x] T16: backend / frontend 品質チェック
 - [ ] T17: 手動確認
-- [ ] T18: `docs/05_progress.md` と plan.md の実装完了更新
+- [x] T18: `docs/05_progress.md` と plan.md の実装完了更新
 
 ## 技術的注意点
 
@@ -564,3 +564,52 @@ export function toAccuracyChartValues(items: readonly MyAccuracyTrendItem[]): nu
 | `cd frontend && npm run test:run` | |
 | 手動確認 | |
 ```
+
+## 実装完了
+- 完了日: 2026-06-25
+- 実装ブランチ: feature/mypage-stats
+- PR: #62
+
+### 計画からの変更点
+- Chart.js は導入せず、軽量 SVG component で正答率グラフを実装した。
+- 理由: 直近10ゲームの推移表示には軽量 SVG で十分であり、依存追加を避けつつ SSR と A11Y の扱いを簡潔にできるため。
+- docs/13_codex_editing.md の PowerShell + WSL 編集ガイド更新をコミット対象に含める。
+- レビュー改善として、frontend API client で正解数が回答数/問題数を超えないことを検証し、SVG グラフへ title/desc を追加した。
+- 追加レビュー対応として、backend の正答率計算を 0〜100 に丸め、frontend API client で 200 OK の JSON パース失敗を ApiError(500) に変換した。
+- 追加レビューで、正答率だけでなく API レスポンスの元データも frontend validation と同じ制約にそろえる必要があると分かったため、統計レスポンス値を 0 以上、正解数は回答数以下に正規化した。
+- docs/13_codex_editing.md に個人環境の絶対パスが残っていたため、他の開発者にも適用できる例示パスへ一般化した。
+- 追加確認で docs/09_startup_commands.md にも同種の個人環境パスが残っていたため、同じ例示パスへ一般化した。
+- 追加レビュー対応として、docs/04_api.md の Authorization ヘッダー例で `<accessToken>` が HTML タグ扱いにならないよう、ヘッダー例全体をインラインコード化した。
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| backend/src/services/user.service.ts | 修正 | 統計取得 service と response 型を追加し、不整合な統計値を API レスポンスで正規化 |
+| backend/src/services/user.service.test.ts | 修正 | stats service の正常系、空状態、0除算、ユーザーなし、不整合データ正規化テストを追加 |
+| backend/src/routes/users/index.ts | 修正 | GET /me/stats route を追加 |
+| backend/src/routes/users/get-me-stats.test.ts | 新規 | stats route の認証、200、UserError、500 テストを追加 |
+| frontend/src/lib/api/users.ts | 新規 | getMyStats API client、型、runtime validation を追加 |
+| frontend/src/lib/api/users.test.ts | 新規 | stats API client の Authorization、AbortSignal、非 JSON、response validation テストを追加 |
+| frontend/src/lib/mypage/stats.ts | 新規 | 数値、正答率、日付、グラフ用データ helper を追加 |
+| frontend/src/lib/mypage/stats.test.ts | 新規 | helper の表示整形と空 trend テストを追加 |
+| frontend/src/lib/components/mypage/StatsSummaryCards.svelte | 新規 | 統計サマリーカード component を追加 |
+| frontend/src/lib/components/mypage/AccuracyTrendChart.svelte | 新規 | 軽量 SVG の正答率推移グラフ component を追加 |
+| frontend/src/routes/(app)/mypage/+page.svelte | 修正 | 統計セクション、取得状態、再試行導線を追加 |
+| docs/04_api.md | 修正 | GET /users/me/stats の詳細仕様、統計値の正規化ルール、Authorization ヘッダー例の表示を更新 |
+| docs/05_progress.md | 修正 | /mypage 統計画面と GET /users/me/stats を完了に更新 |
+| docs/09_startup_commands.md | 修正 | 起動手順に残っていた個人環境の絶対パスを一般化 |
+| docs/13_codex_editing.md | 修正 | PowerShell + WSL 環境で失敗しやすい編集パターンと対処を追加し、個人環境の絶対パスを一般化 |
+| docs/plans/mypage-stats/plan.md | 修正 | タスク完了、実装完了記録、検証結果を追記 |
+
+### 検証結果
+| コマンド / 確認 | 結果 |
+|---|---|
+| cd backend && npm run lint | 成功 |
+| cd backend && npm run format:check | 成功 |
+| cd backend && npm run test -- --run | 成功。28 files / 249 tests passed。既存の forgot-password 異常系テストで想定内の stderr 出力あり |
+| cd frontend && npm run lint | 成功 |
+| cd frontend && npm run check | 成功。0 errors / 0 warnings |
+| cd frontend && npm run test:run | 成功。22 files / 255 tests passed |
+| git diff --check | 成功。空白エラーなし |
+| 個人環境パス検索 | 成功。/home/rituko/labs/Gensoko の残存なし |
+| 手動確認 | ブラウザでの手動確認は未実施。DB schema / migration 変更なしのため Playwright 必須対象外 |
