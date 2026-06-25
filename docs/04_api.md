@@ -679,17 +679,21 @@ Empty response 200:
     }
 
 Response fields:
-- stats.totalGames: 累計ゲーム回数
-- stats.totalCorrect: 累計正解数
-- stats.totalAnswered: 累計回答数
-- stats.averageAccuracyRate: totalCorrect / totalAnswered の整数パーセント。totalAnswered が 0 の場合は 0
-- stats.masteredCount: 習得済み元素数
-- stats.currentStreak: 現在の連続ログイン日数
-- stats.weeklyScore: 週間スコア
-- stats.allTimeScore: 全期間スコア
+- stats.totalGames: 累計ゲーム回数。0 以上の整数
+- stats.totalCorrect: 累計正解数。0 以上かつ stats.totalAnswered 以下の整数
+- stats.totalAnswered: 累計回答数。0 以上の整数
+- stats.averageAccuracyRate: totalCorrect / totalAnswered の整数パーセント。0〜100。totalAnswered が 0 の場合は 0
+- stats.masteredCount: 習得済み元素数。0 以上の整数
+- stats.currentStreak: 現在の連続ログイン日数。0 以上の整数
+- stats.weeklyScore: 週間スコア。0 以上の整数
+- stats.allTimeScore: 全期間スコア。0 以上の整数
 - stats.lastActiveDate: 最終アクティブ日。未記録なら null
 - stats.updatedAt: 統計更新日時。未記録なら null
 - recentAccuracyTrend: 直近10ゲームの正答率推移。古い順に返す
+- recentAccuracyTrend[].correctCount: ゲームごとの正解数。0 以上かつ totalCount 以下の整数
+- recentAccuracyTrend[].totalCount: ゲームごとの回答数。0 以上の整数
+- recentAccuracyTrend[].accuracyRate: ゲームごとの正答率。0〜100 の整数。totalCount が 0 の場合は 0
+- 保存済みデータに不整合がある場合も、レスポンスでは上記の範囲に正規化して返す
 
 Error:
 401 error: 認証が必要です / トークンが無効です / ユーザーが見つかりません（認証ミドルウェアで検出した場合）

@@ -258,8 +258,57 @@ describe("getCurrentUserStats", () => {
 
     const result = await getCurrentUserStats("user-1");
 
+    expect(result.stats.totalCorrect).toBe(10);
+    expect(result.stats.totalAnswered).toBe(10);
     expect(result.stats.averageAccuracyRate).toBe(100);
-    expect(result.recentAccuracyTrend[0]?.accuracyRate).toBe(100);
+    expect(result.recentAccuracyTrend[0]).toMatchObject({
+      correctCount: 10,
+      totalCount: 10,
+      accuracyRate: 100,
+    });
+  });
+
+  it("正常系: 負の統計値はレスポンスで 0 に丸める", async () => {
+    const playedAt = new Date("2026-06-20T12:35:00.000Z");
+
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "user-1" } as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue({
+      totalGames: -1,
+      totalCorrect: -3,
+      totalAnswered: -2,
+      masteredCount: -4,
+      currentStreak: -5,
+      weeklyScore: -6,
+      allTimeScore: -7,
+      lastActiveDate: null,
+      updatedAt: playedAt,
+    } as never);
+    vi.mocked(prisma.gameSession.findMany).mockResolvedValue([
+      {
+        id: "session-1",
+        playedAt,
+        correctCount: -1,
+        totalCount: -10,
+      },
+    ] as never);
+
+    const result = await getCurrentUserStats("user-1");
+
+    expect(result.stats).toMatchObject({
+      totalGames: 0,
+      totalCorrect: 0,
+      totalAnswered: 0,
+      averageAccuracyRate: 0,
+      masteredCount: 0,
+      currentStreak: 0,
+      weeklyScore: 0,
+      allTimeScore: 0,
+    });
+    expect(result.recentAccuracyTrend[0]).toMatchObject({
+      correctCount: 0,
+      totalCount: 0,
+      accuracyRate: 0,
+    });
   });
 
   it("正常系: ユーザー統計と直近10件の正答率推移を返す", async () => {

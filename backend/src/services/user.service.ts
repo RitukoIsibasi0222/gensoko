@@ -203,12 +203,32 @@ export type CurrentUserStats = {
   recentAccuracyTrend: CurrentUserAccuracyTrendItem[];
 };
 
+type NormalizedCountPair = {
+  correctCount: number;
+  totalCount: number;
+};
+
+function normalizeNonNegativeCount(value: number): number {
+  return Math.max(0, value);
+}
+
+function normalizeCountPair(correctCount: number, totalCount: number): NormalizedCountPair {
+  const normalizedTotalCount = normalizeNonNegativeCount(totalCount);
+
+  return {
+    correctCount: Math.min(normalizeNonNegativeCount(correctCount), normalizedTotalCount),
+    totalCount: normalizedTotalCount,
+  };
+}
+
 function calculateAccuracyRate(correctCount: number, totalCount: number): number {
-  if (totalCount <= 0) {
+  const normalized = normalizeCountPair(correctCount, totalCount);
+
+  if (normalized.totalCount <= 0) {
     return 0;
   }
 
-  return Math.min(100, Math.max(0, Math.round((correctCount / totalCount) * 100)));
+  return Math.round((normalized.correctCount / normalized.totalCount) * 100);
 }
 
 function getEmptyCurrentUserStatsSummary(): CurrentUserStatsSummary {
@@ -264,16 +284,22 @@ export async function getCurrentUserStats(userId: string): Promise<CurrentUserSt
     }),
   ]);
 
+  const statsAnswerCounts = stats
+    ? normalizeCountPair(stats.totalCorrect, stats.totalAnswered)
+    : null;
   const statsSummary: CurrentUserStatsSummary = stats
     ? {
-        totalGames: stats.totalGames,
-        totalCorrect: stats.totalCorrect,
-        totalAnswered: stats.totalAnswered,
-        averageAccuracyRate: calculateAccuracyRate(stats.totalCorrect, stats.totalAnswered),
-        masteredCount: stats.masteredCount,
-        currentStreak: stats.currentStreak,
-        weeklyScore: stats.weeklyScore,
-        allTimeScore: stats.allTimeScore,
+        totalGames: normalizeNonNegativeCount(stats.totalGames),
+        totalCorrect: statsAnswerCounts?.correctCount ?? 0,
+        totalAnswered: statsAnswerCounts?.totalCount ?? 0,
+        averageAccuracyRate: calculateAccuracyRate(
+          statsAnswerCounts?.correctCount ?? 0,
+          statsAnswerCounts?.totalCount ?? 0,
+        ),
+        masteredCount: normalizeNonNegativeCount(stats.masteredCount),
+        currentStreak: normalizeNonNegativeCount(stats.currentStreak),
+        weeklyScore: normalizeNonNegativeCount(stats.weeklyScore),
+        allTimeScore: normalizeNonNegativeCount(stats.allTimeScore),
         lastActiveDate: stats.lastActiveDate,
         updatedAt: stats.updatedAt,
       }
@@ -281,12 +307,16 @@ export async function getCurrentUserStats(userId: string): Promise<CurrentUserSt
 
   return {
     stats: statsSummary,
-    recentAccuracyTrend: [...recentSessions].reverse().map((session) => ({
-      sessionId: session.id,
-      playedAt: session.playedAt,
-      correctCount: session.correctCount,
-      totalCount: session.totalCount,
-      accuracyRate: calculateAccuracyRate(session.correctCount, session.totalCount),
-    })),
+    recentAccuracyTrend: [...recentSessions].reverse().map((session) => {
+      const sessionCounts = normalizeCountPair(session.correctCount, session.totalCount);
+
+      return {
+        sessionId: session.id,
+        playedAt: session.playedAt,
+        correctCount: sessionCounts.correctCount,
+        totalCount: sessionCounts.totalCount,
+        accuracyRate: calculateAccuracyRate(sessionCounts.correctCount, sessionCounts.totalCount),
+      };
+    }),
   };
 }
