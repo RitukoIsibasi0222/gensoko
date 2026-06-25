@@ -629,6 +629,73 @@ async function handleSubmit() {
 | DELETE | `/users/me` | アカウント削除 | 🔒 |
 | GET | `/users/me/stats` | 自分の統計取得 | 🔒 |
 
+### GET /users/me/stats
+
+Headers:
+  Authorization: Bearer <accessToken>
+
+Response 200:
+
+    {
+      "stats": {
+        "totalGames": 12,
+        "totalCorrect": 91,
+        "totalAnswered": 120,
+        "averageAccuracyRate": 76,
+        "masteredCount": 18,
+        "currentStreak": 5,
+        "weeklyScore": 2400,
+        "allTimeScore": 9200,
+        "lastActiveDate": "2026-06-20T00:00:00.000Z",
+        "updatedAt": "2026-06-20T12:35:00.000Z"
+      },
+      "recentAccuracyTrend": [
+        {
+          "sessionId": "cuid",
+          "playedAt": "2026-06-20T12:35:00.000Z",
+          "correctCount": 8,
+          "totalCount": 10,
+          "accuracyRate": 80
+        }
+      ]
+    }
+
+Empty response 200:
+
+    {
+      "stats": {
+        "totalGames": 0,
+        "totalCorrect": 0,
+        "totalAnswered": 0,
+        "averageAccuracyRate": 0,
+        "masteredCount": 0,
+        "currentStreak": 0,
+        "weeklyScore": 0,
+        "allTimeScore": 0,
+        "lastActiveDate": null,
+        "updatedAt": null
+      },
+      "recentAccuracyTrend": []
+    }
+
+Response fields:
+- stats.totalGames: 累計ゲーム回数
+- stats.totalCorrect: 累計正解数
+- stats.totalAnswered: 累計回答数
+- stats.averageAccuracyRate: totalCorrect / totalAnswered の整数パーセント。totalAnswered が 0 の場合は 0
+- stats.masteredCount: 習得済み元素数
+- stats.currentStreak: 現在の連続ログイン日数
+- stats.weeklyScore: 週間スコア
+- stats.allTimeScore: 全期間スコア
+- stats.lastActiveDate: 最終アクティブ日。未記録なら null
+- stats.updatedAt: 統計更新日時。未記録なら null
+- recentAccuracyTrend: 直近10ゲームの正答率推移。古い順に返す
+
+Error:
+401 error: 認証が必要です / トークンが無効です / ユーザーが見つかりません
+403 error: アカウントが停止されています / メールアドレスが確認されていません / アカウントがロックされています
+500 error: サーバーエラーが発生しました
+
 ---
 
 ## ランキング `/api/v1/ranking`
