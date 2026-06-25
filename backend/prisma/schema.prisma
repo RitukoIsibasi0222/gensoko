@@ -197,5 +197,7 @@ model UserStats {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([weeklyScore(sort: Desc)])
+  @@index([allTimeScore(sort: Desc)])
   @@map("user_stats")
 }

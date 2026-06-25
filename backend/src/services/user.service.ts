@@ -1,6 +1,11 @@
 import bcrypt from "bcryptjs";
 import type { Role } from "@prisma/client";
 import { normalizePassword } from "../lib/normalize.js";
+import {
+  calculateAccuracyRate,
+  normalizeCountPair,
+  normalizeNonNegativeCount,
+} from "../lib/stats.js";
 import { prisma } from "../lib/prisma.js";
 
 function isUniqueConstraintViolation(error: unknown): boolean {
@@ -202,34 +207,6 @@ export type CurrentUserStats = {
   stats: CurrentUserStatsSummary;
   recentAccuracyTrend: CurrentUserAccuracyTrendItem[];
 };
-
-type NormalizedCountPair = {
-  correctCount: number;
-  totalCount: number;
-};
-
-function normalizeNonNegativeCount(value: number): number {
-  return Math.max(0, value);
-}
-
-function normalizeCountPair(correctCount: number, totalCount: number): NormalizedCountPair {
-  const normalizedTotalCount = normalizeNonNegativeCount(totalCount);
-
-  return {
-    correctCount: Math.min(normalizeNonNegativeCount(correctCount), normalizedTotalCount),
-    totalCount: normalizedTotalCount,
-  };
-}
-
-function calculateAccuracyRate(correctCount: number, totalCount: number): number {
-  const normalized = normalizeCountPair(correctCount, totalCount);
-
-  if (normalized.totalCount <= 0) {
-    return 0;
-  }
-
-  return Math.round((normalized.correctCount / normalized.totalCount) * 100);
-}
 
 function getEmptyCurrentUserStatsSummary(): CurrentUserStatsSummary {
   return {

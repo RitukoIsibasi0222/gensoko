@@ -127,9 +127,11 @@
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
 | `backend/prisma/schema.prisma` | 修正 | `UserStats.weeklyScore` / `allTimeScore` 用 index を追加 |
-| `backend/prisma/migrations/*` | 新規 | ranking index 追加 migration |
+| `backend/prisma/migrations/20260625090000_add_user_stats_ranking_indexes/migration.sql` | 新規 | ranking index 追加 migration |
+| `backend/src/lib/stats.ts` | 新規 | 統計値の正規化・正答率計算 helper |
 | `backend/src/services/ranking.service.ts` | 新規 | ranking 取得、順位算出、response 整形 |
 | `backend/src/services/ranking.service.test.ts` | 新規 | Top50、myRank、同点、空状態、対象ユーザー除外のテスト |
+| `backend/src/services/user.service.ts` | 修正 | 統計 helper を共通化して重複計算を削除 |
 | `backend/src/routes/ranking/index.ts` | 修正 | weekly / alltime route、optional auth、エラー処理 |
 | `backend/src/routes/ranking/ranking.test.ts` | 新規 | route の未ログイン、ログイン、401、500 テスト |
 | `backend/src/index.ts` | 修正 | `/api/v1/ranking` router を mount |
@@ -143,7 +145,7 @@
 | `frontend/src/routes/(app)/ranking/+page.ts` | 新規 | `ssr = true`, `prerender = false` を明示 |
 | `docs/04_api.md` | 修正 | ranking API 仕様を確定し、重複見出しを整理 |
 | `docs/05_progress.md` | 修正 | 対象タスクと ranking API タスクに計画書リンク・完了状態を反映 |
-| `docs/plans/ranking-page/plan.md` | 新規/修正 | 本計画。実装完了時に実態へ更新 |
+| `docs/plans/ranking-page/plan.md` | 修正 | タスク完了・実装記録を追記 |
 
 ## API 仕様（この機能で使う範囲のみ）
 
@@ -157,7 +159,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 認証 | 任意。Authorization があれば `myRank` を返す |
+| 認証 | 任意。`myRank` フィールドは常に返す。Authorization があれば順位を算出し、未ログイン・ランキング対象外の場合は `null` |
 | 成功 | 200 |
 | 用途 | 週間スコア上位50件と自分の週間順位を取得する |
 | request body | なし |
@@ -184,7 +186,7 @@ Response 200:
 
 | 項目 | 内容 |
 |---|---|
-| 認証 | 任意。Authorization があれば `myRank` を返す |
+| 認証 | 任意。`myRank` フィールドは常に返す。Authorization があれば順位を算出し、未ログイン・ランキング対象外の場合は `null` |
 | 成功 | 200 |
 | 用途 | 全期間スコア上位50件と自分の全期間順位を取得する |
 | request body | なし |
@@ -371,17 +373,17 @@ export function formatRankingAccuracy(value: number): string;
 | T10 | 品質チェックを実行する | backend / frontend | lint、format、test、migration deploy 確認が完了する | 高 |
 | T11 | 手動確認を実施する | `/ranking`, `/`, API | 未ログイン・ログイン済み・切替・空状態・エラー・A11Y を確認する | 高 |
 
-- [ ] T1: 既存仕様・既存実装を最終確認する
-- [ ] T2: ranking 用 DB index と migration を追加する
-- [ ] T3: ranking service を TDD で実装する
-- [ ] T4: ranking route を TDD で実装して mount する
-- [ ] T5: frontend ranking API client を実装する
-- [ ] T6: ranking helper を実装する
-- [ ] T7: ranking 表示コンポーネントを作成する
-- [ ] T8: `/ranking` page を実装する
-- [ ] T9: ドキュメントを更新する
-- [ ] T10: 品質チェックを実行する
-- [ ] T11: 手動確認を実施する
+- [x] T1: 既存仕様・既存実装を最終確認する
+- [x] T2: ranking 用 DB index と migration を追加する
+- [x] T3: ranking service を TDD で実装する
+- [x] T4: ranking route を TDD で実装して mount する
+- [x] T5: frontend ranking API client を実装する
+- [x] T6: ranking helper を実装する
+- [x] T7: ranking 表示コンポーネントを作成する
+- [x] T8: `/ranking` page を実装する
+- [x] T9: ドキュメントを更新する
+- [x] T10: 品質チェックを実行する
+- [x] T11: 手動確認を実施する
 
 ## 技術的注意点
 
@@ -484,3 +486,51 @@ export function formatRankingAccuracy(value: number): string;
 - prisma migrate deploy:
 - Playwright:
 ```
+
+
+## 実装完了
+- 完了日: 2026-06-25
+- 実装ブランチ: feature/ranking-page
+- PR: #64
+
+### 計画からの変更点
+- `backend/src/lib/stats.ts` を追加し、ランキング service と既存 user service で統計値の正規化・正答率計算を共有した。計画時は ranking service 内で完結する想定だったが、同じ計算が重複するため共通 helper に切り出した。
+- Playwright の手動確認は、既存データが入っている開発 DB で未ログイン表示、週間/全期間切替、API 200、console error なしを確認した。ログイン済み `myRank`・空状態・エラー系は自動テストで確認した。
+- レビュー改善として、ログイン時の ranking 一覧取得と `myRank` 取得を並列化し、`aria-busy` と ranking 種別ボタンの `aria-pressed` を実際の UI 状態に合わせた。
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `backend/prisma/schema.prisma` | 修正 | `UserStats.weeklyScore` / `allTimeScore` の降順 index を追加 |
+| `backend/prisma/migrations/20260625090000_add_user_stats_ranking_indexes/migration.sql` | 新規 | ranking index 追加 migration |
+| `backend/src/lib/stats.ts` | 新規 | 統計値の正規化・正答率計算 helper |
+| `backend/src/services/ranking.service.ts` | 新規 | Top50、同点順位、myRank、対象ユーザー除外を実装 |
+| `backend/src/services/ranking.service.test.ts` | 新規 | ranking service の TDD テスト |
+| `backend/src/services/user.service.ts` | 修正 | 統計 helper の共通化 |
+| `backend/src/routes/ranking/index.ts` | 修正 | `GET /ranking/weekly` / `GET /ranking/alltime` を実装 |
+| `backend/src/routes/ranking/ranking.test.ts` | 新規 | ranking route の TDD テスト |
+| `backend/src/index.ts` | 修正 | `/api/v1/ranking` router を mount |
+| `frontend/src/lib/api/ranking.ts` | 新規 | ranking API client、型、runtime validation |
+| `frontend/src/lib/api/ranking.test.ts` | 新規 | ranking API client の TDD テスト |
+| `frontend/src/lib/ranking/ranking.ts` | 新規 | period 正規化と表示 formatter |
+| `frontend/src/lib/ranking/ranking.test.ts` | 新規 | ranking helper の TDD テスト |
+| `frontend/src/lib/components/ranking/RankingTable.svelte` | 新規 | ランキング表コンポーネント |
+| `frontend/src/lib/components/ranking/MyRankPanel.svelte` | 新規 | 自分の順位表示コンポーネント |
+| `frontend/src/routes/(app)/ranking/+page.svelte` | 修正 | ranking page の取得・切替・状態表示 |
+| `frontend/src/routes/(app)/ranking/+page.ts` | 新規 | prerender 無効化を明示 |
+| `docs/04_api.md` | 修正 | ranking API 仕様を実装内容に合わせて更新 |
+| `docs/05_progress.md` | 修正 | ranking page / ranking API を完了に更新 |
+| `docs/plans/ranking-page/plan.md` | 修正 | タスク完了・実装記録を追記 |
+
+### 確認結果
+- backend lint: `npm run lint` 成功
+- backend format:check: `npm run format:check` 成功
+- backend test: `npm run test -- --run` 成功（30 files / 259 tests）
+- frontend check: `npm run check` 成功
+- frontend lint: `npm run lint` 成功
+- frontend test: `npm run test:run` 成功（24 files / 267 tests）
+- frontend format: `npm run format` 実行済み
+- prisma validate / format: 成功
+- prisma migrate deploy: host では Docker hostname 解決の都合で失敗、`docker exec gensoko-hono-1 npx prisma migrate deploy` で成功
+- Playwright: `http://localhost:5174/ranking` で週間ランキング表示、全期間切替、`?period=alltime` 反映、console error なしを確認
+- API 実動作: `GET http://localhost:3000/api/v1/ranking/weekly` / `alltime` が 200 OK を返すことを確認
