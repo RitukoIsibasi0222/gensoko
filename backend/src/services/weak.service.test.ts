@@ -4,12 +4,13 @@ vi.mock("../lib/prisma.js", () => ({
   prisma: {
     weakElement: {
       findMany: vi.fn(),
+      deleteMany: vi.fn(),
     },
   },
 }));
 
 import { prisma } from "../lib/prisma.js";
-import { getWeakElements } from "./weak.service.js";
+import { deleteWeakElement, getWeakElements, WeakElementNotFoundError } from "./weak.service.js";
 
 const WEAK_ELEMENT_ROWS = [
   {
@@ -88,5 +89,37 @@ describe("getWeakElements", () => {
     const result = await getWeakElements("user-1");
 
     expect(result).toEqual([]);
+  });
+});
+
+describe("deleteWeakElement", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("ログインユーザー本人の userId と elementId を条件に苦手元素を削除する", async () => {
+    vi.mocked(prisma.weakElement.deleteMany).mockResolvedValue({ count: 1 });
+
+    await deleteWeakElement({ userId: "user-1", elementId: 26 });
+
+    expect(prisma.weakElement.deleteMany).toHaveBeenCalledWith({
+      where: { userId: "user-1", elementId: 26 },
+    });
+  });
+
+  it("削除対象がない場合は WeakElementNotFoundError を投げる", async () => {
+    vi.mocked(prisma.weakElement.deleteMany).mockResolvedValue({ count: 0 });
+
+    await expect(deleteWeakElement({ userId: "user-1", elementId: 26 })).rejects.toBeInstanceOf(
+      WeakElementNotFoundError,
+    );
+  });
+
+  it("削除対象がない場合は日本語エラーメッセージを返せる", async () => {
+    vi.mocked(prisma.weakElement.deleteMany).mockResolvedValue({ count: 0 });
+
+    await expect(deleteWeakElement({ userId: "user-1", elementId: 26 })).rejects.toThrow(
+      "苦手元素が見つかりません",
+    );
   });
 });

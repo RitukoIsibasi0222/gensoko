@@ -17,6 +17,7 @@
 - **実装計画書**: `docs/plans/{機能名}/plan.md` （機能ごとのディレクトリ・設計書・タスクリスト）
 - **テスト開発フロー**: `docs/07_testing_flow.md`
 - **起動コマンド**: `docs/09_startup_commands.md`
+- **Codex ファイル編集ガイド**: `docs/13_codex_editing.md`
 
 ---
 
@@ -253,14 +254,15 @@ git checkout -b feature/xxx
 0. `docs/plans/{機能名}/plan.md` — 実装計画書が存在する場合は **最初に必ず読む**（同ディレクトリの補足資料も確認する）
 1. `docs/08_conventions.md` — **コード規約・命名ルール・Prettier・ESLint**（import配置、インデント、共通化ルールなど）
    - **特に重要**: 「実装前の基本チェックリスト（必須）」セクションを確認する
-2. `docs/05_progress.md` — タスクの位置づけ・依存関係を確認
-3. `docs/07_testing_flow.md` — テスト実装時は必ず読む（TDDフロー）
-4. `docs/04_api.md` — API呼び出し実装時は必ず読む（エンドポイント仕様）
-5. `backend/prisma/schema.prisma` — 関連するモデルの全フィールドを確認
-6. 実装対象ファイル（routes・services・middleware）の現在の内容
-7. **既に実装済みの類似ファイル**（コードのブレを防ぐため）
+2. `docs/13_codex_editing.md` — **PowerShell + WSL 環境での安全なファイル編集方法**（ファイル編集前に必ず読む）
+3. `docs/05_progress.md` — タスクの位置づけ・依存関係を確認
+4. `docs/07_testing_flow.md` — テスト実装時は必ず読む（TDDフロー）
+5. `docs/04_api.md` — API呼び出し実装時は必ず読む（エンドポイント仕様）
+6. `backend/prisma/schema.prisma` — 関連するモデルの全フィールドを確認
+7. 実装対象ファイル（routes・services・middleware）の現在の内容
+8. **既に実装済みの類似ファイル**（コードのブレを防ぐため）
    - 例: `auth.ts` を実装するなら既存の `middleware/auth.ts` を読む
-8. 型定義ファイルの確認
+9. 型定義ファイルの確認
    - バックエンド: `backend/src/types/index.ts`
    - フロントエンド: 既存の型定義（`$lib/api/errors.ts` 等）を参照
 

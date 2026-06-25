@@ -130,7 +130,7 @@
 
 ### 画面
 - [x] 共通ナビ導線・モバイルメニュー整備（/weak 仮ページ、ログイン後 /weak・/mypage 導線、スマホハンバーガーメニュー） — 計画書: docs/plans/header-navigation/plan.md
-- [ ] 苦手リスト画面 `/weak`（ソート・手動削除ボタン） — 計画書: [`docs/plans/weak-list-page/plan.md`](plans/weak-list-page/plan.md)
+- [x] 苦手リスト画面 `/weak`（ソート・手動削除ボタン） — 計画書: [`docs/plans/weak-list-page/plan.md`](plans/weak-list-page/plan.md)
 - [ ] マイページ・統計画面 `/mypage`（正答率グラフ・サマリーカード）
 - [ ] ランキングページ `/ranking`（週間・全期間・自分の順位）
 
@@ -141,7 +141,7 @@
 
 > フェーズ8 の確認で確定したインターフェースを実装する。
 
-- [ ] GET /weak + DELETE /weak/:elementId
+- [x] GET /weak + DELETE /weak/:elementId
 - [ ] GET /users/me + PATCH /users/me + DELETE /users/me
 - [ ] GET /users/me/stats
 - [ ] GET /ranking/weekly + /alltime（myRank フィールド・Top50）

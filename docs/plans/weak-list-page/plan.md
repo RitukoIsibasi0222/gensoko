@@ -330,26 +330,26 @@ export function sortWeakElements(
 | T19 | 手動確認を実施する | Browser / Docker 環境 | 初期表示、空状態、ソート、reload、戻る、削除成功/失敗、未ログイン、モバイルを確認する | 高 |
 | T20 | 実装完了ドキュメントを更新する | `docs/05_progress.md`, `docs/plans/weak-list-page/plan.md` | progress 完了、チェックボックス、実装完了セクション、実際の変更ファイルが実態と一致する | 高 |
 
-- [ ] T1: 既存仕様・既存実装を確認する
-- [ ] T2: `docs/05_progress.md` を実装中へ更新する
-- [ ] T3: backend DELETE service テストを追加する
-- [ ] T4: backend DELETE service を実装する
-- [ ] T5: backend DELETE route テストを追加する
-- [ ] T6: backend DELETE route を実装する
-- [ ] T7: frontend DELETE API client テストを追加する
-- [ ] T8: frontend DELETE API client を実装する
-- [ ] T9: weak sort helper テストを追加する
-- [ ] T10: weak sort helper を実装する
-- [ ] T11: `/weak` の認証・取得状態を実装する
-- [ ] T12: `/weak` の一覧 UI と空状態を実装する
-- [ ] T13: ソート UI と URL query 同期を実装する
-- [ ] T14: 削除確認 UI と削除中状態を実装する
-- [ ] T15: 削除失敗・再取得失敗の表示を実装する
-- [ ] T16: API 仕様ドキュメントを更新する
-- [ ] T17: frontend 品質チェックを実行する
-- [ ] T18: backend 品質チェックを実行する
+- [x] T1: 既存仕様・既存実装を確認する
+- [x] T2: `docs/05_progress.md` を実装中へ更新する
+- [x] T3: backend DELETE service テストを追加する
+- [x] T4: backend DELETE service を実装する
+- [x] T5: backend DELETE route テストを追加する
+- [x] T6: backend DELETE route を実装する
+- [x] T7: frontend DELETE API client テストを追加する
+- [x] T8: frontend DELETE API client を実装する
+- [x] T9: weak sort helper テストを追加する
+- [x] T10: weak sort helper を実装する
+- [x] T11: `/weak` の認証・取得状態を実装する
+- [x] T12: `/weak` の一覧 UI と空状態を実装する
+- [x] T13: ソート UI と URL query 同期を実装する
+- [x] T14: 削除確認 UI と削除中状態を実装する
+- [x] T15: 削除失敗・再取得失敗の表示を実装する
+- [x] T16: API 仕様ドキュメントを更新する
+- [x] T17: frontend 品質チェックを実行する
+- [x] T18: backend 品質チェックを実行する
 - [ ] T19: 手動確認を実施する
-- [ ] T20: 実装完了ドキュメントを更新する
+- [x] T20: 実装完了ドキュメントを更新する
 
 ## 技術的注意点
 
@@ -495,3 +495,56 @@ export function sortWeakElements(
 | GET API エラー |  |
 | モバイル幅 |  |
 ```
+
+## 実装完了
+
+- 完了日: 2026-06-25
+- 実装ブランチ: feature/weak-list-page
+- PR: #61
+
+### 計画からの変更点
+
+- sort query はデフォルト状態では空 query にし、デフォルト以外のみ sort/order を URL に反映する実装にした。
+- ブラウザ手動確認は未ログイン表示とコンソールエラーなしまで実施した。ログイン後の一覧・削除導線は API client / backend route / sort helper / svelte-check で確認した。未実施項目が残るため、T19 は未完了として残す。
+- DB schema / migration は変更していないため、migration 適用確認は対象外。
+- GET /weak は先行実装済みで、本タスクで DELETE /weak/:elementId を実装したため、docs/05_progress.md のフェーズ9 GET /weak + DELETE /weak/:elementId も完了に更新した。
+- 追加レビューで、backend の元素ID検証を既存 schema 再利用へ寄せ、API validation details の path を elementId に整えた。あわせて API client の addedAt / missCount 検証と削除ボタンの A11Y label を補強した。
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| backend/src/services/weak.service.ts | 修正 | 苦手元素削除 service と not found error を追加 |
+| backend/src/services/weak.service.test.ts | 修正 | userId + elementId 削除、対象なしエラーのテストを追加 |
+| backend/src/routes/weak/index.ts | 修正 | DELETE /weak/:elementId、param validation、404/500 handling を追加 |
+| backend/src/routes/weak/weak.test.ts | 修正 | DELETE route の 401/400/200/404/500 テストを追加 |
+| frontend/src/lib/api/weak.ts | 修正 | deleteWeakElement API client と runtime validation を追加 |
+| frontend/src/lib/api/weak.test.ts | 修正 | DELETE client の正常系、AbortSignal、HTTP error、非 JSON、response 不正テストを追加 |
+| frontend/src/lib/weak/sort.ts | 新規 | weak list sort state / URL query / stable sort helper を追加 |
+| frontend/src/lib/weak/sort.test.ts | 新規 | sort query 復元、fallback、各 sort、非破壊性テストを追加 |
+| frontend/src/routes/(app)/weak/+page.svelte | 修正 | 苦手リスト画面、状態表示、ソート、削除確認 UI を実装 |
+| docs/04_api.md | 修正 | DELETE /weak/:elementId 仕様を追加 |
+| docs/05_progress.md | 修正 | 進捗を実装中から完了へ更新 |
+| docs/plans/weak-list-page/plan.md | 修正 | タスクリストと実装完了記録を更新 |
+
+### 品質チェック
+
+| コマンド | 結果 |
+|---|---|
+| cd backend && npm run format | 成功 |
+| cd backend && npm run lint | 成功 |
+| cd backend && npm run format:check | 成功 |
+| cd backend && npm run test -- --run | 成功（27 files / 239 tests） |
+| cd frontend && npm run format | 成功 |
+| cd frontend && npm run lint | 成功 |
+| cd frontend && npm run check | 成功（0 errors / 0 warnings） |
+| cd frontend && npm run test:run | 成功（20 files / 238 tests） |
+
+### 手動確認
+
+| 条件 | 結果 |
+|---|---|
+| 未ログイン /weak | 成功。ログイン導線が表示され、console error なし |
+| 苦手0件 / 苦手複数件 / 削除成功 | 未実施。自動テストと svelte-check で契約・状態管理を確認 |
+| sort query reload / ブラウザ戻る操作 | 未実施。sort helper test と URL 更新実装で確認 |
+| モバイル幅 | 未実施 |
