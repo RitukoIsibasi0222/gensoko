@@ -99,6 +99,14 @@ function buildWeakElementUrl(elementId: number): string {
   return buildWeakElementsUrl() + '/' + encodeURIComponent(String(elementId));
 }
 
+async function parseJsonOrThrow(response: Response, invalidMessage: string): Promise<unknown> {
+  try {
+    return (await response.json()) as unknown;
+  } catch {
+    throw new ApiError(500, invalidMessage, null);
+  }
+}
+
 export async function getWeakElements({
   accessToken,
   signal
@@ -121,7 +129,7 @@ export async function getWeakElements({
     await parseErrorResponse(response, '苦手リストの取得に失敗しました');
   }
 
-  const data = (await response.json()) as unknown;
+  const data = await parseJsonOrThrow(response, '苦手リストのレスポンス形式が不正です');
   if (!isWeakElementsResponse(data)) {
     throw new ApiError(500, '苦手リストのレスポンス形式が不正です', data);
   }
@@ -151,7 +159,7 @@ export async function deleteWeakElement({
     await parseErrorResponse(response, '苦手元素の削除に失敗しました');
   }
 
-  const data = (await response.json()) as unknown;
+  const data = await parseJsonOrThrow(response, '苦手元素削除のレスポンス形式が不正です');
   if (!isDeleteWeakElementResponse(data)) {
     throw new ApiError(500, '苦手元素削除のレスポンス形式が不正です', data);
   }
