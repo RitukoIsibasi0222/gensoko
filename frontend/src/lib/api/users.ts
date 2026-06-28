@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '$lib/api/config';
-import { ApiError, parseErrorResponse } from '$lib/api/errors';
+import { ApiError, parseErrorResponse, parseSuccessJsonResponse } from '$lib/api/errors';
 
 export type MyStatsSummary = {
   totalGames: number;
@@ -137,12 +137,7 @@ export async function getMyStats({
     await parseErrorResponse(response, '統計情報の取得に失敗しました');
   }
 
-  let data: unknown;
-  try {
-    data = (await response.json()) as unknown;
-  } catch {
-    throw new ApiError(500, '統計情報のレスポンス形式が不正です', null);
-  }
+  const data = await parseSuccessJsonResponse(response, '統計情報のレスポンス形式が不正です');
 
   if (!isMyStatsResponse(data)) {
     throw new ApiError(500, '統計情報のレスポンス形式が不正です', data);
@@ -300,14 +295,6 @@ function buildUsersMeFetchOptions({
   return fetchOptions;
 }
 
-async function parseJsonOrThrow(response: Response, invalidMessage: string): Promise<unknown> {
-  try {
-    return (await response.json()) as unknown;
-  } catch {
-    throw new ApiError(500, invalidMessage, null);
-  }
-}
-
 export async function getCurrentUserProfile({
   accessToken,
   signal
@@ -321,7 +308,10 @@ export async function getCurrentUserProfile({
     await parseErrorResponse(response, 'プロフィール情報の取得に失敗しました');
   }
 
-  const data = await parseJsonOrThrow(response, 'プロフィール情報のレスポンス形式が不正です');
+  const data = await parseSuccessJsonResponse(
+    response,
+    'プロフィール情報のレスポンス形式が不正です'
+  );
   if (!isCurrentUserProfileResponse(data)) {
     throw new ApiError(500, 'プロフィール情報のレスポンス形式が不正です', data);
   }
@@ -348,7 +338,7 @@ export async function updateCurrentUsername({
     await parseErrorResponse(response, 'ユーザー名変更に失敗しました');
   }
 
-  const data = await parseJsonOrThrow(response, 'ユーザー名変更のレスポンス形式が不正です');
+  const data = await parseSuccessJsonResponse(response, 'ユーザー名変更のレスポンス形式が不正です');
   if (!isUpdateCurrentUsernameResponse(data)) {
     throw new ApiError(500, 'ユーザー名変更のレスポンス形式が不正です', data);
   }
@@ -376,7 +366,7 @@ export async function changeCurrentPassword({
     await parseErrorResponse(response, 'パスワード変更に失敗しました');
   }
 
-  const data = await parseJsonOrThrow(response, 'パスワード変更のレスポンス形式が不正です');
+  const data = await parseSuccessJsonResponse(response, 'パスワード変更のレスポンス形式が不正です');
   if (!isUserMessageResponse(data)) {
     throw new ApiError(500, 'パスワード変更のレスポンス形式が不正です', data);
   }
@@ -403,7 +393,7 @@ export async function deleteCurrentUser({
     await parseErrorResponse(response, 'アカウント削除に失敗しました');
   }
 
-  const data = await parseJsonOrThrow(response, 'アカウント削除のレスポンス形式が不正です');
+  const data = await parseSuccessJsonResponse(response, 'アカウント削除のレスポンス形式が不正です');
   if (!isUserMessageResponse(data)) {
     throw new ApiError(500, 'アカウント削除のレスポンス形式が不正です', data);
   }

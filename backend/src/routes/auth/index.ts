@@ -104,7 +104,7 @@ authRouter.post(
     try {
       const result = await login({ email, password });
       const isProduction = process.env.NODE_ENV === "production";
-      // Path を /auth ベースにすることで /auth/logout でも Cookie が届くようにする
+      // Path を authBase ベースにすることで logout でも Cookie が届くようにする
       const authBase = getRefreshTokenCookieBasePath(c.req.path);
       setCookie(
         c,
@@ -176,7 +176,7 @@ authRouter.post("/logout", async (c) => {
     return c.body(null, 204);
   }
 
-  // refreshToken Cookie の Path は /auth ベースに設定されているため logout でも Cookie が届く
+  // refreshToken Cookie の Path は authBase ベースに設定されているため logout でも Cookie が届く
   // 旧 Path（authBase/refresh）に残存する Cookie も同時に削除して収束させる
   deleteCookie(c, "refreshToken", { path: authBase });
   deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });

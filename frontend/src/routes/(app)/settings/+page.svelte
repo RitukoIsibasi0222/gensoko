@@ -19,6 +19,7 @@
   } from './validation';
 
   const NETWORK_ERROR_MESSAGE = 'ネットワークエラーが発生しました。接続を確認してください';
+  const AUTH_REQUIRED_MESSAGE = '認証情報が見つかりません。再ログインしてください。';
 
   let profile = $state<CurrentUserProfile | null>(null);
   let username = $state('');
@@ -59,6 +60,28 @@
     }
   });
 
+  type AuthRequiredErrorTarget = 'load' | 'profile' | 'password' | 'delete';
+
+  function requireAccessToken(target: AuthRequiredErrorTarget): string | null {
+    const accessToken = authStore.accessToken;
+    if (accessToken) {
+      return accessToken;
+    }
+
+    if (target === 'load') {
+      loadError = AUTH_REQUIRED_MESSAGE;
+      hasLoadedProfile = true;
+    } else if (target === 'profile') {
+      profileError = AUTH_REQUIRED_MESSAGE;
+    } else if (target === 'password') {
+      passwordError = AUTH_REQUIRED_MESSAGE;
+    } else {
+      deleteError = AUTH_REQUIRED_MESSAGE;
+    }
+
+    return null;
+  }
+
   async function handleUnauthorized(error: ApiError): Promise<boolean> {
     if (error.status !== 401) {
       return false;
@@ -85,10 +108,8 @@
       return;
     }
 
-    const accessToken = authStore.accessToken;
+    const accessToken = requireAccessToken('load');
     if (!accessToken) {
-      loadError = '認証情報が見つかりません。再ログインしてください。';
-      hasLoadedProfile = true;
       return;
     }
 
@@ -134,9 +155,8 @@
       return;
     }
 
-    const accessToken = authStore.accessToken;
+    const accessToken = requireAccessToken('profile');
     if (!accessToken) {
-      profileError = '認証情報が見つかりません。再ログインしてください。';
       return;
     }
 
@@ -198,9 +218,8 @@
       return;
     }
 
-    const accessToken = authStore.accessToken;
+    const accessToken = requireAccessToken('password');
     if (!accessToken) {
-      passwordError = '認証情報が見つかりません。再ログインしてください。';
       return;
     }
 
@@ -253,9 +272,8 @@
       return;
     }
 
-    const accessToken = authStore.accessToken;
+    const accessToken = requireAccessToken('delete');
     if (!accessToken) {
-      deleteError = '認証情報が見つかりません。再ログインしてください。';
       return;
     }
 

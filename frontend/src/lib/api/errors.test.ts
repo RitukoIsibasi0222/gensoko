@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseErrorBody, parseErrorResponse, ApiError } from './errors';
+import { parseErrorBody, parseErrorResponse, parseSuccessJsonResponse, ApiError } from './errors';
 
 describe('parseErrorBody', () => {
   it('JSON レスポンスを正常にパースして返す', async () => {
@@ -94,6 +94,36 @@ describe('parseErrorResponse', () => {
     } catch (e) {
       expect(e).toBeInstanceOf(ApiError);
       expect((e as ApiError).body).toEqual(bodyData);
+    }
+  });
+});
+
+describe('parseSuccessJsonResponse', () => {
+  it('JSON レスポンスを正常にパースして返す', async () => {
+    const response = new Response(JSON.stringify({ message: '成功しました' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    const body = await parseSuccessJsonResponse(response, 'レスポンス形式が不正です');
+
+    expect(body).toEqual({ message: '成功しました' });
+  });
+
+  it('非 JSON レスポンスの場合は ApiError(500) と body=null を throw する', async () => {
+    const response = new Response('OK', {
+      status: 200,
+      headers: { 'Content-Type': 'text/plain' }
+    });
+
+    try {
+      await parseSuccessJsonResponse(response, 'レスポンス形式が不正です');
+      expect.fail('ApiError が throw されるべき');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(500);
+      expect((error as ApiError).message).toBe('レスポンス形式が不正です');
+      expect((error as ApiError).body).toBeNull();
     }
   });
 });
