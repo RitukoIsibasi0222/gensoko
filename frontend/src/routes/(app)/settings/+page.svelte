@@ -1,7 +1,13 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { API_BASE_URL } from '$lib/api/config';
-  import { ApiError, parseErrorResponse } from '$lib/api/errors';
+  import { ApiError } from '$lib/api/errors';
+  import {
+    changeCurrentPassword,
+    deleteCurrentUser,
+    getCurrentUserProfile,
+    updateCurrentUsername,
+    type CurrentUserProfile
+  } from '$lib/api/users';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import { validatePassword } from '$lib/validation/password';
@@ -12,28 +18,9 @@
     validateDeleteAcknowledgement
   } from './validation';
 
-  type MeResponse = {
-    user: {
-      id: string;
-      username: string;
-      email: string;
-      role: 'USER' | 'ADMIN';
-      createdAt: string;
-    };
-  };
-
-  type UpdateUsernameResponse = {
-    message: string;
-    user: {
-      id: string;
-      username: string;
-      role: 'USER' | 'ADMIN';
-    };
-  };
-
   const NETWORK_ERROR_MESSAGE = 'ネットワークエラーが発生しました。接続を確認してください';
 
-  let profile = $state<MeResponse['user'] | null>(null);
+  let profile = $state<CurrentUserProfile | null>(null);
   let username = $state('');
 
   let currentPassword = $state('');
@@ -72,23 +59,6 @@
     }
   });
 
-  function getAuthHeaders(includeContentType = true): Record<string, string> | null {
-    const accessToken = authStore.accessToken;
-    if (!accessToken) {
-      return null;
-    }
-
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${accessToken}`
-    };
-
-    if (includeContentType) {
-      headers['Content-Type'] = 'application/json';
-    }
-
-    return headers;
-  }
-
   async function handleUnauthorized(error: ApiError): Promise<boolean> {
     if (error.status !== 401) {
       return false;
@@ -115,8 +85,8 @@
       return;
     }
 
-    const headers = getAuthHeaders(false);
-    if (!headers) {
+    const accessToken = authStore.accessToken;
+    if (!accessToken) {
       loadError = '認証情報が見つかりません。再ログインしてください。';
       hasLoadedProfile = true;
       return;
@@ -126,19 +96,9 @@
     loadError = null;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/users/me`, {
-        method: 'GET',
-        headers,
-        credentials: 'include'
-      });
-
-      if (!response.ok) {
-        await parseErrorResponse(response);
-      }
-
-      const data = (await response.json()) as MeResponse;
-      profile = data.user;
-      username = data.user.username;
+      const user = await getCurrentUserProfile({ accessToken });
+      profile = user;
+      username = user.username;
       hasLoadedProfile = true;
     } catch (error) {
       if (error instanceof ApiError) {
@@ -174,8 +134,8 @@
       return;
     }
 
-    const headers = getAuthHeaders();
-    if (!headers) {
+    const accessToken = authStore.accessToken;
+    if (!accessToken) {
       profileError = '認証情報が見つかりません。再ログインしてください。';
       return;
     }
@@ -184,18 +144,10 @@
     profileError = null;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/users/me`, {
-        method: 'PATCH',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({ username: normalizedUsername })
+      const data = await updateCurrentUsername({
+        accessToken,
+        username: normalizedUsername
       });
-
-      if (!response.ok) {
-        await parseErrorResponse(response);
-      }
-
-      const data = (await response.json()) as UpdateUsernameResponse;
       authStore.updateUser({
         id: data.user.id,
         username: data.user.username,
@@ -246,8 +198,8 @@
       return;
     }
 
-    const headers = getAuthHeaders();
-    if (!headers) {
+    const accessToken = authStore.accessToken;
+    if (!accessToken) {
       passwordError = '認証情報が見つかりません。再ログインしてください。';
       return;
     }
@@ -256,19 +208,11 @@
     passwordError = null;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/users/me`, {
-        method: 'PATCH',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({
-          currentPassword: normalizedCurrentPassword,
-          newPassword: normalizedNewPassword
-        })
+      await changeCurrentPassword({
+        accessToken,
+        currentPassword: normalizedCurrentPassword,
+        newPassword: normalizedNewPassword
       });
-
-      if (!response.ok) {
-        await parseErrorResponse(response);
-      }
 
       currentPassword = '';
       newPassword = '';
@@ -309,8 +253,8 @@
       return;
     }
 
-    const headers = getAuthHeaders();
-    if (!headers) {
+    const accessToken = authStore.accessToken;
+    if (!accessToken) {
       deleteError = '認証情報が見つかりません。再ログインしてください。';
       return;
     }
@@ -319,16 +263,10 @@
     deleteError = null;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/users/me`, {
-        method: 'DELETE',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({ currentPassword: normalizedCurrentPassword })
+      await deleteCurrentUser({
+        accessToken,
+        currentPassword: normalizedCurrentPassword
       });
-
-      if (!response.ok) {
-        await parseErrorResponse(response);
-      }
 
       deleteCurrentPassword = '';
       deleteAcknowledged = false;
