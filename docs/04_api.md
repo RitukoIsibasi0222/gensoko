@@ -629,6 +629,122 @@ async function handleSubmit() {
 | DELETE | `/users/me` | アカウント削除 | 🔒 |
 | GET | `/users/me/stats` | 自分の統計取得 | 🔒 |
 
+### GET `/users/me`
+
+Headers:
+- `Authorization: Bearer <accessToken>`
+
+Response 200:
+
+    {
+      "user": {
+        "id": "cuid",
+        "username": "taro123",
+        "email": "taro@example.com",
+        "role": "USER",
+        "createdAt": "2026-05-01T00:00:00.000Z"
+      }
+    }
+
+Response fields:
+- user.id: ユーザーID
+- user.username: ユーザー名
+- user.email: メールアドレス
+- user.role: `USER` または `ADMIN`
+- user.createdAt: 登録日時
+
+Error:
+401 error: 認証が必要です / トークンが無効です / ユーザーが見つかりません（認証ミドルウェアで検出した場合）
+403 error: アカウントが停止されています / メールアドレスが確認されていません / アカウントがロックされています / ユーザーが見つかりません（サービス層で検出した場合）
+500 error: サーバーエラーが発生しました
+
+### PATCH `/users/me`
+
+Headers:
+- `Authorization: Bearer <accessToken>`
+- `Content-Type: application/json`
+
+ユーザー名変更 Request:
+
+    {
+      "username": "new_name_123"
+    }
+
+ユーザー名変更 Response 200:
+
+    {
+      "message": "ユーザー名を変更しました",
+      "user": {
+        "id": "cuid",
+        "username": "new_name_123",
+        "role": "USER"
+      }
+    }
+
+パスワード変更 Request:
+
+    {
+      "currentPassword": "OldPass1!",
+      "newPassword": "NewPass1!"
+    }
+
+パスワード変更 Response 200:
+
+    {
+      "message": "パスワードを変更しました"
+    }
+
+Cookie:
+- パスワード変更成功時は既存 refresh token を DB から削除し、`refreshToken` Cookie を削除する
+- 削除対象 Cookie path: `/api/v1/auth`, `/api/v1/auth/refresh`
+- 変更後は再ログインが必要
+
+Validation:
+- `username` は username schema に従う
+- `currentPassword` は空文字不可
+- `newPassword` は strong password schema に従う
+- `username` と `currentPassword/newPassword` を混在させた payload は 400
+- username 変更は同じ username の場合も 200 で現在値を返す
+
+Error:
+400 error: バリデーションエラー / 現在のパスワードが正しくありません / 新しいパスワードは現在のパスワードと異なるものにしてください
+401 error: 認証が必要です / トークンが無効です / ユーザーが見つかりません（認証ミドルウェアで検出した場合）
+403 error: アカウントが停止されています / メールアドレスが確認されていません / アカウントがロックされています / ユーザーが見つかりません（サービス層で検出した場合）
+409 error: このユーザー名は既に使用されています
+429 error: リクエストが多すぎます。しばらく待ってから再試行してください（パスワード変更時）
+500 error: サーバーエラーが発生しました
+
+### DELETE `/users/me`
+
+Headers:
+- `Authorization: Bearer <accessToken>`
+- `Content-Type: application/json`
+
+Request:
+
+    {
+      "currentPassword": "Pass1234!"
+    }
+
+Response 200:
+
+    {
+      "message": "アカウントを削除しました"
+    }
+
+Deletion behavior:
+- ユーザー行は物理削除せず、`isActive = false` と `deletedAt` を設定する
+- `lockedUntil` は `null` にする
+- refresh token / password reset token / email verification token を削除する
+- 成功時は `refreshToken` Cookie を `/api/v1/auth` と `/api/v1/auth/refresh` の両方で削除する
+
+Error:
+400 error: バリデーションエラー / 現在のパスワードが正しくありません
+401 error: 認証が必要です / トークンが無効です / ユーザーが見つかりません（認証ミドルウェアで検出した場合）
+403 error: アカウントが停止されています / メールアドレスが確認されていません / アカウントがロックされています / ユーザーが見つかりません（サービス層で検出した場合）
+429 error: リクエストが多すぎます。しばらく待ってから再試行してください
+500 error: サーバーエラーが発生しました
+
 ### GET /users/me/stats
 
 Headers:

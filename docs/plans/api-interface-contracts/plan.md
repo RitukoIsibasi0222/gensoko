@@ -217,16 +217,16 @@
 | T9 | 手動確認 | `/settings`, `/weak`, `/mypage`, `/ranking` | 主要導線と A11Y 状態を確認済み | High |
 | T10 | 進捗・計画書更新 | `docs/05_progress.md`, 本計画書 | チェックボックスと実装完了セクションが更新されている | High |
 
-- [ ] T1: 既存実装と docs の差分を最終確認
-- [ ] T2: user API 詳細仕様を追記
-- [ ] T3: users API client の型・validation を追加
-- [ ] T4: users API client の契約テストを追加
-- [ ] T5: `/settings` を API client に接続
-- [ ] T6: weak/stats/ranking 契約の回帰確認
-- [ ] T7: backend 既存テストと docs の整合確認
-- [ ] T8: 品質チェック
-- [ ] T9: 手動確認
-- [ ] T10: 進捗・計画書更新
+- [x] T1: 既存実装と docs の差分を最終確認
+- [x] T2: user API 詳細仕様を追記
+- [x] T3: users API client の型・validation を追加
+- [x] T4: users API client の契約テストを追加
+- [x] T5: `/settings` を API client に接続
+- [x] T6: weak/stats/ranking 契約の回帰確認
+- [x] T7: backend 既存テストと docs の整合確認
+- [x] T8: 品質チェック
+- [x] T9: 手動確認
+- [x] T10: 進捗・計画書更新
 
 ## テストケース一覧
 
@@ -277,3 +277,36 @@
 | `docs/04_api.md` | 修正 | user API 詳細仕様を追記 |
 | `frontend/src/lib/api/users.ts` | 修正 | users API client を追加 |
 ```
+
+
+## 実装完了
+- 完了日: 2026-06-28
+- 実装ブランチ: feature/api-interface-contracts
+- PR: 未作成
+
+### 計画からの変更点
+- 共通 `frontend/src/lib/api/client.ts` は計画どおり新規導入せず、既存の `ApiError` / `parseErrorResponse()` パターンへ寄せた。
+- DB schema / migration は変更しなかった。
+- weak / stats / ranking はコード変更せず、既存 route/service/client と docs の契約回帰確認に限定した。
+
+### 実際の変更ファイル
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `docs/04_api.md` | 修正 | `GET/PATCH/DELETE /users/me` の詳細仕様を追記 |
+| `docs/05_progress.md` | 修正 | API インターフェース確定タスクと user API 実装済み状態を更新 |
+| `docs/plans/api-interface-contracts/plan.md` | 修正 | タスク完了状態と実装完了記録を更新 |
+| `frontend/src/lib/api/users.ts` | 修正 | profile / username / password / delete の users API client と runtime validation を追加 |
+| `frontend/src/lib/api/users.test.ts` | 修正 | users API client の契約テストを追加 |
+| `frontend/src/routes/(app)/settings/+page.svelte` | 修正 | page 内 fetch を users API client 呼び出しへ置換 |
+
+### 実行した確認
+| 種別 | コマンド / 内容 | 結果 |
+|---|---|---|
+| Backend lint | `cd backend && npm run lint` | 成功 |
+| Backend format | `cd backend && npm run format:check` | 成功 |
+| Backend test | `cd backend && npm run test -- --run` | 30 files / 259 tests passed |
+| Frontend lint | `cd frontend && npm run lint` | 成功 |
+| Frontend check | `cd frontend && npm run check` | 0 errors / 0 warnings |
+| Frontend test | `cd frontend && npm run test:run` | 24 files / 280 tests passed |
+| Frontend format check | `prettier --check`（変更対象） | 成功 |
+| 手動確認 | テストアカウント登録・メール認証・ログイン・`/settings` 表示・validation A11Y・パスワード変更・新パスワード再ログイン・アカウント削除・`/weak` / `/mypage` / `/ranking` 表示 | 成功 |

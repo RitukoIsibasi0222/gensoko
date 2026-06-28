@@ -135,14 +135,14 @@
 - [x] ランキングページ `/ranking`（週間・全期間・自分の順位） — 計画書: [`docs/plans/ranking-page/plan.md`](plans/ranking-page/plan.md)
 
 ### API インターフェース確定
-- [ ] 苦手 / ユーザー / ランキング / 統計 各 API のインターフェースを確定
+- [x] 苦手 / ユーザー / ランキング / 統計 各 API のインターフェースを確定 — 計画書: [docs/plans/api-interface-contracts/plan.md](plans/api-interface-contracts/plan.md)
 
 ## フェーズ9: 残 API 本実装
 
 > フェーズ8 の確認で確定したインターフェースを実装する。
 
 - [x] GET /weak + DELETE /weak/:elementId
-- [ ] GET /users/me + PATCH /users/me + DELETE /users/me
+- [x] GET /users/me + PATCH /users/me + DELETE /users/me — 計画書: [docs/plans/api-interface-contracts/plan.md](plans/api-interface-contracts/plan.md)
 - [x] GET /users/me/stats — 計画書: [docs/plans/mypage-stats/plan.md](plans/mypage-stats/plan.md)
 - [x] GET /ranking/weekly + /alltime（myRank フィールド・Top50） — 計画書: [`docs/plans/ranking-page/plan.md`](plans/ranking-page/plan.md)
 - [ ] 週間スコアリセットバッチ処理（weeklyScore リセット）
