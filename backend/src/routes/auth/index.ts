@@ -4,6 +4,10 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { strongPasswordSchema, usernameSchema } from "../../lib/validation/auth.js";
 import {
+  getRefreshTokenCookieBasePath,
+  getRefreshTokenCookieOptions,
+} from "../../lib/refresh-token-cookie.js";
+import {
   AuthError,
   login,
   logout,
@@ -28,29 +32,6 @@ const authRateLimit = rateLimit({
   max: 10,
   trustProxy: process.env.TRUST_PROXY === "true",
 });
-
-const REFRESH_TOKEN_COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7日（秒）
-
-/** リクエストパスからマウントベース（例: /auth/login → /auth）を取得する */
-function getAuthBasePath(path: string): string {
-  return path.replace(/\/[^/]+$/, "");
-}
-
-function getRefreshCookieOptions(secure: boolean, path: string) {
-  return {
-    httpOnly: true,
-    secure,
-    // SEC-006: SameSite=Strict で CSRF 対策を行う（仕様 docs/02_security.md 参照）。
-    // SameSite=Strict はクロスサイトリクエストで Cookie が送信されないため、
-    // フロントエンドと API は同一 eTLD+1 配下にデプロイする必要がある。
-    // （例: gensoko.example.com と api.gensoko.example.com は同一 eTLD+1）
-    // SameSite=None に変更すると任意クロスオリジンから Cookie が送れるようになり
-    // CSRF 脆弱性が生じるため使用しない。
-    sameSite: "Strict" as const,
-    path,
-    maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE,
-  };
-}
 
 export const authRouter = new Hono();
 
@@ -123,13 +104,13 @@ authRouter.post(
     try {
       const result = await login({ email, password });
       const isProduction = process.env.NODE_ENV === "production";
-      // Path を /auth ベースにすることで /auth/logout でも Cookie が届くようにする
-      const authBase = getAuthBasePath(c.req.path);
+      // Path を authBase ベースにすることで logout でも Cookie が届くようにする
+      const authBase = getRefreshTokenCookieBasePath(c.req.path);
       setCookie(
         c,
         "refreshToken",
         result.refreshToken,
-        getRefreshCookieOptions(isProduction, authBase),
+        getRefreshTokenCookieOptions(isProduction, authBase),
       );
       // 旧 Path（authBase/refresh）に残存する Cookie も削除して 1 本に収束させる
       deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
@@ -152,7 +133,7 @@ authRouter.post("/refresh", async (c) => {
   }
 
   // randomBytes(32).toString("hex") は 64 文字の hex 文字列
-  const authBase = getAuthBasePath(c.req.path);
+  const authBase = getRefreshTokenCookieBasePath(c.req.path);
   if (!/^[0-9a-f]{64}$/.test(rawToken)) {
     deleteCookie(c, "refreshToken", { path: authBase });
     deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
@@ -166,7 +147,7 @@ authRouter.post("/refresh", async (c) => {
       c,
       "refreshToken",
       result.newRefreshToken,
-      getRefreshCookieOptions(isProduction, authBase),
+      getRefreshTokenCookieOptions(isProduction, authBase),
     );
     // 旧 Path（authBase/refresh）に残存する Cookie も削除して 1 本に収束させる
     deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
@@ -185,7 +166,7 @@ authRouter.post("/refresh", async (c) => {
 authRouter.post("/logout", async (c) => {
   const rawToken = getCookie(c, "refreshToken");
 
-  const authBase = getAuthBasePath(c.req.path);
+  const authBase = getRefreshTokenCookieBasePath(c.req.path);
 
   // Cookie が来ない場合（旧 Path 残存を含む）でも両 Path の削除ヘッダーを返す（冪等）
   // 空文字（refreshToken=）は形式不正として後続処理へ進む
@@ -195,7 +176,7 @@ authRouter.post("/logout", async (c) => {
     return c.body(null, 204);
   }
 
-  // refreshToken Cookie の Path は /auth ベースに設定されているため logout でも Cookie が届く
+  // refreshToken Cookie の Path は authBase ベースに設定されているため logout でも Cookie が届く
   // 旧 Path（authBase/refresh）に残存する Cookie も同時に削除して収束させる
   deleteCookie(c, "refreshToken", { path: authBase });
   deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });

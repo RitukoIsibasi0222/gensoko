@@ -135,13 +135,12 @@ describe("PATCH /users/me", () => {
     const setCookies = res.headers.getSetCookie();
     expect(
       setCookies.some(
-        (cookie) => cookie.includes("refreshToken=") && cookie.includes("Path=/api/v1/auth"),
+        (cookie) => cookie.includes("refreshToken=") && cookie.includes("Path=/auth"),
       ),
     ).toBe(true);
     expect(
       setCookies.some(
-        (cookie) =>
-          cookie.includes("refreshToken=") && cookie.includes("Path=/api/v1/auth/refresh"),
+        (cookie) => cookie.includes("refreshToken=") && cookie.includes("Path=/auth/refresh"),
       ),
     ).toBe(true);
   });

@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '$lib/api/config';
-import { ApiError, parseErrorResponse } from '$lib/api/errors';
+import { ApiError, parseErrorResponse, parseSuccessJsonResponse } from '$lib/api/errors';
 
 export type WeakElement = {
   elementId: number;
@@ -121,7 +121,7 @@ export async function getWeakElements({
     await parseErrorResponse(response, '苦手リストの取得に失敗しました');
   }
 
-  const data = (await response.json()) as unknown;
+  const data = await parseSuccessJsonResponse(response, '苦手リストのレスポンス形式が不正です');
   if (!isWeakElementsResponse(data)) {
     throw new ApiError(500, '苦手リストのレスポンス形式が不正です', data);
   }
@@ -151,7 +151,7 @@ export async function deleteWeakElement({
     await parseErrorResponse(response, '苦手元素の削除に失敗しました');
   }
 
-  const data = (await response.json()) as unknown;
+  const data = await parseSuccessJsonResponse(response, '苦手元素削除のレスポンス形式が不正です');
   if (!isDeleteWeakElementResponse(data)) {
     throw new ApiError(500, '苦手元素削除のレスポンス形式が不正です', data);
   }

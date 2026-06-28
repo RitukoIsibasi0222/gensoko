@@ -1,8 +1,8 @@
 import { zValidator } from "@hono/zod-validator";
-import { deleteCookie } from "hono/cookie";
 import { Hono } from "hono";
 import { z } from "zod";
 import { authMiddleware } from "../../middleware/auth/index.js";
+import { clearRefreshTokenCookies } from "../../lib/refresh-token-cookie.js";
 import { rateLimit } from "../../middleware/rateLimit/index.js";
 import { strongPasswordSchema, usernameSchema } from "../../lib/validation/auth.js";
 import {
@@ -14,8 +14,6 @@ import {
   updateCurrentUsername,
 } from "../../services/user.service.js";
 import type { AppVariables } from "../../types/index.js";
-
-const REFRESH_COOKIE_PATHS = ["/api/v1/auth", "/api/v1/auth/refresh"] as const;
 
 const authRateLimit = rateLimit({
   windowMs: 10 * 60 * 1000,
@@ -43,12 +41,6 @@ const deleteMeSchema = z
     currentPassword: z.string().min(1, "現在のパスワードを入力してください"),
   })
   .strict();
-
-function clearRefreshTokenCookies(c: Parameters<typeof deleteCookie>[0]) {
-  for (const path of REFRESH_COOKIE_PATHS) {
-    deleteCookie(c, "refreshToken", { path });
-  }
-}
 
 function handleUserError(err: unknown, c: { json: (body: unknown, status: number) => Response }) {
   if (err instanceof UserError) {
@@ -123,7 +115,7 @@ usersRouter.patch(
         newPassword: payload.newPassword,
       });
 
-      clearRefreshTokenCookies(c);
+      clearRefreshTokenCookies(c, c.req.path);
       return c.json({ message: "パスワードを変更しました" }, 200);
     } catch (err) {
       return handleUserError(err, c);
@@ -154,7 +146,7 @@ usersRouter.delete(
         currentPassword,
       });
 
-      clearRefreshTokenCookies(c);
+      clearRefreshTokenCookies(c, c.req.path);
       return c.json({ message: "アカウントを削除しました" }, 200);
     } catch (err) {
       return handleUserError(err, c);

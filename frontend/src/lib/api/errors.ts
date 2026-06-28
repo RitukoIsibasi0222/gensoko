@@ -38,6 +38,25 @@ export async function parseErrorResponse(
 }
 
 /**
+ * 成功レスポンスのボディを JSON としてパースする。
+ * response.ok === true の場合に呼び出し、パース失敗時は ApiError(500) を throw する。
+ *
+ * @param response - fetch の Response（response.ok であること）
+ * @param invalidMessage - レスポンス形式が不正な場合のメッセージ
+ * @returns JSON パース結果
+ */
+export async function parseSuccessJsonResponse(
+  response: Response,
+  invalidMessage: string
+): Promise<unknown> {
+  try {
+    return (await response.json()) as unknown;
+  } catch {
+    throw new ApiError(500, invalidMessage, null);
+  }
+}
+
+/**
  * API レスポンスのエラーを表す共通例外。
  * HTTP エラー（4xx / 5xx）とネットワークエラーを統一的に扱う。
  */
