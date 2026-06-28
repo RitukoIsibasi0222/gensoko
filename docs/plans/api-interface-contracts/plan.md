@@ -29,7 +29,7 @@
 
 ### この計画のまま実装すべきではない理由
 
-既存の `docs/plans/api-interface-contracts/plan.md` は存在しなかったため、レビュー対象として保存済みの計画書を確認できなかった。また、現行 `docs/04_api.md` は `GET/PATCH/DELETE /users/me` を一覧に載せているが詳細仕様を持たず、`docs/05_progress.md` は user API を未完了扱いにしている一方で backend route/service/test と `/settings` UI は実装済みである。このズレを整理しないまま実装すると、実装担当が既存実装を二重実装したり、frontend/backend の error/status 契約を食い違わせるリスクが高い。
+この計画書は新規作成であり、作成前は docs/04_api.md が GET/PATCH/DELETE /users/me の詳細仕様を持たず、docs/05_progress.md は user API を未完了扱いにしている一方で backend route/service/test と /settings UI は実装済みだった。このズレを整理しないまま実装すると、実装担当が既存実装を二重実装したり、frontend/backend の error/status 契約を食い違わせるリスクが高い。
 
 ### DBの整合性と負荷
 
@@ -282,7 +282,7 @@
 ## 実装完了
 - 完了日: 2026-06-28
 - 実装ブランチ: feature/api-interface-contracts
-- PR: 未作成
+- PR: #67
 
 ### 計画からの変更点
 - 共通 `frontend/src/lib/api/client.ts` は計画どおり新規導入せず、既存の `ApiError` / `parseErrorResponse()` パターンへ寄せた。
