@@ -377,17 +377,27 @@ describe('updateCurrentUsername', () => {
     expect(result).toEqual(VALID_UPDATE_USERNAME_RESPONSE);
   });
 
-  it('HTTPエラー: 409 の日本語 error を ApiError に保持する', async () => {
+  it('HTTPエラー: 409 の日本語 error と status/body を ApiError に保持する', async () => {
+    const errorBody = { error: 'このユーザー名は既に使用されています' };
     vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ error: 'このユーザー名は既に使用されています' }), {
+      new Response(JSON.stringify(errorBody), {
         status: 409,
         headers: { 'Content-Type': 'application/json' }
       })
     );
 
-    await expect(
-      updateCurrentUsername({ accessToken: 'test-access-token', username: 'duplicated_name' })
-    ).rejects.toThrow('このユーザー名は既に使用されています');
+    try {
+      await updateCurrentUsername({
+        accessToken: 'test-access-token',
+        username: 'duplicated_name'
+      });
+      expect.fail('ApiError が throw されるべき');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(409);
+      expect((error as ApiError).message).toBe('このユーザー名は既に使用されています');
+      expect((error as ApiError).body).toEqual(errorBody);
+    }
   });
 
   it('レスポンス形式不正: updated user がない場合は ApiError(500) を throw する', async () => {
@@ -456,6 +466,32 @@ describe('changeCurrentPassword', () => {
     ).rejects.toThrow('パスワード変更に失敗しました');
   });
 
+  it('HTTPエラー: 429 の日本語 error と status/body を ApiError に保持する', async () => {
+    const errorBody = { error: 'リクエストが多すぎます。しばらく待ってから再試行してください' };
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(errorBody), {
+        status: 429,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    try {
+      await changeCurrentPassword({
+        accessToken: 'test-access-token',
+        currentPassword: 'OldPass1!',
+        newPassword: 'NewPass1!'
+      });
+      expect.fail('ApiError が throw されるべき');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(429);
+      expect((error as ApiError).message).toBe(
+        'リクエストが多すぎます。しばらく待ってから再試行してください'
+      );
+      expect((error as ApiError).body).toEqual(errorBody);
+    }
+  });
+
   it('レスポンス形式不正: message がない場合は ApiError(500) を throw する', async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify({}), {
@@ -519,6 +555,29 @@ describe('deleteCurrentUser', () => {
     await expect(
       deleteCurrentUser({ accessToken: 'test-access-token', currentPassword: 'WrongPass1!' })
     ).rejects.toThrow('現在のパスワードが正しくありません');
+  });
+
+  it('HTTPエラー: details の先頭メッセージを error より優先し、status/body を保持する', async () => {
+    const errorBody = {
+      error: 'バリデーションエラー',
+      details: [{ message: '現在のパスワードを入力してください' }]
+    };
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(errorBody), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    try {
+      await deleteCurrentUser({ accessToken: 'test-access-token', currentPassword: '' });
+      expect.fail('ApiError が throw されるべき');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(400);
+      expect((error as ApiError).message).toBe('現在のパスワードを入力してください');
+      expect((error as ApiError).body).toEqual(errorBody);
+    }
   });
 
   it('レスポンス形式不正: message がない場合は ApiError(500) を throw する', async () => {
