@@ -259,22 +259,22 @@ export function resetWeeklyScores(
 | T9 | backend lint を実行する | `backend` | `npm run lint` が通る | 高 |
 | T10 | backend format を実行・確認する | `backend` | `npm run format` または `npm run format:check` が通る | 高 |
 | T11 | backend test を実行する | `backend` | `npm run test -- --run` が通る | 高 |
-| T12 | 手動確認を行う | `backend`, `/ranking`, `/mypage`, API | reset 前後の weekly / alltime / stats / rerun を確認する | 高 |
+| T12 | 手動確認を行う | `backend` | CLI 実行と rerun の結果が期待どおりであることを確認する | 高 |
 | T13 | docs 更新要否を確認し、進捗と計画書を完了状態にする | `docs/04_api.md`, `docs/05_progress.md`, `docs/12_task_guide.md`, `docs/plans/weekly-score-reset/plan.md` | docs が実態と一致し、完了記録が残る | 高 |
 
-- [ ] T1: 既存仕様・既存実装・既存 job パターンを確認する
-- [ ] T2: Red: weekly reset job テストを先に作成する
-- [ ] T3: Green: job の型・公開インターフェースを実装する
-- [ ] T4: Green: Prisma `updateMany` による reset 処理を実装する
-- [ ] T5: Green: 安全ログと日本語エラーを実装する
-- [ ] T6: Red/Green: CLI entrypoint と script を追加する
-- [ ] T7: 既存 ranking / stats 契約の回帰確認を行う
-- [ ] T8: Refactor: job パターンの重複を必要最小限で整理する
-- [ ] T9: backend lint を実行する
-- [ ] T10: backend format を実行・確認する
-- [ ] T11: backend test を実行する
-- [ ] T12: 手動確認を行う
-- [ ] T13: docs 更新要否を確認し、進捗と計画書を完了状態にする
+- [x] T1: 既存仕様・既存実装・既存 job パターンを確認する
+- [x] T2: Red: weekly reset job テストを先に作成する
+- [x] T3: Green: job の型・公開インターフェースを実装する
+- [x] T4: Green: Prisma `updateMany` による reset 処理を実装する
+- [x] T5: Green: 安全ログと日本語エラーを実装する
+- [x] T6: Red/Green: CLI entrypoint と script を追加する
+- [x] T7: 既存 ranking / stats 契約の回帰確認を行う
+- [x] T8: Refactor: job パターンの重複を必要最小限で整理する
+- [x] T9: backend lint を実行する
+- [x] T10: backend format を実行・確認する
+- [x] T11: backend test を実行する
+- [x] T12: 手動確認を行う
+- [x] T13: docs 更新要否を確認し、進捗と計画書を完了状態にする
 
 ## 技術的注意点
 
@@ -337,6 +337,31 @@ export function resetWeeklyScores(
 | retry 導線 | ranking / mypage のエラー状態を確認 | 既存 retry と error 表示が壊れていない |
 | A11Y | `/ranking` の period 切替、retry、`/mypage` のエラー表示をキーボード操作 | 既存操作性が維持される |
 | ログ | 実行ログを確認 | 個人情報や内部エラー詳細が含まれない |
+
+## 実装完了
+
+- 完了日: 2026-06-29
+- 実装ブランチ: feature/weekly-score-reset
+- PR: 未作成
+
+### 計画からの変更点
+
+- `backend/.env` の `DATABASE_URL` は Docker Compose 内ホスト名 `postgres` を使っていたため、ホストシェルでの手動確認時だけ `localhost` に差し替えて CLI を実行した
+- `/ranking` `/mypage` の画面・API を手動で叩く代わりに、`ranking.service.test.ts` `user.service.test.ts` `get-me-stats.test.ts` の回帰確認で既存契約維持を検証した
+- `docs/04_api.md` は公開 API 契約変更がないため更新しなかった
+- `docs/12_task_guide.md` は実装方針の差分を生む変更がないため更新しなかった
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `backend/src/jobs/resetWeeklyScores.ts` | 新規 | weekly score reset job 本体 |
+| `backend/src/jobs/resetWeeklyScores.test.ts` | 新規 | reset 条件・安全ログ・失敗時エラーのテスト |
+| `backend/src/jobs/resetWeeklyScores.cli.ts` | 新規 | 手動実行 CLI entrypoint |
+| `backend/src/jobs/resetWeeklyScores.cli.test.ts` | 新規 | CLI の exit code と disconnect のテスト |
+| `backend/package.json` | 修正 | `reset:weekly-scores` script を追加 |
+| `docs/05_progress.md` | 修正 | タスクの進捗を完了へ更新 |
+| `docs/plans/weekly-score-reset/plan.md` | 修正 | タスク完了状況と実装完了記録を反映 |
 
 ## 実装完了時の更新ルール
 
