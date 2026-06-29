@@ -145,7 +145,7 @@
 - [x] GET /users/me + PATCH /users/me + DELETE /users/me — 計画書: [docs/plans/api-interface-contracts/plan.md](plans/api-interface-contracts/plan.md)
 - [x] GET /users/me/stats — 計画書: [docs/plans/mypage-stats/plan.md](plans/mypage-stats/plan.md)
 - [x] GET /ranking/weekly + /alltime（myRank フィールド・Top50） — 計画書: [`docs/plans/ranking-page/plan.md`](plans/ranking-page/plan.md)
-- [ ] 週間スコアリセットバッチ処理（weeklyScore リセット）
+- [ ] 週間スコアリセットバッチ処理（weeklyScore リセット） — 計画書: [docs/plans/weekly-score-reset/plan.md](plans/weekly-score-reset/plan.md)
 - [ ] 定期バッチ運用設計（週間リセット・GameQuestionSet cleanup の Cron Trigger 設定）
 - [ ] 残 API のテスト
 
