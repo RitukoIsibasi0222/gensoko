@@ -363,6 +363,67 @@ export function resetWeeklyScores(
 | `docs/05_progress.md` | 修正 | タスクの進捗を完了へ更新 |
 | `docs/plans/weekly-score-reset/plan.md` | 修正 | タスク完了状況と実装完了記録を反映 |
 
+## 追加レビュー指摘と修正予定
+
+- 記録日: 2026-06-29
+- レビュー視点: シニアフルスタックエンジニア観点の追加レビュー
+- ステータス: 修正未着手。次の作業で対応する
+
+### 指摘1: weekly reset とゲーム結果保存の競合で `weeklyScore` を取りこぼす可能性がある
+
+- 事象:
+  - `resetWeeklyScores.ts` は `weeklyScore = 0` を一括更新する
+  - `game.service.ts` は `weeklyScore` に `increment` をかける
+  - 週境界の同時実行時に、リセット直前/直後のゲーム結果が消える可能性がある
+- 影響:
+  - 週間ランキングと `/users/me/stats` の `weeklyScore` が実プレイ結果とずれる
+  - バッチの成否に関係なく、データ整合性が崩れる
+- 修正方針:
+  - `UserStats` に「この `weeklyScore` がどの週の値か」を表す列を追加する
+  - `game.service.ts` の保存時に週識別子を見て、同一週なら加算、別週なら新週スコアへ置き換える
+  - `ranking.service.ts` と `user.service.ts` は現在週の `weeklyScore` だけを参照する
+- 想定変更ファイル:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/*`
+  - `backend/src/services/game.service.ts`
+  - `backend/src/services/game.service.test.ts`
+  - `backend/src/services/ranking.service.ts`
+  - `backend/src/services/ranking.service.test.ts`
+  - `backend/src/services/user.service.ts`
+  - `backend/src/services/user.service.test.ts`
+
+### 指摘2: 手動実行 CLI の運用経路がホスト環境と整合していない
+
+- 事象:
+  - `backend/.env` の `DATABASE_URL` は Docker Compose 内ホスト名 `postgres` を使う
+  - ホストシェルから `npm run reset:weekly-scores` をそのまま実行すると DB に到達できない
+- 影響:
+  - 運用時に「コマンドは存在するが標準手順では失敗する」状態になる
+  - 障害時の手動対応で混乱しやすい
+- 修正方針:
+  - 実行前提を docs に明記するか、CLI 実行時に前提不備を日本語で分かるようにする
+  - 必要なら `docker compose exec hono ...` を標準手順に寄せる
+- 想定変更ファイル:
+  - `backend/src/jobs/resetWeeklyScores.cli.ts`
+  - `docs/09_startup_commands.md`
+  - `docs/plans/weekly-score-reset/plan.md`
+
+### 指摘3: `weeklyScore > 0` 条件では負値や異常値を週跨ぎで残す
+
+- 事象:
+  - reset job は `weeklyScore > 0` の行だけを 0 に戻す
+  - DB には非負制約がないため、負値や異常値が残る余地がある
+- 影響:
+  - API レスポンス上は 0 に正規化されても、DB 実データは前週の異常値を保持し続ける
+  - 週間ランキング集計やデバッグ時に実データと表示が乖離する
+- 修正方針:
+  - 現在週識別子を導入したうえで、reset 対象条件を「現在週状態へ正規化する」責務に見直す
+  - 必要なら DB 制約や追加バリデーションも検討する
+- 想定変更ファイル:
+  - `backend/src/jobs/resetWeeklyScores.ts`
+  - `backend/src/jobs/resetWeeklyScores.test.ts`
+  - 必要に応じて `backend/prisma/schema.prisma`
+
 ## 実装完了時の更新ルール
 
 - `docs/05_progress.md` の対象タスクを `[x]` に更新する
