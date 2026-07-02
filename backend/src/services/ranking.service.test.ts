@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/prisma.js", () => ({
   prisma: {
@@ -13,6 +13,9 @@ vi.mock("../lib/prisma.js", () => ({
 import { prisma } from "../lib/prisma.js";
 import { getAllTimeRanking, getWeeklyRanking } from "./ranking.service.js";
 
+const NOW = new Date("2026-06-20T12:00:00.000Z");
+const WEEK_START = new Date("2026-06-14T15:00:00.000Z");
+
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -26,7 +29,13 @@ function createDeferred<T>() {
 
 describe("ranking service", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("週間ランキングを上位50件・同点順位・正答率つきで返す", async () => {
@@ -75,6 +84,7 @@ describe("ranking service", () => {
       where: {
         totalGames: { gt: 0 },
         user: { isActive: true, deletedAt: null },
+        weeklyScoreWeekStart: WEEK_START,
       },
       orderBy: [{ weeklyScore: "desc" }, { userId: "asc" }],
       take: 50,
@@ -134,6 +144,7 @@ describe("ranking service", () => {
     vi.mocked(prisma.userStats.findUnique).mockResolvedValue({
       userId: "user-me",
       weeklyScore: 12000,
+      weeklyScoreWeekStart: WEEK_START,
       allTimeScore: 70000,
       totalGames: 8,
       user: { isActive: true, deletedAt: null },
@@ -146,6 +157,7 @@ describe("ranking service", () => {
       where: { userId: "user-me" },
       select: {
         weeklyScore: true,
+        weeklyScoreWeekStart: true,
         allTimeScore: true,
         totalGames: true,
         user: { select: { isActive: true, deletedAt: true } },
@@ -155,6 +167,7 @@ describe("ranking service", () => {
       where: {
         totalGames: { gt: 0 },
         user: { isActive: true, deletedAt: null },
+        weeklyScoreWeekStart: WEEK_START,
         weeklyScore: { gt: 12000 },
       },
     });
@@ -169,6 +182,7 @@ describe("ranking service", () => {
 
     vi.mocked(prisma.userStats.findUnique).mockResolvedValueOnce({
       weeklyScore: 100,
+      weeklyScoreWeekStart: WEEK_START,
       allTimeScore: 200,
       totalGames: 0,
       user: { isActive: true, deletedAt: null },
@@ -177,6 +191,7 @@ describe("ranking service", () => {
 
     vi.mocked(prisma.userStats.findUnique).mockResolvedValueOnce({
       weeklyScore: 100,
+      weeklyScoreWeekStart: WEEK_START,
       allTimeScore: 200,
       totalGames: 1,
       user: { isActive: false, deletedAt: null },
@@ -185,6 +200,7 @@ describe("ranking service", () => {
 
     vi.mocked(prisma.userStats.findUnique).mockResolvedValueOnce({
       weeklyScore: 100,
+      weeklyScoreWeekStart: WEEK_START,
       allTimeScore: 200,
       totalGames: 1,
       user: { isActive: true, deletedAt: new Date("2026-06-20T00:00:00.000Z") },
@@ -194,12 +210,27 @@ describe("ranking service", () => {
     expect(prisma.userStats.count).not.toHaveBeenCalled();
   });
 
+  it("週間ランキング対象外の週識別子なら myRank を null にする", async () => {
+    vi.mocked(prisma.userStats.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue({
+      weeklyScore: 12000,
+      weeklyScoreWeekStart: new Date("2026-06-07T15:00:00.000Z"),
+      allTimeScore: 70000,
+      totalGames: 8,
+      user: { isActive: true, deletedAt: null },
+    } as never);
+
+    await expect(getWeeklyRanking("stale-week-user")).resolves.toMatchObject({ myRank: null });
+    expect(prisma.userStats.count).not.toHaveBeenCalled();
+  });
+
   it("ログイン時はランキング一覧と自分の順位取得を並列に開始する", async () => {
     const findManyDeferred = createDeferred<never[]>();
     vi.mocked(prisma.userStats.findMany).mockReturnValue(findManyDeferred.promise as never);
     vi.mocked(prisma.userStats.findUnique).mockResolvedValue({
       userId: "user-me",
       weeklyScore: 12000,
+      weeklyScoreWeekStart: WEEK_START,
       allTimeScore: 70000,
       totalGames: 8,
       user: { isActive: true, deletedAt: null },
@@ -213,6 +244,7 @@ describe("ranking service", () => {
       where: { userId: "user-me" },
       select: {
         weeklyScore: true,
+        weeklyScoreWeekStart: true,
         allTimeScore: true,
         totalGames: true,
         user: { select: { isActive: true, deletedAt: true } },

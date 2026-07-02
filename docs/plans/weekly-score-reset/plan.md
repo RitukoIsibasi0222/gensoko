@@ -259,22 +259,22 @@ export function resetWeeklyScores(
 | T9 | backend lint を実行する | `backend` | `npm run lint` が通る | 高 |
 | T10 | backend format を実行・確認する | `backend` | `npm run format` または `npm run format:check` が通る | 高 |
 | T11 | backend test を実行する | `backend` | `npm run test -- --run` が通る | 高 |
-| T12 | 手動確認を行う | `backend`, `/ranking`, `/mypage`, API | reset 前後の weekly / alltime / stats / rerun を確認する | 高 |
+| T12 | 手動確認を行う | `backend` | CLI 実行と rerun の結果が期待どおりであることを確認する | 高 |
 | T13 | docs 更新要否を確認し、進捗と計画書を完了状態にする | `docs/04_api.md`, `docs/05_progress.md`, `docs/12_task_guide.md`, `docs/plans/weekly-score-reset/plan.md` | docs が実態と一致し、完了記録が残る | 高 |
 
-- [ ] T1: 既存仕様・既存実装・既存 job パターンを確認する
-- [ ] T2: Red: weekly reset job テストを先に作成する
-- [ ] T3: Green: job の型・公開インターフェースを実装する
-- [ ] T4: Green: Prisma `updateMany` による reset 処理を実装する
-- [ ] T5: Green: 安全ログと日本語エラーを実装する
-- [ ] T6: Red/Green: CLI entrypoint と script を追加する
-- [ ] T7: 既存 ranking / stats 契約の回帰確認を行う
-- [ ] T8: Refactor: job パターンの重複を必要最小限で整理する
-- [ ] T9: backend lint を実行する
-- [ ] T10: backend format を実行・確認する
-- [ ] T11: backend test を実行する
-- [ ] T12: 手動確認を行う
-- [ ] T13: docs 更新要否を確認し、進捗と計画書を完了状態にする
+- [x] T1: 既存仕様・既存実装・既存 job パターンを確認する
+- [x] T2: Red: weekly reset job テストを先に作成する
+- [x] T3: Green: job の型・公開インターフェースを実装する
+- [x] T4: Green: Prisma `updateMany` による reset 処理を実装する
+- [x] T5: Green: 安全ログと日本語エラーを実装する
+- [x] T6: Red/Green: CLI entrypoint と script を追加する
+- [x] T7: 既存 ranking / stats 契約の回帰確認を行う
+- [x] T8: Refactor: job パターンの重複を必要最小限で整理する
+- [x] T9: backend lint を実行する
+- [x] T10: backend format を実行・確認する
+- [x] T11: backend test を実行する
+- [x] T12: 手動確認を行う
+- [x] T13: docs 更新要否を確認し、進捗と計画書を完了状態にする
 
 ## 技術的注意点
 
@@ -337,6 +337,144 @@ export function resetWeeklyScores(
 | retry 導線 | ranking / mypage のエラー状態を確認 | 既存 retry と error 表示が壊れていない |
 | A11Y | `/ranking` の period 切替、retry、`/mypage` のエラー表示をキーボード操作 | 既存操作性が維持される |
 | ログ | 実行ログを確認 | 個人情報や内部エラー詳細が含まれない |
+
+## 実装完了
+
+- 完了日: 2026-06-29
+- 実装ブランチ: feature/weekly-score-reset
+- PR: #68
+
+### 計画からの変更点
+
+- `backend/.env` の `DATABASE_URL` は Docker Compose 内ホスト名 `postgres` を使っていたため、ホストシェルでの手動確認時だけ `localhost` に差し替えて CLI を実行した
+- `/ranking` `/mypage` の画面・API を手動で叩く代わりに、`ranking.service.test.ts` `user.service.test.ts` `get-me-stats.test.ts` の回帰確認で既存契約維持を検証した
+- `docs/04_api.md` は公開 API 契約変更がないため更新しなかった
+- `docs/12_task_guide.md` は実装方針の差分を生む変更がないため更新しなかった
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `backend/src/jobs/resetWeeklyScores.ts` | 新規 | weekly score reset job 本体 |
+| `backend/src/jobs/resetWeeklyScores.test.ts` | 新規 | reset 条件・安全ログ・失敗時エラーのテスト |
+| `backend/src/jobs/resetWeeklyScores.cli.ts` | 新規 | 手動実行 CLI entrypoint |
+| `backend/src/jobs/resetWeeklyScores.cli.test.ts` | 新規 | CLI の exit code と disconnect のテスト |
+| `backend/package.json` | 修正 | `reset:weekly-scores` script を追加 |
+| `docs/05_progress.md` | 修正 | タスクの進捗を完了へ更新 |
+| `docs/plans/weekly-score-reset/plan.md` | 修正 | タスク完了状況と実装完了記録を反映 |
+
+## 追加レビュー指摘と修正予定
+
+- 記録日: 2026-06-29
+- レビュー視点: シニアフルスタックエンジニア観点の追加レビュー
+- ステータス: 対応済み（2026-07-02）
+
+### 指摘1: weekly reset とゲーム結果保存の競合で `weeklyScore` を取りこぼす可能性がある
+
+- 事象:
+  - `resetWeeklyScores.ts` は `weeklyScore = 0` を一括更新する
+  - `game.service.ts` は `weeklyScore` に `increment` をかける
+  - 週境界の同時実行時に、リセット直前/直後のゲーム結果が消える可能性がある
+- 影響:
+  - 週間ランキングと `/users/me/stats` の `weeklyScore` が実プレイ結果とずれる
+  - バッチの成否に関係なく、データ整合性が崩れる
+- 修正方針:
+  - `UserStats` に「この `weeklyScore` がどの週の値か」を表す列を追加する
+  - `game.service.ts` の保存時に週識別子を見て、同一週なら加算、別週なら新週スコアへ置き換える
+  - `ranking.service.ts` と `user.service.ts` は現在週の `weeklyScore` だけを参照する
+- 想定変更ファイル:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/*`
+  - `backend/src/services/game.service.ts`
+  - `backend/src/services/game.service.test.ts`
+  - `backend/src/services/ranking.service.ts`
+  - `backend/src/services/ranking.service.test.ts`
+  - `backend/src/services/user.service.ts`
+  - `backend/src/services/user.service.test.ts`
+
+### 指摘2: 手動実行 CLI の運用経路がホスト環境と整合していない
+
+- 事象:
+  - `backend/.env` の `DATABASE_URL` は Docker Compose 内ホスト名 `postgres` を使う
+  - ホストシェルから `npm run reset:weekly-scores` をそのまま実行すると DB に到達できない
+- 影響:
+  - 運用時に「コマンドは存在するが標準手順では失敗する」状態になる
+  - 障害時の手動対応で混乱しやすい
+- 修正方針:
+  - 実行前提を docs に明記するか、CLI 実行時に前提不備を日本語で分かるようにする
+  - 必要なら `docker compose exec hono ...` を標準手順に寄せる
+- 想定変更ファイル:
+  - `backend/src/jobs/resetWeeklyScores.cli.ts`
+  - `docs/09_startup_commands.md`
+  - `docs/plans/weekly-score-reset/plan.md`
+
+### 指摘3: `weeklyScore > 0` 条件では負値や異常値を週跨ぎで残す
+
+- 事象:
+  - reset job は `weeklyScore > 0` の行だけを 0 に戻す
+  - DB には非負制約がないため、負値や異常値が残る余地がある
+- 影響:
+  - API レスポンス上は 0 に正規化されても、DB 実データは前週の異常値を保持し続ける
+  - 週間ランキング集計やデバッグ時に実データと表示が乖離する
+- 修正方針:
+  - 現在週識別子を導入したうえで、reset 対象条件を「現在週状態へ正規化する」責務に見直す
+  - 必要なら DB 制約や追加バリデーションも検討する
+- 想定変更ファイル:
+  - `backend/src/jobs/resetWeeklyScores.ts`
+  - `backend/src/jobs/resetWeeklyScores.test.ts`
+  - 必要に応じて `backend/prisma/schema.prisma`
+
+
+### 追加レビュー対応結果
+
+- 対応日: 2026-07-02
+- 実装ブランチ: feature/weekly-score-reset
+- PR: #68
+
+#### 対応内容
+
+- UserStats.weeklyScoreWeekStart を追加し、weeklyScore がどの週の値かを DB で保持するようにした
+- 週開始は JST 月曜 00:00 を UTC instant として保存する方針にした
+- ゲーム結果保存時は、同一週なら weeklyScore を加算し、別週なら今回セッションのスコアから新週を開始するようにした
+- reset job は現在週の正のスコアを触らず、週が古い行・週識別子がない行・負値行だけを weeklyScore = 0 と現在週へ正規化するようにした
+- weekly ranking は現在週の weeklyScoreWeekStart を持つ行だけを週間ランキング対象にし、古い週の高スコアが残らないようにした
+- /users/me/stats は現在週以外の weeklyScore をレスポンス上 0 として返すようにした
+- 手動実行は docker compose exec hono npm run reset:weekly-scores を標準手順として docs/09_startup_commands.md に記録した
+
+#### 実際の追加変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| backend/prisma/schema.prisma | 修正 | weeklyScoreWeekStart と複合 index を追加 |
+| backend/prisma/migrations/20260702133000_add_user_stats_weekly_score_week_start/migration.sql | 新規 | user_stats.weeklyScoreWeekStart 追加 migration |
+| backend/src/lib/weekly-score.ts | 新規 | JST 月曜 00:00 週開始日時 helper |
+| backend/src/lib/prisma-errors.ts | 新規 | Prisma unique 制約違反判定 helper |
+| backend/src/lib/weekly-score.test.ts | 新規 | 週開始日時 helper の境界テスト |
+| backend/src/services/game.service.ts | 修正 | 週識別子に基づく weeklyScore 加算/置換 |
+| backend/src/services/game.service.test.ts | 修正 | 同一週加算・別週置換・新規作成テスト |
+| backend/src/services/ranking.service.ts | 修正 | weekly ranking を現在週に限定 |
+| backend/src/services/ranking.service.test.ts | 修正 | 現在週条件と myRank テスト更新 |
+| backend/src/services/user.service.ts | 修正 | 現在週以外の weeklyScore を 0 に正規化 |
+| backend/src/services/user.service.test.ts | 修正 | weeklyScoreWeekStart select と現在週テスト更新 |
+| backend/src/jobs/resetWeeklyScores.ts | 修正 | 現在週への正規化 job に変更 |
+| backend/src/jobs/resetWeeklyScores.test.ts | 修正 | stale/null/negative 行の正規化テスト |
+| docs/09_startup_commands.md | 修正 | 手動バッチ実行手順を追加 |
+| docs/plans/weekly-score-reset/plan.md | 修正 | 追加レビュー対応結果を記録 |
+
+#### 追加検証結果
+
+| 確認 | 結果 |
+|---|---|
+| cd backend && npx prisma generate | 成功 |
+| cd backend && npm run lint | 成功 |
+| cd backend && npm run format | 成功 |
+| cd backend && npx prisma format | 成功 |
+| cd backend && npm run format:check | 成功 |
+| cd backend && npm run test -- --run | 34 files / 274 tests passed |
+| docker compose exec -T hono npx prisma migrate deploy | 成功。追加 migration 適用済み |
+| docker compose exec -T hono npm run reset:weekly-scores | 1回目resetCount=9、2回目resetCount=0 で成功 |
+| Playwright: /ranking | 成功。サーバーエラーなし、空ランキング表示 |
+| Playwright: /mypage | 成功。未ログイン時のログイン誘導表示、サーバーエラーなし |
 
 ## 実装完了時の更新ルール
 

@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { getWeeklyScoreWeekStart, isSameWeeklyScoreWeek } from "../lib/weekly-score.js";
 import { calculateAccuracyRate, normalizeNonNegativeCount } from "../lib/stats.js";
 
 const RANKING_LIMIT = 50;
@@ -43,6 +44,7 @@ type RankingRow = {
 
 type RankingTargetStats = {
   weeklyScore: number;
+  weeklyScoreWeekStart: Date | null;
   allTimeScore: number;
   totalGames: number;
   user: { isActive: boolean; deletedAt: Date | null };
@@ -67,6 +69,7 @@ const rankingSelect = {
 
 const myRankSelect = {
   weeklyScore: true,
+  weeklyScoreWeekStart: true,
   allTimeScore: true,
   totalGames: true,
   user: { select: { isActive: true, deletedAt: true } },
@@ -129,7 +132,11 @@ function buildRankingEntries(period: RankingPeriod, rows: RankingRow[]) {
   });
 }
 
-async function getMyRank(period: RankingPeriod, userId?: string): Promise<number | null> {
+async function getMyRank(
+  period: RankingPeriod,
+  userId: string | undefined,
+  weeklyScoreWeekStart: Date,
+): Promise<number | null> {
   if (!userId) {
     return null;
   }
@@ -144,9 +151,19 @@ async function getMyRank(period: RankingPeriod, userId?: string): Promise<number
   }
 
   const scoreField = getScoreField(period);
+
+  if (
+    scoreField === "weeklyScore" &&
+    !isSameWeeklyScoreWeek(stats.weeklyScoreWeekStart, weeklyScoreWeekStart)
+  ) {
+    return null;
+  }
+
   const score = normalizeNonNegativeCount(stats[scoreField]);
   const scoreWhere =
-    scoreField === "weeklyScore" ? { weeklyScore: { gt: score } } : { allTimeScore: { gt: score } };
+    scoreField === "weeklyScore"
+      ? { weeklyScoreWeekStart, weeklyScore: { gt: score } }
+      : { allTimeScore: { gt: score } };
 
   const higherScoreCount = await prisma.userStats.count({
     where: {
@@ -159,14 +176,15 @@ async function getMyRank(period: RankingPeriod, userId?: string): Promise<number
 }
 
 export async function getWeeklyRanking(userId?: string): Promise<WeeklyRankingResponse> {
+  const weeklyScoreWeekStart = getWeeklyScoreWeekStart(new Date());
   const [rows, myRank] = await Promise.all([
     prisma.userStats.findMany({
-      where: activeRankingTargetWhere,
+      where: { ...activeRankingTargetWhere, weeklyScoreWeekStart },
       orderBy: getRankingOrderBy("weekly"),
       take: RANKING_LIMIT,
       select: rankingSelect,
     }),
-    getMyRank("weekly", userId),
+    getMyRank("weekly", userId, weeklyScoreWeekStart),
   ]);
 
   return {
@@ -174,7 +192,6 @@ export async function getWeeklyRanking(userId?: string): Promise<WeeklyRankingRe
     myRank,
   };
 }
-
 export async function getAllTimeRanking(userId?: string): Promise<AllTimeRankingResponse> {
   const [rows, myRank] = await Promise.all([
     prisma.userStats.findMany({
@@ -183,7 +200,7 @@ export async function getAllTimeRanking(userId?: string): Promise<AllTimeRanking
       take: RANKING_LIMIT,
       select: rankingSelect,
     }),
-    getMyRank("alltime", userId),
+    getMyRank("alltime", userId, getWeeklyScoreWeekStart(new Date())),
   ]);
 
   return {

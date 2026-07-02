@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/prisma.js", () => ({
   prisma: {
@@ -42,6 +42,9 @@ import {
   getCurrentUserStats,
   updateCurrentUsername,
 } from "./user.service.js";
+
+const NOW = new Date("2026-06-20T12:00:00.000Z");
+const WEEK_START = new Date("2026-06-14T15:00:00.000Z");
 
 describe("deleteCurrentUser", () => {
   beforeEach(() => {
@@ -229,7 +232,13 @@ describe("getCurrentUserProfile", () => {
 
 describe("getCurrentUserStats", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("正常系: 不整合な正解数でも正答率を 0 から 100 に丸める", async () => {
@@ -243,6 +252,7 @@ describe("getCurrentUserStats", () => {
       masteredCount: 0,
       currentStreak: 1,
       weeklyScore: 0,
+      weeklyScoreWeekStart: WEEK_START,
       allTimeScore: 0,
       lastActiveDate: null,
       updatedAt: playedAt,
@@ -279,6 +289,7 @@ describe("getCurrentUserStats", () => {
       masteredCount: -4,
       currentStreak: -5,
       weeklyScore: -6,
+      weeklyScoreWeekStart: WEEK_START,
       allTimeScore: -7,
       lastActiveDate: null,
       updatedAt: playedAt,
@@ -338,6 +349,7 @@ describe("getCurrentUserStats", () => {
       masteredCount: 18,
       currentStreak: 5,
       weeklyScore: 2400,
+      weeklyScoreWeekStart: WEEK_START,
       allTimeScore: 9200,
       lastActiveDate,
       updatedAt: statsUpdatedAt,
@@ -359,6 +371,7 @@ describe("getCurrentUserStats", () => {
         masteredCount: true,
         currentStreak: true,
         weeklyScore: true,
+        weeklyScoreWeekStart: true,
         allTimeScore: true,
         lastActiveDate: true,
         updatedAt: true,

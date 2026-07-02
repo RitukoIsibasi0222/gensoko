@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import type { Element as PrismaElement, GameMode, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { getWeeklyScoreWeekStart, isSameWeeklyScoreWeek } from "../lib/weekly-score.js";
 import { getElementMasteryStatusMap } from "./element-mastery.service.js";
 
 const GAME_QUESTION_COUNT = 10;
@@ -558,6 +559,10 @@ async function updateWeakElementsForSession({
   }
 }
 
+type ExistingUserStatsForSession = {
+  weeklyScoreWeekStart: Date | null;
+};
+
 async function updateUserStatsForSession({
   tx,
   userId,
@@ -567,6 +572,7 @@ async function updateUserStatsForSession({
   playedAt,
   masteredCountDelta,
   masteredCountOnCreate,
+  existingStats,
 }: {
   tx: Prisma.TransactionClient;
   userId: string;
@@ -576,27 +582,122 @@ async function updateUserStatsForSession({
   playedAt: Date;
   masteredCountDelta: number;
   masteredCountOnCreate: number;
+  existingStats: ExistingUserStatsForSession | null;
 }): Promise<void> {
-  await tx.userStats.upsert({
-    where: { userId },
-    create: {
+  const weeklyScoreWeekStart = getWeeklyScoreWeekStart(playedAt);
+
+  if (!existingStats) {
+    const createResult = await tx.userStats.createMany({
+      data: {
+        userId,
+        totalGames: 1,
+        totalCorrect: correctCount,
+        totalAnswered: totalCount,
+        masteredCount: masteredCountOnCreate,
+        weeklyScore: totalScore,
+        weeklyScoreWeekStart,
+        allTimeScore: totalScore,
+        lastActiveDate: playedAt,
+      },
+      skipDuplicates: true,
+    });
+
+    if (createResult.count === 1) {
+      return;
+    }
+
+    const createdByConcurrentSession = await tx.userStats.findUnique({
+      where: { userId },
+      select: { weeklyScoreWeekStart: true },
+    });
+
+    if (!createdByConcurrentSession) {
+      throw new Error("ユーザー統計の作成状態を確認できません");
+    }
+
+    await updateExistingUserStatsForSession({
+      tx,
       userId,
-      totalGames: 1,
-      totalCorrect: correctCount,
-      totalAnswered: totalCount,
-      masteredCount: masteredCountOnCreate,
-      weeklyScore: totalScore,
-      allTimeScore: totalScore,
-      lastActiveDate: playedAt,
-    },
-    update: {
-      totalGames: { increment: 1 },
-      totalCorrect: { increment: correctCount },
-      totalAnswered: { increment: totalCount },
+      totalScore,
+      correctCount,
+      totalCount,
+      playedAt,
+      masteredCountDelta,
+      existingStats: createdByConcurrentSession,
+      weeklyScoreWeekStart,
+    });
+    return;
+  }
+
+  await updateExistingUserStatsForSession({
+    tx,
+    userId,
+    totalScore,
+    correctCount,
+    totalCount,
+    playedAt,
+    masteredCountDelta,
+    existingStats,
+    weeklyScoreWeekStart,
+  });
+}
+
+async function updateExistingUserStatsForSession({
+  tx,
+  userId,
+  totalScore,
+  correctCount,
+  totalCount,
+  playedAt,
+  masteredCountDelta,
+  existingStats,
+  weeklyScoreWeekStart,
+}: {
+  tx: Prisma.TransactionClient;
+  userId: string;
+  totalScore: number;
+  correctCount: number;
+  totalCount: number;
+  playedAt: Date;
+  masteredCountDelta: number;
+  existingStats: ExistingUserStatsForSession;
+  weeklyScoreWeekStart: Date;
+}): Promise<void> {
+  const commonUpdateData = {
+    totalGames: { increment: 1 },
+    totalCorrect: { increment: correctCount },
+    totalAnswered: { increment: totalCount },
+    weeklyScoreWeekStart,
+    allTimeScore: { increment: totalScore },
+    masteredCount: { increment: masteredCountDelta },
+    lastActiveDate: playedAt,
+  } satisfies Prisma.UserStatsUpdateManyMutationInput;
+
+  if (!isSameWeeklyScoreWeek(existingStats.weeklyScoreWeekStart, weeklyScoreWeekStart)) {
+    const staleWeekUpdateResult = await tx.userStats.updateMany({
+      where: {
+        userId,
+        OR: [
+          { weeklyScoreWeekStart: null },
+          { weeklyScoreWeekStart: { not: weeklyScoreWeekStart } },
+        ],
+      },
+      data: {
+        ...commonUpdateData,
+        weeklyScore: totalScore,
+      },
+    });
+
+    if (staleWeekUpdateResult.count === 1) {
+      return;
+    }
+  }
+
+  await tx.userStats.update({
+    where: { userId },
+    data: {
+      ...commonUpdateData,
       weeklyScore: { increment: totalScore },
-      allTimeScore: { increment: totalScore },
-      masteredCount: { increment: masteredCountDelta },
-      lastActiveDate: playedAt,
     },
   });
 }
@@ -799,7 +900,7 @@ export async function submitGameSession({
     });
     const hasUserStats = await tx.userStats.findUnique({
       where: { userId },
-      select: { userId: true },
+      select: { userId: true, weeklyScoreWeekStart: true },
     });
     const masteredCountOnCreate = hasUserStats
       ? masteredCountAfter
@@ -814,6 +915,7 @@ export async function submitGameSession({
       playedAt: now,
       masteredCountDelta: masteredCountAfter - masteredCountBefore,
       masteredCountOnCreate,
+      existingStats: hasUserStats,
     });
 
     return {
