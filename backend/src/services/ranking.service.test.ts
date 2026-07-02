@@ -210,6 +210,20 @@ describe("ranking service", () => {
     expect(prisma.userStats.count).not.toHaveBeenCalled();
   });
 
+  it("週間ランキング対象外の週識別子なら myRank を null にする", async () => {
+    vi.mocked(prisma.userStats.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue({
+      weeklyScore: 12000,
+      weeklyScoreWeekStart: new Date("2026-06-07T15:00:00.000Z"),
+      allTimeScore: 70000,
+      totalGames: 8,
+      user: { isActive: true, deletedAt: null },
+    } as never);
+
+    await expect(getWeeklyRanking("stale-week-user")).resolves.toMatchObject({ myRank: null });
+    expect(prisma.userStats.count).not.toHaveBeenCalled();
+  });
+
   it("ログイン時はランキング一覧と自分の順位取得を並列に開始する", async () => {
     const findManyDeferred = createDeferred<never[]>();
     vi.mocked(prisma.userStats.findMany).mockReturnValue(findManyDeferred.promise as never);

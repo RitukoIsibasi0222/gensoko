@@ -151,11 +151,15 @@ async function getMyRank(
   }
 
   const scoreField = getScoreField(period);
-  const score =
+
+  if (
     scoreField === "weeklyScore" &&
     !isSameWeeklyScoreWeek(stats.weeklyScoreWeekStart, weeklyScoreWeekStart)
-      ? 0
-      : normalizeNonNegativeCount(stats[scoreField]);
+  ) {
+    return null;
+  }
+
+  const score = normalizeNonNegativeCount(stats[scoreField]);
   const scoreWhere =
     scoreField === "weeklyScore"
       ? { weeklyScoreWeekStart, weeklyScore: { gt: score } }

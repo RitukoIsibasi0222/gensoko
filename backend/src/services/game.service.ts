@@ -663,24 +663,41 @@ async function updateExistingUserStatsForSession({
   existingStats: ExistingUserStatsForSession;
   weeklyScoreWeekStart: Date;
 }): Promise<void> {
-  const weeklyScore = isSameWeeklyScoreWeek(
-    existingStats.weeklyScoreWeekStart,
+  const commonUpdateData = {
+    totalGames: { increment: 1 },
+    totalCorrect: { increment: correctCount },
+    totalAnswered: { increment: totalCount },
     weeklyScoreWeekStart,
-  )
-    ? { increment: totalScore }
-    : totalScore;
+    allTimeScore: { increment: totalScore },
+    masteredCount: { increment: masteredCountDelta },
+    lastActiveDate: playedAt,
+  } satisfies Prisma.UserStatsUpdateManyMutationInput;
+
+  if (!isSameWeeklyScoreWeek(existingStats.weeklyScoreWeekStart, weeklyScoreWeekStart)) {
+    const staleWeekUpdateResult = await tx.userStats.updateMany({
+      where: {
+        userId,
+        OR: [
+          { weeklyScoreWeekStart: null },
+          { weeklyScoreWeekStart: { not: weeklyScoreWeekStart } },
+        ],
+      },
+      data: {
+        ...commonUpdateData,
+        weeklyScore: totalScore,
+      },
+    });
+
+    if (staleWeekUpdateResult.count === 1) {
+      return;
+    }
+  }
 
   await tx.userStats.update({
     where: { userId },
     data: {
-      totalGames: { increment: 1 },
-      totalCorrect: { increment: correctCount },
-      totalAnswered: { increment: totalCount },
-      weeklyScore,
-      weeklyScoreWeekStart,
-      allTimeScore: { increment: totalScore },
-      masteredCount: { increment: masteredCountDelta },
-      lastActiveDate: playedAt,
+      ...commonUpdateData,
+      weeklyScore: { increment: totalScore },
     },
   });
 }

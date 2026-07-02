@@ -7,7 +7,7 @@
 ## 1. Docker 起動
 
 ```bash
-cd /home/<user>/labs/Gensoko
+cd ~/labs/Gensoko
 
 # 初回のみ（または node_modules ボリュームを削除した直後）
 docker compose run --rm hono npm ci
@@ -61,7 +61,7 @@ docker compose logs sveltekit --tail=30
 ## 4. バックエンド開発コマンド
 
 ```bash
-cd /home/<user>/labs/Gensoko/backend
+cd ~/labs/Gensoko/backend
 
 # テスト実行（1回）
 npm run test -- --run
@@ -90,7 +90,7 @@ npm run format
 
 ## 5. 手動バッチ実行
 
-    cd /home/<user>/labs/Gensoko
+    cd ~/labs/Gensoko
 
     # 週間スコアを現在週へ正規化する（Docker 内で実行すること）
     docker compose exec hono npm run reset:weekly-scores
@@ -105,7 +105,7 @@ backend/.env の DATABASE_URL は Docker Compose 内ホスト名 postgres を使
 ## 6. Prisma コマンド
 
 ```bash
-cd /home/<user>/labs/Gensoko/backend
+cd ~/labs/Gensoko/backend
 
 # マイグレーション実行（Docker 内で実行すること）
 docker compose exec hono npx prisma migrate dev --name <変更名>
@@ -122,7 +122,7 @@ docker compose exec hono npx tsx prisma/seed.ts
 ## 7. Git ブランチ操作
 
 ```bash
-cd /home/<user>/labs/Gensoko
+cd ~/labs/Gensoko
 
 # 現在のブランチ確認
 git branch --show-current

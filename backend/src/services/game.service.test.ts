@@ -31,6 +31,7 @@ vi.mock("../lib/prisma.js", () => ({
       create: vi.fn(),
       createMany: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
 }));
@@ -508,6 +509,7 @@ describe("submitGameSession", () => {
     vi.mocked(prisma.userStats.create).mockResolvedValue({} as never);
     vi.mocked(prisma.userStats.createMany).mockResolvedValue({ count: 1 } as never);
     vi.mocked(prisma.userStats.update).mockResolvedValue({} as never);
+    vi.mocked(prisma.userStats.updateMany).mockResolvedValue({ count: 1 } as never);
   });
 
   it("保存済み問題セットを使って正誤判定・スコア計算・結果保存を行う", async () => {
@@ -849,16 +851,55 @@ describe("submitGameSession", () => {
       durationSec: 20,
       now: new Date("2026-06-20T12:05:00.000Z"),
     });
+    expect(prisma.userStats.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: "user-1",
+        OR: [
+          { weeklyScoreWeekStart: null },
+          { weeklyScoreWeekStart: { not: new Date("2026-06-14T15:00:00.000Z") } },
+        ],
+      },
+      data: expect.objectContaining({
+        weeklyScore: 100,
+        weeklyScoreWeekStart: new Date("2026-06-14T15:00:00.000Z"),
+        allTimeScore: { increment: 100 },
+      }),
+    });
+    expect(prisma.userStats.update).not.toHaveBeenCalled();
+  });
 
-    expect(prisma.userStats.update).toHaveBeenCalledWith(
+  it("新週初回セッションの並行更新で既に現在週へ置換済みなら週間スコアを加算する", async () => {
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue({
+      userId: "user-1",
+      weeklyScoreWeekStart: new Date("2026-06-07T15:00:00.000Z"),
+    } as never);
+    vi.mocked(prisma.userStats.updateMany).mockResolvedValue({ count: 0 } as never);
+
+    await submitGameSession({
+      userId: "user-1",
+      questionSetId: "question-set-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      answers: [
+        { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+        { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+      ],
+      durationSec: 20,
+      now: new Date("2026-06-20T12:05:00.000Z"),
+    });
+
+    expect(prisma.userStats.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          weeklyScore: 100,
-          weeklyScoreWeekStart: new Date("2026-06-14T15:00:00.000Z"),
-          allTimeScore: { increment: 100 },
-        }),
+        where: expect.objectContaining({ userId: "user-1" }),
       }),
     );
+    expect(prisma.userStats.update).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      data: expect.objectContaining({
+        weeklyScore: { increment: 100 },
+        weeklyScoreWeekStart: new Date("2026-06-14T15:00:00.000Z"),
+        allTimeScore: { increment: 100 },
+      }),
+    });
   });
 
   it("ユーザー統計が未作成なら現在週つきで作成する", async () => {
