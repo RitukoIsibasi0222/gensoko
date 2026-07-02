@@ -367,7 +367,7 @@ export function resetWeeklyScores(
 
 - 記録日: 2026-06-29
 - レビュー視点: シニアフルスタックエンジニア観点の追加レビュー
-- ステータス: 修正未着手。次の作業で対応する
+- ステータス: 対応済み（2026-07-02）
 
 ### 指摘1: weekly reset とゲーム結果保存の競合で `weeklyScore` を取りこぼす可能性がある
 
@@ -423,6 +423,57 @@ export function resetWeeklyScores(
   - `backend/src/jobs/resetWeeklyScores.ts`
   - `backend/src/jobs/resetWeeklyScores.test.ts`
   - 必要に応じて `backend/prisma/schema.prisma`
+
+
+### 追加レビュー対応結果
+
+- 対応日: 2026-07-02
+- 実装ブランチ: feature/weekly-score-reset
+- PR: 未作成
+
+#### 対応内容
+
+- UserStats.weeklyScoreWeekStart を追加し、weeklyScore がどの週の値かを DB で保持するようにした
+- 週開始は JST 月曜 00:00 を UTC instant として保存する方針にした
+- ゲーム結果保存時は、同一週なら weeklyScore を加算し、別週なら今回セッションのスコアから新週を開始するようにした
+- reset job は現在週の正のスコアを触らず、週が古い行・週識別子がない行・負値行だけを weeklyScore = 0 と現在週へ正規化するようにした
+- weekly ranking は現在週の weeklyScoreWeekStart を持つ行だけを週間ランキング対象にし、古い週の高スコアが残らないようにした
+- /users/me/stats は現在週以外の weeklyScore をレスポンス上 0 として返すようにした
+- 手動実行は docker compose exec hono npm run reset:weekly-scores を標準手順として docs/09_startup_commands.md に記録した
+
+#### 実際の追加変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| backend/prisma/schema.prisma | 修正 | weeklyScoreWeekStart と複合 index を追加 |
+| backend/prisma/migrations/20260702133000_add_user_stats_weekly_score_week_start/migration.sql | 新規 | user_stats.weeklyScoreWeekStart 追加 migration |
+| backend/src/lib/weekly-score.ts | 新規 | JST 月曜 00:00 週開始日時 helper |
+| backend/src/lib/weekly-score.test.ts | 新規 | 週開始日時 helper の境界テスト |
+| backend/src/services/game.service.ts | 修正 | 週識別子に基づく weeklyScore 加算/置換 |
+| backend/src/services/game.service.test.ts | 修正 | 同一週加算・別週置換・新規作成テスト |
+| backend/src/services/ranking.service.ts | 修正 | weekly ranking を現在週に限定 |
+| backend/src/services/ranking.service.test.ts | 修正 | 現在週条件と myRank テスト更新 |
+| backend/src/services/user.service.ts | 修正 | 現在週以外の weeklyScore を 0 に正規化 |
+| backend/src/services/user.service.test.ts | 修正 | weeklyScoreWeekStart select と現在週テスト更新 |
+| backend/src/jobs/resetWeeklyScores.ts | 修正 | 現在週への正規化 job に変更 |
+| backend/src/jobs/resetWeeklyScores.test.ts | 修正 | stale/null/negative 行の正規化テスト |
+| docs/09_startup_commands.md | 修正 | 手動バッチ実行手順を追加 |
+| docs/plans/weekly-score-reset/plan.md | 修正 | 追加レビュー対応結果を記録 |
+
+#### 追加検証結果
+
+| 確認 | 結果 |
+|---|---|
+| cd backend && npx prisma generate | 成功 |
+| cd backend && npm run lint | 成功 |
+| cd backend && npm run format | 成功 |
+| cd backend && npx prisma format | 成功 |
+| cd backend && npm run format:check | 成功 |
+| cd backend && npm run test -- --run | 34 files / 274 tests passed |
+| docker compose exec -T hono npx prisma migrate deploy | 成功。追加 migration 適用済み |
+| docker compose exec -T hono npm run reset:weekly-scores | 1回目resetCount=9、2回目resetCount=0 で成功 |
+| Playwright: /ranking | 成功。サーバーエラーなし、空ランキング表示 |
+| Playwright: /mypage | 成功。未ログイン時のログイン誘導表示、サーバーエラーなし |
 
 ## 実装完了時の更新ルール
 
