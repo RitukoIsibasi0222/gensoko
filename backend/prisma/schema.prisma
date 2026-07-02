@@ -184,20 +184,22 @@ model GameQuestionSet {
 
 // ユーザー統計
 model UserStats {
-  userId         String    @id
-  totalGames     Int       @default(0)
-  totalCorrect   Int       @default(0)
-  totalAnswered  Int       @default(0)
-  masteredCount  Int       @default(0)
-  currentStreak  Int       @default(0)
-  lastActiveDate DateTime?
-  weeklyScore    Int       @default(0)
-  allTimeScore   Int       @default(0)
-  updatedAt      DateTime  @updatedAt
+  userId               String    @id
+  totalGames           Int       @default(0)
+  totalCorrect         Int       @default(0)
+  totalAnswered        Int       @default(0)
+  masteredCount        Int       @default(0)
+  currentStreak        Int       @default(0)
+  lastActiveDate       DateTime?
+  weeklyScore          Int       @default(0)
+  weeklyScoreWeekStart DateTime?
+  allTimeScore         Int       @default(0)
+  updatedAt            DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([weeklyScore(sort: Desc)])
+  @@index([weeklyScoreWeekStart, weeklyScore(sort: Desc)])
   @@index([allTimeScore(sort: Desc)])
   @@map("user_stats")
 }
