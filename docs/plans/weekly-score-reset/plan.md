@@ -342,7 +342,7 @@ export function resetWeeklyScores(
 
 - 完了日: 2026-06-29
 - 実装ブランチ: feature/weekly-score-reset
-- PR: 未作成
+- PR: #68
 
 ### 計画からの変更点
 
@@ -429,7 +429,7 @@ export function resetWeeklyScores(
 
 - 対応日: 2026-07-02
 - 実装ブランチ: feature/weekly-score-reset
-- PR: 未作成
+- PR: #68
 
 #### 対応内容
 
@@ -448,6 +448,7 @@ export function resetWeeklyScores(
 | backend/prisma/schema.prisma | 修正 | weeklyScoreWeekStart と複合 index を追加 |
 | backend/prisma/migrations/20260702133000_add_user_stats_weekly_score_week_start/migration.sql | 新規 | user_stats.weeklyScoreWeekStart 追加 migration |
 | backend/src/lib/weekly-score.ts | 新規 | JST 月曜 00:00 週開始日時 helper |
+| backend/src/lib/prisma-errors.ts | 新規 | Prisma unique 制約違反判定 helper |
 | backend/src/lib/weekly-score.test.ts | 新規 | 週開始日時 helper の境界テスト |
 | backend/src/services/game.service.ts | 修正 | 週識別子に基づく weeklyScore 加算/置換 |
 | backend/src/services/game.service.test.ts | 修正 | 同一週加算・別週置換・新規作成テスト |

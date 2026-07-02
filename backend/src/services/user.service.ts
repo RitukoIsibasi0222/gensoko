@@ -6,17 +6,9 @@ import {
   normalizeCountPair,
   normalizeNonNegativeCount,
 } from "../lib/stats.js";
+import { isUniqueConstraintViolation } from "../lib/prisma-errors.js";
 import { prisma } from "../lib/prisma.js";
 import { getWeeklyScoreWeekStart, isSameWeeklyScoreWeek } from "../lib/weekly-score.js";
-
-function isUniqueConstraintViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: string }).code === "P2002"
-  );
-}
 
 export class UserError extends Error {
   constructor(

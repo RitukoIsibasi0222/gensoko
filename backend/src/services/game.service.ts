@@ -587,7 +587,7 @@ async function updateUserStatsForSession({
   const weeklyScoreWeekStart = getWeeklyScoreWeekStart(playedAt);
 
   if (!existingStats) {
-    await tx.userStats.create({
+    const createResult = await tx.userStats.createMany({
       data: {
         userId,
         totalGames: 1,
@@ -599,10 +599,70 @@ async function updateUserStatsForSession({
         allTimeScore: totalScore,
         lastActiveDate: playedAt,
       },
+      skipDuplicates: true,
+    });
+
+    if (createResult.count === 1) {
+      return;
+    }
+
+    const createdByConcurrentSession = await tx.userStats.findUnique({
+      where: { userId },
+      select: { weeklyScoreWeekStart: true },
+    });
+
+    if (!createdByConcurrentSession) {
+      throw new Error("ユーザー統計の作成状態を確認できません");
+    }
+
+    await updateExistingUserStatsForSession({
+      tx,
+      userId,
+      totalScore,
+      correctCount,
+      totalCount,
+      playedAt,
+      masteredCountDelta,
+      existingStats: createdByConcurrentSession,
+      weeklyScoreWeekStart,
     });
     return;
   }
 
+  await updateExistingUserStatsForSession({
+    tx,
+    userId,
+    totalScore,
+    correctCount,
+    totalCount,
+    playedAt,
+    masteredCountDelta,
+    existingStats,
+    weeklyScoreWeekStart,
+  });
+}
+
+async function updateExistingUserStatsForSession({
+  tx,
+  userId,
+  totalScore,
+  correctCount,
+  totalCount,
+  playedAt,
+  masteredCountDelta,
+  existingStats,
+  weeklyScoreWeekStart,
+}: {
+  tx: Prisma.TransactionClient;
+  userId: string;
+  totalScore: number;
+  correctCount: number;
+  totalCount: number;
+  playedAt: Date;
+  masteredCountDelta: number;
+  existingStats: ExistingUserStatsForSession;
+  weeklyScoreWeekStart: Date;
+}): Promise<void> {
   const weeklyScore = isSameWeeklyScoreWeek(
     existingStats.weeklyScoreWeekStart,
     weeklyScoreWeekStart,

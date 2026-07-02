@@ -29,6 +29,7 @@ vi.mock("../lib/prisma.js", () => ({
     userStats: {
       findUnique: vi.fn(),
       create: vi.fn(),
+      createMany: vi.fn(),
       update: vi.fn(),
     },
   },
@@ -505,6 +506,7 @@ describe("submitGameSession", () => {
       weeklyScoreWeekStart: new Date("2026-06-14T15:00:00.000Z"),
     } as never);
     vi.mocked(prisma.userStats.create).mockResolvedValue({} as never);
+    vi.mocked(prisma.userStats.createMany).mockResolvedValue({ count: 1 } as never);
     vi.mocked(prisma.userStats.update).mockResolvedValue({} as never);
   });
 
@@ -874,7 +876,7 @@ describe("submitGameSession", () => {
       now: new Date("2026-06-20T12:05:00.000Z"),
     });
 
-    expect(prisma.userStats.create).toHaveBeenCalledWith({
+    expect(prisma.userStats.createMany).toHaveBeenCalledWith({
       data: {
         userId: "user-1",
         totalGames: 1,
@@ -886,8 +888,44 @@ describe("submitGameSession", () => {
         allTimeScore: 100,
         lastActiveDate: new Date("2026-06-20T12:05:00.000Z"),
       },
+      skipDuplicates: true,
     });
     expect(prisma.userStats.update).not.toHaveBeenCalled();
+  });
+
+  it("ユーザー統計の初回作成が並行セッションと競合した場合は既存行へ加算する", async () => {
+    vi.mocked(prisma.userStats.findUnique)
+      .mockResolvedValueOnce(null as never)
+      .mockResolvedValueOnce({
+        userId: "user-1",
+        weeklyScoreWeekStart: new Date("2026-06-14T15:00:00.000Z"),
+      } as never);
+    vi.mocked(prisma.userStats.createMany).mockResolvedValue({ count: 0 } as never);
+
+    await submitGameSession({
+      userId: "user-1",
+      questionSetId: "question-set-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      answers: [
+        { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+        { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+      ],
+      durationSec: 20,
+      now: new Date("2026-06-20T12:05:00.000Z"),
+    });
+
+    expect(prisma.userStats.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skipDuplicates: true }),
+    );
+    expect(prisma.userStats.update).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      data: expect.objectContaining({
+        totalGames: { increment: 1 },
+        weeklyScore: { increment: 100 },
+        weeklyScoreWeekStart: new Date("2026-06-14T15:00:00.000Z"),
+        allTimeScore: { increment: 100 },
+      }),
+    });
   });
 
   it("今回セッションで変化した元素だけを見て習得済み元素数の差分を反映する", async () => {
