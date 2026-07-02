@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import type { Element as PrismaElement, GameMode, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { getWeeklyScoreWeekStart, isSameWeeklyScoreWeek } from "../lib/weekly-score.js";
 import { getElementMasteryStatusMap } from "./element-mastery.service.js";
 
 const GAME_QUESTION_COUNT = 10;
@@ -558,6 +559,10 @@ async function updateWeakElementsForSession({
   }
 }
 
+type ExistingUserStatsForSession = {
+  weeklyScoreWeekStart: Date | null;
+};
+
 async function updateUserStatsForSession({
   tx,
   userId,
@@ -567,6 +572,7 @@ async function updateUserStatsForSession({
   playedAt,
   masteredCountDelta,
   masteredCountOnCreate,
+  existingStats,
 }: {
   tx: Prisma.TransactionClient;
   userId: string;
@@ -576,24 +582,42 @@ async function updateUserStatsForSession({
   playedAt: Date;
   masteredCountDelta: number;
   masteredCountOnCreate: number;
+  existingStats: ExistingUserStatsForSession | null;
 }): Promise<void> {
-  await tx.userStats.upsert({
+  const weeklyScoreWeekStart = getWeeklyScoreWeekStart(playedAt);
+
+  if (!existingStats) {
+    await tx.userStats.create({
+      data: {
+        userId,
+        totalGames: 1,
+        totalCorrect: correctCount,
+        totalAnswered: totalCount,
+        masteredCount: masteredCountOnCreate,
+        weeklyScore: totalScore,
+        weeklyScoreWeekStart,
+        allTimeScore: totalScore,
+        lastActiveDate: playedAt,
+      },
+    });
+    return;
+  }
+
+  const weeklyScore = isSameWeeklyScoreWeek(
+    existingStats.weeklyScoreWeekStart,
+    weeklyScoreWeekStart,
+  )
+    ? { increment: totalScore }
+    : totalScore;
+
+  await tx.userStats.update({
     where: { userId },
-    create: {
-      userId,
-      totalGames: 1,
-      totalCorrect: correctCount,
-      totalAnswered: totalCount,
-      masteredCount: masteredCountOnCreate,
-      weeklyScore: totalScore,
-      allTimeScore: totalScore,
-      lastActiveDate: playedAt,
-    },
-    update: {
+    data: {
       totalGames: { increment: 1 },
       totalCorrect: { increment: correctCount },
       totalAnswered: { increment: totalCount },
-      weeklyScore: { increment: totalScore },
+      weeklyScore,
+      weeklyScoreWeekStart,
       allTimeScore: { increment: totalScore },
       masteredCount: { increment: masteredCountDelta },
       lastActiveDate: playedAt,
@@ -799,7 +823,7 @@ export async function submitGameSession({
     });
     const hasUserStats = await tx.userStats.findUnique({
       where: { userId },
-      select: { userId: true },
+      select: { userId: true, weeklyScoreWeekStart: true },
     });
     const masteredCountOnCreate = hasUserStats
       ? masteredCountAfter
@@ -814,6 +838,7 @@ export async function submitGameSession({
       playedAt: now,
       masteredCountDelta: masteredCountAfter - masteredCountBefore,
       masteredCountOnCreate,
+      existingStats: hasUserStats,
     });
 
     return {

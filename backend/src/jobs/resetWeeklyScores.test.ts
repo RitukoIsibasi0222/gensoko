@@ -12,6 +12,7 @@ import { prisma } from "../lib/prisma.js";
 import { resetWeeklyScores } from "./resetWeeklyScores.js";
 
 const NOW = new Date("2026-06-29T00:00:00.000Z");
+const WEEK_START = new Date("2026-06-28T15:00:00.000Z");
 const FAILURE_MESSAGE = "週間スコアのリセットに失敗しました";
 
 describe("resetWeeklyScores", () => {
@@ -19,15 +20,21 @@ describe("resetWeeklyScores", () => {
     vi.clearAllMocks();
   });
 
-  it("resets only user stats whose weeklyScore is greater than zero", async () => {
+  it("normalizes stale, missing, or negative weekly score rows to the current week", async () => {
     const logger = { info: vi.fn(), error: vi.fn() };
     vi.mocked(prisma.userStats.updateMany).mockResolvedValue({ count: 3 } as never);
 
     const result = await resetWeeklyScores({ now: NOW, logger });
 
     expect(prisma.userStats.updateMany).toHaveBeenCalledWith({
-      where: { weeklyScore: { gt: 0 } },
-      data: { weeklyScore: 0 },
+      where: {
+        OR: [
+          { weeklyScoreWeekStart: null },
+          { weeklyScoreWeekStart: { not: WEEK_START } },
+          { weeklyScore: { lt: 0 } },
+        ],
+      },
+      data: { weeklyScore: 0, weeklyScoreWeekStart: WEEK_START },
     });
     expect(result).toEqual({ resetCount: 3, executedAt: NOW });
   });
@@ -42,7 +49,7 @@ describe("resetWeeklyScores", () => {
     expect(logger.error).not.toHaveBeenCalled();
   });
 
-  it("returns zero on the second run when there are no weekly scores left to reset", async () => {
+  it("returns zero on the second run when all rows already belong to the current week", async () => {
     const logger = { info: vi.fn(), error: vi.fn() };
     vi.mocked(prisma.userStats.updateMany)
       .mockResolvedValueOnce({ count: 2 } as never)

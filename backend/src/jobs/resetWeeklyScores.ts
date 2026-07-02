@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { getWeeklyScoreWeekStart } from "../lib/weekly-score.js";
 
 const RESET_COMPLETED_EVENT = "weekly_scores.reset.completed";
 const RESET_FAILED_EVENT = "weekly_scores.reset.failed";
@@ -21,11 +22,18 @@ export async function resetWeeklyScores({
   logger = console,
 }: ResetWeeklyScoresOptions = {}): Promise<ResetWeeklyScoresResult> {
   const executedAt = now;
+  const weeklyScoreWeekStart = getWeeklyScoreWeekStart(executedAt);
 
   try {
     const updateResult = await prisma.userStats.updateMany({
-      where: { weeklyScore: { gt: 0 } },
-      data: { weeklyScore: 0 },
+      where: {
+        OR: [
+          { weeklyScoreWeekStart: null },
+          { weeklyScoreWeekStart: { not: weeklyScoreWeekStart } },
+          { weeklyScore: { lt: 0 } },
+        ],
+      },
+      data: { weeklyScore: 0, weeklyScoreWeekStart },
     });
     const result = { resetCount: updateResult.count, executedAt };
 

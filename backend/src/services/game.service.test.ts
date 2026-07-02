@@ -28,7 +28,7 @@ vi.mock("../lib/prisma.js", () => ({
     },
     userStats: {
       findUnique: vi.fn(),
-      upsert: vi.fn(),
+      create: vi.fn(),
       update: vi.fn(),
     },
   },
@@ -500,8 +500,12 @@ describe("submitGameSession", () => {
     vi.mocked(prisma.weakElement.upsert).mockResolvedValue({} as never);
     vi.mocked(prisma.weakElement.update).mockResolvedValue({} as never);
     vi.mocked(prisma.weakElement.delete).mockResolvedValue({} as never);
-    vi.mocked(prisma.userStats.findUnique).mockResolvedValue({ userId: "user-1" } as never);
-    vi.mocked(prisma.userStats.upsert).mockResolvedValue({} as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue({
+      userId: "user-1",
+      weeklyScoreWeekStart: new Date("2026-06-14T15:00:00.000Z"),
+    } as never);
+    vi.mocked(prisma.userStats.create).mockResolvedValue({} as never);
+    vi.mocked(prisma.userStats.update).mockResolvedValue({} as never);
   });
 
   it("保存済み問題セットを使って正誤判定・スコア計算・結果保存を行う", async () => {
@@ -811,28 +815,79 @@ describe("submitGameSession", () => {
       now: new Date("2026-06-20T12:05:00.000Z"),
     });
 
-    expect(prisma.userStats.upsert).toHaveBeenCalledWith({
+    expect(prisma.userStats.update).toHaveBeenCalledWith({
       where: { userId: "user-1" },
-      create: {
+      data: {
+        totalGames: { increment: 1 },
+        totalCorrect: { increment: 1 },
+        totalAnswered: { increment: 2 },
+        weeklyScore: { increment: 100 },
+        weeklyScoreWeekStart: new Date("2026-06-14T15:00:00.000Z"),
+        allTimeScore: { increment: 100 },
+        masteredCount: { increment: 0 },
+        lastActiveDate: new Date("2026-06-20T12:05:00.000Z"),
+      },
+    });
+  });
+
+  it("週が変わっている場合は週間スコアを今回セッションのスコアで開始する", async () => {
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue({
+      userId: "user-1",
+      weeklyScoreWeekStart: new Date("2026-06-07T15:00:00.000Z"),
+    } as never);
+
+    await submitGameSession({
+      userId: "user-1",
+      questionSetId: "question-set-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      answers: [
+        { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+        { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+      ],
+      durationSec: 20,
+      now: new Date("2026-06-20T12:05:00.000Z"),
+    });
+
+    expect(prisma.userStats.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          weeklyScore: 100,
+          weeklyScoreWeekStart: new Date("2026-06-14T15:00:00.000Z"),
+          allTimeScore: { increment: 100 },
+        }),
+      }),
+    );
+  });
+
+  it("ユーザー統計が未作成なら現在週つきで作成する", async () => {
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue(null as never);
+
+    await submitGameSession({
+      userId: "user-1",
+      questionSetId: "question-set-1",
+      mode: "SYMBOL_TO_NAME_LV1",
+      answers: [
+        { questionId: "q1", chosenChoiceId: "1", answerTimeSec: 5 },
+        { questionId: "q2", chosenChoiceId: null, answerTimeSec: 15 },
+      ],
+      durationSec: 20,
+      now: new Date("2026-06-20T12:05:00.000Z"),
+    });
+
+    expect(prisma.userStats.create).toHaveBeenCalledWith({
+      data: {
         userId: "user-1",
         totalGames: 1,
         totalCorrect: 1,
         totalAnswered: 2,
         masteredCount: 0,
         weeklyScore: 100,
+        weeklyScoreWeekStart: new Date("2026-06-14T15:00:00.000Z"),
         allTimeScore: 100,
         lastActiveDate: new Date("2026-06-20T12:05:00.000Z"),
       },
-      update: {
-        totalGames: { increment: 1 },
-        totalCorrect: { increment: 1 },
-        totalAnswered: { increment: 2 },
-        weeklyScore: { increment: 100 },
-        allTimeScore: { increment: 100 },
-        masteredCount: { increment: 0 },
-        lastActiveDate: new Date("2026-06-20T12:05:00.000Z"),
-      },
     });
+    expect(prisma.userStats.update).not.toHaveBeenCalled();
   });
 
   it("今回セッションで変化した元素だけを見て習得済み元素数の差分を反映する", async () => {
@@ -858,10 +913,9 @@ describe("submitGameSession", () => {
       now: new Date("2026-06-20T12:05:00.000Z"),
     });
 
-    expect(prisma.userStats.upsert).toHaveBeenCalledWith(
+    expect(prisma.userStats.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        create: expect.objectContaining({ masteredCount: 1 }),
-        update: expect.objectContaining({ masteredCount: { increment: 1 } }),
+        data: expect.objectContaining({ masteredCount: { increment: 1 } }),
       }),
     );
     expect(prisma.gameSession.findMany).toHaveBeenCalledTimes(2);
@@ -910,9 +964,9 @@ describe("submitGameSession", () => {
       now: new Date("2026-06-20T12:05:00.000Z"),
     });
 
-    expect(prisma.userStats.upsert).toHaveBeenCalledWith(
+    expect(prisma.userStats.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        update: expect.objectContaining({ masteredCount: { increment: -1 } }),
+        data: expect.objectContaining({ masteredCount: { increment: -1 } }),
       }),
     );
     expect(prisma.gameSession.findMany).toHaveBeenCalledTimes(2);

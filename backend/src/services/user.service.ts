@@ -7,6 +7,7 @@ import {
   normalizeNonNegativeCount,
 } from "../lib/stats.js";
 import { prisma } from "../lib/prisma.js";
+import { getWeeklyScoreWeekStart, isSameWeeklyScoreWeek } from "../lib/weekly-score.js";
 
 function isUniqueConstraintViolation(error: unknown): boolean {
   return (
@@ -243,6 +244,7 @@ export async function getCurrentUserStats(userId: string): Promise<CurrentUserSt
         masteredCount: true,
         currentStreak: true,
         weeklyScore: true,
+        weeklyScoreWeekStart: true,
         allTimeScore: true,
         lastActiveDate: true,
         updatedAt: true,
@@ -261,6 +263,7 @@ export async function getCurrentUserStats(userId: string): Promise<CurrentUserSt
     }),
   ]);
 
+  const currentWeeklyScoreWeekStart = getWeeklyScoreWeekStart(new Date());
   const statsAnswerCounts = stats
     ? normalizeCountPair(stats.totalCorrect, stats.totalAnswered)
     : null;
@@ -275,7 +278,9 @@ export async function getCurrentUserStats(userId: string): Promise<CurrentUserSt
         ),
         masteredCount: normalizeNonNegativeCount(stats.masteredCount),
         currentStreak: normalizeNonNegativeCount(stats.currentStreak),
-        weeklyScore: normalizeNonNegativeCount(stats.weeklyScore),
+        weeklyScore: isSameWeeklyScoreWeek(stats.weeklyScoreWeekStart, currentWeeklyScoreWeekStart)
+          ? normalizeNonNegativeCount(stats.weeklyScore)
+          : 0,
         allTimeScore: normalizeNonNegativeCount(stats.allTimeScore),
         lastActiveDate: stats.lastActiveDate,
         updatedAt: stats.updatedAt,
