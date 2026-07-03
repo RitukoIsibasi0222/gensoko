@@ -100,6 +100,20 @@ npm run format
 
 backend/.env の DATABASE_URL は Docker Compose 内ホスト名 postgres を使うため、ホスト側の cd backend && npm run reset:weekly-scores は標準手順にしない。
 
+### 定期バッチ wrapper の手動確認
+
+GitHub Actions schedule と同じ入口を Docker 内で確認する場合は、BATCH_CRON を指定して npm run batch:scheduled を実行する。
+
+    cd ~/labs/Gensoko
+
+    # 週間スコアリセット相当（UTC 日曜 15:07 = JST 月曜 00:07）
+    docker compose exec -e BATCH_CRON='7 15 * * 0' hono npm run batch:scheduled
+
+    # 期限切れ GameQuestionSet cleanup 相当（毎時17分/47分（30分ごと））
+    docker compose exec -e BATCH_CRON='17,47 * * * *' hono npm run batch:scheduled
+
+GitHub Actions では workflow_dispatch から weekly-reset または game-question-set-cleanup を選んで手動再実行できる。
+
 ---
 
 ## 6. Prisma コマンド
