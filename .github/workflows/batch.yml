@@ -1,0 +1,69 @@
+name: Batch Jobs
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch_job:
+        description: 実行する定期バッチ
+        required: true
+        type: choice
+        options:
+          - weekly-reset
+          - game-question-set-cleanup
+  schedule:
+    - cron: "0 15 * * 0"
+    - cron: "*/30 * * * *"
+
+jobs:
+  scheduled-batch:
+    name: Run scheduled batch
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma generate
+
+      - name: Resolve scheduled cron
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            case "${{ inputs.batch_job }}" in
+              weekly-reset)
+                echo "BATCH_CRON=0 15 * * 0" >> "$GITHUB_ENV"
+                ;;
+              game-question-set-cleanup)
+                echo "BATCH_CRON=*/30 * * * *" >> "$GITHUB_ENV"
+                ;;
+              *)
+                echo "未対応の定期バッチです"
+                exit 1
+                ;;
+            esac
+          else
+            echo "BATCH_CRON=${{ github.event.schedule }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run scheduled batch
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run batch:scheduled
