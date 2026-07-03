@@ -163,20 +163,20 @@
 
 | job | 第一候補 | 意味 | 理由 |
 |---|---|---|---|
-| weekly reset | `0 15 * * SUN` | UTC 日曜 15:07 = JST 月曜 00:07 | `getWeeklyScoreWeekStart()` が JST 月曜始まりのため |
-| GameQuestionSet cleanup | `17,47 * * * *` | 毎時17分/47分（30分ごと） | 問題セット有効期限が30分であり、過剰実行を避けるため |
+| weekly reset | `0 15 * * SUN` | UTC 日曜 15:00 = JST 月曜 00:00 | `getWeeklyScoreWeekStart()` が JST 月曜始まりのため |
+| GameQuestionSet cleanup | `*/30 * * * *` | 30分ごと | 問題セット有効期限が30分であり、過剰実行を避けるため |
 
 cleanup を `*/15 * * * *` に短縮する条件:
 
 - 期限切れ `GameQuestionSet` の件数が短時間で多く積み上がる。
-- `GET /game/questions` の利用量が増え、毎時17分/47分（30分ごと）の削除ではテーブルサイズや正解情報の滞留が問題になる。
+- `GET /game/questions` の利用量が増え、30分ごとの削除ではテーブルサイズや正解情報の滞留が問題になる。
 - Supabase / Workers の実行回数・接続数に余裕がある。
 
 ### Cloudflare Workers 採用時の公開インターフェース案
 
 ```typescript
 export const WEEKLY_SCORE_RESET_CRON = "0 15 * * SUN";
-export const GAME_QUESTION_SET_CLEANUP_CRON = "17,47 * * * *";
+export const GAME_QUESTION_SET_CLEANUP_CRON = "*/30 * * * *";
 
 export type ScheduledBatchJobName =
   | "resetWeeklyScores"
@@ -473,7 +473,7 @@ executedAt=2026-07-03T09:00:00.000Z
 
 - 完了日: 2026-07-03
 - 実装ブランチ: feature/batch-cron-triggers
-- PR: 未作成（チャット確認後に作成予定）
+- PR: #70
 
 ### 採用した定期実行方式
 
@@ -512,8 +512,8 @@ executedAt=2026-07-03T09:00:00.000Z
 | cd backend && npm run format | 成功 |
 | cd backend && npm run format:check | 成功 |
 | cd backend && npm run test -- --run src/jobs/scheduled.test.ts | 成功（8 tests） |
-| cd backend && npm run test -- --run src/jobs/scheduled.cli.test.ts | 成功（3 tests） |
-| cd backend && npm run test -- --run | 成功（36 files / 288 tests） |
+| cd backend && npm run test -- --run src/jobs/scheduled.cli.test.ts | 成功（4 tests） |
+| cd backend && npm run test -- --run | 成功（36 files / 289 tests） |
 | cd backend && npm run build | 成功 |
 | npm run batch:scheduled の BATCH_CRON 未指定時エラー | 成功（日本語エラーで終了） |
 | Docker 手動 weekly reset | 未実施（DB を更新するため、手順を docs/09_startup_commands.md に記録） |

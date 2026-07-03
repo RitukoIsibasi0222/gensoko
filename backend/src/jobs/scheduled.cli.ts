@@ -27,6 +27,14 @@ function parseScheduledTime(value: string | undefined): number {
   throw new Error(INVALID_SCHEDULED_TIME_MESSAGE);
 }
 
+async function disconnectPrisma(): Promise<void> {
+  try {
+    await prisma.$disconnect();
+  } catch {
+    // batch result is already determined; disconnect failure should not change CLI outcome.
+  }
+}
+
 async function main(): Promise<void> {
   const cron = process.env.BATCH_CRON?.trim();
 
@@ -48,6 +56,4 @@ void main()
     });
     process.exitCode = 1;
   })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+  .finally(disconnectPrisma);

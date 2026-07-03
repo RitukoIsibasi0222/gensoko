@@ -58,6 +58,27 @@ describe("scheduled.cli", () => {
     expect(process.exitCode).toBeUndefined();
   });
 
+  it("ignores prisma disconnect failures after a successful batch", async () => {
+    process.env.BATCH_CRON = BATCH_CRON;
+    process.env.SCHEDULED_TIME = SCHEDULED_TIME;
+    vi.mocked(runScheduledBatch).mockResolvedValue({
+      job: "resetWeeklyScores",
+      cron: BATCH_CRON,
+      executedAt: new Date(SCHEDULED_TIME),
+      resetCount: 0,
+    });
+    vi.mocked(prisma.$disconnect).mockRejectedValue(new Error("disconnect failed"));
+
+    await import("./scheduled.cli.js");
+
+    await vi.waitFor(() => {
+      expect(runScheduledBatch).toHaveBeenCalledTimes(1);
+      expect(prisma.$disconnect).toHaveBeenCalledTimes(1);
+    });
+    expect(process.exitCode).toBeUndefined();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
   it("sets a non-zero exit code and disconnects when BATCH_CRON is missing", async () => {
     vi.mocked(prisma.$disconnect).mockResolvedValue(undefined);
 
