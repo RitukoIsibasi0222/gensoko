@@ -46,7 +46,7 @@
 
 | 観点 | 指摘内容 | 根拠: 確認できた事実 | 根拠: 推測 | 影響・リスク | 改善案 | 優先度 |
 |---|---|---|---|---|---|---|
-| DB整合性と負荷 | cleanup / weekly reset の index は概ね妥当だが、Cron 頻度による DB 負荷上限が未定義 | `GameQuestionSet.expiresAt` index と `UserStats.weeklyScoreWeekStart, weeklyScore` 複合 index が存在する | 15分 cleanup は現状規模なら軽いが、無料枠や接続制限に影響する可能性がある | 高頻度実行で DB 接続数や Workers 実行回数が増える | 初期値は `*/30 * * * *` を第一候補にし、必要なら `*/15` へ短縮する判断基準を計画に残す | Medium |
+| DB整合性と負荷 | cleanup / weekly reset の index は概ね妥当だが、Cron 頻度による DB 負荷上限が未定義 | `GameQuestionSet.expiresAt` index と `UserStats.weeklyScoreWeekStart, weeklyScore` 複合 index が存在する | 15分 cleanup は現状規模なら軽いが、無料枠や接続制限に影響する可能性がある | 高頻度実行で DB 接続数や Workers 実行回数が増える | 初期値は `17,47 * * * *` を第一候補にし、必要なら `*/15` へ短縮する判断基準を計画に残す | Medium |
 | DB整合性と負荷 | 週間 reset は Cron が失敗しても表示側が現在週に絞るため致命傷になりにくいが、その性質が前回案に弱い | ranking は `weeklyScoreWeekStart` が現在週の行だけ取得する。stats は現在週以外を 0 として返す | reset job は「表示正しさ」より古い行の正規化と負値修復の意味が強い | 失敗時の運用優先度を誤る可能性 | reset 失敗時は次回実行・手動実行で復旧可能と明記し、ロールバック方針に反映する | Medium |
 | API・コード整合性 | Workers 用 entrypoint と Node entrypoint の分離が前回案では不足 | `backend/src/index.ts` が Hono app 作成と `serve()` を同一ファイルで実行している | Workers にそのまま import すると Node server 起動処理が混入する可能性が高い | 本番 build / deploy / scheduled handler が失敗する | `backend/src/app.ts` を追加して app 構築を分離し、`index.ts` は Node、`worker.ts` は Workers 専用にする | High |
 | API・コード整合性 | Prisma / Workers の接続方式が未確定 | `backend/src/lib/prisma.ts` は `PrismaPg` と `process.env` を使用。`docs/11_deployment.md` は Workers では adapter 変更が必要と記載 | 現状のまま Workers 上で DB 接続できない可能性がある | Cron がDBに到達せず、全定期バッチが失敗する | Cron 実装前に Workers + Supabase + Prisma 方針を確認し、未解決なら GitHub Actions schedule 案へ切り替える | High |
@@ -163,20 +163,20 @@
 
 | job | 第一候補 | 意味 | 理由 |
 |---|---|---|---|
-| weekly reset | `0 15 * * SUN` | UTC 日曜 15:00 = JST 月曜 00:00 | `getWeeklyScoreWeekStart()` が JST 月曜始まりのため |
-| GameQuestionSet cleanup | `*/30 * * * *` | 30分ごと | 問題セット有効期限が30分であり、過剰実行を避けるため |
+| weekly reset | `0 15 * * SUN` | UTC 日曜 15:07 = JST 月曜 00:07 | `getWeeklyScoreWeekStart()` が JST 月曜始まりのため |
+| GameQuestionSet cleanup | `17,47 * * * *` | 毎時17分/47分（30分ごと） | 問題セット有効期限が30分であり、過剰実行を避けるため |
 
 cleanup を `*/15 * * * *` に短縮する条件:
 
 - 期限切れ `GameQuestionSet` の件数が短時間で多く積み上がる。
-- `GET /game/questions` の利用量が増え、30分ごとの削除ではテーブルサイズや正解情報の滞留が問題になる。
+- `GET /game/questions` の利用量が増え、毎時17分/47分（30分ごと）の削除ではテーブルサイズや正解情報の滞留が問題になる。
 - Supabase / Workers の実行回数・接続数に余裕がある。
 
 ### Cloudflare Workers 採用時の公開インターフェース案
 
 ```typescript
 export const WEEKLY_SCORE_RESET_CRON = "0 15 * * SUN";
-export const GAME_QUESTION_SET_CLEANUP_CRON = "*/30 * * * *";
+export const GAME_QUESTION_SET_CLEANUP_CRON = "17,47 * * * *";
 
 export type ScheduledBatchJobName =
   | "resetWeeklyScores"
@@ -230,7 +230,7 @@ resetCount=42
 
 ```text
 event=batch.cron.completed
-cron=*/30 * * * *
+cron=17,47 * * * *
 job=cleanupExpiredGameQuestionSets
 cutoff=2026-07-03T09:00:00.000Z
 deletedCount=12
@@ -240,7 +240,7 @@ deletedCount=12
 
 ```text
 event=batch.cron.failed
-cron=*/30 * * * *
+cron=17,47 * * * *
 job=cleanupExpiredGameQuestionSets
 message=定期バッチの実行に失敗しました
 executedAt=2026-07-03T09:00:00.000Z
@@ -443,7 +443,7 @@ executedAt=2026-07-03T09:00:00.000Z
 ### 計画からの変更点
 
 - 例: Workers DB接続方針が未確定だったため、GitHub Actions schedule を暫定採用した
-- 例: cleanup cron は `*/30 * * * *` から `*/15 * * * *` に変更した
+- 例: cleanup cron は `17,47 * * * *` から `*/15 * * * *` に変更した
 
 ### 実際の変更ファイル
 
@@ -485,8 +485,9 @@ executedAt=2026-07-03T09:00:00.000Z
 ### 計画からの変更点
 
 - Cloudflare Workers Cron は本タスクでは実装せず、フェーズ12で Workers 本番基盤が整った後に移行する方針を docs/11_deployment.md に記録した。
-- GitHub Actions の週間 cron は 0 15 * * 0 を使用する。wrapper は計画書で定義した Cloudflare 形式の 0 15 * * SUN も受け付ける。
+- GitHub Actions の週間 cron は 7 15 * * 0 を使用する。GitHub Actions schedule の遅延・スキップリスクを下げるため、毎時00分を避けて JST 月曜 00:07 に寄せた。wrapper は計画書で定義した Cloudflare 形式の 0 15 * * SUN と旧 GitHub 形式の 0 15 * * 0 も受け付ける。
 - 公開 HTTP API、frontend、DB schema / migration は変更しない。docs/04_api.md の更新も不要。
+- GameQuestionSet cleanup は GitHub Actions では 17,47 * * * * を使用する。Cloudflare Cron 移行時の互換性として */30 * * * * も wrapper で受け付ける。
 - 新規 UI はないため Playwright 回帰は未実施。既存画面への影響は API / DB schema 変更なしとして限定的。
 
 ### 実際の変更ファイル
@@ -510,8 +511,9 @@ executedAt=2026-07-03T09:00:00.000Z
 | cd backend && npm run lint | 成功 |
 | cd backend && npm run format | 成功 |
 | cd backend && npm run format:check | 成功 |
-| cd backend && npm run test -- --run src/jobs/scheduled.test.ts | 成功（5 tests） |
-| cd backend && npm run test -- --run | 成功（35 files / 282 tests） |
+| cd backend && npm run test -- --run src/jobs/scheduled.test.ts | 成功（8 tests） |
+| cd backend && npm run test -- --run src/jobs/scheduled.cli.test.ts | 成功（3 tests） |
+| cd backend && npm run test -- --run | 成功（36 files / 288 tests） |
 | cd backend && npm run build | 成功 |
 | npm run batch:scheduled の BATCH_CRON 未指定時エラー | 成功（日本語エラーで終了） |
 | Docker 手動 weekly reset | 未実施（DB を更新するため、手順を docs/09_startup_commands.md に記録） |
@@ -528,5 +530,5 @@ executedAt=2026-07-03T09:00:00.000Z
 | フェーズ | 内容 | 結果 |
 |---|---|---|
 | Red | backend/src/jobs/scheduled.test.ts を先に追加 | scheduled.js 未存在で失敗を確認 |
-| Green | backend/src/jobs/scheduled.ts と CLI を実装 | 対象テスト 5 件成功 |
+| Green | backend/src/jobs/scheduled.ts と CLI を実装 | scheduled wrapper 8 件、scheduled CLI 3 件の対象テスト成功 |
 | Refactor | Prettier 適用後に対象テストと全テストを再実行 | 全テスト成功 |

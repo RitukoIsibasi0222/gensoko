@@ -2,13 +2,16 @@ import { cleanupExpiredGameQuestionSets } from "./cleanupGameQuestionSets.js";
 import { resetWeeklyScores } from "./resetWeeklyScores.js";
 
 export const WEEKLY_SCORE_RESET_CRON = "0 15 * * SUN";
-export const GITHUB_WEEKLY_SCORE_RESET_CRON = "0 15 * * 0";
+export const GITHUB_WEEKLY_SCORE_RESET_CRON = "7 15 * * 0";
+export const LEGACY_GITHUB_WEEKLY_SCORE_RESET_CRON = "0 15 * * 0";
 export const GAME_QUESTION_SET_CLEANUP_CRON = "*/30 * * * *";
+export const GITHUB_GAME_QUESTION_SET_CLEANUP_CRON = "17,47 * * * *";
 
 const BATCH_COMPLETED_EVENT = "batch.cron.completed";
 const BATCH_SKIPPED_EVENT = "batch.cron.skipped";
 const BATCH_FAILED_EVENT = "batch.cron.failed";
 const BATCH_FAILED_MESSAGE = "定期バッチの実行に失敗しました";
+const INVALID_SCHEDULED_TIME_MESSAGE = "定期バッチの実行時刻が不正です";
 const UNKNOWN_CRON_MESSAGE = "未対応の定期バッチCronです";
 
 export type ScheduledBatchJobName =
@@ -49,16 +52,30 @@ function resolveScheduledBatchJobName(cron: string): ScheduledBatchJobName {
 
   if (
     normalizedCron === WEEKLY_SCORE_RESET_CRON ||
-    normalizedCron === GITHUB_WEEKLY_SCORE_RESET_CRON
+    normalizedCron === GITHUB_WEEKLY_SCORE_RESET_CRON ||
+    normalizedCron === LEGACY_GITHUB_WEEKLY_SCORE_RESET_CRON
   ) {
     return "resetWeeklyScores";
   }
 
-  if (normalizedCron === GAME_QUESTION_SET_CLEANUP_CRON) {
+  if (
+    normalizedCron === GAME_QUESTION_SET_CLEANUP_CRON ||
+    normalizedCron === GITHUB_GAME_QUESTION_SET_CLEANUP_CRON
+  ) {
     return "cleanupExpiredGameQuestionSets";
   }
 
   return "unknown";
+}
+
+function resolveScheduledDate(scheduledTime: number): Date {
+  const scheduledDate = new Date(scheduledTime);
+
+  if (Number.isFinite(scheduledTime) === false || Number.isNaN(scheduledDate.getTime())) {
+    throw new Error(INVALID_SCHEDULED_TIME_MESSAGE);
+  }
+
+  return scheduledDate;
 }
 
 export async function runScheduledBatch({
@@ -67,7 +84,20 @@ export async function runScheduledBatch({
   logger = console,
 }: RunScheduledBatchOptions): Promise<ScheduledBatchResult> {
   const normalizedCron = cron.trim();
-  const executedAt = new Date(scheduledTime);
+  let executedAt: Date;
+
+  try {
+    executedAt = resolveScheduledDate(scheduledTime);
+  } catch {
+    logger.error({
+      event: BATCH_FAILED_EVENT,
+      cron: normalizedCron,
+      job: "unknown",
+      message: INVALID_SCHEDULED_TIME_MESSAGE,
+    });
+    throw new Error(INVALID_SCHEDULED_TIME_MESSAGE);
+  }
+
   const job = resolveScheduledBatchJobName(normalizedCron);
 
   if (job === "unknown") {

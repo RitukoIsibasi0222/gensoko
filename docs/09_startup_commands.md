@@ -106,11 +106,11 @@ GitHub Actions schedule と同じ入口を Docker 内で確認する場合は、
 
     cd ~/labs/Gensoko
 
-    # 週間スコアリセット相当（UTC 日曜 15:00 = JST 月曜 00:00）
-    docker compose exec -e BATCH_CRON='0 15 * * 0' hono npm run batch:scheduled
+    # 週間スコアリセット相当（UTC 日曜 15:07 = JST 月曜 00:07）
+    docker compose exec -e BATCH_CRON='7 15 * * 0' hono npm run batch:scheduled
 
-    # 期限切れ GameQuestionSet cleanup 相当（30分ごと）
-    docker compose exec -e BATCH_CRON='*/30 * * * *' hono npm run batch:scheduled
+    # 期限切れ GameQuestionSet cleanup 相当（毎時17分/47分（30分ごと））
+    docker compose exec -e BATCH_CRON='17,47 * * * *' hono npm run batch:scheduled
 
 GitHub Actions では workflow_dispatch から weekly-reset または game-question-set-cleanup を選んで手動再実行できる。
 

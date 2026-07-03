@@ -295,8 +295,8 @@ jobs:
 
 | job | GitHub Actions cron | 意味 | 備考 |
 |---|---|---|---|
-| 週間スコアリセット | 0 15 * * 0 | UTC 日曜 15:00 = JST 月曜 00:00 | wrapper は Cloudflare 形式の 0 15 * * SUN も受け付ける |
-| GameQuestionSet cleanup | */30 * * * * | 30分ごと | 問題セットの有効期限30分に合わせる |
+| 週間スコアリセット | 7 15 * * 0 | UTC 日曜 15:07 = JST 月曜 00:07 | wrapper は Cloudflare 形式の 0 15 * * SUN も受け付ける |
+| GameQuestionSet cleanup | 17,47 * * * * | 毎時17分/47分（30分ごと） | 問題セットの有効期限30分に合わせる |
 
 ### 必要な Secret
 
@@ -315,7 +315,7 @@ GitHub Actions の Batch Jobs workflow は workflow_dispatch に対応してい�
 | weekly-reset | 週間スコアリセット |
 | game-question-set-cleanup | 期限切れ GameQuestionSet cleanup |
 
-Actions の schedule は遅延・スキップされる可能性があるため、失敗時は workflow の失敗ログを確認し、必要に応じて workflow_dispatch で再実行する。
+Actions の schedule は遅延・スキップされる可能性があるため、毎時00分付近を避けて 7分 / 17分 / 47分に寄せている。失敗時は workflow の失敗ログを確認し、必要に応じて workflow_dispatch で再実行する。
 
 ### Cloudflare Workers Cron へ移行する条件
 

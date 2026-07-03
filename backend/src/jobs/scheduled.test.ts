@@ -12,7 +12,9 @@ import { cleanupExpiredGameQuestionSets } from "./cleanupGameQuestionSets.js";
 import { resetWeeklyScores } from "./resetWeeklyScores.js";
 import {
   GAME_QUESTION_SET_CLEANUP_CRON,
+  GITHUB_GAME_QUESTION_SET_CLEANUP_CRON,
   GITHUB_WEEKLY_SCORE_RESET_CRON,
+  LEGACY_GITHUB_WEEKLY_SCORE_RESET_CRON,
   WEEKLY_SCORE_RESET_CRON,
   runScheduledBatch,
 } from "./scheduled.js";
@@ -20,6 +22,7 @@ import {
 const SCHEDULED_TIME = Date.parse("2026-07-05T15:00:00.000Z");
 const SCHEDULED_DATE = new Date(SCHEDULED_TIME);
 const FAILURE_MESSAGE = "定期バッチの実行に失敗しました";
+const INVALID_SCHEDULED_TIME_MESSAGE = "定期バッチの実行時刻が不正です";
 
 describe("runScheduledBatch", () => {
   beforeEach(() => {
@@ -53,7 +56,7 @@ describe("runScheduledBatch", () => {
     });
   });
 
-  it("also accepts the GitHub Actions numeric Sunday cron for weekly reset", async () => {
+  it("accepts the delayed GitHub Actions Sunday cron for weekly reset", async () => {
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     vi.mocked(resetWeeklyScores).mockResolvedValue({ resetCount: 0, executedAt: SCHEDULED_DATE });
 
@@ -72,7 +75,26 @@ describe("runScheduledBatch", () => {
     });
   });
 
-  it("runs GameQuestionSet cleanup for the cleanup cron", async () => {
+  it("also accepts the previous numeric Sunday cron for weekly reset", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    vi.mocked(resetWeeklyScores).mockResolvedValue({ resetCount: 1, executedAt: SCHEDULED_DATE });
+
+    const result = await runScheduledBatch({
+      cron: LEGACY_GITHUB_WEEKLY_SCORE_RESET_CRON,
+      scheduledTime: SCHEDULED_TIME,
+      logger,
+    });
+
+    expect(resetWeeklyScores).toHaveBeenCalledWith({ now: SCHEDULED_DATE, logger });
+    expect(result).toEqual({
+      job: "resetWeeklyScores",
+      cron: LEGACY_GITHUB_WEEKLY_SCORE_RESET_CRON,
+      executedAt: SCHEDULED_DATE,
+      resetCount: 1,
+    });
+  });
+
+  it("runs GameQuestionSet cleanup for the Cloudflare-style cleanup cron", async () => {
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     vi.mocked(cleanupExpiredGameQuestionSets).mockResolvedValue({
       deletedCount: 2,
@@ -102,6 +124,28 @@ describe("runScheduledBatch", () => {
     });
   });
 
+  it("accepts the delayed GitHub Actions cleanup cron", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    vi.mocked(cleanupExpiredGameQuestionSets).mockResolvedValue({
+      deletedCount: 0,
+      cutoff: SCHEDULED_DATE,
+    });
+
+    const result = await runScheduledBatch({
+      cron: GITHUB_GAME_QUESTION_SET_CLEANUP_CRON,
+      scheduledTime: SCHEDULED_TIME,
+      logger,
+    });
+
+    expect(cleanupExpiredGameQuestionSets).toHaveBeenCalledWith({ now: SCHEDULED_DATE, logger });
+    expect(result).toEqual({
+      job: "cleanupExpiredGameQuestionSets",
+      cron: GITHUB_GAME_QUESTION_SET_CLEANUP_CRON,
+      cutoff: SCHEDULED_DATE,
+      deletedCount: 0,
+    });
+  });
+
   it("skips unknown cron values without running database jobs", async () => {
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const cron = "5 * * * *";
@@ -116,6 +160,23 @@ describe("runScheduledBatch", () => {
       cron,
       message: "未対応の定期バッチCronです",
       executedAt: SCHEDULED_DATE.toISOString(),
+    });
+  });
+
+  it("rejects invalid scheduledTime without leaking a RangeError", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+    await expect(
+      runScheduledBatch({ cron: WEEKLY_SCORE_RESET_CRON, scheduledTime: Number.NaN, logger }),
+    ).rejects.toThrow(INVALID_SCHEDULED_TIME_MESSAGE);
+
+    expect(resetWeeklyScores).not.toHaveBeenCalled();
+    expect(cleanupExpiredGameQuestionSets).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith({
+      event: "batch.cron.failed",
+      cron: WEEKLY_SCORE_RESET_CRON,
+      job: "unknown",
+      message: INVALID_SCHEDULED_TIME_MESSAGE,
     });
   });
 
