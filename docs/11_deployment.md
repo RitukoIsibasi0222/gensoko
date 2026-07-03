@@ -280,6 +280,52 @@ jobs:
 
 ---
 
+## 定期バッチ運用（GitHub Actions schedule）
+
+フェーズ9時点では Cloudflare Workers の wrangler.toml、Workers 用 Prisma 接続、デプロイ workflow が未整備のため、週間スコアリセットと GameQuestionSet cleanup は GitHub Actions schedule から既存 Node CLI を実行する。
+
+### 採用理由
+
+- 既存の resetWeeklyScores と cleanupExpiredGameQuestionSets は Node + Prisma adapter-pg 前提で動作確認済み
+- Workers runtime 用の Prisma adapter / Hyperdrive 方針が未確定
+- Cron だけを Workers に置くと DB 接続や entrypoint 分離まで同時に必要になり、フェーズ12のデプロイ作業とスコープが衝突する
+- GitHub Actions schedule なら DATABASE_URL を Actions Secret として渡し、既存の npm run batch:scheduled から同じ wrapper を実行できる
+
+### 実行スケジュール
+
+| job | GitHub Actions cron | 意味 | 備考 |
+|---|---|---|---|
+| 週間スコアリセット | 0 15 * * 0 | UTC 日曜 15:00 = JST 月曜 00:00 | wrapper は Cloudflare 形式の 0 15 * * SUN も受け付ける |
+| GameQuestionSet cleanup | */30 * * * * | 30分ごと | 問題セットの有効期限30分に合わせる |
+
+### 必要な Secret
+
+GitHub の Settings > Secrets and variables > Actions に以下を登録する。
+
+    DATABASE_URL
+
+DATABASE_URL は本番 DB の接続文字列であり、workflow やリポジトリには直接書かない。
+
+### 手動実行・retry
+
+GitHub Actions の Batch Jobs workflow は workflow_dispatch に対応している。失敗時や手動確認時は以下を選択して再実行する。
+
+| 入力 | 実行内容 |
+|---|---|
+| weekly-reset | 週間スコアリセット |
+| game-question-set-cleanup | 期限切れ GameQuestionSet cleanup |
+
+Actions の schedule は遅延・スキップされる可能性があるため、失敗時は workflow の失敗ログを確認し、必要に応じて workflow_dispatch で再実行する。
+
+### Cloudflare Workers Cron へ移行する条件
+
+フェーズ12で Workers 本番基盤を整備するときに、以下を満たせたら Cloudflare Workers Cron Trigger へ移行する。
+
+- backend/wrangler.toml を作成し、triggers.crons を設定する
+- Hono app 構築と Node server 起動を分離し、Workers 用 entrypoint を追加する
+- Workers runtime で Prisma / Supabase に接続する方式を確定する
+- wrangler dev または Cloudflare dashboard で scheduled handler を確認する
+
 ## オブザーバビリティ設定
 
 - 本番 API の `500` 系エラーを Sentry 等のエラートラッキング、または Cloudflare Workers の構造化ログで検知できるようにする

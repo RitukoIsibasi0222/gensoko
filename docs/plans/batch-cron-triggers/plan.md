@@ -366,26 +366,26 @@ executedAt=2026-07-03T09:00:00.000Z
 | T19 | 既存画面の手動回帰確認を行う | `/ranking`, `/mypage`, `/game/play`, `/game/result` | Cron 後データ状態でも表示・A11Y が破綻しない | 中 |
 | T20 | 実装完了記録を残す | 本計画 | 実際の変更ファイル、検証結果、未実施事項が記録される | 高 |
 
-- [ ] T1: 既存仕様・実装・deploy 基盤を確認する
-- [ ] T2: Cron 実行方式を決定する
-- [ ] T3: Red: 定期実行 wrapper / workflow のテストを作る
-- [ ] T4: Cloudflare 採用時: Hono app を entrypoint から分離する
-- [ ] T5: Cloudflare 採用時: Workers entrypoint を追加する
-- [ ] T6: Cloudflare 採用時: scheduled wrapper を実装する
-- [ ] T7: Cloudflare 採用時: Wrangler 設定を追加する
-- [ ] T8: GitHub Actions 採用時: scheduled workflow を追加する
-- [ ] T9: DB接続・秘密情報の扱いを確認する
-- [ ] T10: 安全ログと失敗時挙動を固定する
-- [ ] T11: API client / 型定義 / validation の変更要否を確認する
-- [ ] T12: UI / A11Y 影響を確認する
-- [ ] T13: 運用手順 docs を更新する
-- [ ] T14: `docs/05_progress.md` と plan を更新する
-- [ ] T15: backend lint を実行する
-- [ ] T16: backend format check を実行する
-- [ ] T17: backend test を実行する
-- [ ] T18: build / 定期実行ローカル検証を行う
-- [ ] T19: 既存画面の手動回帰確認を行う
-- [ ] T20: 実装完了記録を残す
+- [x] T1: 既存仕様・実装・deploy 基盤を確認する
+- [x] T2: Cron 実行方式を決定する
+- [x] T3: Red: 定期実行 wrapper / workflow のテストを作る
+- [x] T4: Cloudflare 採用時: Hono app を entrypoint から分離する（GitHub Actions 採用により対象外と判断）
+- [x] T5: Cloudflare 採用時: Workers entrypoint を追加する（GitHub Actions 採用により対象外と判断）
+- [x] T6: Cloudflare 採用時: scheduled wrapper を実装する（GitHub Actions 採用により対象外と判断）
+- [x] T7: Cloudflare 採用時: Wrangler 設定を追加する（GitHub Actions 採用により対象外と判断）
+- [x] T8: GitHub Actions 採用時: scheduled workflow を追加する
+- [x] T9: DB接続・秘密情報の扱いを確認する
+- [x] T10: 安全ログと失敗時挙動を固定する
+- [x] T11: API client / 型定義 / validation の変更要否を確認する
+- [x] T12: UI / A11Y 影響を確認する
+- [x] T13: 運用手順 docs を更新する
+- [x] T14: `docs/05_progress.md` と plan を更新する
+- [x] T15: backend lint を実行する
+- [x] T16: backend format check を実行する
+- [x] T17: backend test を実行する
+- [x] T18: build / 定期実行ローカル検証を行う
+- [x] T19: 既存画面の手動回帰確認を行う（UI / 公開 API / DB schema 変更なしのため未実施として記録）
+- [x] T20: 実装完了記録を残す
 
 ## テストケース一覧
 
@@ -467,3 +467,66 @@ executedAt=2026-07-03T09:00:00.000Z
 | `/game/play` 回帰 | 成功 / 未実施 |
 | `/game/result` 回帰 | 成功 / 未実施 |
 ```
+
+
+## 実装完了
+
+- 完了日: 2026-07-03
+- 実装ブランチ: feature/batch-cron-triggers
+- PR: 未作成（チャット確認後に作成予定）
+
+### 採用した定期実行方式
+
+- 採用方式: GitHub Actions schedule
+- 採用理由: 現在の backend は Node server と Prisma adapter-pg 前提で、wrangler.toml、Workers 用 Prisma 接続、Workers deploy workflow が未整備のため。既存 CLI と同じ Node 実行環境から安全に定期実行できる方式を優先した。
+- 採用しなかった方式: Cloudflare Workers Cron Trigger
+- 採用しなかった理由: Workers runtime での DB 接続方針が未確定で、entrypoint 分離や Workers 用 adapter 整備まで同時に行うとフェーズ12のデプロイ基盤作業とスコープが衝突するため。
+
+### 計画からの変更点
+
+- Cloudflare Workers Cron は本タスクでは実装せず、フェーズ12で Workers 本番基盤が整った後に移行する方針を docs/11_deployment.md に記録した。
+- GitHub Actions の週間 cron は 0 15 * * 0 を使用する。wrapper は計画書で定義した Cloudflare 形式の 0 15 * * SUN も受け付ける。
+- 公開 HTTP API、frontend、DB schema / migration は変更しない。docs/04_api.md の更新も不要。
+- 新規 UI はないため Playwright 回帰は未実施。既存画面への影響は API / DB schema 変更なしとして限定的。
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| backend/src/jobs/scheduled.ts | 新規 | Cron 文字列から既存 batch job を呼び分ける wrapper |
+| backend/src/jobs/scheduled.test.ts | 新規 | weekly / cleanup / 未知 cron / 失敗ログの unit test |
+| backend/src/jobs/scheduled.cli.ts | 新規 | GitHub Actions と手動実行用の CLI entrypoint |
+| backend/package.json | 修正 | batch:scheduled script を追加 |
+| .github/workflows/batch.yml | 新規 | schedule と workflow_dispatch で定期バッチを実行 |
+| docs/09_startup_commands.md | 修正 | 手動実行と wrapper 確認手順を追記 |
+| docs/11_deployment.md | 修正 | 採用方式、cron、Secret、retry、Workers 移行条件を追記 |
+| docs/05_progress.md | 修正 | 対象タスクの進捗を更新 |
+| docs/plans/batch-cron-triggers/plan.md | 修正 | チェックボックスと実装完了記録を更新 |
+
+### 検証結果
+
+| 確認 | 結果 |
+|---|---|
+| cd backend && npm run lint | 成功 |
+| cd backend && npm run format | 成功 |
+| cd backend && npm run format:check | 成功 |
+| cd backend && npm run test -- --run src/jobs/scheduled.test.ts | 成功（5 tests） |
+| cd backend && npm run test -- --run | 成功（35 files / 282 tests） |
+| cd backend && npm run build | 成功 |
+| npm run batch:scheduled の BATCH_CRON 未指定時エラー | 成功（日本語エラーで終了） |
+| Docker 手動 weekly reset | 未実施（DB を更新するため、手順を docs/09_startup_commands.md に記録） |
+| Docker 手動 cleanup | 未実施（DB を更新するため、手順を docs/09_startup_commands.md に記録） |
+| GitHub Actions workflow_dispatch | 未実施（リモート Secret / Actions 実行環境が必要） |
+| Cloudflare Cron Events 確認 | 未実施（Cloudflare Workers Cron は本タスクでは未採用） |
+| /ranking 回帰 | 未実施（新規 UI / 公開 API / DB schema 変更なし） |
+| /mypage 回帰 | 未実施（新規 UI / 公開 API / DB schema 変更なし） |
+| /game/play 回帰 | 未実施（新規 UI / 公開 API / DB schema 変更なし） |
+| /game/result 回帰 | 未実施（新規 UI / 公開 API / DB schema 変更なし） |
+
+### TDD 実施記録
+
+| フェーズ | 内容 | 結果 |
+|---|---|---|
+| Red | backend/src/jobs/scheduled.test.ts を先に追加 | scheduled.js 未存在で失敗を確認 |
+| Green | backend/src/jobs/scheduled.ts と CLI を実装 | 対象テスト 5 件成功 |
+| Refactor | Prettier 適用後に対象テストと全テストを再実行 | 全テスト成功 |
