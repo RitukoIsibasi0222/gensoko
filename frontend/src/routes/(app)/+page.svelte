@@ -32,7 +32,7 @@
   let rankingPreviewErrorMessage = $state<string | null>(null);
   let activeRankingPreviewAbortController: AbortController | null = null;
   let activeRankingPreviewRequestKey: string | null = null;
-  let loadedRankingPreviewRequestKey: string | null = null;
+  let settledRankingPreviewRequestKey: string | null = null;
 
   $effect(() => {
     void loadRankingPreview(false);
@@ -51,7 +51,7 @@
     if (
       !force &&
       (activeRankingPreviewRequestKey === requestKey ||
-        loadedRankingPreviewRequestKey === requestKey)
+        settledRankingPreviewRequestKey === requestKey)
     ) {
       return;
     }
@@ -62,7 +62,7 @@
     activeRankingPreviewRequestKey = requestKey;
 
     if (force) {
-      loadedRankingPreviewRequestKey = null;
+      settledRankingPreviewRequestKey = null;
     }
 
     rankingPreviewLoadStatus = 'loading';
@@ -83,7 +83,7 @@
         RANKING_PREVIEW_LIMIT
       );
       rankingPreviewLoadStatus = 'success';
-      loadedRankingPreviewRequestKey = requestKey;
+      settledRankingPreviewRequestKey = requestKey;
     } catch (error) {
       if (
         isAbortError(error) ||
@@ -95,7 +95,7 @@
 
       rankingPreviewEntries = [];
       rankingPreviewLoadStatus = 'error';
-      loadedRankingPreviewRequestKey = null;
+      settledRankingPreviewRequestKey = requestKey;
       rankingPreviewErrorMessage =
         error instanceof ApiError ? error.message : NETWORK_ERROR_MESSAGE;
     } finally {

@@ -81,6 +81,7 @@ GitHub Issue #72「トップ画面、ランキングプレビュー対応」に�
 | `frontend/src/lib/components/home/RankingPreviewSection.svelte.test.ts` | 新規 | preview section の success / loading / error / empty 表示と A11Y 属性テストを追加 |
 | `frontend/src/lib/test/svelte-client.ts` | 新規 | Svelte component DOM test 用の client runtime import を集約 |
 | `frontend/src/routes/(app)/+page.svelte` | 修正 | `getRanking({ period: 'weekly' })` で preview を取得し、状態と週次詳細リンク label を section へ渡す |
+| `frontend/src/routes/home-page-ranking-preview.test.ts` | 新規 | preview 取得失敗時に自動再リクエストせず、Retry でのみ再取得することを検証 |
 | `docs/05_progress.md` | 修正 | Issue #72 対応タスクの進捗を更新 |
 | `docs/plans/home-ranking-preview/plan.md` | 修正 | 実装完了記録と確認結果を追記 |
 
@@ -265,14 +266,15 @@ T8	実装完了時に計画書と進捗を更新する	docs/05_progress.md, docs
 | `frontend/src/lib/components/home/RankingPreviewSection.svelte.test.ts` | 新規 | preview section の success / loading / error / empty 表示と A11Y 属性テストを追加 |
 | `frontend/src/lib/test/svelte-client.ts` | 新規 | Svelte component DOM test 用の client runtime import を集約 |
 | `frontend/src/routes/(app)/+page.svelte` | 修正 | 週間ランキング preview の実データ取得、上位3件変換、週次詳細リンク label、retry、AbortController を追加 |
+| `frontend/src/routes/home-page-ranking-preview.test.ts` | 新規 | preview 取得失敗時に自動再リクエストせず、Retry でのみ再取得することを検証 |
 | `docs/05_progress.md` | 修正 | 対象タスクを完了に更新 |
 | `docs/plans/home-ranking-preview/plan.md` | 修正 | 実装完了記録と確認結果を追記 |
 
 ### 確認結果
 - frontend check: `npm run check` 成功（0 errors / 0 warnings）
 - frontend lint: `npm run lint` 成功
-- frontend test: `npm run test:run` 成功（25 files / 302 tests passed）
+- frontend test: `npm run test:run` 成功（26 files / 305 tests passed）
 - 手動確認: Docker 上の `http://localhost:5174/` でトップページを開き、週間ランキング preview に実データ2件が表示されることを確認
 - 手動確認: 「もっと見る」から `http://localhost:5174/ranking?period=weekly` へ遷移し、週間ランキング表示になることを確認
 - 手動確認: ブラウザ console error が 0 件であることを確認
-- 補足確認: loading / empty / error / retry は `RankingPreviewSection.svelte.test.ts` で確認
+- 補足確認: loading / empty / error / retry は `RankingPreviewSection.svelte.test.ts`、取得失敗時の自動再リクエスト抑止と Retry 再取得は `home-page-ranking-preview.test.ts` で確認
