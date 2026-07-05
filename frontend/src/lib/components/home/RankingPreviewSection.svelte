@@ -23,12 +23,16 @@
 
 <section
   class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8"
+  aria-labelledby="home-ranking-preview-heading"
   aria-busy={isLoading ? 'true' : undefined}
 >
   <div class="flex items-center justify-between gap-4">
-    <h2 class="text-ink text-2xl font-bold">ランキングプレビュー</h2>
+    <h2 id="home-ranking-preview-heading" class="text-ink text-2xl font-bold">
+      ランキングプレビュー
+    </h2>
     <a
       href={moreHref}
+      aria-label="週間ランキングをもっと見る"
       class="text-brand focus-visible:outline-brand text-sm font-semibold underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       もっと見る

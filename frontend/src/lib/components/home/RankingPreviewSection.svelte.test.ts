@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-// @ts-expect-error - Vitest resolves 'svelte' to the server entry; component DOM tests need the client runtime.
-import { mount, unmount } from '../../../../node_modules/svelte/src/index-client.js';
+import { mount, unmount } from '$lib/test/svelte-client';
 import RankingPreviewSection from './RankingPreviewSection.svelte';
 import type { HomeRankingPreviewEntry } from '$lib/home/content';
 
@@ -42,13 +41,20 @@ describe('RankingPreviewSection', () => {
     expect(target.textContent).toContain('1位 taro');
     expect(target.textContent).toContain('30ゲーム');
     expect(target.textContent).toContain('15,000 pt');
-    expect(target.querySelector('a')?.getAttribute('href')).toBe('/ranking?period=weekly');
+    const link = target.querySelector('a');
+    expect(link?.getAttribute('href')).toBe('/ranking?period=weekly');
+    expect(link?.getAttribute('aria-label')).toBe('週間ランキングをもっと見る');
   });
 
   it('loading: 読み込み中を aria-busy と live region で表示する', () => {
     const target = renderSection({ entries: [], isLoading: true });
 
-    expect(target.querySelector('section')?.getAttribute('aria-busy')).toBe('true');
+    const section = target.querySelector('section');
+    expect(section?.getAttribute('aria-labelledby')).toBe('home-ranking-preview-heading');
+    expect(target.querySelector('#home-ranking-preview-heading')?.textContent).toContain(
+      'ランキングプレビュー'
+    );
+    expect(section?.getAttribute('aria-busy')).toBe('true');
     expect(target.querySelector('[aria-live=polite]')?.textContent).toContain(
       'ランキングを読み込んでいます...'
     );
