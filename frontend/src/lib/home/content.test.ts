@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import type { RankingEntry } from '$lib/api/ranking';
 import {
   getPrimaryCta,
   getSecondaryCta,
   getTopPageAudience,
   selectRankingPreviewEntries,
+  toHomeRankingPreviewEntries,
   type HomeRankingPreviewEntry
 } from './content';
 
@@ -79,5 +81,31 @@ describe('selectRankingPreviewEntries', () => {
     const before = [...entries];
     selectRankingPreviewEntries(entries, 3);
     expect(entries).toEqual(before);
+  });
+});
+
+describe('toHomeRankingPreviewEntries', () => {
+  const rankingEntries: RankingEntry[] = [
+    { rank: 1, username: 'taro', score: 15000, totalGames: 30, accuracyRate: 86 },
+    { rank: 2, username: 'hanako', score: 9200, totalGames: 18, accuracyRate: 91 }
+  ];
+
+  it('空配列は空のまま返す', () => {
+    expect(toHomeRankingPreviewEntries([])).toEqual([]);
+  });
+
+  it('RankingEntry の score を HomeRankingPreviewEntry の weeklyScore に変換する', () => {
+    expect(toHomeRankingPreviewEntries(rankingEntries)).toEqual([
+      { rank: 1, username: 'taro', weeklyScore: 15000, totalGames: 30 },
+      { rank: 2, username: 'hanako', weeklyScore: 9200, totalGames: 18 }
+    ]);
+  });
+
+  it('元配列は破壊しない', () => {
+    const before = structuredClone(rankingEntries);
+
+    toHomeRankingPreviewEntries(rankingEntries);
+
+    expect(rankingEntries).toEqual(before);
   });
 });
