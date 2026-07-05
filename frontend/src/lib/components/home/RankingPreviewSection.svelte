@@ -48,7 +48,7 @@
     >
       ランキングを読み込んでいます...
     </p>
-  {:else if errorMessage}
+  {:else if errorMessage !== null}
     <div
       class="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
       role="alert"

@@ -90,6 +90,13 @@ describe('RankingPreviewSection', () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
+  it('error: 空文字の errorMessage でも error 状態として扱う', () => {
+    const target = renderSection({ entries: [], errorMessage: '' });
+
+    expect(target.querySelector('[role=alert]')).not.toBeNull();
+    expect(target.textContent).not.toContain('ランキングは準備中です。');
+  });
+
   it('empty: 取得後にランキング対象がない文言を表示する', () => {
     const target = renderSection({
       entries: [],
