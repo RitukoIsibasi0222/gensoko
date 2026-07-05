@@ -60,6 +60,20 @@ describe("PATCH /users/me", () => {
     vi.clearAllMocks();
   });
 
+  it("returns 401 when unauthenticated", async () => {
+    const res = await app.request("/users/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "new_name_123" }),
+    });
+
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body).toEqual({ error: "認証が必要です" });
+    expect(updateCurrentUsername).not.toHaveBeenCalled();
+    expect(changeCurrentPassword).not.toHaveBeenCalled();
+  });
+
   it("ユーザー名変更成功時は200を返す", async () => {
     vi.mocked(updateCurrentUsername).mockResolvedValue({
       user: { id: "user-1", username: "new_name_123", role: "USER" },
@@ -215,5 +229,41 @@ describe("PATCH /users/me", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("バリデーションエラー");
+  });
+
+  it("maps service UserError status and message", async () => {
+    vi.mocked(updateCurrentUsername).mockRejectedValue(
+      new UserError(403, "ユーザーが見つかりません"),
+    );
+
+    const res = await app.request("/users/me", {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ username: "new_name_123" }),
+    });
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body).toEqual({ error: "ユーザーが見つかりません" });
+  });
+
+  it("returns 500 for unexpected service errors", async () => {
+    vi.mocked(updateCurrentUsername).mockRejectedValue(new Error("unexpected"));
+
+    const res = await app.request("/users/me", {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ username: "new_name_123" }),
+    });
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body).toEqual({ error: "サーバーエラーが発生しました" });
   });
 });

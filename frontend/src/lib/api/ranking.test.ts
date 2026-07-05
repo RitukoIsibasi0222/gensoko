@@ -49,6 +49,22 @@ describe('getRanking', () => {
     });
   });
 
+  it('blank accessToken does not send Authorization header', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(WEEKLY_RESPONSE), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    await getRanking({ period: 'weekly', accessToken: '   ' });
+
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3000/api/v1/ranking/weekly', {
+      method: 'GET',
+      credentials: 'include'
+    });
+  });
+
   it('alltime は Authorization と AbortSignal を付けて /ranking/alltime を取得する', async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify(ALLTIME_RESPONSE), {
