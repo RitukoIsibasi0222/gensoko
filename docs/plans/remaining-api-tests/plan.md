@@ -265,7 +265,7 @@ Phase 9 で実装された weak list、users、ranking、weekly reset、batch cr
 | T8 | テストで見つかった仕様不一致だけを最小修正する | `backend/src/**`, `frontend/src/lib/api/*.ts` | 仕様・docs・test の整合が取れ、不要な実装変更がない | High |
 | T9 | `docs/04_api.md` 更新要否を確認する | `docs/04_api.md` | 更新不要または必要差分が明記される | Medium |
 | T10 | backend の lint / format / test を実行する | `backend` | `npm run lint`, `npm run format:check`, `npm run test -- --run` が通る | High |
-| T11 | frontend の lint / format / test を実行する | `frontend` | `npm run lint`, `npm run format`, `npm run test -- --run` が通る | High |
+| T11 | frontend の lint / format / test を実行する | `frontend` | `npm run lint`, `npm run format`, `npm run test:run` が通る | High |
 | T12 | 手動確認を行う | `/weak`, `/mypage`, `/ranking` | loading、empty、error、retry、keyboard、A11Y の最低確認が完了する | Medium |
 | T13 | 実装完了更新を行う | `docs/05_progress.md`, 本 plan | checklist が更新され、`## 実装完了` が追記される | High |
 
@@ -293,7 +293,7 @@ Phase 9 で実装された weak list、users、ranking、weekly reset、batch cr
 | frontend lint | `cd frontend && npm run lint` | pass |
 | frontend check | `cd frontend && npm run check` | pass: 0 errors / 0 warnings |
 | frontend format | `cd frontend && npx prettier --check src/lib/api/users.test.ts src/lib/api/ranking.test.ts` | pass |
-| frontend test | `cd frontend && npm run test:run` | pass: 24 files / 294 tests |
+| frontend test | `cd frontend && npm run test:run` | pass: 24 files / 295 tests |
 
 frontend の `npm run format` は `prettier --write .` でリポジトリ全体に書き込みうるため、今回変更した API client test ファイルに対して `prettier --check` を実行した。
 
@@ -407,7 +407,7 @@ frontend の `npm run format` は `prettier --write .` でリポジトリ全体�
 ## 実装完了
 - 完了日: YYYY-MM-DD
 - 実装ブランチ: feature/xxx
-- PR: #N
+- PR: #74
 
 ### 計画からの変更点
 - なし
@@ -421,13 +421,13 @@ frontend の `npm run format` は `prettier --write .` でリポジトリ全体�
 | コマンド / 確認 | 結果 |
 |---|---|
 | `cd backend && npm run test -- --run` | pass |
-| `cd frontend && npm run test -- --run` | pass |
+| `cd frontend && npm run test:run` | pass |
 ```
 
 ## 実装完了
 - 完了日: 2026-07-05
 - 実装ブランチ: feature/phase9-remaining-api-tests
-- PR: 未作成
+- PR: #74
 
 ### 計画からの変更点
 - weak API、ranking API、batch job / scheduled entrypoint は、棚卸しと既存テスト再実行により計画の主要観点を満たしていると判断し、重複するテスト追加は行わなかった。
@@ -468,7 +468,7 @@ frontend の `npm run format` は `prettier --write .` でリポジトリ全体�
 | `cd frontend && npm run lint` | pass |
 | `cd frontend && npm run check` | pass: 0 errors / 0 warnings |
 | `cd frontend && npx prettier --check src/lib/api/users.test.ts src/lib/api/ranking.test.ts` | pass |
-| `cd frontend && npm run test:run` | pass: 24 files / 294 tests |
+| `cd frontend && npm run test:run` | pass: 24 files / 295 tests |
 | `/weak` 手動確認 | pass: 未ログイン導線、ログイン後空状態、console error なし |
 | `/mypage` 手動確認 | pass: stats / history 空状態、A11Y section / combobox、console error なし |
 | `/ranking` 手動確認 | pass: weekly 表示、全期間 click 切替、`aria-pressed` 更新、console error なし |
@@ -477,4 +477,4 @@ frontend の `npm run format` は `prettier --write .` でリポジトリ全体�
 ### 残した確認メモ
 - 手動確認用にローカル開発 DB へ一時ユーザーを API 登録し、Mailpit の確認メールからメール確認を完了してログインした。
 - DB schema / migration は変更していないため、`npx prisma migrate deploy` は対象外。
-- push / PR 作成は未実施。
+- push / PR 作成: 実施済み（PR #74）。

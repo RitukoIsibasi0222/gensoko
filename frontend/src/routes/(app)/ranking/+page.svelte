@@ -123,7 +123,7 @@
   }
 
   function handlePeriodKeydown(event: KeyboardEvent, period: RankingPeriod): void {
-    if (!isRankingPeriodActivationKey(event.key)) return;
+    if (event.repeat || !isRankingPeriodActivationKey(event.key)) return;
 
     event.preventDefault();
     void updatePeriod(period);
