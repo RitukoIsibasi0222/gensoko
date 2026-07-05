@@ -110,7 +110,7 @@ describe("updateCurrentUsername", () => {
     vi.clearAllMocks();
   });
 
-  it("returns current user without update when username is unchanged after trim", async () => {
+  it("trim後のユーザー名が同じ場合は更新せず現在のユーザーを返す", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "user-1",
       username: "same_name",
@@ -126,7 +126,7 @@ describe("updateCurrentUsername", () => {
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
-  it("uses the trimmed username for duplicate check and update", async () => {
+  it("重複確認と更新にはtrim後のユーザー名を使う", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "user-1",
       username: "old_name",
@@ -158,7 +158,7 @@ describe("updateCurrentUsername", () => {
     });
   });
 
-  it("throws UserError(403) when the user is missing", async () => {
+  it("ユーザーが存在しない場合はUserError(403)を投げる", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue(null as never);
 
     await expect(

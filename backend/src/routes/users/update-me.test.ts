@@ -60,7 +60,7 @@ describe("PATCH /users/me", () => {
     vi.clearAllMocks();
   });
 
-  it("returns 401 when unauthenticated", async () => {
+  it("未認証の場合は401を返し、サービス層を呼び出さない", async () => {
     const res = await app.request("/users/me", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -231,7 +231,7 @@ describe("PATCH /users/me", () => {
     expect(body.error).toBe("バリデーションエラー");
   });
 
-  it("maps service UserError status and message", async () => {
+  it("サービス層のUserErrorはステータスと日本語メッセージを返す", async () => {
     vi.mocked(updateCurrentUsername).mockRejectedValue(
       new UserError(403, "ユーザーが見つかりません"),
     );
@@ -250,7 +250,7 @@ describe("PATCH /users/me", () => {
     expect(body).toEqual({ error: "ユーザーが見つかりません" });
   });
 
-  it("returns 500 for unexpected service errors", async () => {
+  it("サービス層で予期しないエラーが起きた場合は500を返す", async () => {
     vi.mocked(updateCurrentUsername).mockRejectedValue(new Error("unexpected"));
 
     const res = await app.request("/users/me", {

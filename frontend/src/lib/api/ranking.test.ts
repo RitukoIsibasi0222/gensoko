@@ -49,7 +49,7 @@ describe('getRanking', () => {
     });
   });
 
-  it('blank accessToken does not send Authorization header', async () => {
+  it('空白だけの accessToken では Authorization header を送らない', async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify(WEEKLY_RESPONSE), {
         status: 200,

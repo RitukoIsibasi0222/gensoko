@@ -88,7 +88,7 @@ describe("GET /users/me", () => {
     expect(getCurrentUserProfile).toHaveBeenCalledWith("user-1");
   });
 
-  it("maps service UserError status and message", async () => {
+  it("サービス層のUserErrorはステータスと日本語メッセージを返す", async () => {
     vi.mocked(getCurrentUserProfile).mockRejectedValue(
       new UserError(403, "ユーザーが見つかりません"),
     );

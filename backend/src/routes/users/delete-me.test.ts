@@ -116,7 +116,7 @@ describe("DELETE /users/me", () => {
     ).toBe(true);
   });
 
-  it("returns 400 for empty currentPassword without calling service", async () => {
+  it("currentPasswordが空の場合は400を返し、サービス層を呼び出さない", async () => {
     const res = await app.request("/users/me", {
       method: "DELETE",
       headers: {
@@ -132,7 +132,7 @@ describe("DELETE /users/me", () => {
     expect(deleteCurrentUser).not.toHaveBeenCalled();
   });
 
-  it("maps service UserError status and message", async () => {
+  it("サービス層のUserErrorはステータスと日本語メッセージを返す", async () => {
     vi.mocked(deleteCurrentUser).mockRejectedValue(new UserError(403, "ユーザーが見つかりません"));
 
     const res = await app.request("/users/me", {
@@ -149,7 +149,7 @@ describe("DELETE /users/me", () => {
     expect(body).toEqual({ error: "ユーザーが見つかりません" });
   });
 
-  it("returns 500 for unexpected service errors", async () => {
+  it("サービス層で予期しないエラーが起きた場合は500を返す", async () => {
     vi.mocked(deleteCurrentUser).mockRejectedValue(new Error("unexpected"));
 
     const res = await app.request("/users/me", {
