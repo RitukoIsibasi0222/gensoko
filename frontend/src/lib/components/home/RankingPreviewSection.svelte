@@ -5,6 +5,7 @@
   type Props = {
     entries: readonly HomeRankingPreviewEntry[];
     moreHref?: string;
+    moreAriaLabel?: string;
     emptyMessage?: string;
     isLoading?: boolean;
     errorMessage?: string | null;
@@ -14,6 +15,7 @@
   let {
     entries,
     moreHref = '/ranking',
+    moreAriaLabel = 'ランキングをもっと見る',
     emptyMessage = 'ランキングは準備中です。',
     isLoading = false,
     errorMessage = null,
@@ -32,7 +34,7 @@
     </h2>
     <a
       href={moreHref}
-      aria-label="週間ランキングをもっと見る"
+      aria-label={moreAriaLabel}
       class="text-brand focus-visible:outline-brand text-sm font-semibold underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       もっと見る

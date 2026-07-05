@@ -77,10 +77,10 @@ GitHub Issue #72「トップ画面、ランキングプレビュー対応」に�
 |---|---|---|
 | `frontend/src/lib/home/content.ts` | 修正 | `RankingEntry` から `HomeRankingPreviewEntry` へ変換する helper を追加 |
 | `frontend/src/lib/home/content.test.ts` | 修正 | preview 変換 helper と上位3件切り出しのテストを追加 |
-| `frontend/src/lib/components/home/RankingPreviewSection.svelte` | 修正 | loading / error / empty / retry の表示状態を追加し、score 表示は `formatRankingScore()` に寄せる |
+| `frontend/src/lib/components/home/RankingPreviewSection.svelte` | 修正 | loading / error / empty / retry の表示状態を追加し、詳細リンク aria-label をprops化し、score 表示は `formatRankingScore()` に寄せる |
 | `frontend/src/lib/components/home/RankingPreviewSection.svelte.test.ts` | 新規 | preview section の success / loading / error / empty 表示と A11Y 属性テストを追加 |
 | `frontend/src/lib/test/svelte-client.ts` | 新規 | Svelte component DOM test 用の client runtime import を集約 |
-| `frontend/src/routes/(app)/+page.svelte` | 修正 | `getRanking({ period: 'weekly' })` で preview を取得し、状態を section へ渡す |
+| `frontend/src/routes/(app)/+page.svelte` | 修正 | `getRanking({ period: 'weekly' })` で preview を取得し、状態と週次詳細リンク label を section へ渡す |
 | `docs/05_progress.md` | 修正 | Issue #72 対応タスクの進捗を更新 |
 | `docs/plans/home-ranking-preview/plan.md` | 修正 | 実装完了記録と確認結果を追記 |
 
@@ -249,7 +249,7 @@ T8	実装完了時に計画書と進捗を更新する	docs/05_progress.md, docs
 ## 実装完了
 - 完了日: 2026-07-05
 - 実装ブランチ: feature/home-ranking-preview
-- PR: 未作成
+- PR: #76
 
 ### 計画からの変更点
 - `RankingPreviewSection.svelte.test.ts` を追加し、section component の success / loading / error / empty 表示を DOM ベースで確認した。
@@ -261,10 +261,10 @@ T8	実装完了時に計画書と進捗を更新する	docs/05_progress.md, docs
 |---|---|---|
 | `frontend/src/lib/home/content.ts` | 修正 | `RankingEntry.score` を `HomeRankingPreviewEntry.weeklyScore` へ変換する helper を追加 |
 | `frontend/src/lib/home/content.test.ts` | 修正 | preview 変換 helper の unit test を追加 |
-| `frontend/src/lib/components/home/RankingPreviewSection.svelte` | 修正 | loading / error / retry / empty 表示、A11Y 属性、詳細リンク aria-label、共通 score formatter 利用を追加 |
+| `frontend/src/lib/components/home/RankingPreviewSection.svelte` | 修正 | loading / error / retry / empty 表示、A11Y 属性、詳細リンク aria-label のprops化、共通 score formatter 利用を追加 |
 | `frontend/src/lib/components/home/RankingPreviewSection.svelte.test.ts` | 新規 | preview section の success / loading / error / empty 表示と A11Y 属性テストを追加 |
 | `frontend/src/lib/test/svelte-client.ts` | 新規 | Svelte component DOM test 用の client runtime import を集約 |
-| `frontend/src/routes/(app)/+page.svelte` | 修正 | 週間ランキング preview の実データ取得、上位3件変換、retry、AbortController を追加 |
+| `frontend/src/routes/(app)/+page.svelte` | 修正 | 週間ランキング preview の実データ取得、上位3件変換、週次詳細リンク label、retry、AbortController を追加 |
 | `docs/05_progress.md` | 修正 | 対象タスクを完了に更新 |
 | `docs/plans/home-ranking-preview/plan.md` | 修正 | 実装完了記録と確認結果を追記 |
 

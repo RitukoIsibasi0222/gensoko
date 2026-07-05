@@ -11,6 +11,7 @@ const entries: HomeRankingPreviewEntry[] = [
 type RankingPreviewSectionProps = {
   entries: readonly HomeRankingPreviewEntry[];
   moreHref?: string;
+  moreAriaLabel?: string;
   emptyMessage?: string;
   isLoading?: boolean;
   errorMessage?: string | null;
@@ -36,7 +37,11 @@ afterEach(async () => {
 
 describe('RankingPreviewSection', () => {
   it('success: 週間ランキング項目と詳細導線を表示する', () => {
-    const target = renderSection({ entries, moreHref: '/ranking?period=weekly' });
+    const target = renderSection({
+      entries,
+      moreHref: '/ranking?period=weekly',
+      moreAriaLabel: '週間ランキングをもっと見る'
+    });
 
     expect(target.textContent).toContain('1位 taro');
     expect(target.textContent).toContain('30ゲーム');
@@ -44,6 +49,14 @@ describe('RankingPreviewSection', () => {
     const link = target.querySelector('a');
     expect(link?.getAttribute('href')).toBe('/ranking?period=weekly');
     expect(link?.getAttribute('aria-label')).toBe('週間ランキングをもっと見る');
+  });
+
+  it('default: 詳細導線の aria-label は汎用文言を使う', () => {
+    const target = renderSection({ entries });
+
+    const link = target.querySelector('a');
+    expect(link?.getAttribute('href')).toBe('/ranking');
+    expect(link?.getAttribute('aria-label')).toBe('ランキングをもっと見る');
   });
 
   it('loading: 読み込み中を aria-busy と live region で表示する', () => {

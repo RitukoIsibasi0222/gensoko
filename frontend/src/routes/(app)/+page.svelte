@@ -21,6 +21,7 @@
   const RANKING_PREVIEW_LIMIT = 3;
   const RANKING_PREVIEW_REQUEST_KEY = 'weekly-public';
   const RANKING_PREVIEW_MORE_HREF = '/ranking?period=weekly';
+  const RANKING_PREVIEW_MORE_ARIA_LABEL = '週間ランキングをもっと見る';
   const RANKING_PREVIEW_EMPTY_MESSAGE = 'まだランキング対象のゲーム結果がありません。';
   const NETWORK_ERROR_MESSAGE = 'ネットワークエラーが発生しました。接続を確認してください';
 
@@ -138,5 +139,6 @@
     onRetry={retryRankingPreview}
     emptyMessage={RANKING_PREVIEW_EMPTY_MESSAGE}
     moreHref={RANKING_PREVIEW_MORE_HREF}
+    moreAriaLabel={RANKING_PREVIEW_MORE_ARIA_LABEL}
   />
 </div>
