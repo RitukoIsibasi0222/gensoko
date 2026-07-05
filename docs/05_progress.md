@@ -83,7 +83,7 @@
 
 ### 画面
 - [x] トップページ `/`（アプリ概要・ゲーム開始CTA・ランキングプレビュー）
-- [ ] トップページ ランキングプレビュー実データ対応（週間ランキング上位3件・loading/error/empty表示） — Issue #72 / 計画書: [`docs/plans/home-ranking-preview/plan.md`](plans/home-ranking-preview/plan.md)
+- [x] トップページ ランキングプレビュー実データ対応（週間ランキング上位3件・loading/error/empty表示） — Issue #72 / 計画書: [`docs/plans/home-ranking-preview/plan.md`](plans/home-ranking-preview/plan.md)
 - [x] 元素一覧ページ `/elements`（118枚カードグリッド・分類色分け）
 - [x] 元素詳細モーダルコンポーネント（カードクリックで開く） — 計画書: [`docs/plans/elements-detail-modal/plan.md`](plans/elements-detail-modal/plan.md)
 - [x] 検索・フィルターUI（キーワード・分類・周期）
