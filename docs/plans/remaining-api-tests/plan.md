@@ -310,7 +310,7 @@ frontend の `npm run format` は `prettier --write .` でリポジトリ全体�
 | `/ranking` 種別切替 | 全期間ボタン click、URL query、`aria-pressed` | pass: `/ranking?period=alltime` に遷移し、全期間側の `aria-pressed` が `true` |
 | 横はみ出し | `/weak`, `/mypage`, `/ranking` の表示幅 | pass: 確認時 viewport で `scrollWidth <= clientWidth` |
 | loading / error / retry UI | source と既存 test の確認 | pass: 各画面に loading 表示、error `role="alert"`、retry button が実装済み。API client の error / AbortSignal は自動テストで確認済み |
-| keyboard | links / buttons / select の到達性 | partial: DOM 上は native `a` / `button` / `select` として取得可能。`/ranking` の Enter / Space 発火は自動ブラウザ環境では切替を確認できず、click での切替確認に留めた |
+| keyboard | links / buttons / select の到達性 | pass: DOM 上は native `a` / `button` / `select` として取得可能。`/ranking` は Enter / Space を明示ハンドラーと `isRankingPeriodActivationKey` の自動テストで固定 |
 
 手動確認用にローカル開発 DB へ一時ユーザーを API 登録し、Mailpit の確認メールからメール確認を完了してログインした。パスワード等の秘密情報は plan には記録しない。
 
@@ -434,7 +434,7 @@ frontend の `npm run format` は `prettier --write .` でリポジトリ全体�
 - 本番コードの仕様不一致は見つからなかったため、production code は変更しなかった。
 - `docs/04_api.md` は公開 API 仕様変更がないため更新しなかった。
 - frontend の `npm run format` は `prettier --write .` で対象外ファイルまで書き換える可能性があるため、今回変更した API client test ファイルに対する `prettier --check` で確認した。
-- `/ranking` の Enter / Space による種別切替は自動ブラウザ環境では発火確認できなかったため、DOM 上の native button / focusable 確認と click による切替確認を記録した。
+- `/ranking` の Enter / Space による種別切替は、明示的な `onkeydown` ハンドラーと `isRankingPeriodActivationKey` の自動テストを追加して固定した。
 
 ### 実際の変更ファイル
 
@@ -446,6 +446,9 @@ frontend の `npm run format` は `prettier --write .` でリポジトリ全体�
 | `backend/src/services/user.service.test.ts` | 修正 | username 更新の同値 no-op、trim 後の重複確認・更新、ユーザーなし 403 を追加 |
 | `frontend/src/lib/api/users.test.ts` | 修正 | update / password / delete の AbortSignal、validation details 優先、delete 非 JSON error を追加 |
 | `frontend/src/lib/api/ranking.test.ts` | 修正 | blank token では Authorization header を送らない optional auth 境界を追加 |
+| `frontend/src/lib/ranking/ranking.ts` | 修正 | ランキング種別切替用の Enter / Space 判定 helper を追加 |
+| `frontend/src/lib/ranking/ranking.test.ts` | 修正 | Enter / Space だけを種別切替キーとして扱うテストを追加 |
+| `frontend/src/routes/(app)/ranking/+page.svelte` | 修正 | 種別切替ボタンの Enter / Space 操作を keydown で明示対応 |
 | `docs/05_progress.md` | 修正 | `残 API のテスト` を実装中から完了へ更新 |
 | `docs/plans/remaining-api-tests/plan.md` | 修正 | 棚卸し matrix、品質チェック結果、手動確認結果、実装完了記録を追加 |
 
@@ -457,6 +460,8 @@ frontend の `npm run format` は `prettier --write .` でリポジトリ全体�
 | `cd backend && npm run test -- --run src/routes/users src/routes/weak src/routes/ranking src/services/user.service.test.ts src/services/weak.service.test.ts src/services/ranking.service.test.ts src/jobs` | pass: 14 files / 91 tests |
 | `cd frontend && npm run test:run -- src/lib/api/users.test.ts src/lib/api/ranking.test.ts` | pass: 2 files / 41 tests |
 | `cd frontend && npm run test:run -- src/lib/api/weak.test.ts src/lib/api/users.test.ts src/lib/api/ranking.test.ts` | pass: 3 files / 56 tests |
+| `cd frontend && npm run test:run -- src/lib/ranking/ranking.test.ts` | pass: 1 file / 5 tests |
+| `cd frontend && npm run check` | pass: 0 errors / 0 warnings |
 | `cd backend && npm run lint` | pass |
 | `cd backend && npm run format:check` | pass |
 | `cd backend && npm run test -- --run` | pass: 36 files / 299 tests |
