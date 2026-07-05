@@ -77,10 +77,13 @@ GitHub Issue #72「トップ画面、ランキングプレビュー対応」に�
 |---|---|---|
 | `frontend/src/lib/home/content.ts` | 修正 | `RankingEntry` から `HomeRankingPreviewEntry` へ変換する helper を追加 |
 | `frontend/src/lib/home/content.test.ts` | 修正 | preview 変換 helper と上位3件切り出しのテストを追加 |
-| `frontend/src/lib/components/home/RankingPreviewSection.svelte` | 修正 | loading / error / empty / retry の表示状態を追加し、score 表示は `formatRankingScore()` に寄せる |
-| `frontend/src/routes/(app)/+page.svelte` | 修正 | `getRanking({ period: 'weekly' })` で preview を取得し、状態を section へ渡す |
-| `docs/05_progress.md` | 修正 | Issue #72 対応タスクと計画書リンクを追記 |
-| `docs/plans/home-ranking-preview/plan.md` | 新規 | 本計画書 |
+| `frontend/src/lib/components/home/RankingPreviewSection.svelte` | 修正 | loading / error / empty / retry の表示状態を追加し、詳細リンク aria-label をprops化し、score 表示は `formatRankingScore()` に寄せる |
+| `frontend/src/lib/components/home/RankingPreviewSection.svelte.test.ts` | 新規 | preview section の success / loading / error / empty 表示と A11Y 属性テストを追加 |
+| `frontend/src/lib/test/svelte-client.ts` | 新規 | Svelte component DOM test 用の client runtime import を集約 |
+| `frontend/src/routes/(app)/+page.svelte` | 修正 | `getRanking({ period: 'weekly' })` で preview を取得し、状態と週次詳細リンク label を section へ渡す |
+| `frontend/src/routes/home-page-ranking-preview.test.ts` | 新規 | preview 取得失敗時に自動再リクエストせず、Retry でのみ再取得することを検証 |
+| `docs/05_progress.md` | 修正 | Issue #72 対応タスクの進捗を更新 |
+| `docs/plans/home-ranking-preview/plan.md` | 修正 | 実装完了記録と確認結果を追記 |
 
 ## API 仕様（関連エンドポイント）
 
@@ -182,14 +185,14 @@ type Props = {
 | T7 | 手動確認を実施する | `/` | 高 | loading, success, empty, error, retry, keyboard focus, `/ranking?period=weekly` 導線 |
 | T8 | 実装完了時に計画書と進捗を更新する | `docs/05_progress.md`, `docs/plans/home-ranking-preview/plan.md` | 高 | 完了チェックと実変更ファイルを記録 |
 
-- [ ] T1: 既存のランキング API client とトップページ preview 実装を確認する
-- [ ] T2: ranking 表示項目からトップ preview 用項目へ変換する helper を追加する
-- [ ] T3: helper のユニットテストを追加する
-- [ ] T4: preview section に loading / error / retry / empty 表示を追加する
-- [ ] T5: トップページで週間ランキング preview を取得する
-- [ ] T6: 品質チェックを実行する
-- [ ] T7: 手動確認を実施する
-- [ ] T8: 実装完了時に計画書と進捗を更新する
+- [x] T1: 既存のランキング API client とトップページ preview 実装を確認する
+- [x] T2: ranking 表示項目からトップ preview 用項目へ変換する helper を追加する
+- [x] T3: helper のユニットテストを追加する
+- [x] T4: preview section に loading / error / retry / empty 表示を追加する
+- [x] T5: トップページで週間ランキング preview を取得する
+- [x] T6: 品質チェックを実行する
+- [x] T7: 手動確認を実施する
+- [x] T8: 実装完了時に計画書と進捗を更新する
 
 ### タブ区切りタスクリスト
 
@@ -243,23 +246,35 @@ T8	実装完了時に計画書と進捗を更新する	docs/05_progress.md, docs
 - `docs/05_progress.md` の「トップページ ランキングプレビュー実データ対応」を `[x]` に更新する。
 - 確認結果（frontend check / lint / test、手動確認）を本計画書の `## 実装完了` に記録する。
 
-```markdown
+
 ## 実装完了
-- 完了日: YYYY-MM-DD
+- 完了日: 2026-07-05
 - 実装ブランチ: feature/home-ranking-preview
-- PR: #N
+- PR: #76
 
 ### 計画からの変更点
-- なし
+- `RankingPreviewSection.svelte.test.ts` を追加し、section component の success / loading / error / empty 表示を DOM ベースで確認した。
+- Vitest が `svelte` を server entry に解決するため、component test 用の client runtime 参照を `frontend/src/lib/test/svelte-client.ts` に隔離し、理由をコメントで明記した。
+- 実DB状態を変更しないため、手動確認は success 表示と `/ranking?period=weekly` 導線を対象にした。empty / error / retry は component test で確認した。
 
 ### 実際の変更ファイル
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
-| `frontend/src/routes/(app)/+page.svelte` | 修正 | 週間ランキング preview 取得 |
+| `frontend/src/lib/home/content.ts` | 修正 | `RankingEntry.score` を `HomeRankingPreviewEntry.weeklyScore` へ変換する helper を追加 |
+| `frontend/src/lib/home/content.test.ts` | 修正 | preview 変換 helper の unit test を追加 |
+| `frontend/src/lib/components/home/RankingPreviewSection.svelte` | 修正 | loading / error / retry / empty 表示、A11Y 属性、詳細リンク aria-label のprops化、共通 score formatter 利用を追加 |
+| `frontend/src/lib/components/home/RankingPreviewSection.svelte.test.ts` | 新規 | preview section の success / loading / error / empty 表示と A11Y 属性テストを追加 |
+| `frontend/src/lib/test/svelte-client.ts` | 新規 | Svelte component DOM test 用の client runtime import を集約 |
+| `frontend/src/routes/(app)/+page.svelte` | 修正 | 週間ランキング preview の実データ取得、上位3件変換、週次詳細リンク label、retry、AbortController を追加 |
+| `frontend/src/routes/home-page-ranking-preview.test.ts` | 新規 | preview 取得失敗時に自動再リクエストせず、Retry でのみ再取得することを検証 |
+| `docs/05_progress.md` | 修正 | 対象タスクを完了に更新 |
+| `docs/plans/home-ranking-preview/plan.md` | 修正 | 実装完了記録と確認結果を追記 |
 
 ### 確認結果
-- frontend check:
-- frontend lint:
-- frontend test:
-- 手動確認:
-```
+- frontend check: `npm run check` 成功（0 errors / 0 warnings）
+- frontend lint: `npm run lint` 成功
+- frontend test: `npm run test:run` 成功（26 files / 305 tests passed）
+- 手動確認: Docker 上の `http://localhost:5174/` でトップページを開き、週間ランキング preview に実データ2件が表示されることを確認
+- 手動確認: 「もっと見る」から `http://localhost:5174/ranking?period=weekly` へ遷移し、週間ランキング表示になることを確認
+- 手動確認: ブラウザ console error が 0 件であることを確認
+- 補足確認: loading / empty / error / retry は `RankingPreviewSection.svelte.test.ts`、取得失敗時の自動再リクエスト抑止と Retry 再取得は `home-page-ranking-preview.test.ts` で確認
