@@ -1,3 +1,4 @@
+import type { RankingEntry } from '$lib/api/ranking';
 import type { AuthStatus } from '$lib/stores/auth.svelte';
 
 export type TopPageAudience = AuthStatus;
@@ -103,6 +104,16 @@ function normalizePreviewLimit(limit: number | undefined): number {
   return floored;
 }
 
+export function toHomeRankingPreviewEntries(
+  entries: readonly RankingEntry[]
+): HomeRankingPreviewEntry[] {
+  return entries.map((entry) => ({
+    rank: entry.rank,
+    username: entry.username,
+    weeklyScore: entry.score,
+    totalGames: entry.totalGames
+  }));
+}
 export function selectRankingPreviewEntries(
   entries: readonly HomeRankingPreviewEntry[],
   limit = DEFAULT_PREVIEW_LIMIT
