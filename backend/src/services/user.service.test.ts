@@ -110,6 +110,67 @@ describe("updateCurrentUsername", () => {
     vi.clearAllMocks();
   });
 
+  it("trim後のユーザー名が同じ場合は更新せず現在のユーザーを返す", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      username: "same_name",
+      role: "USER",
+    } as never);
+
+    const result = await updateCurrentUsername({ userId: "user-1", username: " same_name " });
+
+    expect(result).toEqual({
+      user: { id: "user-1", username: "same_name", role: "USER" },
+    });
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("重複確認と更新にはtrim後のユーザー名を使う", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      username: "old_name",
+      role: "USER",
+    } as never);
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({
+      id: "user-1",
+      username: "new_name",
+      role: "USER",
+    } as never);
+
+    const result = await updateCurrentUsername({ userId: "user-1", username: " new_name " });
+
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({
+      where: {
+        username: "new_name",
+        id: { not: "user-1" },
+      },
+      select: { id: true },
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { username: "new_name" },
+      select: { id: true, username: true, role: true },
+    });
+    expect(result).toEqual({
+      user: { id: "user-1", username: "new_name", role: "USER" },
+    });
+  });
+
+  it("ユーザーが存在しない場合はUserError(403)を投げる", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(null as never);
+
+    await expect(
+      updateCurrentUsername({ userId: "missing-user", username: "new_name" }),
+    ).rejects.toMatchObject({
+      status: 403,
+      message: "ユーザーが見つかりません",
+    });
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
   it("異常系: DBのユニーク制約違反(P2002)をUserError(409)に変換する", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "user-1",

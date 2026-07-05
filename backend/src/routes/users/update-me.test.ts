@@ -60,6 +60,20 @@ describe("PATCH /users/me", () => {
     vi.clearAllMocks();
   });
 
+  it("未認証の場合は401を返し、サービス層を呼び出さない", async () => {
+    const res = await app.request("/users/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "new_name_123" }),
+    });
+
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body).toEqual({ error: "認証が必要です" });
+    expect(updateCurrentUsername).not.toHaveBeenCalled();
+    expect(changeCurrentPassword).not.toHaveBeenCalled();
+  });
+
   it("ユーザー名変更成功時は200を返す", async () => {
     vi.mocked(updateCurrentUsername).mockResolvedValue({
       user: { id: "user-1", username: "new_name_123", role: "USER" },
@@ -215,5 +229,41 @@ describe("PATCH /users/me", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("バリデーションエラー");
+  });
+
+  it("サービス層のUserErrorはステータスと日本語メッセージを返す", async () => {
+    vi.mocked(updateCurrentUsername).mockRejectedValue(
+      new UserError(403, "ユーザーが見つかりません"),
+    );
+
+    const res = await app.request("/users/me", {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ username: "new_name_123" }),
+    });
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body).toEqual({ error: "ユーザーが見つかりません" });
+  });
+
+  it("サービス層で予期しないエラーが起きた場合は500を返す", async () => {
+    vi.mocked(updateCurrentUsername).mockRejectedValue(new Error("unexpected"));
+
+    const res = await app.request("/users/me", {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ username: "new_name_123" }),
+    });
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body).toEqual({ error: "サーバーエラーが発生しました" });
   });
 });

@@ -148,7 +148,7 @@
 - [x] GET /ranking/weekly + /alltime（myRank フィールド・Top50） — 計画書: [`docs/plans/ranking-page/plan.md`](plans/ranking-page/plan.md)
 - [x] 週間スコアリセットバッチ処理（weeklyScore リセット） — 計画書: [docs/plans/weekly-score-reset/plan.md](plans/weekly-score-reset/plan.md)
 - [x] 定期バッチ運用設計（週間リセット・GameQuestionSet cleanup の Cron Trigger 設定） — 計画書: [docs/plans/batch-cron-triggers/plan.md](plans/batch-cron-triggers/plan.md)
-- [ ] 残 API のテスト — 計画書: [docs/plans/remaining-api-tests/plan.md](plans/remaining-api-tests/plan.md)
+- [x] 残 API のテスト — 計画書: [docs/plans/remaining-api-tests/plan.md](plans/remaining-api-tests/plan.md)
 
 ## フェーズ10: 管理者機能
 

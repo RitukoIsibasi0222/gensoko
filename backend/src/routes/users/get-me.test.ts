@@ -42,7 +42,7 @@ vi.mock("../../services/user.service.js", () => {
   };
 });
 
-import { getCurrentUserProfile } from "../../services/user.service.js";
+import { getCurrentUserProfile, UserError } from "../../services/user.service.js";
 
 const app = new Hono();
 app.route("/users", usersRouter);
@@ -86,6 +86,21 @@ describe("GET /users/me", () => {
       },
     });
     expect(getCurrentUserProfile).toHaveBeenCalledWith("user-1");
+  });
+
+  it("サービス層のUserErrorはステータスと日本語メッセージを返す", async () => {
+    vi.mocked(getCurrentUserProfile).mockRejectedValue(
+      new UserError(403, "ユーザーが見つかりません"),
+    );
+
+    const res = await app.request("/users/me", {
+      method: "GET",
+      headers: { Authorization: "Bearer valid-token" },
+    });
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body).toEqual({ error: "ユーザーが見つかりません" });
   });
 
   it("サービス層で予期しないエラーが起きた場合は500を返す", async () => {

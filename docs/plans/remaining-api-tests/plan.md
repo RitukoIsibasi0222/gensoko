@@ -90,6 +90,42 @@ Phase 9 で実装された weak list、users、ranking、weekly reset、batch cr
 - 現時点の実装は広くテストされているため、追加すべきテストは「未検証 endpoint」よりも「仕様境界、error body、state leakage、frontend/backend 整合性」に寄る可能性が高い。
 - DB 変更は不要であり、テスト実装中に API 実装の不備が見つかった場合は、テストタスク内の小修正に収めるか、仕様変更として別計画化するのが安全である。
 
+## 実装前棚卸し matrix
+
+実装開始前に既存仕様・既存テストを棚卸しした結果、今回の追加対象は「未実装 endpoint の追加」ではなく、既存 API の不足している境界テストを補う方針に絞る。
+
+### ベースライン確認
+
+| 対象 | コマンド | 結果 |
+|---|---|---|
+| backend 関連テスト | `cd backend && npm run test -- --run src/routes/users src/routes/weak src/routes/ranking src/services/user.service.test.ts src/services/weak.service.test.ts src/services/ranking.service.test.ts src/jobs` | pass: 14 files / 81 tests |
+| frontend API client 関連テスト | `cd frontend && npm run test:run -- src/lib/api/weak.test.ts src/lib/api/users.test.ts src/lib/api/ranking.test.ts` | pass: 3 files / 49 tests |
+
+### coverage matrix
+
+| 領域 | 既存テストで確認済み | 追加対象 | 判断 |
+|---|---|---|---|
+| weak route | 未認証 401、一覧 200、空配列、DELETE validation 400、削除 200、削除対象なし 404、500 | なし | 計画の主要観点を満たしているため、重複追加しない |
+| weak service | `userId` 条件の一覧取得、公開フィールド整形、空配列、`userId + elementId` 条件削除、0件時エラー | なし | Prisma 条件と日本語 error が確認済み |
+| weak frontend client | Authorization、AbortSignal、API error JSON、非 JSON error、不正 success response | なし | 非 JSON / runtime validation まで確認済み |
+| users route: GET `/users/me` | 未認証 401、プロフィール 200、予期しない 500 | `UserError(403)` の status/message 維持 | stats route にはあるが profile route では未固定 |
+| users route: PATCH `/users/me` | username 成功、409、username validation 400、password 成功、password 400、混在 payload 400、Cookie clear | 未認証 401、`UserError(403)`、予期しない 500 | error mapping の一貫性を固定する |
+| users route: DELETE `/users/me` | 未認証 401、password 不一致 400、削除成功、Cookie clear | validation 400、`UserError(403)`、予期しない 500 | request validation と service error mapping を固定する |
+| users service | 論理削除、token 削除、password hash 更新、重複 409、profile、stats 空状態・正規化 | 同一 username では update しない、trim 後 username で重複確認・更新、ユーザーなし 403 | 仕様文書の「同じ username は 200」「正規化値再利用」を固定する |
+| ranking route | 未ログイン 200、ログイン時 userId 受け渡し、不正 token 401、500 | なし | optional auth の主要観点を確認済み |
+| ranking service | Top50、同点順位、active/deleted 除外、weekly boundary、myRank、並列実行、正規化 | なし | 計画の主要観点を満たしているため、重複追加しない |
+| ranking frontend client | 未ログイン Authorization なし、ログイン Authorization、AbortSignal、JSON error、非 JSON error、不正 response | blank token で Authorization を送らない | optional auth の境界を frontend 側でも固定する |
+| batch jobs | weekly reset、cleanup、scheduled known/unknown cron、invalid time、failure sanitization、CLI disconnect | なし | 既存テストで計画の主要観点を満たしている |
+| frontend users client | stats/profile/update/password/delete の成功・error・不正 response | update/password/delete の AbortSignal、update/password の details 優先、delete 非 JSON error | API client 関数ごとの options 伝搬と error body 優先順位をそろえる |
+| UI / A11Y | 既存画面に loading、empty、error、retry、aria-live / role 属性が存在 | 手動確認項目として記録 | 新規 component test 基盤は導入しない |
+
+### 確定した追加実装単位
+
+1. users backend route / service の不足テストを補う。
+2. frontend users / ranking API client の不足テストを補う。
+3. テストで仕様不一致が見つかった場合のみ、本番コードを最小修正する。
+4. 最後に `docs/04_api.md` 更新要否、手動確認、完了記録を行う。
+
 ## 実装方針
 
 1. 既存テストの棚卸しを最初に行う。
@@ -229,23 +265,54 @@ Phase 9 で実装された weak list、users、ranking、weekly reset、batch cr
 | T8 | テストで見つかった仕様不一致だけを最小修正する | `backend/src/**`, `frontend/src/lib/api/*.ts` | 仕様・docs・test の整合が取れ、不要な実装変更がない | High |
 | T9 | `docs/04_api.md` 更新要否を確認する | `docs/04_api.md` | 更新不要または必要差分が明記される | Medium |
 | T10 | backend の lint / format / test を実行する | `backend` | `npm run lint`, `npm run format:check`, `npm run test -- --run` が通る | High |
-| T11 | frontend の lint / format / test を実行する | `frontend` | `npm run lint`, `npm run format`, `npm run test -- --run` が通る | High |
+| T11 | frontend の lint / format / test を実行する | `frontend` | `npm run lint`, `npm run format`, `npm run test:run` が通る | High |
 | T12 | 手動確認を行う | `/weak`, `/mypage`, `/ranking` | loading、empty、error、retry、keyboard、A11Y の最低確認が完了する | Medium |
 | T13 | 実装完了更新を行う | `docs/05_progress.md`, 本 plan | checklist が更新され、`## 実装完了` が追記される | High |
 
-- [ ] T1: 既存仕様・既存テストの棚卸し matrix を作成する
-- [ ] T2: weak API の route / service test 不足を補う
-- [ ] T3: users API の route / service test 不足を補う
-- [ ] T4: ranking API の route / service test 不足を補う
-- [ ] T5: batch job / scheduled entrypoint test 不足を補う
-- [ ] T6: frontend API client test 不足を補う
-- [ ] T7: URL query / helper / UI 接続の不足を確認する
-- [ ] T8: テストで見つかった仕様不一致だけを最小修正する
-- [ ] T9: `docs/04_api.md` 更新要否を確認する
-- [ ] T10: backend の lint / format / test を実行する
-- [ ] T11: frontend の lint / format / test を実行する
-- [ ] T12: 手動確認を行う
-- [ ] T13: `docs/05_progress.md` と plan の実装完了更新を行う
+- [x] T1: 既存仕様・既存テストの棚卸し matrix を作成する
+- [x] T2: weak API の route / service test 不足を補う（棚卸しと既存テスト再実行により追加不要と判断）
+- [x] T3: users API の route / service test 不足を補う
+- [x] T4: ranking API の route / service test 不足を補う（棚卸しと既存テスト再実行により追加不要と判断）
+- [x] T5: batch job / scheduled entrypoint test 不足を補う（棚卸しと既存テスト再実行により追加不要と判断）
+- [x] T6: frontend API client test 不足を補う
+- [x] T7: URL query / helper / UI 接続の不足を確認する（API client/helperは既存テストで確認、UIは手動確認項目として残す）
+- [x] T8: テストで見つかった仕様不一致だけを最小修正する（仕様不一致なし、本番コード修正なし）
+- [x] T9: `docs/04_api.md` 更新要否を確認する（公開API仕様変更なしのため更新不要）
+- [x] T10: backend の lint / format / test を実行する
+- [x] T11: frontend の lint / format / test を実行する
+- [x] T12: 手動確認を行う
+- [x] T13: `docs/05_progress.md` と plan の実装完了更新を行う
+
+### 品質チェック結果
+
+| 対象 | コマンド | 結果 |
+|---|---|---|
+| backend lint | `cd backend && npm run lint` | pass |
+| backend format | `cd backend && npm run format:check` | pass |
+| backend test | `cd backend && npm run test -- --run` | pass: 36 files / 299 tests |
+| frontend lint | `cd frontend && npm run lint` | pass |
+| frontend check | `cd frontend && npm run check` | pass: 0 errors / 0 warnings |
+| frontend format | `cd frontend && npx prettier --check src/lib/api/users.test.ts src/lib/api/ranking.test.ts` | pass |
+| frontend test | `cd frontend && npm run test:run` | pass: 24 files / 295 tests |
+
+frontend の `npm run format` は `prettier --write .` でリポジトリ全体に書き込みうるため、今回変更した API client test ファイルに対して `prettier --check` を実行した。
+
+
+### 手動確認結果
+
+| 対象 | 確認内容 | 結果 |
+|---|---|---|
+| `/weak` 未ログイン | API を呼ばずログイン導線を表示 | pass: 「苦手リストを見るにはログインが必要です。」と「ログインへ」を表示 |
+| `/weak` ログイン済み | 空状態、導線、console error | pass: 「苦手元素はまだありません。」と「ゲームで練習する」を表示、console error なし |
+| `/mypage` ログイン済み | stats / history 空状態、導線、console error | pass: 0件 stats、空グラフ、空履歴、「ゲームを始める」を表示、console error なし |
+| `/mypage` A11Y | stats / history section、mode select | pass: section は `aria-labelledby`、mode は `combobox` role / name `モード` で取得可能 |
+| `/ranking` ログイン済み | weekly 表示、myRank 空状態、console error | pass: ranking table と「自分の順位」の未参加メッセージを表示、console error なし |
+| `/ranking` 種別切替 | 全期間ボタン click、URL query、`aria-pressed` | pass: `/ranking?period=alltime` に遷移し、全期間側の `aria-pressed` が `true` |
+| 横はみ出し | `/weak`, `/mypage`, `/ranking` の表示幅 | pass: 確認時 viewport で `scrollWidth <= clientWidth` |
+| loading / error / retry UI | source と既存 test の確認 | pass: 各画面に loading 表示、error `role="alert"`、retry button が実装済み。API client の error / AbortSignal は自動テストで確認済み |
+| keyboard | links / buttons / select の到達性 | pass: DOM 上は native `a` / `button` / `select` として取得可能。`/ranking` は Enter / Space を明示ハンドラーと `isRankingPeriodActivationKey` の自動テストで固定 |
+
+手動確認用にローカル開発 DB へ一時ユーザーを API 登録し、Mailpit の確認メールからメール確認を完了してログインした。パスワード等の秘密情報は plan には記録しない。
 
 ## テストケース一覧
 
@@ -354,5 +421,60 @@ Phase 9 で実装された weak list、users、ranking、weekly reset、batch cr
 | コマンド / 確認 | 結果 |
 |---|---|
 | `cd backend && npm run test -- --run` | pass |
-| `cd frontend && npm run test -- --run` | pass |
+| `cd frontend && npm run test:run` | pass |
 ```
+
+## 実装完了
+- 完了日: 2026-07-05
+- 実装ブランチ: feature/phase9-remaining-api-tests
+- PR: #74
+
+### 計画からの変更点
+- weak API、ranking API、batch job / scheduled entrypoint は、棚卸しと既存テスト再実行により計画の主要観点を満たしていると判断し、重複するテスト追加は行わなかった。
+- API 側の仕様不一致は見つからなかったため、backend / frontend API client の production code は変更しなかった。
+- `docs/04_api.md` は公開 API 仕様変更がないため更新しなかった。
+- frontend の `npm run format` は `prettier --write .` で対象外ファイルまで書き換える可能性があるため、今回変更した API client test ファイルに対する `prettier --check` で確認した。
+- `/ranking` の Enter / Space による種別切替は、明示的な `onkeydown` ハンドラーと `isRankingPeriodActivationKey` の自動テストを追加して固定した。
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `backend/src/routes/users/get-me.test.ts` | 修正 | `UserError` の status / message が route response に反映されることを追加 |
+| `backend/src/routes/users/update-me.test.ts` | 修正 | 未認証、`UserError`、予期しない service error の route test を追加 |
+| `backend/src/routes/users/delete-me.test.ts` | 修正 | validation error、`UserError`、予期しない service error の route test を追加 |
+| `backend/src/services/user.service.test.ts` | 修正 | username 更新の同値 no-op、trim 後の重複確認・更新、ユーザーなし 403 を追加 |
+| `frontend/src/lib/api/users.test.ts` | 修正 | update / password / delete の AbortSignal、validation details 優先、delete 非 JSON error を追加 |
+| `frontend/src/lib/api/ranking.test.ts` | 修正 | blank token では Authorization header を送らない optional auth 境界を追加 |
+| `frontend/src/lib/ranking/ranking.ts` | 修正 | ランキング種別切替用の Enter / Space 判定 helper を追加 |
+| `frontend/src/lib/ranking/ranking.test.ts` | 修正 | Enter / Space だけを種別切替キーとして扱うテストを追加 |
+| `frontend/src/routes/(app)/ranking/+page.svelte` | 修正 | 種別切替ボタンの Enter / Space 操作を keydown で明示対応 |
+| `docs/05_progress.md` | 修正 | `残 API のテスト` を実装中から完了へ更新 |
+| `docs/plans/remaining-api-tests/plan.md` | 修正 | 棚卸し matrix、品質チェック結果、手動確認結果、実装完了記録を追加 |
+
+### 実行した確認
+
+| コマンド / 確認 | 結果 |
+|---|---|
+| `cd backend && npm run test -- --run src/routes/users/get-me.test.ts src/routes/users/update-me.test.ts src/routes/users/delete-me.test.ts src/services/user.service.test.ts` | pass: 4 files / 38 tests |
+| `cd backend && npm run test -- --run src/routes/users src/routes/weak src/routes/ranking src/services/user.service.test.ts src/services/weak.service.test.ts src/services/ranking.service.test.ts src/jobs` | pass: 14 files / 91 tests |
+| `cd frontend && npm run test:run -- src/lib/api/users.test.ts src/lib/api/ranking.test.ts` | pass: 2 files / 41 tests |
+| `cd frontend && npm run test:run -- src/lib/api/weak.test.ts src/lib/api/users.test.ts src/lib/api/ranking.test.ts` | pass: 3 files / 56 tests |
+| `cd frontend && npm run test:run -- src/lib/ranking/ranking.test.ts` | pass: 1 file / 5 tests |
+| `cd frontend && npm run check` | pass: 0 errors / 0 warnings |
+| `cd backend && npm run lint` | pass |
+| `cd backend && npm run format:check` | pass |
+| `cd backend && npm run test -- --run` | pass: 36 files / 299 tests |
+| `cd frontend && npm run lint` | pass |
+| `cd frontend && npm run check` | pass: 0 errors / 0 warnings |
+| `cd frontend && npx prettier --check src/lib/api/users.test.ts src/lib/api/ranking.test.ts` | pass |
+| `cd frontend && npm run test:run` | pass: 24 files / 295 tests |
+| `/weak` 手動確認 | pass: 未ログイン導線、ログイン後空状態、console error なし |
+| `/mypage` 手動確認 | pass: stats / history 空状態、A11Y section / combobox、console error なし |
+| `/ranking` 手動確認 | pass: weekly 表示、全期間 click 切替、`aria-pressed` 更新、console error なし |
+| `git diff --check` | pass |
+
+### 残した確認メモ
+- 手動確認用にローカル開発 DB へ一時ユーザーを API 登録し、Mailpit の確認メールからメール確認を完了してログインした。
+- DB schema / migration は変更していないため、`npx prisma migrate deploy` は対象外。
+- push / PR 作成: 実施済み（PR #74）。

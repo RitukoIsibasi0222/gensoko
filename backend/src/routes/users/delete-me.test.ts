@@ -115,4 +115,54 @@ describe("DELETE /users/me", () => {
       ),
     ).toBe(true);
   });
+
+  it("currentPasswordが空の場合は400を返し、サービス層を呼び出さない", async () => {
+    const res = await app.request("/users/me", {
+      method: "DELETE",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ currentPassword: "" }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("バリデーションエラー");
+    expect(deleteCurrentUser).not.toHaveBeenCalled();
+  });
+
+  it("サービス層のUserErrorはステータスと日本語メッセージを返す", async () => {
+    vi.mocked(deleteCurrentUser).mockRejectedValue(new UserError(403, "ユーザーが見つかりません"));
+
+    const res = await app.request("/users/me", {
+      method: "DELETE",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ currentPassword: "Pass1234!" }),
+    });
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body).toEqual({ error: "ユーザーが見つかりません" });
+  });
+
+  it("サービス層で予期しないエラーが起きた場合は500を返す", async () => {
+    vi.mocked(deleteCurrentUser).mockRejectedValue(new Error("unexpected"));
+
+    const res = await app.request("/users/me", {
+      method: "DELETE",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ currentPassword: "Pass1234!" }),
+    });
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body).toEqual({ error: "サーバーエラーが発生しました" });
+  });
 });

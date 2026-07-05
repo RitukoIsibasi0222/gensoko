@@ -431,6 +431,59 @@ describe('updateCurrentUsername', () => {
       updateCurrentUsername({ accessToken: 'test-access-token', username: 'new_name_123' })
     ).rejects.toThrow('ユーザー名変更のレスポンス形式が不正です');
   });
+
+  it('ユーザー名変更時に AbortSignal を fetch へ渡す', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(VALID_UPDATE_USERNAME_RESPONSE), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+    const controller = new AbortController();
+
+    await updateCurrentUsername({
+      accessToken: 'test-access-token',
+      username: 'new_name_123',
+      signal: controller.signal
+    });
+
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3000/api/v1/users/me', {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: {
+        Authorization: 'Bearer test-access-token',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ username: 'new_name_123' }),
+      signal: controller.signal
+    });
+  });
+
+  it('ユーザー名変更時は汎用 error より validation details を優先する', async () => {
+    const errorBody = {
+      error: 'バリデーションエラー',
+      details: [{ message: 'ユーザー名を入力してください' }]
+    };
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(errorBody), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    try {
+      await updateCurrentUsername({
+        accessToken: 'test-access-token',
+        username: ''
+      });
+      expect.fail('ApiError が throw されるべき');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(400);
+      expect((error as ApiError).message).toBe('ユーザー名を入力してください');
+      expect((error as ApiError).body).toEqual(errorBody);
+    }
+  });
 });
 
 describe('changeCurrentPassword', () => {
@@ -527,6 +580,61 @@ describe('changeCurrentPassword', () => {
       })
     ).rejects.toThrow('パスワード変更のレスポンス形式が不正です');
   });
+
+  it('パスワード変更時に AbortSignal を fetch へ渡す', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ message: 'パスワードを変更しました' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+    const controller = new AbortController();
+
+    await changeCurrentPassword({
+      accessToken: 'test-access-token',
+      currentPassword: 'OldPass1!',
+      newPassword: 'NewPass1!',
+      signal: controller.signal
+    });
+
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3000/api/v1/users/me', {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: {
+        Authorization: 'Bearer test-access-token',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ currentPassword: 'OldPass1!', newPassword: 'NewPass1!' }),
+      signal: controller.signal
+    });
+  });
+
+  it('パスワード変更時は汎用 error より validation details を優先する', async () => {
+    const errorBody = {
+      error: 'バリデーションエラー',
+      details: [{ message: '現在のパスワードを入力してください' }]
+    };
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(errorBody), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    try {
+      await changeCurrentPassword({
+        accessToken: 'test-access-token',
+        currentPassword: '',
+        newPassword: 'NewPass1!'
+      });
+      expect.fail('ApiError が throw されるべき');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(400);
+      expect((error as ApiError).message).toBe('現在のパスワードを入力してください');
+      expect((error as ApiError).body).toEqual(errorBody);
+    }
+  });
 });
 
 describe('deleteCurrentUser', () => {
@@ -610,5 +718,45 @@ describe('deleteCurrentUser', () => {
     await expect(
       deleteCurrentUser({ accessToken: 'test-access-token', currentPassword: 'Pass1234!' })
     ).rejects.toThrow('アカウント削除のレスポンス形式が不正です');
+  });
+
+  it('アカウント削除時に AbortSignal を fetch へ渡す', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ message: 'アカウントを削除しました' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+    const controller = new AbortController();
+
+    await deleteCurrentUser({
+      accessToken: 'test-access-token',
+      currentPassword: 'Pass1234!',
+      signal: controller.signal
+    });
+
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3000/api/v1/users/me', {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: {
+        Authorization: 'Bearer test-access-token',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ currentPassword: 'Pass1234!' }),
+      signal: controller.signal
+    });
+  });
+
+  it('アカウント削除時の非 JSON エラーではデフォルトメッセージを使う', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response('Bad Gateway', {
+        status: 502,
+        headers: { 'Content-Type': 'text/html' }
+      })
+    );
+
+    await expect(
+      deleteCurrentUser({ accessToken: 'test-access-token', currentPassword: 'Pass1234!' })
+    ).rejects.toThrow('アカウント削除に失敗しました');
   });
 });
