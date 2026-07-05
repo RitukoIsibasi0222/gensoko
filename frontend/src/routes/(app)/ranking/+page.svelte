@@ -6,7 +6,11 @@
   import { getRanking, type RankingPeriod, type RankingResponse } from '$lib/api/ranking';
   import MyRankPanel from '$lib/components/ranking/MyRankPanel.svelte';
   import RankingTable from '$lib/components/ranking/RankingTable.svelte';
-  import { normalizeRankingPeriod, toRankingSearchParams } from '$lib/ranking/ranking';
+  import {
+    isRankingPeriodActivationKey,
+    normalizeRankingPeriod,
+    toRankingSearchParams
+  } from '$lib/ranking/ranking';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
 
@@ -118,6 +122,13 @@
     });
   }
 
+  function handlePeriodKeydown(event: KeyboardEvent, period: RankingPeriod): void {
+    if (!isRankingPeriodActivationKey(event.key)) return;
+
+    event.preventDefault();
+    void updatePeriod(period);
+  }
+
   function retryRanking(): void {
     if (isLoading || authStore.isInitializing) return;
     const accessToken = authStore.isLoggedIn ? authStore.accessToken : null;
@@ -163,6 +174,7 @@
             : 'rounded px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500'}
           aria-pressed={currentPeriod === 'weekly'}
           onclick={() => updatePeriod('weekly')}
+          onkeydown={(event) => handlePeriodKeydown(event, 'weekly')}
         >
           週間
         </button>
@@ -173,6 +185,7 @@
             : 'rounded px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500'}
           aria-pressed={currentPeriod === 'alltime'}
           onclick={() => updatePeriod('alltime')}
+          onkeydown={(event) => handlePeriodKeydown(event, 'alltime')}
         >
           全期間
         </button>

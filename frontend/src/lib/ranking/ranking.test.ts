@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatRankingAccuracy,
   formatRankingScore,
+  isRankingPeriodActivationKey,
   normalizeRankingPeriod,
   toRankingSearchParams
 } from './ranking';
@@ -18,6 +19,14 @@ describe('ranking helpers', () => {
   it('period を URLSearchParams に変換する', () => {
     expect(toRankingSearchParams('weekly').toString()).toBe('period=weekly');
     expect(toRankingSearchParams('alltime').toString()).toBe('period=alltime');
+  });
+
+  it('?????????? Enter / Space ???????????????', () => {
+    expect(isRankingPeriodActivationKey('Enter')).toBe(true);
+    expect(isRankingPeriodActivationKey(' ')).toBe(true);
+    expect(isRankingPeriodActivationKey('Spacebar')).toBe(true);
+    expect(isRankingPeriodActivationKey('Tab')).toBe(false);
+    expect(isRankingPeriodActivationKey('ArrowRight')).toBe(false);
   });
 
   it('スコアを ja-JP の桁区切りと pt 付きで表示する', () => {

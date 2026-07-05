@@ -10,6 +10,10 @@ export function toRankingSearchParams(period: RankingPeriod): URLSearchParams {
   return new URLSearchParams({ period });
 }
 
+export function isRankingPeriodActivationKey(key: string): boolean {
+  return key === 'Enter' || key === ' ' || key === 'Spacebar';
+}
+
 export function formatRankingScore(value: number): string {
   return rankingNumberFormatter.format(value) + ' pt';
 }
