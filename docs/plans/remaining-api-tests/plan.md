@@ -407,7 +407,7 @@ frontend の `npm run format` は `prettier --write .` でリポジトリ全体�
 ## 実装完了
 - 完了日: YYYY-MM-DD
 - 実装ブランチ: feature/xxx
-- PR: #74
+- PR: #N
 
 ### 計画からの変更点
 - なし
@@ -431,7 +431,7 @@ frontend の `npm run format` は `prettier --write .` でリポジトリ全体�
 
 ### 計画からの変更点
 - weak API、ranking API、batch job / scheduled entrypoint は、棚卸しと既存テスト再実行により計画の主要観点を満たしていると判断し、重複するテスト追加は行わなかった。
-- 本番コードの仕様不一致は見つからなかったため、production code は変更しなかった。
+- API 側の仕様不一致は見つからなかったため、backend / frontend API client の production code は変更しなかった。
 - `docs/04_api.md` は公開 API 仕様変更がないため更新しなかった。
 - frontend の `npm run format` は `prettier --write .` で対象外ファイルまで書き換える可能性があるため、今回変更した API client test ファイルに対する `prettier --check` で確認した。
 - `/ranking` の Enter / Space による種別切替は、明示的な `onkeydown` ハンドラーと `isRankingPeriodActivationKey` の自動テストを追加して固定した。

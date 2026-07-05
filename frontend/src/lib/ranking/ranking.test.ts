@@ -21,7 +21,7 @@ describe('ranking helpers', () => {
     expect(toRankingSearchParams('alltime').toString()).toBe('period=alltime');
   });
 
-  it('ランキング種別切替は Enter / Space だけをキーボード操作として扱う', () => {
+  it('ランキング種別切替は Enter / Space / Spacebar をキーボード操作として扱う', () => {
     expect(isRankingPeriodActivationKey('Enter')).toBe(true);
     expect(isRankingPeriodActivationKey(' ')).toBe(true);
     expect(isRankingPeriodActivationKey('Spacebar')).toBe(true);
