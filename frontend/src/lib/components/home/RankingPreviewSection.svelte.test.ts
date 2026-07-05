@@ -94,6 +94,7 @@ describe('RankingPreviewSection', () => {
     const target = renderSection({ entries: [], errorMessage: '' });
 
     expect(target.querySelector('[role=alert]')).not.toBeNull();
+    expect(target.textContent).toContain('ランキングを表示できませんでした。');
     expect(target.textContent).not.toContain('ランキングは準備中です。');
   });
 

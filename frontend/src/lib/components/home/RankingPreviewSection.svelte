@@ -2,6 +2,8 @@
   import type { HomeRankingPreviewEntry } from '$lib/home/content';
   import { formatRankingScore } from '$lib/ranking/ranking';
 
+  const ERROR_FALLBACK_MESSAGE = 'ランキングを表示できませんでした。';
+
   type Props = {
     entries: readonly HomeRankingPreviewEntry[];
     moreHref?: string;
@@ -21,6 +23,10 @@
     errorMessage = null,
     onRetry
   }: Props = $props();
+
+  const displayErrorMessage = $derived(
+    errorMessage !== null && errorMessage.trim() !== '' ? errorMessage : ERROR_FALLBACK_MESSAGE
+  );
 </script>
 
 <section
@@ -53,7 +59,7 @@
       class="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
       role="alert"
     >
-      <p class="font-semibold">{errorMessage}</p>
+      <p class="font-semibold">{displayErrorMessage}</p>
       {#if onRetry}
         <button
           type="button"
