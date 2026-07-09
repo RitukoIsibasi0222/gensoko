@@ -10,6 +10,7 @@ Codex は実装・修正・追加・リファクタリングでファイル編�
 
 - 作業パスは原則 `/home/<user>/labs/Gensoko` を使う。
 - PowerShell から UNC パスを直接編集しない。
+- 手作業の差分編集は、リポジトリルートに移動して **WSL 内の `apply_patch`** を使う。
 - `$lib`, `$state`, `$app`, `$derived` を含む内容を PowerShell inline 文字列で直接書かない。
 - 長い `python3 -c ...` や長い heredoc を PowerShell 経由で直接渡さない。
 - 編集後は必ず `git diff -- 対象ファイル` で意図した差分だけか確認する。
@@ -19,20 +20,45 @@ Codex は実装・修正・追加・リファクタリングでファイル編�
 
 ## 失敗しやすい編集パターンと対処
 
-`apply_patch` が `\\wsl.localhost\...` の UNC パスに対して `アクセスが拒否されました (os error 5)` で失敗することがある。失敗した `apply_patch` を繰り返さず、WSL 側パス `/home/<user>/labs/Gensoko` を使う編集方法へ切り替える。
+Codex の `apply_patch` ツールを UNC パス `\\wsl.localhost\...` に対して使うと、`アクセスが拒否されました (os error 5)` で失敗することがある。この場合は `perl` や一時ファイル方式へすぐ逃げず、まず WSL 内でリポジトリルートへ移動して `apply_patch` を実行する。
+
+```powershell
+$OutputEncoding = [System.Text.UTF8Encoding]::new()
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+@'
+*** Begin Patch
+*** Update File: docs/example.md
+@@
+-old
++new
+*** End Patch
+'@ | wsl -d Ubuntu-24.04 -e bash -lc 'cd /home/rituko/labs/Gensoko && apply_patch'
+```
 
 また、PowerShell から WSL に長い script を渡すと、実行前に PowerShell 側で引用符や `$` を解釈して壊れることがある。特に `$lib`, `$state`, `$app`, `$derived`, `./user.service.js`, 日本語文字列, template literal, JSON 文字列を含む編集では注意する。
 
 対処方針:
 
-- まず `apply_patch` を試し、UNC パス権限で失敗したら WSL 側パスへ切り替える。
-- 小さい置換だけなら、WSL 側の短い `perl` 置換にする。
-- 複数行追加や大きい編集は、短い置換を積み重ねず **一時ファイル方式** にする。
-- PowerShell 経由の長い `python3 -c ...`, heredoc, pipe 渡しは避ける。途中で引用符が落ちたり、WSL 側へ届く前に止まったりすることがある。
+- まず WSL 内のリポジトリルートで `apply_patch` を使う。
+- Codex の `apply_patch` ツールが UNC 権限で失敗しても、同じ変更を WSL 内 `apply_patch` で再実行する。
+- 小さい置換でも、引用符・`$`・日本語・template literal を含むなら `perl` より WSL 内 `apply_patch` を優先する。
+- `perl` / `python3 -c` 置換は、単純な1行置換や機械的な繰り返し変更に限定する。
+- 複数行追加や大きい編集で `apply_patch` が読みづらくなる場合だけ **一時ファイル方式** にする。
+- PowerShell 経由の長い `python3 -c ...`, heredoc, pipe 渡しは避ける。途中で引用符が落ちたり、WSL 側へ届く前に止まったりすることがある。ただし、UTF-8 を明示した PowerShell here-string を WSL 内 `apply_patch` に渡す用途は例外として使ってよい。
 - `base64` 化などの回り道を増やすより、編集単位を小さくするか、一時ファイル方式に戻す。
 - PowerShell の .NET ファイル API で UNC パスを直接編集しない。例外的な編集が必要な場合も、WSL 側一時ファイル方式へ戻す。
 - 失敗した編集コマンドの後は、必ず `sed -n` などで対象ファイルを確認してから続行する。
 - 編集後は必ず `git diff -- 対象ファイル` で、意図した差分だけになっているか確認する。
+
+Markdown に TypeScript の型例やレスポンス例を書くときは、文字列リテラル型を必ずクオートする。特に union 型は `USER | ADMIN` のように書くと TypeScript 上は未定義識別子として扱われるため、コピー可能なサンプルとして不正になる。`"USER" | "ADMIN"` のように文字列リテラル union として書く。
+
+```typescript
+// 悪い例: USER / ADMIN が未定義識別子になる
+type Role = USER | ADMIN;
+
+// 良い例: 文字列リテラル union としてコピーできる
+type Role = "USER" | "ADMIN";
+```
 
 安全な分割例:
 
@@ -58,24 +84,26 @@ Codex は実装・修正・追加・リファクタリングでファイル編�
 
 小規模変更:
 
-- `apply_patch` を優先する。
-- `apply_patch` が UNC パスや権限で失敗する場合は、WSL 側で短い `python3` / `perl` 置換に切り替える。
+- WSL 内 `apply_patch` を優先する。
+- UNC パスに対する `apply_patch` が権限で失敗しても、`python3` / `perl` 置換へ移る前に WSL 内 `apply_patch` で再実行する。
 
 大規模変更:
 
-- 一時ファイル方式を使う。
+- まず WSL 内 `apply_patch` で差分を表現できるか検討する。
+- 差分が大きすぎる、または全文置換のほうが安全な場合だけ一時ファイル方式を使う。
 - 特に frontend の `$lib` import を含むファイルは、Svelte と同じく PowerShell inline 編集を避ける。
 
 ### 3. Markdown（`.md`）
 
 小規模変更:
 
-- `apply_patch` を優先する。
-- 1行置換なら WSL 側の短い `python3` / `perl` でもよい。
+- WSL 内 `apply_patch` を優先する。
+- 1行だけの完全一致置換なら、WSL 側の短い `python3` / `perl` でもよい。
 
 大規模変更・コードブロックが多い場合:
 
-- 一時ファイル方式を使う。
+- まず WSL 内 `apply_patch` で段落単位に分けて編集する。
+- コードブロックや表が大きく崩れそうな場合だけ一時ファイル方式を使う。
 
 注意:
 
@@ -83,19 +111,19 @@ Codex は実装・修正・追加・リファクタリングでファイル編�
 
 ### 4. JSON / package files（`.json`）
 
-- 小規模なら `apply_patch`。
+- 小規模なら WSL 内 `apply_patch`。
 - 構造変更なら JSON parser を使って読み書きする。
 - 編集後に format / test / package script で検証する。
 
 ### 5. Prisma schema（`schema.prisma`）
 
-- `apply_patch` または一時ファイル方式。
+- WSL 内 `apply_patch` または一時ファイル方式。
 - `datasource` に `url =` を書かない。
 - DB 構造変更をした場合は、マイグレーション確認と Playwright 確認を実施し、作業報告に含める。
 
 ### 6. テストファイル（`.test.ts`）
 
-- 小規模追加は `apply_patch` を優先する。
+- 小規模追加は WSL 内 `apply_patch` を優先する。
 - 大きめの `describe` / fixture 追加は、一時ファイル方式、または小さい差分に分割する。
 - 日本語テスト名、引用符、template literal が混ざるため、PowerShell inline 編集は避ける。
 
