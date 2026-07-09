@@ -374,6 +374,7 @@ Response 200 は以下を返す。
 - レビュー改善として status / role / force delete の mutation を Serializable transaction に変更し、同時操作の競合が続く場合は 409 を返すようにした。
 - PRレビュー対応として `adminUserId` も `targetUserId` と同じく正規化し、自己操作チェックを一貫させた。
 - 追加レビュー対応として admin 一覧 limit 定数を service export に集約し、fake timers を `afterEach` で復帰するようにした。
+- 追加レビュー対応として token 削除を `Promise.all` にまとめ、強制退会 update の返却 select を最小化した。
 - route test は endpoint ごとに `backend/src/routes/admin/*.test.ts` へ分割し、認証・認可・validation・Date の ISO 変換を検証した。
 - 手動 API 確認では検証専用ユーザーをローカルDBに一時追加し、確認後に削除した。
 

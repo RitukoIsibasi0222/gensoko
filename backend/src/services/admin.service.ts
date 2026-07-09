@@ -278,9 +278,11 @@ function toAdminUserDetail(user: AdminUserDetailRow): AdminUserDetail {
 }
 
 async function deleteUserTokens(tx: TokenCleanupClient, userId: string): Promise<void> {
-  await tx.refreshToken.deleteMany({ where: { userId } });
-  await tx.passwordResetToken.deleteMany({ where: { userId } });
-  await tx.emailVerification.deleteMany({ where: { userId } });
+  await Promise.all([
+    tx.refreshToken.deleteMany({ where: { userId } }),
+    tx.passwordResetToken.deleteMany({ where: { userId } }),
+    tx.emailVerification.deleteMany({ where: { userId } }),
+  ]);
 }
 
 function isSerializationConflict(error: unknown): boolean {
@@ -510,7 +512,7 @@ export async function forceDeleteAdminUser(input: {
     await tx.user.update({
       where: { id: targetUserId },
       data: { isActive: false, deletedAt: now, lockedUntil: null },
-      select: adminUserSummarySelect,
+      select: { id: true },
     });
     await deleteUserTokens(tx, targetUserId);
 

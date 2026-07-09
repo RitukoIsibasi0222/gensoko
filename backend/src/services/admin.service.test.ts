@@ -369,6 +369,7 @@ describe("forceDeleteAdminUser", () => {
       expect.objectContaining({
         where: { id: "user-1" },
         data: { isActive: false, deletedAt: NOW, lockedUntil: null },
+        select: { id: true },
       }),
     );
     expect(tx.refreshToken.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
