@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { adminRouter } from "./routes/admin/index.js";
 import { authRouter } from "./routes/auth/index.js";
 import { elementsRouter } from "./routes/elements/index.js";
 import { gameRouter } from "./routes/game/index.js";
@@ -35,6 +36,7 @@ app.get("/api/v1/health", (c) => {
 
 // ルート登録
 app.route("/api/v1/auth", authRouter);
+app.route("/api/v1/admin", adminRouter);
 app.route("/api/v1/elements", elementsRouter);
 app.route("/api/v1/game", gameRouter);
 app.route("/api/v1/ranking", rankingRouter);
