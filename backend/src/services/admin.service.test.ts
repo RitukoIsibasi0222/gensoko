@@ -34,6 +34,8 @@ vi.mock("../lib/prisma.js", () => ({
 import { prisma } from "../lib/prisma.js";
 import {
   AdminServiceError,
+  ADMIN_USERS_DEFAULT_LIMIT,
+  ADMIN_USERS_MAX_LIMIT,
   forceDeleteAdminUser,
   getAdminStats,
   getAdminUserDetail,
@@ -173,6 +175,31 @@ describe("getAdminUsers", () => {
     expect(result.nextCursor).toBe("user-1");
     expect(result.users).toHaveLength(2);
     expect(result.users[0].stats.accuracyRate).toBe(83);
+  });
+
+  it("limit が非有限値や小数でも Prisma に渡す take は整数になる", async () => {
+    vi.mocked(prisma.user.findMany).mockResolvedValue([] as never);
+
+    await getAdminUsers({ limit: Number.NaN });
+    await getAdminUsers({ limit: Number.POSITIVE_INFINITY });
+    await getAdminUsers({ limit: 2.9 });
+    await getAdminUsers({ limit: 101.9 });
+    await getAdminUsers({ limit: 0.9 });
+
+    expect(prisma.user.findMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ take: ADMIN_USERS_DEFAULT_LIMIT + 1 }),
+    );
+    expect(prisma.user.findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ take: ADMIN_USERS_DEFAULT_LIMIT + 1 }),
+    );
+    expect(prisma.user.findMany).toHaveBeenNthCalledWith(3, expect.objectContaining({ take: 3 }));
+    expect(prisma.user.findMany).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({ take: ADMIN_USERS_MAX_LIMIT + 1 }),
+    );
+    expect(prisma.user.findMany).toHaveBeenNthCalledWith(5, expect.objectContaining({ take: 2 }));
   });
 
   it("cursor が存在しない場合は AdminServiceError(400) を投げる", async () => {

@@ -150,7 +150,13 @@ function normalizeLimit(limit: number | undefined): number {
     return ADMIN_USERS_DEFAULT_LIMIT;
   }
 
-  return Math.min(Math.max(limit, 1), ADMIN_USERS_MAX_LIMIT);
+  if (!Number.isFinite(limit)) {
+    return ADMIN_USERS_DEFAULT_LIMIT;
+  }
+
+  const integerLimit = Math.floor(limit);
+
+  return Math.min(Math.max(integerLimit, 1), ADMIN_USERS_MAX_LIMIT);
 }
 
 function getUsableAdminWhere(now: Date): Prisma.UserWhereInput {
