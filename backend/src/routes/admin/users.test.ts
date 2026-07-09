@@ -64,6 +64,8 @@ vi.mock("../../services/admin.service.js", () => {
   }
 
   return {
+    ADMIN_USERS_DEFAULT_LIMIT: 20,
+    ADMIN_USERS_MAX_LIMIT: 100,
     AdminServiceError,
     forceDeleteAdminUser: vi.fn(),
     getAdminStats: vi.fn(),

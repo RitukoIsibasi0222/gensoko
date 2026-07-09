@@ -5,6 +5,8 @@ import { z } from "zod";
 import { adminMiddleware } from "../../middleware/admin/index.js";
 import { authMiddleware } from "../../middleware/auth/index.js";
 import {
+  ADMIN_USERS_DEFAULT_LIMIT,
+  ADMIN_USERS_MAX_LIMIT,
   AdminServiceError,
   forceDeleteAdminUser,
   getAdminStats,
@@ -18,8 +20,6 @@ import {
 } from "../../services/admin.service.js";
 import type { AppVariables } from "../../types/index.js";
 
-const ADMIN_USERS_DEFAULT_LIMIT = 20;
-const ADMIN_USERS_MAX_LIMIT = 100;
 const ADMIN_USERS_LIMIT_ERROR_MESSAGE = "取得件数が正しくありません";
 const ADMIN_USERS_CURSOR_ERROR_MESSAGE = "カーソルが正しくありません";
 const ADMIN_USERS_QUERY_ERROR_MESSAGE = "検索キーワードが正しくありません";

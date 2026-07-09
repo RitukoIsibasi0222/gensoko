@@ -81,8 +81,8 @@ export type AdminStats = {
   };
 };
 
-const ADMIN_USERS_DEFAULT_LIMIT = 20;
-const ADMIN_USERS_MAX_LIMIT = 100;
+export const ADMIN_USERS_DEFAULT_LIMIT = 20;
+export const ADMIN_USERS_MAX_LIMIT = 100;
 const ADMIN_MUTATION_MAX_SERIALIZATION_ATTEMPTS = 2;
 const ADMIN_MUTATION_CONFLICT_MESSAGE = "同時操作により処理できませんでした。再試行してください";
 
