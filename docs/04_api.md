@@ -650,7 +650,7 @@ Response fields:
 - user.id: ユーザーID
 - user.username: ユーザー名
 - user.email: メールアドレス
-- user.role: `USER` または `ADMIN`
+- user.role: `"USER"` または `"ADMIN"`
 - user.createdAt: 登録日時
 
 Error:
@@ -932,8 +932,8 @@ Query params:
 | `limit` | number | 20 | 1〜100。未指定または空文字は20 |
 | `cursor` | string | なし | 前回レスポンスの `nextCursor`。trim 後空文字は400 |
 | `q` | string | なし | `username` / `email` の部分一致。trim 後100文字以内。空文字は未指定扱い |
-| `role` | `USER` または `ADMIN` | なし | ロール filter |
-| `status` | `active` または `suspended` または `deleted` | なし | 状態 filter |
+| `role` | `"USER" | "ADMIN"` | なし | ロール filter |
+| `status` | `"active" | "suspended" | "deleted"` | なし | 状態 filter |
 
 Response 200:
 
