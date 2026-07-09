@@ -297,19 +297,19 @@ Response 200 は以下を返す。
 | T12 | 手動 API 確認 | Docker 起動環境 | ADMIN/USER/未認証で主要 endpoint を確認済み | Medium |
 | T13 | 進捗・計画書更新 | docs/05_progress.md, 本 plan | checklist と実装完了セクションが更新される | High |
 
-- [ ] T1: 既存仕様・既存実装を再確認し admin API 契約を確定
-- [ ] T2: docs/04_api.md に admin API 詳細を追記
-- [ ] T3: service test を追加
-- [ ] T4: route test を追加
-- [ ] T5: admin service の型・エラー・共通 helper を実装
-- [ ] T6: ユーザー一覧・詳細 service を実装
-- [ ] T7: status / role / force delete service を実装
-- [ ] T8: admin stats service を実装
-- [ ] T9: admin route を実装
-- [ ] T10: admin router を mount
-- [ ] T11: 品質チェック
-- [ ] T12: 手動 API 確認
-- [ ] T13: 進捗・計画書更新
+- [x] T1: 既存仕様・既存実装を再確認し admin API 契約を確定
+- [x] T2: docs/04_api.md に admin API 詳細を追記
+- [x] T3: service test を追加
+- [x] T4: route test を追加
+- [x] T5: admin service の型・エラー・共通 helper を実装
+- [x] T6: ユーザー一覧・詳細 service を実装
+- [x] T7: status / role / force delete service を実装
+- [x] T8: admin stats service を実装
+- [x] T9: admin route を実装
+- [x] T10: admin router を mount
+- [x] T11: 品質チェック
+- [x] T12: 手動 API 確認
+- [x] T13: 進捗・計画書更新
 
 ## テストケース一覧
 
@@ -364,20 +364,44 @@ Response 200 は以下を返す。
 - DB 変更が発生した場合は、migration、npx prisma migrate deploy、Playwright または手動確認結果を記録する。
 - 実装完了 セクションを追記する。
 
-実装完了セクションのテンプレート:
-
 ## 実装完了
-- 完了日: YYYY-MM-DD
+- 完了日: 2026-07-09
 - 実装ブランチ: feature/admin-apis
-- PR: #N
+- PR: 未作成（チャット確認後に作成予定）
 
 ### 計画からの変更点
-- なし
+- route test は endpoint ごとに `backend/src/routes/admin/*.test.ts` へ分割し、認証・認可・validation・Date の ISO 変換を検証した。
+- 手動 API 確認では検証専用ユーザーをローカルDBに一時追加し、確認後に削除した。
 
 ### 実際の変更ファイル
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
-| docs/04_api.md | 修正 | admin API 詳細仕様を追記 |
-| backend/src/services/admin.service.ts | 新規 | admin service を実装 |
-| backend/src/routes/admin/index.ts | 修正 | admin routes を実装 |
-| backend/src/index.ts | 修正 | admin router を mount |
+| `docs/04_api.md` | 修正 | admin API 詳細仕様を追記 |
+| `docs/05_progress.md` | 修正 | Admin APIs タスクを実装中から完了へ更新 |
+| `docs/plans/admin-apis/plan.md` | 修正 | タスク完了状況と実装完了記録を更新 |
+| `backend/src/services/admin.service.ts` | 新規 | admin service と保護ロジックを実装 |
+| `backend/src/services/admin.service.test.ts` | 新規 | admin service の TDD テストを追加 |
+| `backend/src/routes/admin/index.ts` | 修正 | admin routes を実装 |
+| `backend/src/routes/admin/users.test.ts` | 新規 | GET /admin/users route テストを追加 |
+| `backend/src/routes/admin/user-detail.test.ts` | 新規 | GET /admin/users/:id route テストを追加 |
+| `backend/src/routes/admin/user-status.test.ts` | 新規 | PATCH /admin/users/:id/status route テストを追加 |
+| `backend/src/routes/admin/user-role.test.ts` | 新規 | PATCH /admin/users/:id/role route テストを追加 |
+| `backend/src/routes/admin/user-delete.test.ts` | 新規 | DELETE /admin/users/:id route テストを追加 |
+| `backend/src/routes/admin/stats.test.ts` | 新規 | GET /admin/stats route テストを追加 |
+| `backend/src/index.ts` | 修正 | /api/v1/admin router を mount |
+
+### 検証結果
+| 種別 | コマンド / 手順 | 結果 |
+|---|---|---|
+| Red | `npm run test -- src/services/admin.service.test.ts --run` | `admin.service.js` 未実装で失敗することを確認 |
+| Red | `npm run test -- src/routes/admin/*.test.ts --run` | `adminRouter` 未実装で失敗することを確認 |
+| Green | `npm run test -- src/services/admin.service.test.ts src/routes/admin/*.test.ts --run` | 31 tests passed |
+| Format | `npm run format` | 成功 |
+| Lint | `npm run lint` | 成功 |
+| Format check | `npm run format:check` | 成功 |
+| Test | `npm run test -- --run` | 43 files / 330 tests passed |
+| Build | `npm run build` | 成功 |
+| 手動 API | 未認証 `GET /api/v1/admin/stats` | 401 `認証が必要です` |
+| 手動 API | USER token `GET /api/v1/admin/stats` | 403 `管理者権限が必要です` |
+| 手動 API | ADMIN token `GET /api/v1/admin/stats` | 200、統計 JSON を返却 |
+| 手動 API | ADMIN token `GET /api/v1/admin/users?limit=2` | 200、`users` と `nextCursor` を返却 |

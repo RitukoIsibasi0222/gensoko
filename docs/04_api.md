@@ -898,15 +898,300 @@ Error:
 | DELETE | `/admin/users/:id` | 強制退会 | 👑 |
 | GET | `/admin/stats` | サービス全体の統計 | 👑 |
 
-### PATCH `/admin/users/:id/status`
+### 共通仕様
+
+全 endpoint は `authMiddleware` と `adminMiddleware` を通す。
+レスポンスには `passwordHash`、refresh token、email verification token、password reset token などの機密情報を含めない。
+
+共通エラー:
+
+```text
+400 error: バリデーションエラー
+401 error: 認証が必要です / トークンが無効です / ユーザーが見つかりません
+403 error: 管理者権限が必要です / アカウントが停止されています / メールアドレスが確認されていません / アカウントがロックされています
+500 error: サーバーエラーが発生しました
 ```
-Request:
-{
-  "isActive": false   // false=停止, true=解除
-}
+
+最後の管理者保護で数える「利用可能な管理者」は、以下をすべて満たすユーザーとする。
+
+- `role = ADMIN`
+- `isActive = true`
+- `deletedAt = null`
+- `emailVerified = true`
+- `lockedUntil = null` または現在時刻以前
+
+### GET `/admin/users`
+
+Query params:
+
+| パラメータ | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `limit` | number | 20 | 1〜100。未指定または空文字は20 |
+| `cursor` | string | なし | 前回レスポンスの `nextCursor`。trim 後空文字は400 |
+| `q` | string | なし | `username` / `email` の部分一致。trim 後100文字以内。空文字は未指定扱い |
+| `role` | `USER` または `ADMIN` | なし | ロール filter |
+| `status` | `active` または `suspended` または `deleted` | なし | 状態 filter |
 
 Response 200:
+
+```ts
 {
-  "message": "アカウントを停止しました"
+  users: [
+    {
+      id: string,
+      username: string,
+      email: string,
+      role: USER | ADMIN,
+      emailVerified: boolean,
+      isActive: boolean,
+      deletedAt: string | null,
+      lockedUntil: string | null,
+      lastLoginAt: string | null,
+      createdAt: string,
+      updatedAt: string,
+      stats: {
+        totalGames: number,
+        accuracyRate: number,
+        weeklyScore: number,
+        allTimeScore: number
+      }
+    }
+  ],
+  nextCursor: string | null
 }
 ```
+
+Status filter:
+
+- `active`: `isActive = true` かつ `deletedAt = null`
+- `suspended`: `isActive = false` かつ `deletedAt = null`
+- `deleted`: `deletedAt != null`
+
+Sort:
+
+- `createdAt desc`, `id desc`
+
+Error:
+
+```text
+400 error: バリデーションエラー / カーソルが正しくありません
+```
+
+### GET `/admin/users/:id`
+
+Path params:
+
+| パラメータ | 型 | 説明 |
+|---|---|---|
+| `id` | string | ユーザーID。trim 後に空文字不可 |
+
+Response 200:
+
+```ts
+{
+  user: {
+    id: string,
+    username: string,
+    email: string,
+    role: USER | ADMIN,
+    emailVerified: boolean,
+    isActive: boolean,
+    deletedAt: string | null,
+    loginFailCount: number,
+    lockedUntil: string | null,
+    lastLoginAt: string | null,
+    createdAt: string,
+    updatedAt: string,
+    stats: {
+      totalGames: number,
+      totalCorrect: number,
+      totalAnswered: number,
+      accuracyRate: number,
+      masteredCount: number,
+      currentStreak: number,
+      weeklyScore: number,
+      allTimeScore: number,
+      lastActiveDate: string | null,
+      updatedAt: string | null
+    }
+  }
+}
+```
+
+Error:
+
+```text
+404 error: ユーザーが見つかりません
+```
+
+### PATCH `/admin/users/:id/status`
+
+Path params:
+
+| パラメータ | 型 | 説明 |
+|---|---|---|
+| `id` | string | ユーザーID。trim 後に空文字不可 |
+
+Request:
+
+```ts
+{
+  isActive: boolean
+}
+```
+
+Response 200:
+
+```ts
+{
+  message: アカウントを停止しました | アカウント停止を解除しました,
+  user: {
+    id: string,
+    username: string,
+    email: string,
+    role: USER | ADMIN,
+    emailVerified: boolean,
+    isActive: boolean,
+    deletedAt: string | null,
+    lockedUntil: string | null,
+    lastLoginAt: string | null,
+    createdAt: string,
+    updatedAt: string
+  }
+}
+```
+
+Rules:
+
+- 自分自身は停止/解除できない。
+- 利用可能な管理者が0人になる停止は409。
+- 削除済みユーザーの停止/解除は409。
+- 停止時は `isActive=false`, `lockedUntil=null` にし、refresh token / password reset token / email verification token を削除する。
+- 解除時は `isActive=true`, `lockedUntil=null` にする。token は再発行しない。
+
+Error:
+
+```text
+404 error: ユーザーが見つかりません
+409 error: 自分自身には実行できません / 最後の管理者は変更できません / 削除済みユーザーは変更できません
+```
+
+### PATCH `/admin/users/:id/role`
+
+Path params:
+
+| パラメータ | 型 | 説明 |
+|---|---|---|
+| `id` | string | ユーザーID。trim 後に空文字不可 |
+
+Request:
+
+```ts
+{
+  role: USER | ADMIN
+}
+```
+
+Response 200:
+
+```ts
+{
+  message: ロールを変更しました,
+  user: {
+    id: string,
+    username: string,
+    email: string,
+    role: USER | ADMIN,
+    emailVerified: boolean,
+    isActive: boolean,
+    deletedAt: string | null,
+    lockedUntil: string | null,
+    lastLoginAt: string | null,
+    createdAt: string,
+    updatedAt: string
+  }
+}
+```
+
+Rules:
+
+- 自分自身の role は変更できない。
+- 利用可能な管理者が0人になる降格は409。
+- 停止済み・削除済みユーザーの role は変更できない。
+- `ADMIN` に昇格できるのは `emailVerified=true`, `isActive=true`, `deletedAt=null` のユーザーのみ。
+- 認可は DB の最新 role を参照するため、ロール変更は次リクエストから反映される。
+- ロール変更時に refresh token は削除しない。
+
+Error:
+
+```text
+404 error: ユーザーが見つかりません
+409 error: 自分自身には実行できません / 最後の管理者は変更できません / 停止中または削除済みのユーザーは変更できません / メール認証済みで有効なユーザーのみ管理者にできます
+```
+
+### DELETE `/admin/users/:id`
+
+Path params:
+
+| パラメータ | 型 | 説明 |
+|---|---|---|
+| `id` | string | ユーザーID。trim 後に空文字不可 |
+
+Response 200:
+
+```ts
+{
+  message: ユーザーを強制退会しました
+}
+```
+
+Rules:
+
+- 物理削除ではなく soft delete とする。
+- 自分自身は強制退会できない。
+- 利用可能な管理者が0人になる強制退会は409。
+- 既に削除済みのユーザーは409。
+- `isActive=false`, `deletedAt=現在時刻`, `lockedUntil=null` を設定する。
+- refresh token / password reset token / email verification token を削除する。
+
+Error:
+
+```text
+404 error: ユーザーが見つかりません
+409 error: 自分自身には実行できません / 最後の管理者は変更できません / ユーザーは既に削除されています
+```
+
+### GET `/admin/stats`
+
+Response 200:
+
+```ts
+{
+  users: {
+    total: number,
+    active: number,
+    suspended: number,
+    deleted: number,
+    admins: number,
+    emailVerified: number
+  },
+  games: {
+    totalSessions: number,
+    totalAnswered: number,
+    averageAccuracyRate: number
+  },
+  learning: {
+    totalWeakElements: number,
+    totalMasteredCount: number
+  }
+}
+```
+
+Aggregation:
+
+- `users.*` は `user.count` を使う。
+- `admins` は利用可能な管理者数ではなく、表示用に `role=ADMIN`, `deletedAt=null` を数える。
+- `games.totalSessions` は `gameSession.count` を使う。
+- `games.totalAnswered` と `games.averageAccuracyRate` は `userStats.aggregate` の `totalAnswered` / `totalCorrect` 合計から算出する。
+- `learning.totalWeakElements` は `weakElement.count` を使う。
+- `learning.totalMasteredCount` は `userStats.aggregate` の `masteredCount` 合計から算出する。
