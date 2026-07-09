@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/prisma.js", () => ({
@@ -43,6 +44,13 @@ import {
 
 const NOW = new Date("2026-07-09T12:00:00.000Z");
 const BASE_DATE = new Date("2026-06-20T12:00:00.000Z");
+
+function createSerializationConflictError() {
+  return new Prisma.PrismaClientKnownRequestError("Transaction write conflict", {
+    code: "P2034",
+    clientVersion: "test",
+  });
+}
 
 const baseAdminUser = {
   id: "admin-1",
@@ -224,6 +232,9 @@ describe("updateAdminUserStatus", () => {
       isActive: false,
     });
 
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    });
     expect(tx.user.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "user-1" },
@@ -258,6 +269,18 @@ describe("updateAdminUserStatus", () => {
       message: "最後の管理者は変更できません",
     });
     expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  it("serializable transaction の競合が続いた場合は AdminServiceError(409) にする", async () => {
+    vi.mocked(prisma.$transaction).mockRejectedValue(createSerializationConflictError());
+
+    await expect(
+      updateAdminUserStatus({ adminUserId: "admin-1", targetUserId: "admin-2", isActive: false }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "同時操作により処理できませんでした。再試行してください",
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
   });
 });
 

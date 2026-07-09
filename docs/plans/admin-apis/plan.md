@@ -103,7 +103,7 @@
 1. admin API の契約を docs/04_api.md に追記する。
 2. backend/src/services/admin.service.ts を新規作成し、DB 操作と保護ロジックを route から分離する。
 3. route では zod validation、auth/admin middleware、Date の ISO 変換、service error mapping に集中する。
-4. mutation は transaction 内で対象ユーザー確認、usable admin 保護、更新、token 削除をまとめる。
+4. mutation は Serializable transaction 内で対象ユーザー確認、usable admin 保護、更新、token 削除をまとめ、最後の管理者保護の write skew を DB 側で検出する。
 5. admin response は必要な public/admin 表示情報だけを select し、passwordHash や token hash は返さない。
 6. DB schema は変更せず、性能懸念は bounded query と後続 index 検討として記録する。
 7. TDD で route test と service test を先に追加し、Red -> Green -> Refactor の流れで実装する。
@@ -351,6 +351,7 @@ Response 200 は以下を返す。
 | stats 0件 | すべて 0、accuracyRate 0 |
 | stats 集計あり | UserStats.aggregate の sum から正答率を算出 |
 | service 予期しない例外 | route は 500 サーバーエラーが発生しました |
+| serializable transaction 競合 | 409 同時操作により処理できませんでした。再試行してください |
 | response shape | Date は ISO string、機密 field は含まない |
 
 ## 実装完了時の更新ルール
@@ -370,6 +371,7 @@ Response 200 は以下を返す。
 - PR: 未作成（チャット確認後に作成予定）
 
 ### 計画からの変更点
+- レビュー改善として status / role / force delete の mutation を Serializable transaction に変更し、同時操作の競合が続く場合は 409 を返すようにした。
 - route test は endpoint ごとに `backend/src/routes/admin/*.test.ts` へ分割し、認証・認可・validation・Date の ISO 変換を検証した。
 - 手動 API 確認では検証専用ユーザーをローカルDBに一時追加し、確認後に削除した。
 
@@ -395,11 +397,11 @@ Response 200 は以下を返す。
 |---|---|---|
 | Red | `npm run test -- src/services/admin.service.test.ts --run` | `admin.service.js` 未実装で失敗することを確認 |
 | Red | `npm run test -- src/routes/admin/*.test.ts --run` | `adminRouter` 未実装で失敗することを確認 |
-| Green | `npm run test -- src/services/admin.service.test.ts src/routes/admin/*.test.ts --run` | 31 tests passed |
+| Green | `npm run test -- src/services/admin.service.test.ts src/routes/admin/*.test.ts --run` | 32 tests passed |
 | Format | `npm run format` | 成功 |
 | Lint | `npm run lint` | 成功 |
 | Format check | `npm run format:check` | 成功 |
-| Test | `npm run test -- --run` | 43 files / 330 tests passed |
+| Test | `npm run test -- --run` | 43 files / 331 tests passed |
 | Build | `npm run build` | 成功 |
 | 手動 API | 未認証 `GET /api/v1/admin/stats` | 401 `認証が必要です` |
 | 手動 API | USER token `GET /api/v1/admin/stats` | 403 `管理者権限が必要です` |

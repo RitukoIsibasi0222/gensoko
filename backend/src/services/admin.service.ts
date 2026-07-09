@@ -1,4 +1,4 @@
-import type { Prisma, Role } from "@prisma/client";
+import { Prisma, type Role } from "@prisma/client";
 import { calculateAccuracyRate, normalizeNonNegativeCount } from "../lib/stats.js";
 import { prisma } from "../lib/prisma.js";
 
@@ -83,6 +83,8 @@ export type AdminStats = {
 
 const ADMIN_USERS_DEFAULT_LIMIT = 20;
 const ADMIN_USERS_MAX_LIMIT = 100;
+const ADMIN_MUTATION_MAX_SERIALIZATION_ATTEMPTS = 2;
+const ADMIN_MUTATION_CONFLICT_MESSAGE = "同時操作により処理できませんでした。再試行してください";
 
 const adminUserSummarySelect = {
   id: true,
@@ -281,6 +283,33 @@ async function deleteUserTokens(tx: TokenCleanupClient, userId: string): Promise
   await tx.emailVerification.deleteMany({ where: { userId } });
 }
 
+function isSerializationConflict(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
+}
+
+// 最後の管理者保護は count -> update なので、write skew を DB 側で検出する。
+async function runAdminMutationTransaction<T>(
+  callback: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  for (let attempt = 1; attempt <= ADMIN_MUTATION_MAX_SERIALIZATION_ATTEMPTS; attempt += 1) {
+    try {
+      return await prisma.$transaction(callback, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (error) {
+      if (!isSerializationConflict(error)) {
+        throw error;
+      }
+
+      if (attempt === ADMIN_MUTATION_MAX_SERIALIZATION_ATTEMPTS) {
+        throw new AdminServiceError(409, ADMIN_MUTATION_CONFLICT_MESSAGE);
+      }
+    }
+  }
+
+  throw new AdminServiceError(409, ADMIN_MUTATION_CONFLICT_MESSAGE);
+}
+
 export async function getAdminUsers(input: AdminUserListQuery = {}): Promise<{
   users: AdminUserListItem[];
   nextCursor: string | null;
@@ -354,7 +383,7 @@ export async function updateAdminUserStatus(input: {
     throw new AdminServiceError(409, "自分自身には実行できません");
   }
 
-  return await prisma.$transaction(async (tx) => {
+  return await runAdminMutationTransaction(async (tx) => {
     const targetUser = await tx.user.findUnique({
       where: { id: targetUserId },
       select: adminUserSummarySelect,
@@ -404,7 +433,7 @@ export async function updateAdminUserRole(input: {
     throw new AdminServiceError(409, "自分自身には実行できません");
   }
 
-  return await prisma.$transaction(async (tx) => {
+  return await runAdminMutationTransaction(async (tx) => {
     const targetUser = await tx.user.findUnique({
       where: { id: targetUserId },
       select: adminUserSummarySelect,
@@ -453,7 +482,7 @@ export async function forceDeleteAdminUser(input: {
     throw new AdminServiceError(409, "自分自身には実行できません");
   }
 
-  return await prisma.$transaction(async (tx) => {
+  return await runAdminMutationTransaction(async (tx) => {
     const targetUser = await tx.user.findUnique({
       where: { id: targetUserId },
       select: adminUserSummarySelect,
