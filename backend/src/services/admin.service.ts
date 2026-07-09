@@ -377,9 +377,10 @@ export async function updateAdminUserStatus(input: {
   targetUserId: string;
   isActive: boolean;
 }): Promise<{ message: string; user: AdminUserSummary }> {
+  const adminUserId = normalizeId(input.adminUserId);
   const targetUserId = normalizeId(input.targetUserId);
 
-  if (input.adminUserId === targetUserId) {
+  if (adminUserId === targetUserId) {
     throw new AdminServiceError(409, "自分自身には実行できません");
   }
 
@@ -427,9 +428,10 @@ export async function updateAdminUserRole(input: {
   targetUserId: string;
   role: Role;
 }): Promise<{ message: string; user: AdminUserSummary }> {
+  const adminUserId = normalizeId(input.adminUserId);
   const targetUserId = normalizeId(input.targetUserId);
 
-  if (input.adminUserId === targetUserId) {
+  if (adminUserId === targetUserId) {
     throw new AdminServiceError(409, "自分自身には実行できません");
   }
 
@@ -476,9 +478,10 @@ export async function forceDeleteAdminUser(input: {
   adminUserId: string;
   targetUserId: string;
 }): Promise<{ message: string }> {
+  const adminUserId = normalizeId(input.adminUserId);
   const targetUserId = normalizeId(input.targetUserId);
 
-  if (input.adminUserId === targetUserId) {
+  if (adminUserId === targetUserId) {
     throw new AdminServiceError(409, "自分自身には実行できません");
   }
 

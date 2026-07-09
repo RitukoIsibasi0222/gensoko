@@ -1047,7 +1047,7 @@ Response 200:
 
 ```ts
 {
-  message: アカウントを停止しました | アカウント停止を解除しました,
+  message: "アカウントを停止しました" | "アカウント停止を解除しました",
   user: {
     id: string,
     username: string,
@@ -1099,7 +1099,7 @@ Response 200:
 
 ```ts
 {
-  message: ロールを変更しました,
+  message: "ロールを変更しました",
   user: {
     id: string,
     username: string,
@@ -1144,7 +1144,7 @@ Response 200:
 
 ```ts
 {
-  message: ユーザーを強制退会しました
+  message: "ユーザーを強制退会しました"
 }
 ```
 

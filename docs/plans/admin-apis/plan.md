@@ -368,10 +368,11 @@ Response 200 は以下を返す。
 ## 実装完了
 - 完了日: 2026-07-09
 - 実装ブランチ: feature/admin-apis
-- PR: 未作成（チャット確認後に作成予定）
+- PR: #77
 
 ### 計画からの変更点
 - レビュー改善として status / role / force delete の mutation を Serializable transaction に変更し、同時操作の競合が続く場合は 409 を返すようにした。
+- PRレビュー対応として `adminUserId` も `targetUserId` と同じく正規化し、自己操作チェックを一貫させた。
 - route test は endpoint ごとに `backend/src/routes/admin/*.test.ts` へ分割し、認証・認可・validation・Date の ISO 変換を検証した。
 - 手動 API 確認では検証専用ユーザーをローカルDBに一時追加し、確認後に削除した。
 
@@ -397,11 +398,11 @@ Response 200 は以下を返す。
 |---|---|---|
 | Red | `npm run test -- src/services/admin.service.test.ts --run` | `admin.service.js` 未実装で失敗することを確認 |
 | Red | `npm run test -- src/routes/admin/*.test.ts --run` | `adminRouter` 未実装で失敗することを確認 |
-| Green | `npm run test -- src/services/admin.service.test.ts src/routes/admin/*.test.ts --run` | 32 tests passed |
+| Green | `npm run test -- src/services/admin.service.test.ts src/routes/admin/*.test.ts --run` | 34 tests passed |
 | Format | `npm run format` | 成功 |
 | Lint | `npm run lint` | 成功 |
 | Format check | `npm run format:check` | 成功 |
-| Test | `npm run test -- --run` | 43 files / 331 tests passed |
+| Test | `npm run test -- --run` | 43 files / 333 tests passed |
 | Build | `npm run build` | 成功 |
 | 手動 API | 未認証 `GET /api/v1/admin/stats` | 401 `認証が必要です` |
 | 手動 API | USER token `GET /api/v1/admin/stats` | 403 `管理者権限が必要です` |

@@ -249,7 +249,7 @@ describe("updateAdminUserStatus", () => {
 
   it("自分自身の停止/解除は AdminServiceError(409) にする", async () => {
     await expect(
-      updateAdminUserStatus({ adminUserId: "admin-1", targetUserId: "admin-1", isActive: false }),
+      updateAdminUserStatus({ adminUserId: " admin-1 ", targetUserId: "admin-1", isActive: false }),
     ).rejects.toMatchObject({
       status: 409,
       message: "自分自身には実行できません",
@@ -310,6 +310,16 @@ describe("updateAdminUserRole", () => {
     expect(result.user.role).toBe("ADMIN");
   });
 
+  it("adminUserId を正規化して自分自身のロール変更を拒否する", async () => {
+    await expect(
+      updateAdminUserRole({ adminUserId: " admin-1 ", targetUserId: "admin-1", role: "USER" }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "自分自身には実行できません",
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it("メール未認証ユーザーの ADMIN 昇格は AdminServiceError(409) にする", async () => {
     const tx = mockTransaction();
     tx.user.findUnique.mockResolvedValue({ ...baseTargetUser, emailVerified: false });
@@ -361,6 +371,16 @@ describe("forceDeleteAdminUser", () => {
     expect(tx.passwordResetToken.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
     expect(tx.emailVerification.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
     expect(result).toEqual({ message: "ユーザーを強制退会しました" });
+  });
+
+  it("adminUserId を正規化して自分自身の強制退会を拒否する", async () => {
+    await expect(
+      forceDeleteAdminUser({ adminUserId: " admin-1 ", targetUserId: "admin-1" }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "自分自身には実行できません",
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it("既に削除済みのユーザーは AdminServiceError(409) にする", async () => {
