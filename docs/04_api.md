@@ -944,7 +944,7 @@ Response 200:
       id: string,
       username: string,
       email: string,
-      role: USER | ADMIN,
+      role: "USER" | "ADMIN",
       emailVerified: boolean,
       isActive: boolean,
       deletedAt: string | null,
@@ -996,7 +996,7 @@ Response 200:
     id: string,
     username: string,
     email: string,
-    role: USER | ADMIN,
+    role: "USER" | "ADMIN",
     emailVerified: boolean,
     isActive: boolean,
     deletedAt: string | null,
@@ -1052,7 +1052,7 @@ Response 200:
     id: string,
     username: string,
     email: string,
-    role: USER | ADMIN,
+    role: "USER" | "ADMIN",
     emailVerified: boolean,
     isActive: boolean,
     deletedAt: string | null,
@@ -1091,7 +1091,7 @@ Request:
 
 ```ts
 {
-  role: USER | ADMIN
+  role: "USER" | "ADMIN"
 }
 ```
 
@@ -1104,7 +1104,7 @@ Response 200:
     id: string,
     username: string,
     email: string,
-    role: USER | ADMIN,
+    role: "USER" | "ADMIN",
     emailVerified: boolean,
     isActive: boolean,
     deletedAt: string | null,

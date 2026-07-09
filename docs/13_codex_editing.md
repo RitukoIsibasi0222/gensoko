@@ -34,6 +34,16 @@ Codex は実装・修正・追加・リファクタリングでファイル編�
 - 失敗した編集コマンドの後は、必ず `sed -n` などで対象ファイルを確認してから続行する。
 - 編集後は必ず `git diff -- 対象ファイル` で、意図した差分だけになっているか確認する。
 
+Markdown に TypeScript の型例やレスポンス例を書くときは、文字列リテラル型を必ずクオートする。特に union 型は `USER | ADMIN` のように書くと TypeScript 上は未定義識別子として扱われるため、コピー可能なサンプルとして不正になる。`"USER" | "ADMIN"` のように文字列リテラル union として書く。
+
+```typescript
+// 悪い例: USER / ADMIN が未定義識別子になる
+type Role = USER | ADMIN;
+
+// 良い例: 文字列リテラル union としてコピーできる
+type Role = "USER" | "ADMIN";
+```
+
 安全な分割例:
 
 1. import や mock などの小さい置換だけ先に行う。
