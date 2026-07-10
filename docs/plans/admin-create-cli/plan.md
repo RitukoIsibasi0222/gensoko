@@ -149,7 +149,7 @@ username、email、passwordをコマンド引数または環境変数から受�
 | `docs/09_startup_commands.md` | 修正 | Docker内運用手順と権限境界 |
 | `docs/12_task_guide.md` | 修正 | username不足・旧ts-node例を修正 |
 | `docs/05_progress.md` | 修正 | 実装中・完了状態を更新 |
-| `docs/plans/admin-create-cli/plan.md` | 新規 | 本計画と実装完了記録 |
+| `docs/plans/admin-create-cli/plan.md` | 修正 | checkbox、TDD・品質・手動確認の実装完了記録 |
 
 次は変更しない。
 
@@ -547,22 +547,22 @@ repository rootで `git diff --check` も実行する。
 | T15 | 変更要否再確認 | schema、`docs/04_api.md` | DB/API変更なしと追加検証不要理由を記録 | Medium |
 | T16 | 進捗・plan完了更新 | progress、本plan | `[x]`、checkbox、実装完了記録を更新 | High |
 
-- [ ] T1: 既存仕様再確認と進捗開始更新
-- [ ] T2: CLI契約確定
-- [ ] T3: pure CLI Red test
-- [ ] T4: hash/service Red test
-- [ ] T5: lifecycle Red test
-- [ ] T6: 共通validation/hash helper
-- [ ] T7: admin create service
-- [ ] T8: pure CLI logic
-- [ ] T9: entrypoint/npm script
-- [ ] T10: 運用文書更新
-- [ ] T11: Refactor・format
-- [ ] T12: lint・format check・build
-- [ ] T13: 全test
-- [ ] T14: Docker手動確認
-- [ ] T15: 変更要否再確認
-- [ ] T16: 進捗・plan完了更新
+- [x] T1: 既存仕様再確認と進捗開始更新
+- [x] T2: CLI契約確定
+- [x] T3: pure CLI Red test
+- [x] T4: hash/service Red test
+- [x] T5: lifecycle Red test
+- [x] T6: 共通validation/hash helper
+- [x] T7: admin create service
+- [x] T8: pure CLI logic
+- [x] T9: entrypoint/npm script
+- [x] T10: 運用文書更新
+- [x] T11: Refactor・format
+- [x] T12: lint・format check・build
+- [x] T13: 全test
+- [x] T14: Docker手動確認
+- [x] T15: 変更要否再確認
+- [x] T16: 進捗・plan完了更新
 
 ## 実装完了時の更新ルール
 
@@ -575,33 +575,78 @@ repository rootで `git diff --check` も実行する。
 
 ## 実装完了
 
-- 完了日: YYYY-MM-DD
+- 完了日: 2026-07-11
 - 実装ブランチ: feature/admin-create-cli
-- PR: #N
+- PR: 未作成（日本語PR本文をチャット確認後に作成）
 
 ### 計画からの変更点
+
+- 開発DBには利用可能な既存管理者が0人で、検証用管理者を既存Admin APIから全件削除できなかったため、永続volume・公開portを持たない使い捨てPostgreSQLと一時Honoサーバーで手動確認した。確認後は一時環境を削除し、開発DBの利用可能管理者数が0人のままであることを再確認した。
+- 引数方式の手動確認中に、通常の `npm run` はCLI起動前にpassword引数をechoすることを確認した。helpを `npm --silent run admin:create -- ...` へ変更し、運用文書と回帰testを追加した。`--silent`でもshell history・process listのリスクは残るため、環境変数方式を標準とする方針は維持した。
+- 初回のDocker確認はstdout/stderrを結合した文言順序へ依存する検証スクリプトにより停止した。CLIの終了code・成功文言・警告・秘密情報非出力を個別に確認して実装不具合でないことを切り分け、一時DBを破棄後、順序非依存の検証で全シナリオを再実行した。
 
 ### 実際の変更ファイル
 
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
+| `backend/src/lib/password.ts` | 新規 | bcrypt cost 12を一元管理する `hashPassword()` |
+| `backend/src/lib/password.test.ts` | 新規 | bcrypt呼び出し、cost、例外伝播test |
+| `backend/src/lib/validation/auth.ts` | 修正 | 共通 `emailSchema` を追加 |
+| `backend/src/routes/auth/index.ts` | 修正 | register/login/forgot-passwordで共通email schemaを利用 |
+| `backend/src/services/auth.service.ts` | 修正 | 通常password hashを共通helperへ移行。タイミング対策cost 4は維持 |
+| `backend/src/services/user.service.ts` | 修正 | password変更時のhashを共通helperへ移行 |
+| `backend/src/services/admin-create.service.ts` | 新規 | 単一User.create、ADMIN状態、P2002変換 |
+| `backend/src/services/admin-create.service.test.ts` | 新規 | DB保存内容、非更新・非upsert、重複、例外test |
+| `backend/src/scripts/createAdmin.ts` | 新規 | 引数解析、入力解決、正規化、validation、安全な結果生成 |
+| `backend/src/scripts/createAdmin.test.ts` | 新規 | pure CLI logic、DB未load、秘密情報非出力test |
+| `backend/src/scripts/createAdmin.cli.ts` | 新規 | service/Prismaの遅延import、stream出力、終了code設定 |
+| `backend/src/scripts/createAdmin.cli.test.ts` | 新規 | entrypoint lifecycle、遅延load、disconnect、安全出力test |
+| `backend/package.json` | 修正 | `admin:create` npm scriptを追加 |
+| `docs/09_startup_commands.md` | 修正 | Docker内の一時環境変数方式、権限境界、unset、npm echo対策 |
+| `docs/12_task_guide.md` | 修正 | username不足・旧ts-node例を現在の構成へ更新 |
+| `docs/05_progress.md` | 修正 | 対象タスクを実装中から完了へ更新 |
+| `docs/plans/admin-create-cli/plan.md` | 修正 | checkbox、TDD・品質・手動確認の実装記録 |
 
 ### TDD実施記録
 
 | フェーズ | 内容 | 結果 |
 |---|---|---|
-| Red | | |
-| Green | | |
-| Refactor | | |
+| Red | pure CLI、password helper、DB service、entrypointの4 testファイルを先行追加 | 未実装moduleを理由に4ファイル失敗。entrypointは10件すべて失敗を確認 |
+| Green | helper、service、pure CLI、entrypointを責務単位で実装 | 新規62件（44 + 10 + 6 + 2）が成功 |
+| 追加Red/Green | npm wrapperのpassword echo対策としてhelpへ `--silent` を要求 | 44件中1件失敗を確認後、help修正で44件成功。実npm出力もpassword非包含 |
+| Refactor | email/password hashを共通化し、既存認証testを含む全体回帰を実施 | 47ファイル・396件成功 |
 
 ### 品質チェック
 
 | コマンド | 結果 |
 |---|---|
-| `npm run lint` | |
-| `npm run format:check` | |
-| `npm run test -- --run` | |
-| `npm run build` | |
-| `git diff --check` | |
+| `npm run format` | 成功（全対象がunchanged） |
+| `npm run lint` | 成功 |
+| `npm run format:check` | 成功 |
+| `npm run test -- --run` | 成功（47ファイル・396件） |
+| `npm run build` | 成功 |
+| `git diff --check` | 成功 |
 
 ### 手動確認結果
+
+| ケース | 結果 |
+|---|---|
+| 開発DBの事前確認 | 利用可能な管理者0人。既存DBでは安全に全件後片付けできないため作成を中止 |
+| 隔離環境 | tmpfs PostgreSQLへ既存13 migrationを適用。一時Honoを別portで起動 |
+| `--help` | DB設定なしで成功。入力値・DB設定名を出力しない |
+| 環境変数方式 | 作成成功、認証情報・接続文字列を出力しない |
+| 引数方式 | `npm --silent run` で作成成功、環境変数推奨警告、認証情報を出力しない |
+| 重複 | 同一username/emailの再実行は終了code 1、既存userを変更しない |
+| 並行実行 | 同一入力2processの片方だけ成功、片方は重複終了code 1 |
+| login API | CLI作成管理者でログイン成功、role `ADMIN` |
+| Admin API | ユーザー一覧へアクセス成功。管理者が認証済み・有効・未削除であることを確認 |
+| 通常register | requestへroleを含めても作成userは `USER` |
+| npm echo確認 | 通常npmはpasswordを含む、`npm --silent run`は含まないことをランダム値の真偽判定で確認 |
+| 後片付け | 一時Hono停止、一時DBコンテナ削除、永続volumeなし、開発DBの管理者0人を再確認 |
+
+### 変更要否再確認
+
+- `backend/prisma/schema.prisma` / migration: 変更なし。既存User modelとunique制約を利用するため追加migration不要。
+- `docs/04_api.md`: 変更なし。公開API・HTTP status・response仕様を変更していない。
+- `frontend/**`: 変更なし。画面・API client・A11Y対象を追加していない。
+- Playwright: DB構造・frontend変更がないため対象外。login/Admin APIは隔離Docker環境の実HTTPリクエストで確認した。
