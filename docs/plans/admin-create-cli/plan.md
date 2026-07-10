@@ -579,7 +579,7 @@ repository rootで `git diff --check` も実行する。
 
 - 完了日: 2026-07-11
 - 実装ブランチ: feature/admin-create-cli
-- PR: 未作成（日本語PR本文をチャット確認後に作成）
+- PR: #79
 
 ### 計画からの変更点
 
