@@ -148,6 +148,7 @@ username、email、passwordをコマンド引数または環境変数から受�
 | `backend/package.json` | 修正 | `admin:create` script |
 | `docs/09_startup_commands.md` | 修正 | Docker内運用手順と権限境界 |
 | `docs/12_task_guide.md` | 修正 | username不足・旧ts-node例を修正 |
+| `docs/02_security.md` | 修正 | bcrypt 72バイト制限を認証全体の別タスクとして記録 |
 | `docs/05_progress.md` | 修正 | 実装中・完了状態を更新 |
 | `docs/plans/admin-create-cli/plan.md` | 修正 | checkbox、TDD・品質・手動確認の実装完了記録 |
 
@@ -588,6 +589,18 @@ repository rootで `git diff --check` も実行する。
 - 実装後のシニアレビューで、Prismaのcreateが既定ではpasswordHashを含む全User列を返す点を検出した。戻り値は不要なため `select: { id: true }` へ制限し、DBからアプリへ返す機密データと転送量を最小化した。
 - 作成成功後のdisconnect失敗を一般警告だけで返すと、operatorが作成自体も失敗したと誤認して再実行する余地があった。終了code 0は維持しつつ「作成済み・再実行しない」を固定文言で明示した。
 - 運用手順の認証情報を親shellへexportしてからunsetする方式は、途中終了時の消去漏れがあり得るため、入力・export・実行をsubshellへ閉じ込めた。
+- bcryptjsがUTF-8で72バイトを超える入力を切り捨てる制約は、管理者CLIだけでなく通常登録・変更・リセット・既存ユーザー互換性・フロント表示へ影響する。本PRへ部分的に実装せず、フェーズ11の独立タスクへ移管した。
+
+### 別タスクへ移管した事項
+
+**bcrypt 72バイト上限の入力検証統一**
+
+- 進捗管理: `docs/05_progress.md` フェーズ11へ未着手タスクとして追加。
+- セキュリティ仕様: `docs/02_security.md` に現状、影響範囲、対応完了までの運用制約を記録。
+- 対象: 通常登録、パスワード変更、パスワードリセット、管理者作成CLI、フロントエンドの入力案内・エラー表示。
+- 設計時に確認する事項: 既存の72バイト超パスワード利用者との互換性、UTF-8バイト数の共通検証方法、APIとフロントのエラーメッセージ整合性。
+- 必須テスト: ASCIIおよび複数バイト文字について、UTF-8で72バイトを受理し73バイトを拒否する境界値テスト。
+- 本PRの扱い: CLI固有の仕様ではないため実装対象外。別タスク完了まで運用パスワードはUTF-8で72バイト以内とする。
 
 ### 実際の変更ファイル
 
@@ -608,7 +621,8 @@ repository rootで `git diff --check` も実行する。
 | `backend/package.json` | 修正 | `admin:create` npm scriptを追加 |
 | `docs/09_startup_commands.md` | 修正 | Docker内の一時環境変数方式、権限境界、unset、npm echo対策 |
 | `docs/12_task_guide.md` | 修正 | username不足・旧ts-node例を現在の構成へ更新 |
-| `docs/05_progress.md` | 修正 | 対象タスクを実装中から完了へ更新 |
+| `docs/02_security.md` | 修正 | bcrypt 72バイト制限の現状と別タスクの完了条件を追記 |
+| `docs/05_progress.md` | 修正 | CLIを完了へ更新し、bcrypt 72バイト制限をフェーズ11の別タスクとして追加 |
 | `docs/plans/admin-create-cli/plan.md` | 修正 | checkbox、TDD・品質・手動確認の実装記録 |
 
 ### TDD実施記録
