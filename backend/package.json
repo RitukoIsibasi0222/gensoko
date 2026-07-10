@@ -13,6 +13,7 @@
     "lint:fix": "eslint src --fix",
     "format": "prettier --write src",
     "format:check": "prettier --check src",
+    "admin:create": "tsx src/scripts/createAdmin.cli.ts",
     "cleanup:game-question-sets": "tsx src/jobs/cleanupGameQuestionSets.cli.ts",
     "reset:weekly-scores": "tsx src/jobs/resetWeeklyScores.cli.ts",
     "batch:scheduled": "tsx src/jobs/scheduled.cli.ts"

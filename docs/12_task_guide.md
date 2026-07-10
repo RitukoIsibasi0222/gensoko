@@ -420,15 +420,25 @@ backend/src/routes/admin/admin.test.ts  ← テスト（新規作成）
 **作成・変更ファイル**
 
 ```
-backend/src/scripts/createAdmin.ts  ← 新規作成
+backend/src/lib/password.ts                    ← bcrypt cost 12 の共通helper
+backend/src/services/admin-create.service.ts  ← 新規ADMINの単一create・重複変換
+backend/src/scripts/createAdmin.ts             ← 引数解析・入力解決・validation
+backend/src/scripts/createAdmin.cli.ts         ← 遅延import・標準出力・終了code
 ```
 
-**実装の流れ**
+**実行方法**
 
 ```bash
-# 使用例
-npx ts-node src/scripts/createAdmin.ts --email admin@example.com --password Secure1!
+# Docker 内でhelpを表示（DB接続・作成処理は行わない）
+docker compose exec hono npm run admin:create -- --help
 ```
+
+- username、email、passwordをコマンド引数または一時的な環境変数から受け取る。
+- passwordをshell historyへ残さないため、標準手順は環境変数方式とする。
+- 実際の入力・実行・unset手順は `docs/09_startup_commands.md` の「管理者作成 CLI」を参照する。
+- CLIは新規作成専用とし、既存ユーザーの昇格・上書き・再有効化を行わない。
+- `role=ADMIN`、メール認証済み、有効、未削除の状態で作成する。
+- `--help`、引数エラー、validationエラーではPrismaを読み込まない。
 
 ---
 

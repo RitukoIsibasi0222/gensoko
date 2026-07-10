@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import type { Role } from "@prisma/client";
 import { normalizePassword } from "../lib/normalize.js";
+import { hashPassword } from "../lib/password.js";
 import {
   calculateAccuracyRate,
   normalizeCountPair,
@@ -126,7 +127,7 @@ export async function changeCurrentPassword(input: {
     throw new UserError(400, "現在のパスワードが正しくありません");
   }
 
-  const newPasswordHash = await bcrypt.hash(normalizedNewPassword, 12);
+  const newPasswordHash = await hashPassword(normalizedNewPassword);
 
   await prisma.$transaction(async (tx) => {
     await tx.user.update({

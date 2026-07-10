@@ -116,7 +116,50 @@ GitHub Actions では workflow_dispatch から weekly-reset または game-quest
 
 ---
 
-## 6. Prisma コマンド
+## 6. 管理者作成 CLI
+
+管理者アカウントは UI や公開 API から作成せず、信頼された運用者が Docker Compose の `hono` コンテナ内で CLI を実行して作成する。
+
+実行方法と入力項目を確認する場合は、DB 接続や作成処理を行わない `--help` を使用する。
+
+    cd ~/labs/Gensoko
+    docker compose exec hono npm run admin:create -- --help
+
+### 推奨: 環境変数を一時的に渡す
+
+    cd ~/labs/Gensoko
+
+    (
+      read -r -p "管理者ユーザー名: " ADMIN_USERNAME
+      read -r -p "管理者メールアドレス: " ADMIN_EMAIL
+      read -r -s -p "管理者パスワード: " ADMIN_PASSWORD
+      printf "\n"
+
+      export ADMIN_USERNAME ADMIN_EMAIL ADMIN_PASSWORD
+
+      docker compose exec \
+        -e ADMIN_USERNAME \
+        -e ADMIN_EMAIL \
+        -e ADMIN_PASSWORD \
+        hono npm run admin:create
+    )
+
+- `--username`、`--email`、`--password` でも指定できるが、特にpasswordはshell historyやprocess listへ残る可能性があるため非推奨。引数でpasswordを指定するとCLIが警告する。
+- 引数方式を避けられない場合は、npm自身が引数をechoしないよう `npm --silent run admin:create -- ...` を使う。ただし、shell historyやprocess listのリスクは解消されない。
+- 引数と環境変数を混在させた場合は項目単位で引数を優先する。
+- 管理者認証情報を `.env`、Compose file、repository、CI logへ保存しない。
+- 入力と実行をsubshellの `(...)` 内に閉じ込めているため、正常終了・エラー・割り込みのいずれでも親shellに管理者認証情報を残さない。
+- 環境変数方式も同一OS userからのprocess参照に対して完全な秘密保護ではないため、共有ホストでは実行しない。
+- Dockerコンテナ操作権限とDB接続環境を持つ主体は、管理者作成権限を持つものとして扱う。
+- 既存ユーザーとusernameまたはemailが重複した場合は失敗し、既存ユーザーのrole・password・状態は変更しない。
+
+終了codeは、成功とhelpが `0`、重複・DB・実行時エラーが `1`、引数・入力validationエラーが `2`。
+
+作成成功後にDB接続の終了処理だけが失敗した場合は、管理者は作成済みなので終了code `0`を維持する。警告に従って再実行せず、コンテナとDBの接続状態を確認する。
+
+---
+
+## 7. Prisma コマンド
 
 ```bash
 cd ~/labs/Gensoko/backend
@@ -133,7 +176,7 @@ docker compose exec hono npx tsx prisma/seed.ts
 
 ---
 
-## 7. Git ブランチ操作
+## 8. Git ブランチ操作
 
 ```bash
 cd ~/labs/Gensoko
@@ -159,7 +202,7 @@ git branch --merged develop | grep -v "develop\|main" | xargs git branch -d
 
 ---
 
-## 8. Docker 停止・リセット
+## 9. Docker 停止・リセット
 
 ```bash
 # コンテナ停止（データは保持）

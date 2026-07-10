@@ -2,7 +2,7 @@ import { zValidator } from "@hono/zod-validator";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { Hono } from "hono";
 import { z } from "zod";
-import { strongPasswordSchema, usernameSchema } from "../../lib/validation/auth.js";
+import { emailSchema, strongPasswordSchema, usernameSchema } from "../../lib/validation/auth.js";
 import {
   getRefreshTokenCookieBasePath,
   getRefreshTokenCookieOptions,
@@ -21,7 +21,7 @@ import { rateLimit } from "../../middleware/rateLimit/index.js";
 
 const registerSchema = z.object({
   username: usernameSchema,
-  email: z.string().email("有効なメールアドレスを入力してください"),
+  email: emailSchema,
   password: strongPasswordSchema,
 });
 
@@ -86,7 +86,7 @@ authRouter.post(
 );
 
 const loginSchema = z.object({
-  email: z.string().email("有効なメールアドレスを入力してください"),
+  email: emailSchema,
   password: z.string().min(1, "パスワードを入力してください"),
 });
 
@@ -195,7 +195,7 @@ authRouter.post("/logout", async (c) => {
 });
 
 const forgotPasswordSchema = z.object({
-  email: z.string().email("有効なメールアドレスを入力してください"),
+  email: emailSchema,
 });
 
 authRouter.post(
