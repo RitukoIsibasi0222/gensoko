@@ -65,10 +65,22 @@ describe("createAdmin", () => {
         isActive: true,
         deletedAt: null,
       },
+      select: { id: true },
     });
 
     const prismaArguments = JSON.stringify(vi.mocked(prisma.user.create).mock.calls);
     expect(prismaArguments).not.toContain(INPUT.password);
+  });
+
+  it("作成後にpasswordHashを含む全User列を取得せず、IDだけを返却対象にする", async () => {
+    vi.mocked(hashPassword).mockResolvedValue(PASSWORD_HASH);
+    vi.mocked(prisma.user.create).mockResolvedValue({ id: "admin-1" } as never);
+
+    await createAdmin(INPUT);
+
+    expect(prisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({ select: { id: true } }),
+    );
   });
 
   it("既存ユーザー検索・更新・upsert・transaction・関連model作成を行わない", async () => {

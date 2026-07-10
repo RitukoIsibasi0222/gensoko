@@ -33,6 +33,7 @@ export async function createAdmin(input: AdminCreateInput): Promise<void> {
         isActive: true,
         deletedAt: null,
       },
+      select: { id: true },
     });
   } catch (error) {
     if (isUniqueConstraintViolation(error)) {

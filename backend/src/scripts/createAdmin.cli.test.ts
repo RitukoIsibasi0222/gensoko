@@ -262,7 +262,7 @@ describe("createAdmin.cli", () => {
     }
   });
 
-  it("作成成功後のdisconnect失敗では成功codeを維持し、安全な警告を出す", async () => {
+  it("作成成功後のdisconnect失敗では成功codeを維持し、再実行を避ける警告を出す", async () => {
     setValidAdminEnvironment();
     runtimeMocks.disconnect.mockRejectedValue(new Error(`disconnect failed: ${DATABASE_URL}`));
 
@@ -270,7 +270,9 @@ describe("createAdmin.cli", () => {
 
     await vi.waitFor(() => expect(process.exitCode).toBe(0));
     expect(consoleLogSpy).toHaveBeenCalledWith("管理者アカウントを作成しました");
-    expect(consoleErrorSpy).toHaveBeenCalledWith("データベース接続の終了処理に失敗しました");
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "管理者アカウントは作成済みですが、データベース接続の終了処理に失敗しました。再実行せず、接続状態を確認してください",
+    );
     expect(getConsoleOutput(consoleErrorSpy)).not.toContain(DATABASE_URL);
   });
 

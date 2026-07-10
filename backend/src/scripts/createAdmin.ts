@@ -68,6 +68,8 @@ const CREATE_FAILED_MESSAGE = "管理者アカウントの作成に失敗しま�
 const CREATE_SUCCEEDED_MESSAGE = "管理者アカウントを作成しました";
 const DUPLICATE_USER_MESSAGE = "ユーザー名またはメールアドレスは既に使用されています";
 const DISCONNECT_FAILED_MESSAGE = "データベース接続の終了処理に失敗しました";
+const DISCONNECT_FAILED_AFTER_CREATE_MESSAGE =
+  "管理者アカウントは作成済みですが、データベース接続の終了処理に失敗しました。再実行せず、接続状態を確認してください";
 const PASSWORD_ARGUMENT_WARNING =
   "パスワードをコマンド引数で指定すると履歴やプロセス一覧に残る可能性があります。環境変数の利用を推奨します";
 
@@ -242,7 +244,9 @@ export async function runCreateAdminCommand(input: {
   try {
     await dependencies.disconnect();
   } catch {
-    stderr.push(DISCONNECT_FAILED_MESSAGE);
+    stderr.push(
+      exitCode === 0 ? DISCONNECT_FAILED_AFTER_CREATE_MESSAGE : DISCONNECT_FAILED_MESSAGE,
+    );
   }
 
   return { exitCode, stdout, stderr };

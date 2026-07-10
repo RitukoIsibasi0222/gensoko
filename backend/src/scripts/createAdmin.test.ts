@@ -430,7 +430,7 @@ describe("runCreateAdminCommand", () => {
     });
   });
 
-  it("作成成功後のdisconnect失敗では成功codeを維持して一般警告だけを追加する", async () => {
+  it("作成成功後のdisconnect失敗では成功codeを維持し、再実行を避ける警告を返す", async () => {
     const { disconnect, loadDependencies } = createRuntimeMocks();
     disconnect.mockRejectedValue(new Error(`disconnect failed: ${DATABASE_URL}`));
 
@@ -438,7 +438,9 @@ describe("runCreateAdminCommand", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toEqual(["管理者アカウントを作成しました"]);
-    expect(result.stderr).toEqual(["データベース接続の終了処理に失敗しました"]);
+    expect(result.stderr).toEqual([
+      "管理者アカウントは作成済みですが、データベース接続の終了処理に失敗しました。再実行せず、接続状態を確認してください",
+    ]);
     expect(result.stderr.join("\n")).not.toContain(DATABASE_URL);
   });
 
