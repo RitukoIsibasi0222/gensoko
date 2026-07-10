@@ -257,7 +257,7 @@ DB変更が発生した場合は作業を止め、本計画へmigration、`prism
 | 重複 | stderr | `ユーザー名またはメールアドレスは既に使用されています` |
 | DB設定不足 | stderr | `データベース接続設定がありません` |
 | DB/想定外エラー | stderr | `管理者アカウントの作成に失敗しました` |
-| disconnect失敗 | stderr | 内部詳細を含まない終了処理の一般警告 |
+| disconnect失敗 | stderr | 内部詳細を含めない。作成成功後は「作成済み・再実行しない」を明示する |
 
 次は出力しない。
 
@@ -272,23 +272,24 @@ DB変更が発生した場合は作業を止め、本計画へmigration、`prism
 標準手順は環境変数方式とし、信頼された運用者だけが実行する。
 
 ```bash
-read -r -p "管理者ユーザー名: " ADMIN_USERNAME
-read -r -p "管理者メールアドレス: " ADMIN_EMAIL
-read -r -s -p "管理者パスワード: " ADMIN_PASSWORD
-printf "\n"
+(
+  read -r -p "管理者ユーザー名: " ADMIN_USERNAME
+  read -r -p "管理者メールアドレス: " ADMIN_EMAIL
+  read -r -s -p "管理者パスワード: " ADMIN_PASSWORD
+  printf "\n"
 
-export ADMIN_USERNAME ADMIN_EMAIL ADMIN_PASSWORD
+  export ADMIN_USERNAME ADMIN_EMAIL ADMIN_PASSWORD
 
-docker compose exec \
-  -e ADMIN_USERNAME \
-  -e ADMIN_EMAIL \
-  -e ADMIN_PASSWORD \
-  hono npm run admin:create
-
-unset ADMIN_USERNAME ADMIN_EMAIL ADMIN_PASSWORD
+  docker compose exec \
+    -e ADMIN_USERNAME \
+    -e ADMIN_EMAIL \
+    -e ADMIN_PASSWORD \
+    hono npm run admin:create
+)
 ```
 
 - password引数方式はprocess list・shell historyへ残る可能性があるため非推奨。
+- 入力・export・実行をsubshellへ閉じ込め、親shellへ認証情報を残さない。
 - 環境変数も同一OS userやprocess introspectionに対して完全な秘密保護ではない。共有ホストでは実行しない。
 - `.env`、Compose file、repository、CI logへ管理者認証情報を保存しない。
 - `docker compose exec` 権限とDB接続環境を持つ主体は管理者作成権限を持つものとして扱う。
@@ -447,7 +448,7 @@ repository rootで `git diff --check` も実行する。
 | help | DB dependencyをloadせず終了コード0 |
 | parse/validation error | DB dependencyをloadせず終了コード2 |
 | DB設定不足 | DB moduleをloadせず安全な固定エラー、終了コード1 |
-| disconnect失敗・作成成功 | 終了コード0を維持し一般警告のみ |
+| disconnect失敗・作成成功 | 終了コード0を維持し、作成済みなので再実行しないよう警告 |
 | disconnect失敗・作成失敗 | 元の終了コード1を維持 |
 | password引数使用 | 環境変数推奨警告 |
 | password環境変数使用 | 引数警告なし |
@@ -505,7 +506,7 @@ repository rootで `git diff --check` も実行する。
 | bcrypt設定重複 | cost変更漏れ | helper一元化と既存認証回帰test |
 | concurrency race | 重複または内部error | DB unique + P2002 mapping + 実DB並行手動確認 |
 | 既存userを暗黙更新 | 認可境界破壊 | create専用、update/upsert禁止test |
-| disconnect失敗を作成失敗扱い | operator再実行・重複 | 作成結果codeを維持し一般警告 |
+| disconnect失敗を作成失敗扱い | operator再実行・重複 | 作成結果codeを維持し、作成済みなら再実行しないよう明示 |
 | tsxが本番にない | productionで実行不能 | Docker Composeを標準対象、本番opsは別計画 |
 
 ## 作業手順
@@ -584,6 +585,9 @@ repository rootで `git diff --check` も実行する。
 - 開発DBには利用可能な既存管理者が0人で、検証用管理者を既存Admin APIから全件削除できなかったため、永続volume・公開portを持たない使い捨てPostgreSQLと一時Honoサーバーで手動確認した。確認後は一時環境を削除し、開発DBの利用可能管理者数が0人のままであることを再確認した。
 - 引数方式の手動確認中に、通常の `npm run` はCLI起動前にpassword引数をechoすることを確認した。helpを `npm --silent run admin:create -- ...` へ変更し、運用文書と回帰testを追加した。`--silent`でもshell history・process listのリスクは残るため、環境変数方式を標準とする方針は維持した。
 - 初回のDocker確認はstdout/stderrを結合した文言順序へ依存する検証スクリプトにより停止した。CLIの終了code・成功文言・警告・秘密情報非出力を個別に確認して実装不具合でないことを切り分け、一時DBを破棄後、順序非依存の検証で全シナリオを再実行した。
+- 実装後のシニアレビューで、Prismaのcreateが既定ではpasswordHashを含む全User列を返す点を検出した。戻り値は不要なため `select: { id: true }` へ制限し、DBからアプリへ返す機密データと転送量を最小化した。
+- 作成成功後のdisconnect失敗を一般警告だけで返すと、operatorが作成自体も失敗したと誤認して再実行する余地があった。終了code 0は維持しつつ「作成済み・再実行しない」を固定文言で明示した。
+- 運用手順の認証情報を親shellへexportしてからunsetする方式は、途中終了時の消去漏れがあり得るため、入力・export・実行をsubshellへ閉じ込めた。
 
 ### 実際の変更ファイル
 
@@ -595,8 +599,8 @@ repository rootで `git diff --check` も実行する。
 | `backend/src/routes/auth/index.ts` | 修正 | register/login/forgot-passwordで共通email schemaを利用 |
 | `backend/src/services/auth.service.ts` | 修正 | 通常password hashを共通helperへ移行。タイミング対策cost 4は維持 |
 | `backend/src/services/user.service.ts` | 修正 | password変更時のhashを共通helperへ移行 |
-| `backend/src/services/admin-create.service.ts` | 新規 | 単一User.create、ADMIN状態、P2002変換 |
-| `backend/src/services/admin-create.service.test.ts` | 新規 | DB保存内容、非更新・非upsert、重複、例外test |
+| `backend/src/services/admin-create.service.ts` | 新規 | 単一User.create、返却列のID限定、ADMIN状態、P2002変換 |
+| `backend/src/services/admin-create.service.test.ts` | 新規 | DB保存内容、返却列限定、非更新・非upsert、重複、例外test |
 | `backend/src/scripts/createAdmin.ts` | 新規 | 引数解析、入力解決、正規化、validation、安全な結果生成 |
 | `backend/src/scripts/createAdmin.test.ts` | 新規 | pure CLI logic、DB未load、秘密情報非出力test |
 | `backend/src/scripts/createAdmin.cli.ts` | 新規 | service/Prismaの遅延import、stream出力、終了code設定 |
@@ -614,7 +618,8 @@ repository rootで `git diff --check` も実行する。
 | Red | pure CLI、password helper、DB service、entrypointの4 testファイルを先行追加 | 未実装moduleを理由に4ファイル失敗。entrypointは10件すべて失敗を確認 |
 | Green | helper、service、pure CLI、entrypointを責務単位で実装 | 新規62件（44 + 10 + 6 + 2）が成功 |
 | 追加Red/Green | npm wrapperのpassword echo対策としてhelpへ `--silent` を要求 | 44件中1件失敗を確認後、help修正で44件成功。実npm出力もpassword非包含 |
-| Refactor | email/password hashを共通化し、既存認証testを含む全体回帰を実施 | 47ファイル・396件成功 |
+| レビューRed/Green | User返却列限定とdisconnect警告改善をtestへ先行反映 | 対象61件中3件失敗を確認後、実装修正で61件成功 |
+| Refactor | email/password hashを共通化し、既存認証testを含む全体回帰を実施 | 47ファイル・397件成功 |
 
 ### 品質チェック
 
@@ -623,7 +628,7 @@ repository rootで `git diff --check` も実行する。
 | `npm run format` | 成功（全対象がunchanged） |
 | `npm run lint` | 成功 |
 | `npm run format:check` | 成功 |
-| `npm run test -- --run` | 成功（47ファイル・396件） |
+| `npm run test -- --run` | 成功（47ファイル・397件） |
 | `npm run build` | 成功 |
 | `git diff --check` | 成功 |
 
