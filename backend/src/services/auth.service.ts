@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { sign } from "hono/jwt";
 import { normalizePassword } from "../lib/normalize.js";
+import { hashPassword } from "../lib/password.js";
 import { prisma } from "../lib/prisma.js";
 import { mailer } from "../lib/mail.js";
 import type { Role } from "@prisma/client";
@@ -59,7 +60,7 @@ export async function register(input: {
         throw new AuthError(409, "メールアドレスまたはユーザー名が既に使用されています");
       }
 
-      const passwordHash = await bcrypt.hash(password, 12);
+      const passwordHash = await hashPassword(password);
       const token = randomBytes(32).toString("hex");
       const tokenHash = createHash("sha256").update(token).digest("hex");
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24時間
@@ -80,7 +81,7 @@ export async function register(input: {
     }
 
     // 2. パスワードをハッシュ化（コスト=12）
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = await hashPassword(password);
 
     // 3. ユーザー作成
     const user = await tx.user.create({
@@ -456,7 +457,7 @@ export async function resetPassword(input: { token: string; password: string }):
   }
 
   // 4. トランザクション: パスワード更新・全RT削除・リセットトークン削除
-  const passwordHash = await bcrypt.hash(password, 12);
+  const passwordHash = await hashPassword(password);
 
   await prisma.$transaction(async (tx) => {
     const now = new Date();

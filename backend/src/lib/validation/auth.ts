@@ -6,6 +6,8 @@ export const usernameSchema = z
   .max(20, "ユーザー名は20文字以内にしてください")
   .regex(/^[a-zA-Z0-9_]+$/, "ユーザー名は英数字とアンダースコアのみ使用できます");
 
+export const emailSchema = z.string().email("有効なメールアドレスを入力してください");
+
 // 認証関連で共通利用するパスワード強度チェック
 export const strongPasswordSchema = z
   .string()
