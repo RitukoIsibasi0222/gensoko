@@ -66,13 +66,15 @@ describe("POST /auth/forgot-password", () => {
   });
 
   it("メール送信失敗時: deleteMany でトークンを削除して200を返す", async () => {
+    const internalError = new Error("SMTP password=smtp-secret");
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "user-1",
       email: "taro@example.com",
     } as never);
     vi.mocked(prisma.passwordResetToken.upsert).mockResolvedValue({} as never);
     vi.mocked(prisma.passwordResetToken.deleteMany).mockResolvedValue({ count: 1 } as never);
-    vi.mocked(mailer.sendMail).mockRejectedValue(new Error("SMTP error"));
+    vi.mocked(mailer.sendMail).mockRejectedValue(internalError);
 
     const res = await app.request("/auth/forgot-password", {
       method: "POST",
@@ -84,6 +86,10 @@ describe("POST /auth/forgot-password", () => {
     expect(res.status).toBe(200);
     // upsert したトークンが削除されることを検証
     expect(prisma.passwordResetToken.deleteMany).toHaveBeenCalledOnce();
+    const consoleErrorCalls = consoleErrorSpy.mock.calls;
+    consoleErrorSpy.mockRestore();
+    expect(consoleErrorCalls).toEqual([["[forgot-password] 内部エラーが発生しました"]]);
+    expect(consoleErrorCalls.flat()).not.toContain(internalError);
   });
 
   it("列挙攻撃対策: 存在しないメールでも200を返す（メールは送信しない）", async () => {
@@ -112,7 +118,9 @@ describe("POST /auth/forgot-password", () => {
   });
 
   it("列挙攻撃対策: サービス内部エラー（DBエラー等）でも200を返す", async () => {
-    vi.mocked(prisma.user.findUnique).mockRejectedValue(new Error("DB connection error"));
+    const internalError = new Error("DATABASE_URL=postgres://secret@example.com/gensoko");
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(prisma.user.findUnique).mockRejectedValue(internalError);
 
     const res = await app.request("/auth/forgot-password", {
       method: "POST",
@@ -124,5 +132,9 @@ describe("POST /auth/forgot-password", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual({ message: "パスワードリセットメールを送信しました" });
+    const consoleErrorCalls = consoleErrorSpy.mock.calls;
+    consoleErrorSpy.mockRestore();
+    expect(consoleErrorCalls).toEqual([["[forgot-password] 内部エラーが発生しました"]]);
+    expect(consoleErrorCalls.flat()).not.toContain(internalError);
   });
 });

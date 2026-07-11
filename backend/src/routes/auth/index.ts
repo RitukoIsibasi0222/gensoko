@@ -210,9 +210,9 @@ authRouter.post(
     const { email } = c.req.valid("json");
     try {
       await forgotPassword({ email });
-    } catch (err) {
-      // 列挙攻撃対策: 内部エラー時も常に 200 を返す。エラーはサーバーログで検知する
-      console.error("[forgot-password] internal error:", err);
+    } catch {
+      // 列挙攻撃対策: 内部エラー時も常に200を返し、秘密情報を含み得るErrorは出力しない
+      console.error("[forgot-password] 内部エラーが発生しました");
     }
     return c.json({ message: "パスワードリセットメールを送信しました" }, 200);
   },
