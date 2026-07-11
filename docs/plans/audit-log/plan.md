@@ -306,7 +306,7 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 - business/transaction検証はservice testへ置く。
 - Prisma mockへ`auditLog.create`とtransaction clientを追加する。
 - mock testでは呼出し回数、完全なcreate引数、retry境界、error mappingを検証する。
-- 実PostgreSQL確認ではmigration、enum、index、rollback、1操作1rowを確認する。
+- 実PostgreSQL確認ではmigration、enum、index、rollback、1操作1rowを確認する。rollbackは専用環境変数で明示実行するintegration testとして再実行可能にする。
 - frontend自動testは追加しない。Playwrightで既存画面回帰を確認する。
 
 ## 対象ファイル一覧
@@ -318,6 +318,8 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | `backend/src/services/audit-events.ts` | 新規 | action/target/reason/strict schema |
 | `backend/src/services/audit.service.ts` | 新規 | 必須・best-effort記録service |
 | `backend/src/services/audit.service.test.ts` | 新規 | 共通監査処理test |
+| `backend/src/services/audit-rollback.integration.test.ts` | 新規 | PostgreSQLで監査insert失敗時のrollbackを検証 |
+| `backend/package.json` | 修正 | 監査integration testコマンドを追加 |
 | `backend/src/services/auth.service.ts` | 修正 | login/reset監査、login成功DB mutation transaction化 |
 | `backend/src/routes/auth/index.ts` | 修正 | raw error objectを安全な固定ログへ置換 |
 | `backend/src/routes/auth/login.test.ts` | 修正 | login監査と回帰test |
@@ -328,6 +330,7 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | `backend/src/services/admin.service.ts` | 修正 | admin監査descriptorとretry境界 |
 | `backend/src/services/admin.service.test.ts` | 修正 | admin success/failure/retry test |
 | `docs/04_api.md` | 修正 | 監査副作用、login status不整合補正 |
+| `docs/07_testing_flow.md` | 修正 | 監査integration testの実行方針を追記 |
 | `docs/09_startup_commands.md` | 修正 | schema変更後のPrisma Client再生成条件を明記 |
 | `docs/05_progress.md` | 修正 | 実装中/完了とplan link |
 | `docs/plans/audit-log/plan.md` | 修正 | 本計画と実装完了記録 |
@@ -578,6 +581,7 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 - 実装後レビューで、管理者APIの未検証path値が失敗監査の`targetId`へ入る問題を確認した。DBで対象を確認できた失敗だけ内部IDを保存し、対象不存在・retry枯渇ではtargetをnullにする安全側の設計へ修正した。
 - 実装後レビューで、password検証後に管理者停止が完了すると古い状態のままlogin成功を返す競合を確認した。成功transaction内の再確認と条件付き更新を追加し、停止済みは403、再確認直後の競合は409としてsuccess token・success監査を確定しないよう修正した。
 - 実装後レビューで、共通schemaがaction固有のactor/target/reason制約を保証していない問題を確認した。action別のstrict unionと値相関のruntime refinementへ変更し、意味的に不正なeventをDB書込み前に拒否するよう修正した。
+- 実装後レビューで、rollback確認が一時的な手動scriptに留まり将来の回帰を検知できない問題を確認した。通常testではskipし、専用環境変数を渡したローカルDocker PostgreSQLでだけ実行するintegration testへ置き換えた。
 
 ### 実際の変更ファイル
 
@@ -588,6 +592,8 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | `backend/src/services/audit-events.ts` | 新規 | action・target・failure reasonとaction別strict unionを一元化 |
 | `backend/src/services/audit.service.ts` | 新規 | 必須監査とbest-effort監査を許可列だけで保存 |
 | `backend/src/services/audit.service.test.ts` | 新規 | 許可値・禁止項目・action固有制約・null整合性・安全ログを検証 |
+| `backend/src/services/audit-rollback.integration.test.ts` | 新規 | P2002発生後の本体更新rollbackを実DBで検証 |
+| `backend/package.json` | 修正 | `test:integration:audit`を追加 |
 | `backend/src/services/auth.service.ts` | 修正 | login成功のatomic化・状態競合防止、login失敗・reset成功監査を追加 |
 | `backend/src/routes/auth/index.ts` | 修正 | forgot-passwordのraw error出力を固定eventへ変更 |
 | `backend/src/routes/auth/login.test.ts` | 修正 | login成功・失敗・rollback・回帰testを追加 |
@@ -598,6 +604,7 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | `backend/src/services/admin.service.ts` | 修正 | 管理者action descriptorとretry境界の監査を追加 |
 | `backend/src/services/admin.service.test.ts` | 修正 | success/failure/P2034 retry/重複防止testを追加 |
 | `docs/04_api.md` | 修正 | 監査副作用・対象外・秘密除外とlogin status/Cookie pathを実装へ整合 |
+| `docs/07_testing_flow.md` | 修正 | 通常skip・Docker明示実行のintegration test手順を追加 |
 | `docs/09_startup_commands.md` | 修正 | schema変更・branch切替後のPrisma Client再生成を明記 |
 | `docs/05_progress.md` | 修正 | 対象タスクを完了へ更新 |
 | `docs/plans/audit-log/plan.md` | 修正 | 実績、検証結果、後続課題を反映 |
@@ -622,7 +629,8 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | Green | レビュー修正: login状態競合 | login route 28件全通過 |
 | Red | レビュー修正: action固有validation | 新規7件失敗、既存23件通過を確認 |
 | Green | レビュー修正: action固有validation | 共通監査service 30件全通過 |
-| Refactor | 全backend | 重複整理とformat後、48 files・446 tests全通過 |
+| Regression | 実DBrollback自動化 | Docker PostgreSQLで1件通過。既存保証の自動化のためproduction実装変更・人工的Redなし |
+| Refactor | 通常backend test | 48 files・446 tests全通過、integration 1 file・1 testはDB未指定時skip |
 
 ### 検証結果
 
@@ -631,8 +639,8 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | Prisma | `prisma format`、`prisma validate`、`prisma generate` | 成功 |
 | Migration deploy | Docker PostgreSQLへ`prisma migrate deploy` | 成功。14 migrations適用済みを確認 |
 | Schema/index | 実DBの`audit_logs`、enum、3 indexを確認 | 計画どおり |
-| Rollback | 一時検証scriptで本体更新後の監査insertを意図的に失敗 | transaction全体がrollbackし、対象user未更新・監査row未追加 |
-| Format/Lint/Build/Test | backend format、lint、format check、build、全test | 全成功。48 files・446 tests通過 |
+| Rollback | `npm run test:integration:audit`をDocker PostgreSQLで実行 | P2002後にtransaction全体がrollbackし、対象user未更新・監査row非増加。終了後の一時data 0件 |
+| Format/Lint/Build/Test | backend format、lint、format check、build、通常test | 全成功。48 files・446 tests通過、integration 1 testは通常skip |
 | Playwright: login | 誤password、正常login、reload後の認証状態 | 401表示、正常redirect/toast、認証維持を確認 |
 | Playwright: password | settingsからpassword変更、reset tokenで再設定 | どちらも成功しloginへ遷移 |
 | Playwright: admin | USERで停止API、ADMINで一時userの停止・解除 | USERは403、ADMINは両操作成功 |
