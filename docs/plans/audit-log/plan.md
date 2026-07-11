@@ -166,7 +166,7 @@
 3. service APIはrequest/body/headers/error/metadataを受け取らない。
 4. 成功監査は本体の最終的なDB mutationと同一transactionへ含める。
 5. loginのuser取得とbcrypt比較はtransaction外で実行し、成功後のDB mutationだけを短いtransactionへまとめる。
-6. login成功時はJWT secret確認・JWT署名・refresh token raw値/hash生成をtransaction前に完了し、その後に`lastLoginAt`/失敗回数、streak、refresh token row、成功監査をtransactionへ含める。transaction commit後に署名失敗して成功証跡だけ残る順序を作らない。
+6. login成功時はJWT secret確認・JWT署名・refresh token raw値/hash生成をtransaction前に完了する。transaction内でアカウント状態とroleを再確認し、同じ状態の行だけを条件付き更新してから`lastLoginAt`/失敗回数、streak、refresh token row、成功監査を確定する。transaction commit後に署名失敗して成功証跡だけ残る順序を作らず、password検証後の停止・role変更競合も成功させない。
 7. 既存`updateLoginStreak()`とrefresh token作成処理は`Prisma.TransactionClient`を受け取れる形へ分け、transaction内からglobal `prisma`へ抜けない。
 8. login失敗はoriginal `AuthError`を保持したままbest-effortで1回記録する。
 9. admin成功監査はSerializable callback内、失敗監査は全retry終了後に1回だけ記録する。
@@ -365,6 +365,8 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 |---|---|
 | success | `LOGIN/SUCCESS`が1件、actor/targetはuser ID |
 | success audit失敗 | user update/streak/refresh token/auditがrollbackし500、Cookie/token非発行 |
+| password検証後に停止 | transaction内再確認で403、success処理・success監査なし |
+| transaction内再確認直後に状態変更 | 条件付き更新0件を409へ変換し、再試行を求める |
 | user不存在 | `LOGIN/FAILURE`、actor/target null |
 | password不一致 | user不存在と同じ監査形状 |
 | stopped/deleted/unverified/locked | 個人情報なし、reasonは共通 |
@@ -575,6 +577,7 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 - DockerのHono containerはschema変更前のPrisma Clientを保持していたため、container内で`prisma generate`後にHonoだけを再起動してから回帰確認した。これは成果物の変更ではなく、ローカル検証環境の生成物更新である。
 - 大量login failure時の負荷・容量試験は実施していない。rate limitの本番化、保持期間、容量試算と合わせて後続課題とする。
 - 実装後レビューで、管理者APIの未検証path値が失敗監査の`targetId`へ入る問題を確認した。DBで対象を確認できた失敗だけ内部IDを保存し、対象不存在・retry枯渇ではtargetをnullにする安全側の設計へ修正した。
+- 実装後レビューで、password検証後に管理者停止が完了すると古い状態のままlogin成功を返す競合を確認した。成功transaction内の再確認と条件付き更新を追加し、停止済みは403、再確認直後の競合は409としてsuccess token・success監査を確定しないよう修正した。
 
 ### 実際の変更ファイル
 
@@ -585,7 +588,7 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | `backend/src/services/audit-events.ts` | 新規 | action・target・failure reasonとstrict schemaを一元化 |
 | `backend/src/services/audit.service.ts` | 新規 | 必須監査とbest-effort監査を許可列だけで保存 |
 | `backend/src/services/audit.service.test.ts` | 新規 | 許可値・禁止項目・null整合性・安全ログを検証 |
-| `backend/src/services/auth.service.ts` | 修正 | login成功のatomic化、login失敗・reset成功監査を追加 |
+| `backend/src/services/auth.service.ts` | 修正 | login成功のatomic化・状態競合防止、login失敗・reset成功監査を追加 |
 | `backend/src/routes/auth/index.ts` | 修正 | forgot-passwordのraw error出力を固定eventへ変更 |
 | `backend/src/routes/auth/login.test.ts` | 修正 | login成功・失敗・rollback・回帰testを追加 |
 | `backend/src/routes/auth/forgot-password.test.ts` | 修正 | raw error非出力testを追加 |
@@ -615,7 +618,9 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | Green | forgot-password安全ログ | 5件全通過 |
 | Red | レビュー修正: 未検証target ID除外 | 新規・変更4件失敗、既存21件通過を確認 |
 | Green | レビュー修正: 未検証target ID除外 | 管理者service 25件全通過 |
-| Refactor | 全backend | 重複整理とformat後、48 files・437 tests全通過 |
+| Red | レビュー修正: login状態競合 | 新規2件失敗、既存26件通過を確認 |
+| Green | レビュー修正: login状態競合 | login route 28件全通過 |
+| Refactor | 全backend | 重複整理とformat後、48 files・439 tests全通過 |
 
 ### 検証結果
 
@@ -625,7 +630,7 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | Migration deploy | Docker PostgreSQLへ`prisma migrate deploy` | 成功。14 migrations適用済みを確認 |
 | Schema/index | 実DBの`audit_logs`、enum、3 indexを確認 | 計画どおり |
 | Rollback | 一時検証scriptで本体更新後の監査insertを意図的に失敗 | transaction全体がrollbackし、対象user未更新・監査row未追加 |
-| Format/Lint/Build/Test | backend format、lint、format check、build、全test | 全成功。48 files・437 tests通過 |
+| Format/Lint/Build/Test | backend format、lint、format check、build、全test | 全成功。48 files・439 tests通過 |
 | Playwright: login | 誤password、正常login、reload後の認証状態 | 401表示、正常redirect/toast、認証維持を確認 |
 | Playwright: password | settingsからpassword変更、reset tokenで再設定 | どちらも成功しloginへ遷移 |
 | Playwright: admin | USERで停止API、ADMINで一時userの停止・解除 | USERは403、ADMINは両操作成功 |

@@ -64,6 +64,7 @@ Error:
 403 このアカウントは削除されています
 403 アカウントが停止されています
 403 メールアドレスが確認されていません
+409 アカウント情報が変更されました。再試行してください
 ```
 
 監査ログ:
@@ -71,7 +72,8 @@ Error:
 - 認証成功と、serviceが`AuthError`として判定した認証・アカウント状態の失敗を内部DBへ記録する。入力検証失敗、rate limit、想定外の内部エラーは記録対象外。
 - 成功時は `LOGIN / SUCCESS` と内部user ID・roleを保存する。失敗時は `LOGIN / FAILURE`、actor/targetを`null`、理由を共通code `AUTHENTICATION_FAILED` とする。
 - email、username、password、token、Cookie、Authorization、request/response body、IP、User-Agent、raw errorは保存しない。
-- 成功監査はlogin状態更新・refresh token保存と同一transactionで記録し、監査保存失敗時は全体をrollbackして500を返す。失敗監査はbest-effortで、保存失敗時も元の401/403を維持する。
+- 成功監査はlogin状態更新・refresh token保存と同一transactionで記録し、監査保存失敗時は全体をrollbackして500を返す。失敗監査はbest-effortで、保存失敗時も元の401/403/409を維持する。
+- password検証後にアカウント状態やroleが変わった場合に古い状態で成功させないよう、成功transaction内で状態を再確認する。再確認直後の競合は条件付き更新で検出し、409で再試行を求める。
 
 ### POST `/auth/forgot-password`
 
