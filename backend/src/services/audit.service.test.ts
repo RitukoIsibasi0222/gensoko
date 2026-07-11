@@ -112,6 +112,79 @@ describe("recordAuditEvent", () => {
 
   it.each([
     {
+      name: "PASSWORD_RESETにactorを指定",
+      event: {
+        ...successEvent,
+        action: AUDIT_ACTIONS.PASSWORD_RESET,
+      },
+    },
+    {
+      name: "LOGIN失敗にtargetを指定",
+      event: {
+        ...failureEvent,
+        targetType: AUDIT_TARGET_TYPES.USER,
+        targetId: "user-1",
+      },
+    },
+    {
+      name: "管理者操作のactorRoleにUSERを指定",
+      event: {
+        ...successEvent,
+        action: AUDIT_ACTIONS.ADMIN_USER_SUSPEND,
+      },
+    },
+    {
+      name: "PASSWORD_CHANGEのactorとtargetに異なるIDを指定",
+      event: {
+        ...successEvent,
+        action: AUDIT_ACTIONS.PASSWORD_CHANGE,
+        targetId: "user-2",
+      },
+    },
+    {
+      name: "TARGET_NOT_FOUNDに未確認targetを指定",
+      event: {
+        action: AUDIT_ACTIONS.ADMIN_USER_SUSPEND,
+        result: AuditResult.FAILURE,
+        actorId: "admin-1",
+        actorRole: "ADMIN",
+        targetType: AUDIT_TARGET_TYPES.USER,
+        targetId: "secret@example.com",
+        failureReason: AUDIT_FAILURE_REASONS.TARGET_NOT_FOUND,
+      },
+    },
+    {
+      name: "TARGET_STATE_CONFLICTでtargetをnullに指定",
+      event: {
+        action: AUDIT_ACTIONS.ADMIN_USER_SUSPEND,
+        result: AuditResult.FAILURE,
+        actorId: "admin-1",
+        actorRole: "ADMIN",
+        targetType: null,
+        targetId: null,
+        failureReason: AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
+      },
+    },
+    {
+      name: "管理者操作にAUTHENTICATION_FAILEDを指定",
+      event: {
+        action: AUDIT_ACTIONS.ADMIN_USER_SUSPEND,
+        result: AuditResult.FAILURE,
+        actorId: "admin-1",
+        actorRole: "ADMIN",
+        targetType: null,
+        targetId: null,
+        failureReason: AUDIT_FAILURE_REASONS.AUTHENTICATION_FAILED,
+      },
+    },
+  ])("異常系: action固有の制約に反する$nameイベントを拒否する", async ({ event }) => {
+    await expect(recordAuditEvent(prisma, event as never)).rejects.toThrow();
+
+    expect(prisma.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
       name: "未定義action",
       event: { ...successEvent, action: "UNKNOWN_ACTION" },
     },

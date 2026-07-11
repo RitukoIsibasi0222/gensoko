@@ -5,8 +5,8 @@ import {
   AUDIT_ACTIONS,
   AUDIT_FAILURE_REASONS,
   AUDIT_TARGET_TYPES,
-  type AuditAction,
-  type AuditFailureReason,
+  type AdminAuditAction,
+  type AdminAuditFailureReason,
 } from "./audit-events.js";
 import { recordAuditEvent, recordAuditEventBestEffort } from "./audit.service.js";
 
@@ -14,7 +14,7 @@ export class AdminServiceError extends Error {
   constructor(
     public readonly status: 400 | 404 | 409,
     message: string,
-    public readonly auditFailureReason?: AuditFailureReason,
+    public readonly auditFailureReason?: AdminAuditFailureReason,
     public readonly auditTargetId: string | null = null,
   ) {
     super(message);
@@ -97,7 +97,7 @@ const ADMIN_MUTATION_MAX_SERIALIZATION_ATTEMPTS = 2;
 const ADMIN_MUTATION_CONFLICT_MESSAGE = "同時操作により処理できませんでした。再試行してください";
 
 type AdminAuditDescriptor = {
-  action: AuditAction;
+  action: AdminAuditAction;
   adminUserId: string;
   targetUserId: string;
 };

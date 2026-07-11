@@ -13,6 +13,15 @@ export const AUDIT_ACTIONS = {
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
 
+export const ADMIN_AUDIT_ACTIONS = [
+  AUDIT_ACTIONS.ADMIN_USER_SUSPEND,
+  AUDIT_ACTIONS.ADMIN_USER_REACTIVATE,
+  AUDIT_ACTIONS.ADMIN_USER_ROLE_CHANGE,
+  AUDIT_ACTIONS.ADMIN_USER_FORCE_DELETE,
+] as const;
+
+export type AdminAuditAction = (typeof ADMIN_AUDIT_ACTIONS)[number];
+
 export const AUDIT_TARGET_TYPES = {
   USER: "USER",
 } as const;
@@ -31,30 +40,94 @@ export const AUDIT_FAILURE_REASONS = {
 
 export type AuditFailureReason = (typeof AUDIT_FAILURE_REASONS)[keyof typeof AUDIT_FAILURE_REASONS];
 
-const commonAuditEventShape = {
-  action: z.enum(AUDIT_ACTIONS),
-  actorId: z.string().min(1).nullable(),
-  actorRole: z.enum(Role).nullable(),
-  targetType: z.enum(AUDIT_TARGET_TYPES).nullable(),
-  targetId: z.string().min(1).nullable(),
-};
+const ADMIN_AUDIT_FAILURE_REASONS = [
+  AUDIT_FAILURE_REASONS.TARGET_NOT_FOUND,
+  AUDIT_FAILURE_REASONS.SELF_OPERATION_DENIED,
+  AUDIT_FAILURE_REASONS.LAST_ADMIN_PROTECTED,
+  AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
+  AUDIT_FAILURE_REASONS.SERIALIZATION_CONFLICT,
+  AUDIT_FAILURE_REASONS.INTERNAL_ERROR,
+] as const;
+
+export type AdminAuditFailureReason = (typeof ADMIN_AUDIT_FAILURE_REASONS)[number];
+
+const UNCONFIRMED_TARGET_FAILURE_REASONS: readonly AdminAuditFailureReason[] = [
+  AUDIT_FAILURE_REASONS.TARGET_NOT_FOUND,
+  AUDIT_FAILURE_REASONS.SERIALIZATION_CONFLICT,
+  AUDIT_FAILURE_REASONS.INTERNAL_ERROR,
+];
+
+const internalIdSchema = z.string().min(1);
+const actorRoleSchema = z.enum(Role);
+const adminActionSchema = z.enum(ADMIN_AUDIT_ACTIONS);
+
+const actorIsTargetSuccessSchema = z
+  .object({
+    action: z.enum([AUDIT_ACTIONS.LOGIN, AUDIT_ACTIONS.PASSWORD_CHANGE]),
+    result: z.literal(AuditResult.SUCCESS),
+    actorId: internalIdSchema,
+    actorRole: actorRoleSchema,
+    targetType: z.literal(AUDIT_TARGET_TYPES.USER),
+    targetId: internalIdSchema,
+    failureReason: z.null(),
+  })
+  .strict();
+
+const passwordResetSuccessSchema = z
+  .object({
+    action: z.literal(AUDIT_ACTIONS.PASSWORD_RESET),
+    result: z.literal(AuditResult.SUCCESS),
+    actorId: z.null(),
+    actorRole: z.null(),
+    targetType: z.literal(AUDIT_TARGET_TYPES.USER),
+    targetId: internalIdSchema,
+    failureReason: z.null(),
+  })
+  .strict();
+
+const adminSuccessSchema = z
+  .object({
+    action: adminActionSchema,
+    result: z.literal(AuditResult.SUCCESS),
+    actorId: internalIdSchema,
+    actorRole: z.literal(Role.ADMIN),
+    targetType: z.literal(AUDIT_TARGET_TYPES.USER),
+    targetId: internalIdSchema,
+    failureReason: z.null(),
+  })
+  .strict();
+
+const loginFailureSchema = z
+  .object({
+    action: z.literal(AUDIT_ACTIONS.LOGIN),
+    result: z.literal(AuditResult.FAILURE),
+    actorId: z.null(),
+    actorRole: z.null(),
+    targetType: z.null(),
+    targetId: z.null(),
+    failureReason: z.literal(AUDIT_FAILURE_REASONS.AUTHENTICATION_FAILED),
+  })
+  .strict();
+
+const adminFailureSchema = z
+  .object({
+    action: adminActionSchema,
+    result: z.literal(AuditResult.FAILURE),
+    actorId: internalIdSchema,
+    actorRole: z.literal(Role.ADMIN),
+    targetType: z.literal(AUDIT_TARGET_TYPES.USER).nullable(),
+    targetId: internalIdSchema.nullable(),
+    failureReason: z.enum(ADMIN_AUDIT_FAILURE_REASONS),
+  })
+  .strict();
 
 export const auditEventSchema = z
-  .discriminatedUnion("result", [
-    z
-      .object({
-        ...commonAuditEventShape,
-        result: z.literal(AuditResult.SUCCESS),
-        failureReason: z.null(),
-      })
-      .strict(),
-    z
-      .object({
-        ...commonAuditEventShape,
-        result: z.literal(AuditResult.FAILURE),
-        failureReason: z.enum(AUDIT_FAILURE_REASONS),
-      })
-      .strict(),
+  .union([
+    actorIsTargetSuccessSchema,
+    passwordResetSuccessSchema,
+    adminSuccessSchema,
+    loginFailureSchema,
+    adminFailureSchema,
   ])
   .superRefine((event, context) => {
     const hasTargetType = event.targetType !== null;
@@ -66,6 +139,38 @@ export const auditEventSchema = z
         message: "targetTypeとtargetIdは両方指定するか、両方nullにしてください",
         path: hasTargetType ? ["targetId"] : ["targetType"],
       });
+    }
+
+    if (
+      event.result === AuditResult.SUCCESS &&
+      (event.action === AUDIT_ACTIONS.LOGIN || event.action === AUDIT_ACTIONS.PASSWORD_CHANGE) &&
+      event.actorId !== event.targetId
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "本人操作のactorIdとtargetIdは一致させてください",
+        path: ["targetId"],
+      });
+    }
+
+    if (event.result === AuditResult.FAILURE && event.action !== AUDIT_ACTIONS.LOGIN) {
+      const requiresNullTarget = UNCONFIRMED_TARGET_FAILURE_REASONS.includes(event.failureReason);
+
+      if (requiresNullTarget && (hasTargetType || hasTargetId)) {
+        context.addIssue({
+          code: "custom",
+          message: "対象未確認の失敗イベントにはtargetを指定できません",
+          path: ["targetId"],
+        });
+      }
+
+      if (!requiresNullTarget && (!hasTargetType || !hasTargetId)) {
+        context.addIssue({
+          code: "custom",
+          message: "対象確認済みの失敗イベントにはtargetが必要です",
+          path: ["targetId"],
+        });
+      }
     }
   });
 
