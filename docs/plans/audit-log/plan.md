@@ -322,7 +322,7 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
 | `backend/prisma/schema.prisma` | 修正 | AuditLog/AuditResult追加 |
-| `backend/prisma/migrations/{timestamp}_add_audit_logs/migration.sql` | 新規 | table/enum/index追加 |
+| `backend/prisma/migrations/20260711105051_add_audit_logs/migration.sql` | 新規 | table/enum/index追加 |
 | `backend/src/services/audit-events.ts` | 新規 | action/target/reason/strict schema |
 | `backend/src/services/audit.service.ts` | 新規 | 必須・best-effort記録service |
 | `backend/src/services/audit.service.test.ts` | 新規 | 共通監査処理test |
@@ -337,7 +337,7 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | `backend/src/services/admin.service.test.ts` | 修正 | admin success/failure/retry test |
 | `docs/04_api.md` | 修正 | 監査副作用、login status不整合補正 |
 | `docs/05_progress.md` | 修正 | 実装中/完了とplan link |
-| `docs/plans/audit-log/plan.md` | 新規・修正 | 本計画と実装完了記録 |
+| `docs/plans/audit-log/plan.md` | 修正 | 本計画と実装完了記録 |
 
 ## テストケース一覧
 
@@ -498,42 +498,42 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | T17 | 手動DB確認 | `audit_logs` | 1操作1row、禁止情報なし | T14 | High |
 | T18 | docs実装完了更新 | API/progress/plan | 実態一致、`[x]`、完了欄 | T16,T17 | High |
 
-- [ ] T1: 仕様・実装・矛盾の再確認
-- [ ] T2: 進捗を実装中へ更新
-- [ ] T3: Prisma schema/migration追加
-- [ ] T4: 共通監査service Red test
-- [ ] T5: event型・strict schema・共通service実装
-- [ ] T6: login監査 Red test
-- [ ] T7: login成功atomic・失敗best-effort実装
-- [ ] T8: password変更/reset監査 Red test
-- [ ] T9: password変更/reset監査実装
-- [ ] T10: admin監査 Red test
-- [ ] T11: admin監査とretry境界実装
-- [ ] T12: raw errorログ安全化
-- [ ] T13: 秘密情報除外・重複防止・回帰test
-- [ ] T14: Prisma/migration/実DBrollback確認
-- [ ] T15: format/lint/build/all test
-- [ ] T16: Playwright主要導線確認
-- [ ] T17: 手動DBレコード確認
-- [ ] T18: API・進捗・plan実装完了更新
+- [x] T1: 仕様・実装・矛盾の再確認
+- [x] T2: 進捗を実装中へ更新
+- [x] T3: Prisma schema/migration追加
+- [x] T4: 共通監査service Red test
+- [x] T5: event型・strict schema・共通service実装
+- [x] T6: login監査 Red test
+- [x] T7: login成功atomic・失敗best-effort実装
+- [x] T8: password変更/reset監査 Red test
+- [x] T9: password変更/reset監査実装
+- [x] T10: admin監査 Red test
+- [x] T11: admin監査とretry境界実装
+- [x] T12: raw errorログ安全化
+- [x] T13: 秘密情報除外・重複防止・回帰test
+- [x] T14: Prisma/migration/実DBrollback確認
+- [x] T15: format/lint/build/all test
+- [x] T16: Playwright主要導線確認
+- [x] T17: 手動DBレコード確認
+- [x] T18: API・進捗・plan実装完了更新
 
 ## セキュリティ確認項目
 
-- [ ] password/passwordHash/current/new/confirmを保存しない。
-- [ ] JWT/refresh/verify/reset tokenとtoken hashを保存しない。
-- [ ] Cookie/Authorization/session IDを保存しない。
-- [ ] email/username/氏名/IP/User-Agentを保存しない。
-- [ ] request/response/body/headers/query/error/stackを保存しない。
-- [ ] 任意metadata/Json列がない。
-- [ ] login failureのactor/targetはnullで理由は共通。
-- [ ] actorIdとtargetIdを分離する。
-- [ ] route/middlewareで重複記録しない。
-- [ ] success監査は本体transaction内。
-- [ ] admin retryで重複しない。
-- [ ] auth/admin/rate limitを弱めない。
-- [ ] audit update/delete APIがない。
-- [ ] raw error objectを運用ログへ出さない。
-- [ ] datasourceに`url =`を追加せずPrismaPgを維持する。
+- [x] password/passwordHash/current/new/confirmを保存しない。
+- [x] JWT/refresh/verify/reset tokenとtoken hashを保存しない。
+- [x] Cookie/Authorization/session IDを保存しない。
+- [x] email/username/氏名/IP/User-Agentを保存しない。
+- [x] request/response/body/headers/query/error/stackを保存しない。
+- [x] 任意metadata/Json列がない。
+- [x] login failureのactor/targetはnullで理由は共通。
+- [x] actorIdとtargetIdを分離する。
+- [x] route/middlewareで重複記録しない。
+- [x] success監査は本体transaction内。
+- [x] admin retryで重複しない。
+- [x] auth/admin/rate limitを弱めない。
+- [x] audit update/delete APIがない。
+- [x] raw error objectを運用ログへ出さない。
+- [x] datasourceに`url =`を追加せずPrismaPgを維持する。
 
 ## 手動確認項目
 
@@ -561,59 +561,78 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 6. DB role分離、append-only権限、外部WORMが必要か決める。
 7. 監査閲覧API/UIの要否と閲覧可能roleを管理者ダッシュボード計画で決める。
 
-## 実装完了時の更新ルール
-
-- 対象ファイル一覧を実際の変更と一致させる。
-- 計画外変更、未実装、設計変更を記録する。
-- checkboxを実態に合わせて`[x]`へ更新する。
-- `docs/04_api.md`のstatus・監査副作用を実装/testと一致させる。
-- `docs/05_progress.md`を`[x]`へ更新する。
-- migration名、Prisma validate/generate/deploy結果を記録する。
-- Red→Green→Refactorの実行記録とtest件数を記録する。
-- Playwright画面・手順・結果、実DB確認結果を記録する。
-- 保持期間、外部保存、閲覧、メール認証、退会時証跡、改ざん耐性の判断を記録する。
-- 末尾に以下を追記する。
-
-```markdown
 ## 実装完了
 
-- 完了日: YYYY-MM-DD
-- 実装ブランチ: feature/audit-log
-- PR: #N
+- 完了日: 2026-07-11
+- 実装ブランチ: `feature/audit-log`
+- PR: 未作成（チャットで内容確認後に作成）
 
 ### 計画からの変更点
 
-- 変更がなければ「なし」
+- 公開API・UIの追加はなく、計画したbackend監査範囲をそのまま実装した。
+- 管理者画面は未実装のため、Playwright確認では既存画面の代わりにBrowserから公開HTTP APIを呼び、USERの403拒否とADMINの停止・解除成功を確認した。
+- DockerのHono containerはschema変更前のPrisma Clientを保持していたため、container内で`prisma generate`後にHonoだけを再起動してから回帰確認した。これは成果物の変更ではなく、ローカル検証環境の生成物更新である。
+- 大量login failure時の負荷・容量試験は実施していない。rate limitの本番化、保持期間、容量試算と合わせて後続課題とする。
 
 ### 実際の変更ファイル
 
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
+| `backend/prisma/schema.prisma` | 修正 | `AuditResult`と`AuditLog`、検索用indexを追加 |
+| `backend/prisma/migrations/20260711105051_add_audit_logs/migration.sql` | 新規 | enum・table・indexをexpand-onlyで追加 |
+| `backend/src/services/audit-events.ts` | 新規 | action・target・failure reasonとstrict schemaを一元化 |
+| `backend/src/services/audit.service.ts` | 新規 | 必須監査とbest-effort監査を許可列だけで保存 |
+| `backend/src/services/audit.service.test.ts` | 新規 | 許可値・禁止項目・null整合性・安全ログを検証 |
+| `backend/src/services/auth.service.ts` | 修正 | login成功のatomic化、login失敗・reset成功監査を追加 |
+| `backend/src/routes/auth/index.ts` | 修正 | forgot-passwordのraw error出力を固定eventへ変更 |
+| `backend/src/routes/auth/login.test.ts` | 修正 | login成功・失敗・rollback・回帰testを追加 |
+| `backend/src/routes/auth/forgot-password.test.ts` | 修正 | raw error非出力testを追加 |
+| `backend/src/routes/auth/reset-password.test.ts` | 修正 | reset成功監査と秘密情報除外testを追加 |
+| `backend/src/services/user.service.ts` | 修正 | password変更成功監査を既存transactionへ追加 |
+| `backend/src/services/user.service.test.ts` | 修正 | password変更のatomic性・秘密情報除外testを追加 |
+| `backend/src/services/admin.service.ts` | 修正 | 管理者action descriptorとretry境界の監査を追加 |
+| `backend/src/services/admin.service.test.ts` | 修正 | success/failure/P2034 retry/重複防止testを追加 |
+| `docs/04_api.md` | 修正 | 監査副作用・対象外・秘密除外とlogin status/Cookie pathを実装へ整合 |
+| `docs/05_progress.md` | 修正 | 対象タスクを完了へ更新 |
+| `docs/plans/audit-log/plan.md` | 修正 | 実績、検証結果、後続課題を反映 |
 
 ### TDD実施記録
 
-| フェーズ | 対象・コマンド | 結果 |
+| フェーズ | 対象 | 結果 |
 |---|---|---|
-| Red | | |
-| Green | | |
-| Refactor | | |
+| Red | 共通監査service | 未実装moduleによりtest collection失敗を確認 |
+| Green | 共通監査service | 23件全通過 |
+| Red | login監査 | 新規8件失敗、既存18件通過を確認 |
+| Green | login監査 | 26件全通過 |
+| Red | password変更・reset監査 | 新規4件失敗、既存22件通過を確認 |
+| Green | password変更・reset監査 | 26件全通過 |
+| Red | 管理者操作監査 | 新規15件失敗、既存7件通過を確認 |
+| Green | 管理者操作監査 | 22件全通過。横断test追加後の現行件数は23件 |
+| Red | forgot-password安全ログ | 新規2件失敗、既存3件通過を確認 |
+| Green | forgot-password安全ログ | 5件全通過 |
+| Refactor | 全backend | 重複整理とformat後、48 files・435 tests全通過 |
 
 ### 検証結果
 
 | 種別 | コマンド・確認内容 | 結果 |
 |---|---|---|
-| Prisma validate/generate | | |
-| Migration deploy | | |
-| Format/Lint/Build/Test | | |
-| Playwright | login/settings/reset/admin | |
-| 実DB | rollback/1操作1row/禁止項目 | |
+| Prisma | `prisma format`、`prisma validate`、`prisma generate` | 成功 |
+| Migration deploy | Docker PostgreSQLへ`prisma migrate deploy` | 成功。14 migrations適用済みを確認 |
+| Schema/index | 実DBの`audit_logs`、enum、3 indexを確認 | 計画どおり |
+| Rollback | 一時検証scriptで本体更新後の監査insertを意図的に失敗 | transaction全体がrollbackし、対象user未更新・監査row未追加 |
+| Format/Lint/Build/Test | backend format、lint、format check、build、全test | 全成功。48 files・435 tests通過 |
+| Playwright: login | 誤password、正常login、reload後の認証状態 | 401表示、正常redirect/toast、認証維持を確認 |
+| Playwright: password | settingsからpassword変更、reset tokenで再設定 | どちらも成功しloginへ遷移 |
+| Playwright: admin | USERで停止API、ADMINで一時userの停止・解除 | USERは403、ADMINは両操作成功 |
+| Browser console/backend | console errorと確認対象requestの500 | console errorなし、確認対象に500なし |
+| 実DBレコード | 一時user/adminで対象操作後に許可列を確認 | 期待8件。LOGIN failure 1、LOGIN success 3、password change 1、reset 1、suspend 1、reactivate 1 |
+| 秘密情報・重複 | 8 rowの形状、USERのmiddleware拒否、actor/target | 個人情報・秘密情報なし、拒否時rowなし、actor/target正常。検証dataは削除済み |
 
 ### 後続確認事項
 
-- 保持期間・cleanup:
-- 外部ログ・request ID:
-- 閲覧API/UI:
-- メール認証監査:
-- 退会時の監査証跡:
-- DB権限分離・改ざん耐性:
-```
+- 保持期間・cleanup: 本番公開前に件数試算、保持期間、削除jobを決める。大量failureの負荷・容量試験も同時に行う。
+- 外部ログ・request ID: フェーズ11の構造化ログで実装し、DB監査との相関方法を決める。
+- 閲覧API/UI: 必要性、閲覧可能role、filter、pagination、A11Yを管理者ダッシュボード計画で設計する。
+- メール認証監査: `docs/02_security.md`との範囲差を整理し、後続追加の要否を決める。
+- 退会時の監査証跡: relationを持たない内部IDの保持をプライバシーポリシーと整合させる。
+- DB権限分離・改ざん耐性: append-only権限、管理DB role分離、外部WORMの必要性を判断する。
