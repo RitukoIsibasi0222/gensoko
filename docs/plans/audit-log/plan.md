@@ -656,3 +656,4 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 - メール認証監査: `docs/02_security.md`との範囲差を整理し、後続追加の要否を決める。
 - 退会時の監査証跡: relationを持たない内部IDの保持をプライバシーポリシーと整合させる。
 - DB権限分離・改ざん耐性: append-only権限、管理DB role分離、外部WORMの必要性を判断する。
+- 保持期間・容量監視・cleanup・退会後の内部ID保持方針は、`docs/05_progress.md`フェーズ11の独立タスクとして本番公開前に追跡する。
