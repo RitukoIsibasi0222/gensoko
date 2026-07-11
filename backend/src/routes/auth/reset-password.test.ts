@@ -90,6 +90,7 @@ describe("POST /auth/reset-password", () => {
         failureReason: null,
       },
     });
+    expect(txAuditLogCreate).toHaveBeenCalledTimes(1);
   });
 
   it("監査: 保存失敗時は500を返してパスワードリセットを確定しない", async () => {
@@ -139,6 +140,7 @@ describe("POST /auth/reset-password", () => {
     });
 
     expect(res.status).toBe(404);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it("期限切れトークン: 400を返しトークンを削除する", async () => {
@@ -159,6 +161,7 @@ describe("POST /auth/reset-password", () => {
 
     expect(res.status).toBe(400);
     expect(prisma.passwordResetToken.deleteMany).toHaveBeenCalledOnce();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it("バリデーション: tokenが64文字未満の場合は400を返す", async () => {
@@ -169,6 +172,7 @@ describe("POST /auth/reset-password", () => {
     });
 
     expect(res.status).toBe(400);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it("バリデーション: 64文字でも非hex文字列の場合は400を返す", async () => {
@@ -181,6 +185,7 @@ describe("POST /auth/reset-password", () => {
     });
 
     expect(res.status).toBe(400);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it("バリデーション: パスワードが強度不足の場合は400を返す", async () => {
@@ -191,6 +196,7 @@ describe("POST /auth/reset-password", () => {
     });
 
     expect(res.status).toBe(400);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it("二重使用: $transaction内でcount=0の場合は400を返す", async () => {

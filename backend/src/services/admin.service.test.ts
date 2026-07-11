@@ -141,6 +141,7 @@ function expectSuccessAudit(
       failureReason: null,
     },
   });
+  expect(createAuditLog).toHaveBeenCalledTimes(1);
 }
 
 function expectFailureAudit(action: string, targetUserId: string, failureReason: string) {
@@ -155,7 +156,13 @@ function expectFailureAudit(action: string, targetUserId: string, failureReason:
       failureReason,
     },
   });
+  expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
 }
+
+beforeEach(() => {
+  vi.mocked(prisma.auditLog.create).mockReset();
+  vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
+});
 
 describe("getAdminUsers", () => {
   beforeEach(() => {
@@ -354,6 +361,30 @@ describe("updateAdminUserStatus", () => {
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expectFailureAudit("ADMIN_USER_SUSPEND", "admin-1", "SELF_OPERATION_DENIED");
+  });
+
+  it("失敗監査の保存失敗でも元のAdminServiceErrorを維持しraw errorを出力しない", async () => {
+    const auditError = new Error("DATABASE_URL=postgres://secret@example.com/gensoko");
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(prisma.auditLog.create).mockRejectedValue(auditError);
+
+    await expect(
+      updateAdminUserStatus({
+        adminUserId: "admin-1",
+        targetUserId: "admin-1",
+        isActive: false,
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "自分自身には実行できません",
+    });
+
+    const consoleErrorCalls = consoleErrorSpy.mock.calls;
+    consoleErrorSpy.mockRestore();
+    expect(consoleErrorCalls).toEqual([
+      ["[audit] 監査ログの保存に失敗しました: action=ADMIN_USER_SUSPEND result=FAILURE"],
+    ]);
+    expect(consoleErrorCalls.flat()).not.toContain(auditError);
   });
 
   it("対象ユーザーが存在しない場合はTARGET_NOT_FOUNDを1件記録する", async () => {

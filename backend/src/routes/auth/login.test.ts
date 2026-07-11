@@ -138,6 +138,7 @@ describe("POST /auth/login", () => {
     });
 
     expect(res.status).toBe(400);
+    expect(prisma.auditLog.create).not.toHaveBeenCalled();
   });
 
   it("バリデーション: password が空の場合は 400 を返す", async () => {
@@ -148,6 +149,7 @@ describe("POST /auth/login", () => {
     });
 
     expect(res.status).toBe(400);
+    expect(prisma.auditLog.create).not.toHaveBeenCalled();
   });
 
   it("バリデーション: email・password が未指定の場合は 400 を返す", async () => {
@@ -158,6 +160,7 @@ describe("POST /auth/login", () => {
     });
 
     expect(res.status).toBe(400);
+    expect(prisma.auditLog.create).not.toHaveBeenCalled();
   });
 
   it("異常系: 存在しないメールアドレスの場合は 401 を返す", async () => {
@@ -450,6 +453,7 @@ describe("POST /auth/login", () => {
         failureReason: null,
       },
     });
+    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
     expect(vi.mocked(bcrypt.compare).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(prisma.$transaction).mock.invocationCallOrder[0],
     );
@@ -566,5 +570,6 @@ describe("POST /auth/login", () => {
         failureReason: "AUTHENTICATION_FAILED",
       },
     });
+    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
   });
 });

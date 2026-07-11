@@ -243,6 +243,7 @@ describe("changeCurrentPassword", () => {
         failureReason: null,
       },
     });
+    expect(txAuditLogCreate).toHaveBeenCalledTimes(1);
   });
 
   it("監査: 保存失敗時はパスワード変更処理全体を失敗させる", async () => {
@@ -309,6 +310,7 @@ describe("changeCurrentPassword", () => {
       status: 400,
       message: "現在のパスワードが正しくありません",
     });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
 
