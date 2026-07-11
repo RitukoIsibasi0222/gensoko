@@ -54,18 +54,21 @@ Response 200:
     "role": "USER"
   }
 }
-Set-Cookie: refreshToken=xxx; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth
+Set-Cookie: refreshToken=xxx; HttpOnly; SameSite=Strict; Path=/api/v1/auth
+
+※ production環境では`Secure`も付与する。
 
 Error:
 401 メールアドレスまたはパスワードが正しくありません
-401 アカウントがロックされています
+401 しばらく後に再試行してください
+403 このアカウントは削除されています
 403 アカウントが停止されています
-403 メール認証が完了していません
+403 メールアドレスが確認されていません
 ```
 
 監査ログ:
 
-- service到達後の成功・失敗を内部DBへ記録する。入力検証失敗、rate limit、認証・認可middlewareでの拒否は記録対象外。
+- 認証成功と、serviceが`AuthError`として判定した認証・アカウント状態の失敗を内部DBへ記録する。入力検証失敗、rate limit、想定外の内部エラーは記録対象外。
 - 成功時は `LOGIN / SUCCESS` と内部user ID・roleを保存する。失敗時は `LOGIN / FAILURE`、actor/targetを`null`、理由を共通code `AUTHENTICATION_FAILED` とする。
 - email、username、password、token、Cookie、Authorization、request/response body、IP、User-Agent、raw errorは保存しない。
 - 成功監査はlogin状態更新・refresh token保存と同一transactionで記録し、監査保存失敗時は全体をrollbackして500を返す。失敗監査はbest-effortで、保存失敗時も元の401/403を維持する。
@@ -720,7 +723,7 @@ Cookie:
 
 監査ログ:
 
-- password変更成功時だけ `PASSWORD_CHANGE / SUCCESS` を、password更新・各種token削除と同一transactionで記録する。
+- password変更成功時だけ `PASSWORD_CHANGE / SUCCESS` を、password更新・refresh token削除と同一transactionで記録する。
 - actor/targetには認証済みユーザーの内部IDとroleだけを保存し、password、password hash、token、Cookie、request bodyは保存しない。
 - username変更、入力検証失敗、現在password不一致、認証middlewareでの拒否は監査対象外。
 
@@ -950,7 +953,8 @@ Error:
 
 監査ログ:
 
-- 状態変更、ロール変更、強制退会は、操作ごとのaction・result・actor内部ID/role・target内部IDを記録する。停止と解除は別actionとして記録する。
+- 状態変更、ロール変更、強制退会は、操作ごとのaction・result・actor内部ID/roleを記録する。停止と解除は別actionとして記録する。
+- target内部IDはDBで対象ユーザーを確認できた場合だけ保存する。対象不存在やtransaction競合など対象を確認できない失敗では、未検証のpath入力を保存せず`targetType`と`targetId`を`null`にする。
 - 成功監査は本体変更と同じSerializable transaction内へ含める。P2034 retry時もcommitされた最終transactionの1件だけが残る。
 - serviceで判定した対象不存在・自己操作・最後の管理者保護・対象状態競合・retry枯渇は、安全な分類codeで1件だけbest-effort記録する。
 - 入力検証失敗、401/403のmiddleware拒否、一覧・詳細・統計など参照系APIは監査対象外。

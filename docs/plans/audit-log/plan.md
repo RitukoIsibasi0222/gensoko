@@ -336,6 +336,7 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | `backend/src/services/admin.service.ts` | 修正 | admin監査descriptorとretry境界 |
 | `backend/src/services/admin.service.test.ts` | 修正 | admin success/failure/retry test |
 | `docs/04_api.md` | 修正 | 監査副作用、login status不整合補正 |
+| `docs/09_startup_commands.md` | 修正 | schema変更後のPrisma Client再生成条件を明記 |
 | `docs/05_progress.md` | 修正 | 実装中/完了とplan link |
 | `docs/plans/audit-log/plan.md` | 修正 | 本計画と実装完了記録 |
 
@@ -394,11 +395,11 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | role change | actor/targetを分離し、変更前後roleを保存しない |
 | force delete | soft delete/token削除/auditを同一transaction |
 | self operation | `SELF_OPERATION_DENIED`を1件failure |
-| target不存在 | `TARGET_NOT_FOUND`を1件failure |
+| target不存在 | `TARGET_NOT_FOUND`を1件failure。未検証path値は保存せずtargetはnull |
 | last admin | `LAST_ADMIN_PROTECTED`を1件failure |
 | target state競合 | `TARGET_STATE_CONFLICT`を1件failure |
 | P2034後にretry成功 | success監査は最終transactionの1件だけ |
-| 全retry失敗 | `SERIALIZATION_CONFLICT` failureを外側で1件 |
+| 全retry失敗 | `SERIALIZATION_CONFLICT` failureを外側で1件。対象未確認のためtargetはnull |
 | success audit失敗 | 本体更新をrollback |
 | validation/401/403 | 監査なし |
 | response | 既存日本語error/status不変 |
@@ -573,6 +574,7 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 - 管理者画面は未実装のため、Playwright確認では既存画面の代わりにBrowserから公開HTTP APIを呼び、USERの403拒否とADMINの停止・解除成功を確認した。
 - DockerのHono containerはschema変更前のPrisma Clientを保持していたため、container内で`prisma generate`後にHonoだけを再起動してから回帰確認した。これは成果物の変更ではなく、ローカル検証環境の生成物更新である。
 - 大量login failure時の負荷・容量試験は実施していない。rate limitの本番化、保持期間、容量試算と合わせて後続課題とする。
+- 実装後レビューで、管理者APIの未検証path値が失敗監査の`targetId`へ入る問題を確認した。DBで対象を確認できた失敗だけ内部IDを保存し、対象不存在・retry枯渇ではtargetをnullにする安全側の設計へ修正した。
 
 ### 実際の変更ファイル
 
@@ -593,6 +595,7 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | `backend/src/services/admin.service.ts` | 修正 | 管理者action descriptorとretry境界の監査を追加 |
 | `backend/src/services/admin.service.test.ts` | 修正 | success/failure/P2034 retry/重複防止testを追加 |
 | `docs/04_api.md` | 修正 | 監査副作用・対象外・秘密除外とlogin status/Cookie pathを実装へ整合 |
+| `docs/09_startup_commands.md` | 修正 | schema変更・branch切替後のPrisma Client再生成を明記 |
 | `docs/05_progress.md` | 修正 | 対象タスクを完了へ更新 |
 | `docs/plans/audit-log/plan.md` | 修正 | 実績、検証結果、後続課題を反映 |
 
@@ -610,7 +613,9 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | Green | 管理者操作監査 | 22件全通過。横断test追加後の現行件数は23件 |
 | Red | forgot-password安全ログ | 新規2件失敗、既存3件通過を確認 |
 | Green | forgot-password安全ログ | 5件全通過 |
-| Refactor | 全backend | 重複整理とformat後、48 files・435 tests全通過 |
+| Red | レビュー修正: 未検証target ID除外 | 新規・変更4件失敗、既存21件通過を確認 |
+| Green | レビュー修正: 未検証target ID除外 | 管理者service 25件全通過 |
+| Refactor | 全backend | 重複整理とformat後、48 files・437 tests全通過 |
 
 ### 検証結果
 
@@ -620,7 +625,7 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 | Migration deploy | Docker PostgreSQLへ`prisma migrate deploy` | 成功。14 migrations適用済みを確認 |
 | Schema/index | 実DBの`audit_logs`、enum、3 indexを確認 | 計画どおり |
 | Rollback | 一時検証scriptで本体更新後の監査insertを意図的に失敗 | transaction全体がrollbackし、対象user未更新・監査row未追加 |
-| Format/Lint/Build/Test | backend format、lint、format check、build、全test | 全成功。48 files・435 tests通過 |
+| Format/Lint/Build/Test | backend format、lint、format check、build、全test | 全成功。48 files・437 tests通過 |
 | Playwright: login | 誤password、正常login、reload後の認証状態 | 401表示、正常redirect/toast、認証維持を確認 |
 | Playwright: password | settingsからpassword変更、reset tokenで再設定 | どちらも成功しloginへ遷移 |
 | Playwright: admin | USERで停止API、ADMINで一時userの停止・解除 | USERは403、ADMINは両操作成功 |
