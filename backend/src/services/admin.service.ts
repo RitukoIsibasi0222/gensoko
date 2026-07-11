@@ -15,6 +15,7 @@ export class AdminServiceError extends Error {
     public readonly status: 400 | 404 | 409,
     message: string,
     public readonly auditFailureReason?: AuditFailureReason,
+    public readonly auditTargetId: string | null = null,
   ) {
     super(message);
     this.name = "AdminServiceError";
@@ -370,8 +371,8 @@ async function runAuditedAdminMutation<T>(
         result: AuditResult.FAILURE,
         actorId: audit.adminUserId,
         actorRole: "ADMIN",
-        targetType: AUDIT_TARGET_TYPES.USER,
-        targetId: audit.targetUserId,
+        targetType: error.auditTargetId === null ? null : AUDIT_TARGET_TYPES.USER,
+        targetId: error.auditTargetId,
         failureReason: error.auditFailureReason,
       });
     }
@@ -461,6 +462,7 @@ export async function updateAdminUserStatus(input: {
         409,
         "自分自身には実行できません",
         AUDIT_FAILURE_REASONS.SELF_OPERATION_DENIED,
+        adminUserId,
       );
     }
 
@@ -483,6 +485,7 @@ export async function updateAdminUserStatus(input: {
           409,
           "削除済みユーザーは変更できません",
           AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
+          targetUser.id,
         );
       }
 
@@ -494,6 +497,7 @@ export async function updateAdminUserStatus(input: {
             409,
             "最後の管理者は変更できません",
             AUDIT_FAILURE_REASONS.LAST_ADMIN_PROTECTED,
+            targetUser.id,
           );
         }
       }
@@ -535,6 +539,7 @@ export async function updateAdminUserRole(input: {
         409,
         "自分自身には実行できません",
         AUDIT_FAILURE_REASONS.SELF_OPERATION_DENIED,
+        adminUserId,
       );
     }
 
@@ -557,6 +562,7 @@ export async function updateAdminUserRole(input: {
           409,
           "停止中または削除済みのユーザーは変更できません",
           AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
+          targetUser.id,
         );
       }
 
@@ -568,6 +574,7 @@ export async function updateAdminUserRole(input: {
             409,
             "最後の管理者は変更できません",
             AUDIT_FAILURE_REASONS.LAST_ADMIN_PROTECTED,
+            targetUser.id,
           );
         }
       }
@@ -577,6 +584,7 @@ export async function updateAdminUserRole(input: {
           409,
           "メール認証済みで有効なユーザーのみ管理者にできます",
           AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
+          targetUser.id,
         );
       }
 
@@ -612,6 +620,7 @@ export async function forceDeleteAdminUser(input: {
         409,
         "自分自身には実行できません",
         AUDIT_FAILURE_REASONS.SELF_OPERATION_DENIED,
+        adminUserId,
       );
     }
 
@@ -634,6 +643,7 @@ export async function forceDeleteAdminUser(input: {
           409,
           "ユーザーは既に削除されています",
           AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
+          targetUser.id,
         );
       }
 
@@ -645,6 +655,7 @@ export async function forceDeleteAdminUser(input: {
             409,
             "最後の管理者は変更できません",
             AUDIT_FAILURE_REASONS.LAST_ADMIN_PROTECTED,
+            targetUser.id,
           );
         }
       }

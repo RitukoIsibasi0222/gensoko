@@ -144,14 +144,14 @@ function expectSuccessAudit(
   expect(createAuditLog).toHaveBeenCalledTimes(1);
 }
 
-function expectFailureAudit(action: string, targetUserId: string, failureReason: string) {
+function expectFailureAudit(action: string, targetUserId: string | null, failureReason: string) {
   expect(prisma.auditLog.create).toHaveBeenCalledWith({
     data: {
       action,
       result: "FAILURE",
       actorId: "admin-1",
       actorRole: "ADMIN",
-      targetType: "USER",
+      targetType: targetUserId === null ? null : "USER",
       targetId: targetUserId,
       failureReason,
     },
@@ -387,19 +387,22 @@ describe("updateAdminUserStatus", () => {
     expect(consoleErrorCalls.flat()).not.toContain(auditError);
   });
 
-  it("対象ユーザーが存在しない場合はTARGET_NOT_FOUNDを1件記録する", async () => {
+  it.each([
+    { name: "存在しないID", targetUserId: "missing" },
+    { name: "メールアドレス", targetUserId: "secret@example.com" },
+    { name: "token相当値", targetUserId: "a".repeat(64) },
+  ])("対象が未確認の$nameは監査ログへ保存しない", async ({ targetUserId }) => {
     const tx = mockTransaction();
     tx.user.findUnique.mockResolvedValue(null);
 
     await expect(
-      updateAdminUserStatus({ adminUserId: "admin-1", targetUserId: "missing", isActive: false }),
+      updateAdminUserStatus({ adminUserId: "admin-1", targetUserId, isActive: false }),
     ).rejects.toMatchObject({
       status: 404,
       message: "ユーザーが見つかりません",
     });
 
-    expectFailureAudit("ADMIN_USER_SUSPEND", "missing", "TARGET_NOT_FOUND");
-    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
+    expectFailureAudit("ADMIN_USER_SUSPEND", null, "TARGET_NOT_FOUND");
   });
 
   it("最後の利用可能な管理者を停止しようとしたら AdminServiceError(409) にする", async () => {
@@ -448,7 +451,7 @@ describe("updateAdminUserStatus", () => {
       message: "同時操作により処理できませんでした。再試行してください",
     });
     expect(prisma.$transaction).toHaveBeenCalledTimes(2);
-    expectFailureAudit("ADMIN_USER_SUSPEND", "admin-2", "SERIALIZATION_CONFLICT");
+    expectFailureAudit("ADMIN_USER_SUSPEND", null, "SERIALIZATION_CONFLICT");
     expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
   });
 });
