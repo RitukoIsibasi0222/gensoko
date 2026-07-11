@@ -240,6 +240,32 @@ type LoginResult = {
   user: { id: string; username: string; role: Role };
 };
 
+type LoginAccountState = {
+  role: Role;
+  emailVerified: boolean;
+  isActive: boolean;
+  deletedAt: Date | null;
+  lockedUntil: Date | null;
+};
+
+function assertLoginAccountIsUsable(user: LoginAccountState, now = new Date()): void {
+  if (user.deletedAt) {
+    throw new AuthError(403, "このアカウントは削除されています");
+  }
+
+  if (!user.isActive) {
+    throw new AuthError(403, "アカウントが停止されています");
+  }
+
+  if (!user.emailVerified) {
+    throw new AuthError(403, "メールアドレスが確認されていません");
+  }
+
+  if (user.lockedUntil && user.lockedUntil > now) {
+    throw new AuthError(401, "しばらく後に再試行してください");
+  }
+}
+
 export async function login(input: { email: string; password: string }): Promise<LoginResult> {
   try {
     return await loginWithRequiredAudit(input);
@@ -287,24 +313,8 @@ async function loginWithRequiredAudit(input: {
     throw new AuthError(401, "メールアドレスまたはパスワードが正しくありません");
   }
 
-  // 2. アカウント停止チェック
-  if (user.deletedAt) {
-    throw new AuthError(403, "このアカウントは削除されています");
-  }
-
-  if (!user.isActive) {
-    throw new AuthError(403, "アカウントが停止されています");
-  }
-
-  // 3. メール確認チェック
-  if (!user.emailVerified) {
-    throw new AuthError(403, "メールアドレスが確認されていません");
-  }
-
-  // 4. ブルートフォースロックチェック
-  if (user.lockedUntil && user.lockedUntil > new Date()) {
-    throw new AuthError(401, "しばらく後に再試行してください");
-  }
+  // 2. アカウント状態チェック
+  assertLoginAccountIsUsable(user);
 
   // ロック期限切れの場合は failCount をリセットしてから検証（再ロックを防ぐ）
   let currentFailCount = user.loginFailCount;
@@ -346,10 +356,44 @@ async function loginWithRequiredAudit(input: {
 
   // 7. ログイン成功時のDB更新と監査証跡を原子的に確定する
   await prisma.$transaction(async (tx) => {
-    await tx.user.update({
+    const stateCheckedAt = new Date();
+    const currentUser = await tx.user.findUnique({
       where: { id: user.id },
+      select: {
+        role: true,
+        emailVerified: true,
+        isActive: true,
+        deletedAt: true,
+        lockedUntil: true,
+      },
+    });
+
+    if (!currentUser) {
+      throw new AuthError(401, "メールアドレスまたはパスワードが正しくありません");
+    }
+
+    assertLoginAccountIsUsable(currentUser, stateCheckedAt);
+
+    if (currentUser.role !== user.role) {
+      throw new AuthError(409, "アカウント情報が変更されました。再試行してください");
+    }
+
+    const { count } = await tx.user.updateMany({
+      where: {
+        id: user.id,
+        role: user.role,
+        emailVerified: true,
+        isActive: true,
+        deletedAt: null,
+        OR: [{ lockedUntil: null }, { lockedUntil: { lte: stateCheckedAt } }],
+      },
       data: { loginFailCount: 0, lockedUntil: null, lastLoginAt: new Date() },
     });
+
+    if (count !== 1) {
+      throw new AuthError(409, "アカウント情報が変更されました。再試行してください");
+    }
+
     await updateLoginStreak(tx, user.id);
     await saveRefreshToken(tx, user.id, refreshTokenValues);
     await recordAuditEvent(tx, {

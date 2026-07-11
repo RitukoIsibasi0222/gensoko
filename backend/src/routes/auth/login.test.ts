@@ -8,6 +8,7 @@ vi.mock("../../lib/prisma.js", () => ({
     user: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     userStats: {
       findUnique: vi.fn(),
@@ -59,10 +60,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("JWT_SECRET", "test-secret-32chars-long-enough!!");
   vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
+  vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 1 } as never);
   vi.mocked(prisma.$transaction).mockImplementation(async (callback) => {
     return callback({
       user: {
+        findUnique: prisma.user.findUnique,
         update: prisma.user.update,
+        updateMany: prisma.user.updateMany,
       },
       userStats: {
         findUnique: prisma.userStats.findUnique,
@@ -442,6 +446,21 @@ describe("POST /auth/login", () => {
 
     expect(res.status).toBe(200);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.user.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "user-1",
+        role: "USER",
+        emailVerified: true,
+        isActive: true,
+        deletedAt: null,
+        OR: [{ lockedUntil: null }, { lockedUntil: { lte: expect.any(Date) } }],
+      },
+      data: {
+        loginFailCount: 0,
+        lockedUntil: null,
+        lastLoginAt: expect.any(Date),
+      },
+    });
     expect(prisma.auditLog.create).toHaveBeenCalledWith({
       data: {
         action: "LOGIN",
@@ -457,6 +476,97 @@ describe("POST /auth/login", () => {
     expect(vi.mocked(bcrypt.compare).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(prisma.$transaction).mock.invocationCallOrder[0],
     );
+  });
+
+  it("競合: パスワード検証後に停止された場合は成功処理と成功監査を確定しない", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(ACTIVE_USER as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+
+    const txUserFindUnique = vi.fn().mockResolvedValue({
+      role: "USER",
+      emailVerified: true,
+      isActive: false,
+      deletedAt: null,
+      lockedUntil: null,
+    });
+    const txUserUpdate = vi.fn().mockResolvedValue({});
+    const txRefreshTokenCreate = vi.fn().mockResolvedValue({});
+    const txAuditLogCreate = vi.fn().mockResolvedValue({});
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback) => {
+      return callback({
+        user: {
+          findUnique: txUserFindUnique,
+          update: txUserUpdate,
+        },
+        userStats: {
+          findUnique: vi.fn(),
+          upsert: vi.fn(),
+        },
+        refreshToken: { create: txRefreshTokenCreate },
+        auditLog: { create: txAuditLogCreate },
+      } as never);
+    });
+
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "taro@example.com", password: "Pass1234!" }),
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "アカウントが停止されています" });
+    expect(txUserFindUnique).toHaveBeenCalledOnce();
+    expect(txUserUpdate).not.toHaveBeenCalled();
+    expect(txRefreshTokenCreate).not.toHaveBeenCalled();
+    expect(txAuditLogCreate).not.toHaveBeenCalled();
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
+      data: {
+        action: "LOGIN",
+        result: "FAILURE",
+        actorId: null,
+        actorRole: null,
+        targetType: null,
+        targetId: null,
+        failureReason: "AUTHENTICATION_FAILED",
+      },
+    });
+  });
+
+  it("競合: transaction内の再確認後に状態が変わった場合は409で再試行を求める", async () => {
+    vi.mocked(prisma.user.findUnique)
+      .mockResolvedValueOnce(ACTIVE_USER as never)
+      .mockResolvedValueOnce({
+        role: "USER",
+        emailVerified: true,
+        isActive: true,
+        deletedAt: null,
+        lockedUntil: null,
+      } as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 0 } as never);
+
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "taro@example.com", password: "Pass1234!" }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: "アカウント情報が変更されました。再試行してください",
+    });
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    expect(prisma.userStats.upsert).not.toHaveBeenCalled();
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: "LOGIN",
+        result: "FAILURE",
+        actorId: null,
+        targetId: null,
+        failureReason: "AUTHENTICATION_FAILED",
+      }),
+    });
   });
 
   it("監査: 成功監査の保存失敗時は500を返しrefresh token Cookieを発行しない", async () => {
