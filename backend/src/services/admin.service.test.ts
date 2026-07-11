@@ -27,6 +27,9 @@ vi.mock("../lib/prisma.js", () => ({
     emailVerification: {
       deleteMany: vi.fn(),
     },
+    auditLog: {
+      create: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -114,11 +117,44 @@ function mockTransaction() {
     refreshToken: { deleteMany: vi.fn() },
     passwordResetToken: { deleteMany: vi.fn() },
     emailVerification: { deleteMany: vi.fn() },
+    auditLog: { create: vi.fn() },
   };
 
   vi.mocked(prisma.$transaction).mockImplementation(async (fn) => fn(tx as never));
 
   return tx;
+}
+
+function expectSuccessAudit(
+  createAuditLog: ReturnType<typeof vi.fn>,
+  action: string,
+  targetUserId = "user-1",
+) {
+  expect(createAuditLog).toHaveBeenCalledWith({
+    data: {
+      action,
+      result: "SUCCESS",
+      actorId: "admin-1",
+      actorRole: "ADMIN",
+      targetType: "USER",
+      targetId: targetUserId,
+      failureReason: null,
+    },
+  });
+}
+
+function expectFailureAudit(action: string, targetUserId: string, failureReason: string) {
+  expect(prisma.auditLog.create).toHaveBeenCalledWith({
+    data: {
+      action,
+      result: "FAILURE",
+      actorId: "admin-1",
+      actorRole: "ADMIN",
+      targetType: "USER",
+      targetId: targetUserId,
+      failureReason,
+    },
+  });
 }
 
 describe("getAdminUsers", () => {
@@ -271,7 +307,42 @@ describe("updateAdminUserStatus", () => {
     expect(tx.refreshToken.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
     expect(tx.passwordResetToken.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
     expect(tx.emailVerification.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
+    expectSuccessAudit(tx.auditLog.create, "ADMIN_USER_SUSPEND");
     expect(result.message).toBe("アカウントを停止しました");
+  });
+
+  it("停止解除時は専用actionで成功監査を記録する", async () => {
+    const tx = mockTransaction();
+    tx.user.findUnique.mockResolvedValue({ ...baseTargetUser, isActive: false });
+    tx.user.update.mockResolvedValue({ ...baseTargetUser, isActive: true });
+
+    const result = await updateAdminUserStatus({
+      adminUserId: "admin-1",
+      targetUserId: "user-1",
+      isActive: true,
+    });
+
+    expectSuccessAudit(tx.auditLog.create, "ADMIN_USER_REACTIVATE");
+    expect(result.message).toBe("アカウント停止を解除しました");
+  });
+
+  it("成功監査の保存失敗時は管理者操作全体を失敗させる", async () => {
+    const tx = mockTransaction();
+    tx.user.findUnique.mockResolvedValue(baseTargetUser);
+    tx.user.update.mockResolvedValue({ ...baseTargetUser, isActive: false });
+    tx.auditLog.create.mockRejectedValue(new Error("audit insert failed"));
+
+    await expect(
+      updateAdminUserStatus({
+        adminUserId: "admin-1",
+        targetUserId: "user-1",
+        isActive: false,
+      }),
+    ).rejects.toThrow("audit insert failed");
+
+    expect(tx.user.update).toHaveBeenCalledOnce();
+    expect(tx.auditLog.create).toHaveBeenCalledOnce();
+    expect(prisma.auditLog.create).not.toHaveBeenCalled();
   });
 
   it("自分自身の停止/解除は AdminServiceError(409) にする", async () => {
@@ -282,6 +353,22 @@ describe("updateAdminUserStatus", () => {
       message: "自分自身には実行できません",
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();
+    expectFailureAudit("ADMIN_USER_SUSPEND", "admin-1", "SELF_OPERATION_DENIED");
+  });
+
+  it("対象ユーザーが存在しない場合はTARGET_NOT_FOUNDを1件記録する", async () => {
+    const tx = mockTransaction();
+    tx.user.findUnique.mockResolvedValue(null);
+
+    await expect(
+      updateAdminUserStatus({ adminUserId: "admin-1", targetUserId: "missing", isActive: false }),
+    ).rejects.toMatchObject({
+      status: 404,
+      message: "ユーザーが見つかりません",
+    });
+
+    expectFailureAudit("ADMIN_USER_SUSPEND", "missing", "TARGET_NOT_FOUND");
+    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
   });
 
   it("最後の利用可能な管理者を停止しようとしたら AdminServiceError(409) にする", async () => {
@@ -296,6 +383,28 @@ describe("updateAdminUserStatus", () => {
       message: "最後の管理者は変更できません",
     });
     expect(tx.user.update).not.toHaveBeenCalled();
+    expectFailureAudit("ADMIN_USER_SUSPEND", "admin-2", "LAST_ADMIN_PROTECTED");
+  });
+
+  it("P2034後の再試行成功では成功監査を1件だけ記録する", async () => {
+    const tx = mockTransaction();
+    tx.user.findUnique.mockResolvedValue(baseTargetUser);
+    tx.user.update.mockResolvedValue({ ...baseTargetUser, isActive: false });
+    vi.mocked(prisma.$transaction)
+      .mockReset()
+      .mockRejectedValueOnce(createSerializationConflictError())
+      .mockImplementationOnce(async (fn) => fn(tx as never));
+
+    await updateAdminUserStatus({
+      adminUserId: "admin-1",
+      targetUserId: "user-1",
+      isActive: false,
+    });
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expectSuccessAudit(tx.auditLog.create, "ADMIN_USER_SUSPEND");
+    expect(tx.auditLog.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditLog.create).not.toHaveBeenCalled();
   });
 
   it("serializable transaction の競合が続いた場合は AdminServiceError(409) にする", async () => {
@@ -308,6 +417,8 @@ describe("updateAdminUserStatus", () => {
       message: "同時操作により処理できませんでした。再試行してください",
     });
     expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expectFailureAudit("ADMIN_USER_SUSPEND", "admin-2", "SERIALIZATION_CONFLICT");
+    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -334,6 +445,7 @@ describe("updateAdminUserRole", () => {
       }),
     );
     expect(tx.refreshToken.deleteMany).not.toHaveBeenCalled();
+    expectSuccessAudit(tx.auditLog.create, "ADMIN_USER_ROLE_CHANGE");
     expect(result.user.role).toBe("ADMIN");
   });
 
@@ -345,6 +457,7 @@ describe("updateAdminUserRole", () => {
       message: "自分自身には実行できません",
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();
+    expectFailureAudit("ADMIN_USER_ROLE_CHANGE", "admin-1", "SELF_OPERATION_DENIED");
   });
 
   it("メール未認証ユーザーの ADMIN 昇格は AdminServiceError(409) にする", async () => {
@@ -358,6 +471,7 @@ describe("updateAdminUserRole", () => {
       message: "メール認証済みで有効なユーザーのみ管理者にできます",
     });
     expect(tx.user.update).not.toHaveBeenCalled();
+    expectFailureAudit("ADMIN_USER_ROLE_CHANGE", "user-1", "TARGET_STATE_CONFLICT");
   });
 
   it("最後の利用可能な管理者を USER に降格しようとしたら AdminServiceError(409) にする", async () => {
@@ -371,6 +485,7 @@ describe("updateAdminUserRole", () => {
       status: 409,
       message: "最後の管理者は変更できません",
     });
+    expectFailureAudit("ADMIN_USER_ROLE_CHANGE", "admin-2", "LAST_ADMIN_PROTECTED");
   });
 });
 
@@ -402,6 +517,7 @@ describe("forceDeleteAdminUser", () => {
     expect(tx.refreshToken.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
     expect(tx.passwordResetToken.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
     expect(tx.emailVerification.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
+    expectSuccessAudit(tx.auditLog.create, "ADMIN_USER_FORCE_DELETE");
     expect(result).toEqual({ message: "ユーザーを強制退会しました" });
   });
 
@@ -413,6 +529,7 @@ describe("forceDeleteAdminUser", () => {
       message: "自分自身には実行できません",
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();
+    expectFailureAudit("ADMIN_USER_FORCE_DELETE", "admin-1", "SELF_OPERATION_DENIED");
   });
 
   it("既に削除済みのユーザーは AdminServiceError(409) にする", async () => {
@@ -426,6 +543,7 @@ describe("forceDeleteAdminUser", () => {
       message: "ユーザーは既に削除されています",
     });
     expect(tx.user.update).not.toHaveBeenCalled();
+    expectFailureAudit("ADMIN_USER_FORCE_DELETE", "user-1", "TARGET_STATE_CONFLICT");
   });
 });
 
