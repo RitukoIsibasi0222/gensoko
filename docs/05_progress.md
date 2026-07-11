@@ -154,7 +154,7 @@
 
 - [x] Admin APIs（ユーザー一覧/詳細/停止/ロール変更/強制退会/統計） — 計画書: [docs/plans/admin-apis/plan.md](plans/admin-apis/plan.md)
 - [x] 管理者作成 CLI コマンド（UI 登録不可・環境変数両対応） — 計画書: [docs/plans/admin-create-cli/plan.md](plans/admin-create-cli/plan.md)
-- [ ] 監査ログ実装（ログイン/PW変更/管理者操作・個人情報除外）
+- [ ] 監査ログ実装（ログイン/PW変更/管理者操作・個人情報除外） — 計画書: [docs/plans/audit-log/plan.md](plans/audit-log/plan.md)
 - [ ] 管理者ダッシュボード `/admin`（ユーザー一覧・管理 UI）
 
 ## フェーズ11: セキュリティ・品質仕上げ
