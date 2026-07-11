@@ -6,6 +6,7 @@
     title: string;
     description?: string;
     isBusy?: boolean;
+    initialFocus?: 'close' | 'cancel';
     returnFocus?: HTMLElement | null;
     fallbackFocus?: HTMLElement | null;
     onClose: () => void;
@@ -16,6 +17,7 @@
     title,
     description,
     isBusy = false,
+    initialFocus = 'close',
     returnFocus = null,
     fallbackFocus = null,
     onClose,
@@ -111,7 +113,13 @@
 
   $effect(() => {
     if (open) {
-      queueMicrotask(() => closeButton?.focus());
+      queueMicrotask(() => {
+        const cancelButton =
+          initialFocus === 'cancel'
+            ? dialogElement?.querySelector<HTMLElement>('[data-cancel]')
+            : null;
+        (cancelButton ?? closeButton)?.focus();
+      });
     }
   });
 </script>

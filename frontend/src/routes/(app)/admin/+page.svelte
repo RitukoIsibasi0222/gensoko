@@ -33,6 +33,7 @@
     | 'forbidden'
     | 'error';
   type AdminListAction = 'status' | 'role' | 'delete';
+  type DialogMode = 'closed' | 'detail' | 'confirmation';
   type ConfirmationAction =
     | { type: 'status'; nextIsActive: boolean }
     | { type: 'role'; nextRole: AdminUserRole }
@@ -58,8 +59,7 @@
   let isStatsLoading = $state(false);
   let statsError = $state<string | null>(null);
 
-  let isDetailOpen = $state(false);
-  let isConfirmationOpen = $state(false);
+  let dialogMode = $state<DialogMode>('closed');
   let selectedListUser = $state<AdminUserListItem | null>(null);
   let detail = $state<AdminUserDetail | null>(null);
   let isDetailLoading = $state(false);
@@ -124,6 +124,18 @@
     resetDialogState();
   }
 
+  function handleAuthorizationError(error: unknown): boolean {
+    if (error instanceof ApiError && error.status === 403) {
+      enterForbiddenState(error.message);
+      return true;
+    }
+    if (error instanceof ApiError && error.status === 401) {
+      enterAnonymousState();
+      return true;
+    }
+    return false;
+  }
+
   async function getRefreshedAccessToken(): Promise<string | null> {
     if (reauthPromise === null) {
       reauthPromise = (async () => {
@@ -185,12 +197,7 @@
       if (controller.signal.aborted || generation !== statsGeneration || isAbortError(error)) {
         return;
       }
-      if (error instanceof ApiError && error.status === 403) {
-        enterForbiddenState(error.message);
-        return;
-      }
-      if (error instanceof ApiError && error.status === 401) {
-        enterAnonymousState();
+      if (handleAuthorizationError(error)) {
         return;
       }
       statsError = getErrorMessage(error, '統計情報を表示できませんでした');
@@ -236,12 +243,7 @@
       if (controller.signal.aborted || generation !== listGeneration || isAbortError(error)) {
         return;
       }
-      if (error instanceof ApiError && error.status === 403) {
-        enterForbiddenState(error.message);
-        return;
-      }
-      if (error instanceof ApiError && error.status === 401) {
-        enterAnonymousState();
+      if (handleAuthorizationError(error)) {
         return;
       }
       accessState = 'error';
@@ -279,12 +281,7 @@
       if (controller.signal.aborted || generation !== detailGeneration || isAbortError(error)) {
         return;
       }
-      if (error instanceof ApiError && error.status === 403) {
-        enterForbiddenState(error.message);
-        return;
-      }
-      if (error instanceof ApiError && error.status === 401) {
-        enterAnonymousState();
+      if (handleAuthorizationError(error)) {
         return;
       }
       detailError = getErrorMessage(error, 'ユーザー詳細を表示できませんでした');
@@ -302,14 +299,14 @@
       return;
     }
     returnFocus = trigger;
-    isDetailOpen = true;
+    dialogMode = 'detail';
     void loadDetail(user, accessToken);
   }
 
   function closeDetail(): void {
     detailController?.abort();
     detailGeneration += 1;
-    isDetailOpen = false;
+    dialogMode = 'closed';
     selectedListUser = null;
     detail = null;
     detailError = null;
@@ -317,7 +314,7 @@
   }
 
   function resetConfirmation(): void {
-    isConfirmationOpen = false;
+    dialogMode = 'closed';
     confirmationAction = null;
     mutationError = null;
     restoreDetailAfterMutation = false;
@@ -438,8 +435,7 @@
     returnFocus = trigger;
     restoreDetailAfterMutation = fromDetail;
     mutationError = null;
-    isDetailOpen = false;
-    isConfirmationOpen = true;
+    dialogMode = 'confirmation';
   }
 
   function handleDetailAction(action: AdminListAction): void {
@@ -461,7 +457,7 @@
     }
 
     selectedListUser = targetUser;
-    isDetailOpen = true;
+    dialogMode = 'detail';
     const latestAccessToken = authStore.accessToken ?? accessToken;
     await loadDetail(targetUser, latestAccessToken);
   }
@@ -509,12 +505,7 @@
       const latestAccessToken = authStore.accessToken ?? accessToken;
       await synchronizeAfterMutation(targetUser, shouldRestoreDetail, latestAccessToken);
     } catch (error) {
-      if (error instanceof ApiError && error.status === 403) {
-        enterForbiddenState(error.message);
-        return;
-      }
-      if (error instanceof ApiError && error.status === 401) {
-        enterAnonymousState();
+      if (handleAuthorizationError(error)) {
         return;
       }
       mutationError = getErrorMessage(error, '管理操作を完了できませんでした');
@@ -653,17 +644,18 @@
       />
 
       <AdminDialog
-        open={isDetailOpen || isConfirmationOpen}
-        title={isConfirmationOpen ? '管理操作の確認' : 'ユーザー詳細'}
-        description={isConfirmationOpen
+        open={dialogMode !== 'closed'}
+        title={dialogMode === 'confirmation' ? '管理操作の確認' : 'ユーザー詳細'}
+        description={dialogMode === 'confirmation'
           ? '対象ユーザーと変更内容を確認してください'
           : '選択したユーザーのアカウント情報と学習状況'}
         isBusy={isMutationSubmitting}
+        initialFocus={dialogMode === 'confirmation' ? 'cancel' : 'close'}
         {returnFocus}
         fallbackFocus={pageHeading}
         onClose={closeAdminDialog}
       >
-        {#if isConfirmationOpen && selectedListUser && confirmationAction}
+        {#if dialogMode === 'confirmation' && selectedListUser && confirmationAction}
           <AdminActionConfirmation
             user={selectedListUser}
             action={confirmationAction}

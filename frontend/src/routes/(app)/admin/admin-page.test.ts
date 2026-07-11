@@ -311,6 +311,7 @@ describe('/admin mutation・sync orchestration', () => {
 
     expect(target.textContent).toContain('有効（未退会）');
     expect(target.textContent).toContain('停止中');
+    expect(document.activeElement).toBe(target.querySelector('[data-cancel]'));
     target.querySelector<HTMLButtonElement>('[data-confirm]')?.click();
     await flushAsyncWork();
 

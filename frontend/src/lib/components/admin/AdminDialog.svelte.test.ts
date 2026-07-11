@@ -8,6 +8,7 @@ type DialogProps = {
   title: string;
   description?: string;
   isBusy?: boolean;
+  initialFocus?: 'close' | 'cancel';
   returnFocus?: HTMLElement | null;
   fallbackFocus?: HTMLElement | null;
   onClose: () => void;
@@ -58,6 +59,17 @@ describe('AdminDialog', () => {
     await tick();
 
     expect(document.activeElement).toBe(target.querySelector('[data-dialog-close]'));
+  });
+
+  it('確認dialogではcancelボタンへ初期focusする', async () => {
+    const target = renderDialog({ initialFocus: 'cancel' });
+    const cancelButton = document.createElement('button');
+    cancelButton.dataset.cancel = '';
+    target.querySelector('[role=dialog]')?.append(cancelButton);
+
+    await tick();
+
+    expect(document.activeElement).toBe(cancelButton);
   });
 
   it('未送信時はEscとbackdropでcloseする', () => {
