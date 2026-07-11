@@ -1,11 +1,13 @@
+import { AuditResult, type Prisma, type Role } from "@prisma/client";
 import { createHash, randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { sign } from "hono/jwt";
+import { mailer } from "../lib/mail.js";
 import { normalizePassword } from "../lib/normalize.js";
 import { hashPassword } from "../lib/password.js";
 import { prisma } from "../lib/prisma.js";
-import { mailer } from "../lib/mail.js";
-import type { Role } from "@prisma/client";
+import { AUDIT_ACTIONS, AUDIT_FAILURE_REASONS, AUDIT_TARGET_TYPES } from "./audit-events.js";
+import { recordAuditEvent, recordAuditEventBestEffort } from "./audit.service.js";
 
 /** フロントエンドのベース URL を返す。環境変数が未設定の場合は開発用デフォルトを使用する */
 function getFrontendBaseUrl(): string {
@@ -129,16 +131,41 @@ const LOCK_DURATION_MS = 15 * 60 * 1000; // 15分
 const ACCESS_TOKEN_TTL_SEC = 15 * 60; // 15分
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7日
 
-export async function issueRefreshToken(userId: string): Promise<string> {
+type RefreshTokenClient = Pick<Prisma.TransactionClient, "refreshToken">;
+
+type RefreshTokenValues = {
+  rawToken: string;
+  tokenHash: string;
+  expiresAt: Date;
+};
+
+function createRefreshTokenValues(): RefreshTokenValues {
   const rawToken = randomBytes(32).toString("hex");
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
 
-  await prisma.refreshToken.create({
-    data: { userId, tokenHash, expiresAt },
-  });
+  return { rawToken, tokenHash, expiresAt };
+}
 
-  return rawToken;
+async function saveRefreshToken(
+  client: RefreshTokenClient,
+  userId: string,
+  values: RefreshTokenValues,
+): Promise<void> {
+  await client.refreshToken.create({
+    data: {
+      userId,
+      tokenHash: values.tokenHash,
+      expiresAt: values.expiresAt,
+    },
+  });
+}
+
+export async function issueRefreshToken(userId: string): Promise<string> {
+  const values = createRefreshTokenValues();
+  await saveRefreshToken(prisma, userId, values);
+
+  return values.rawToken;
 }
 
 export async function logout(rawToken: string): Promise<void> {
@@ -207,11 +234,36 @@ export async function refreshAccessToken(rawToken: string): Promise<{
   };
 }
 
-export async function login(input: { email: string; password: string }): Promise<{
+type LoginResult = {
   accessToken: string;
   refreshToken: string;
   user: { id: string; username: string; role: Role };
-}> {
+};
+
+export async function login(input: { email: string; password: string }): Promise<LoginResult> {
+  try {
+    return await loginWithRequiredAudit(input);
+  } catch (error) {
+    if (error instanceof AuthError) {
+      await recordAuditEventBestEffort({
+        action: AUDIT_ACTIONS.LOGIN,
+        result: AuditResult.FAILURE,
+        actorId: null,
+        actorRole: null,
+        targetType: null,
+        targetId: null,
+        failureReason: AUDIT_FAILURE_REASONS.AUTHENTICATION_FAILED,
+      });
+    }
+
+    throw error;
+  }
+}
+
+async function loginWithRequiredAudit(input: {
+  email: string;
+  password: string;
+}): Promise<LoginResult> {
   const { email, password: rawPassword } = input;
   const password = normalizePassword(rawPassword);
 
@@ -279,13 +331,7 @@ export async function login(input: { email: string; password: string }): Promise
     throw new AuthError(401, "メールアドレスまたはパスワードが正しくありません");
   }
 
-  // 6. ログイン成功: failCount リセット・lastLoginAt 更新
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { loginFailCount: 0, lockedUntil: null, lastLoginAt: new Date() },
-  });
-
-  // 7. JWT 発行
+  // 6. JWT署名とrefresh token生成はtransaction開始前に完了する
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET is not set");
 
@@ -296,24 +342,41 @@ export async function login(input: { email: string; password: string }): Promise
     "HS256",
   );
 
-  // 8. streak 更新
-  await updateLoginStreak(user.id);
+  const refreshTokenValues = createRefreshTokenValues();
 
-  // 9. リフレッシュトークン発行
-  const refreshToken = await issueRefreshToken(user.id);
+  // 7. ログイン成功時のDB更新と監査証跡を原子的に確定する
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: user.id },
+      data: { loginFailCount: 0, lockedUntil: null, lastLoginAt: new Date() },
+    });
+    await updateLoginStreak(tx, user.id);
+    await saveRefreshToken(tx, user.id, refreshTokenValues);
+    await recordAuditEvent(tx, {
+      action: AUDIT_ACTIONS.LOGIN,
+      result: AuditResult.SUCCESS,
+      actorId: user.id,
+      actorRole: user.role,
+      targetType: AUDIT_TARGET_TYPES.USER,
+      targetId: user.id,
+      failureReason: null,
+    });
+  });
 
   return {
     accessToken,
-    refreshToken,
+    refreshToken: refreshTokenValues.rawToken,
     user: { id: user.id, username: user.username, role: user.role },
   };
 }
 
-async function updateLoginStreak(userId: string): Promise<void> {
+type LoginStreakClient = Pick<Prisma.TransactionClient, "userStats">;
+
+async function updateLoginStreak(client: LoginStreakClient, userId: string): Promise<void> {
   const todayUTC = new Date();
   todayUTC.setUTCHours(0, 0, 0, 0);
 
-  const stats = await prisma.userStats.findUnique({
+  const stats = await client.userStats.findUnique({
     where: { userId },
     select: { currentStreak: true, lastActiveDate: true },
   });
@@ -337,7 +400,7 @@ async function updateLoginStreak(userId: string): Promise<void> {
     newStreak = diffDays === 1 ? stats.currentStreak + 1 : 1;
   }
 
-  await prisma.userStats.upsert({
+  await client.userStats.upsert({
     where: { userId },
     create: { userId, currentStreak: newStreak, lastActiveDate: new Date() },
     update: { currentStreak: newStreak, lastActiveDate: new Date() },
