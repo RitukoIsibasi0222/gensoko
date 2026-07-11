@@ -58,6 +58,31 @@ enum Role {
   ADMIN
 }
 
+// 監査ログの実行結果
+enum AuditResult {
+  SUCCESS
+  FAILURE
+}
+
+// セキュリティ上重要な操作の監査証跡
+// User relationを持たず、ユーザー削除後も監査ログを保持する
+model AuditLog {
+  id            String      @id @default(cuid())
+  action        String
+  result        AuditResult
+  actorId       String?
+  actorRole     Role?
+  targetType    String?
+  targetId      String?
+  failureReason String?
+  occurredAt    DateTime    @default(now())
+
+  @@index([occurredAt(sort: Desc), id(sort: Desc)])
+  @@index([action, occurredAt(sort: Desc)])
+  @@index([targetType, targetId, occurredAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
 // リフレッシュトークン
 model RefreshToken {
   tokenHash String   @id

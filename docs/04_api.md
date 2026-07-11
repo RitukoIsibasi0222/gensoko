@@ -54,13 +54,37 @@ Response 200:
     "role": "USER"
   }
 }
-Set-Cookie: refreshToken=xxx; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth/refresh
+Set-Cookie: refreshToken=xxx; HttpOnly; SameSite=Strict; Path=/api/v1/auth
+
+※ production環境では`Secure`も付与する。
 
 Error:
 401 メールアドレスまたはパスワードが正しくありません
-403 アカウントがロックされています
-403 メール認証が完了していません
+401 しばらく後に再試行してください
+403 このアカウントは削除されています
+403 アカウントが停止されています
+403 メールアドレスが確認されていません
+409 アカウント情報が変更されました。再試行してください
 ```
+
+監査ログ:
+
+- 認証成功と、serviceが`AuthError`として判定した認証・アカウント状態の失敗を内部DBへ記録する。入力検証失敗、rate limit、想定外の内部エラーは記録対象外。
+- 成功時は `LOGIN / SUCCESS` と内部user ID・roleを保存する。失敗時は `LOGIN / FAILURE`、actor/targetを`null`、理由を共通code `AUTHENTICATION_FAILED` とする。
+- email、username、password、token、Cookie、Authorization、request/response body、IP、User-Agent、raw errorは保存しない。
+- 成功監査はlogin状態更新・refresh token保存と同一transactionで記録し、監査保存失敗時は全体をrollbackして500を返す。失敗監査はbest-effortで、保存失敗時も元の401/403/409を維持する。
+- password検証後にアカウント状態やroleが変わった場合に古い状態で成功させないよう、成功transaction内で状態を再確認する。再確認直後の競合は条件付き更新で検出し、409で再試行を求める。
+
+### POST `/auth/forgot-password`
+
+- メールアドレスの存在有無を外部へ漏らさない既存responseを維持する。
+- 申請操作は監査DBの対象外。内部例外時もraw error objectを出力せず、固定event名だけを運用ログへ記録する。
+
+### POST `/auth/reset-password`
+
+- 成功時だけ `PASSWORD_RESET / SUCCESS` を、password更新・reset token削除・refresh token削除と同一transactionで記録する。
+- actorは`null`、targetはtoken recordから特定した内部user IDとする。無効・期限切れ・使用済みtokenによる失敗は監査対象外。
+- password、password hash、reset token、token hash、request body、raw errorは保存しない。
 
 ---
 
@@ -699,6 +723,12 @@ Cookie:
 - 削除対象 Cookie path: `/api/v1/auth`, `/api/v1/auth/refresh`
 - 変更後は再ログインが必要
 
+監査ログ:
+
+- password変更成功時だけ `PASSWORD_CHANGE / SUCCESS` を、password更新・refresh token削除と同一transactionで記録する。
+- actor/targetには認証済みユーザーの内部IDとroleだけを保存し、password、password hash、token、Cookie、request bodyは保存しない。
+- username変更、入力検証失敗、現在password不一致、認証middlewareでの拒否は監査対象外。
+
 Validation:
 - `username` は username schema に従う
 - `currentPassword` は空文字不可
@@ -922,6 +952,15 @@ Error:
 - `lockedUntil = null` または現在時刻以前
 
 停止・ロール変更・強制退会の mutation は Serializable transaction で実行し、同時操作の競合が解消できない場合は 409 `同時操作により処理できませんでした。再試行してください` を返す。
+
+監査ログ:
+
+- 状態変更、ロール変更、強制退会は、操作ごとのaction・result・actor内部ID/roleを記録する。停止と解除は別actionとして記録する。
+- target内部IDはDBで対象ユーザーを確認できた場合だけ保存する。対象不存在やtransaction競合など対象を確認できない失敗では、未検証のpath入力を保存せず`targetType`と`targetId`を`null`にする。
+- 成功監査は本体変更と同じSerializable transaction内へ含める。P2034 retry時もcommitされた最終transactionの1件だけが残る。
+- serviceで判定した対象不存在・自己操作・最後の管理者保護・対象状態競合・retry枯渇は、安全な分類codeで1件だけbest-effort記録する。
+- 入力検証失敗、401/403のmiddleware拒否、一覧・詳細・統計など参照系APIは監査対象外。
+- email、username、変更前後のUser object、request/response、token、raw errorなどの個人情報・秘密情報は保存しない。監査ログの閲覧・更新・削除APIは今回追加しない。
 
 ### GET `/admin/users`
 

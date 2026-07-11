@@ -1,11 +1,21 @@
-import { Prisma, type Role } from "@prisma/client";
+import { AuditResult, Prisma, type Role } from "@prisma/client";
 import { calculateAccuracyRate, normalizeNonNegativeCount } from "../lib/stats.js";
 import { prisma } from "../lib/prisma.js";
+import {
+  AUDIT_ACTIONS,
+  AUDIT_FAILURE_REASONS,
+  AUDIT_TARGET_TYPES,
+  type AdminAuditAction,
+  type AdminAuditFailureReason,
+} from "./audit-events.js";
+import { recordAuditEvent, recordAuditEventBestEffort } from "./audit.service.js";
 
 export class AdminServiceError extends Error {
   constructor(
     public readonly status: 400 | 404 | 409,
     message: string,
+    public readonly auditFailureReason?: AdminAuditFailureReason,
+    public readonly auditTargetId: string | null = null,
   ) {
     super(message);
     this.name = "AdminServiceError";
@@ -85,6 +95,12 @@ export const ADMIN_USERS_DEFAULT_LIMIT = 20;
 export const ADMIN_USERS_MAX_LIMIT = 100;
 const ADMIN_MUTATION_MAX_SERIALIZATION_ATTEMPTS = 2;
 const ADMIN_MUTATION_CONFLICT_MESSAGE = "同時操作により処理できませんでした。再試行してください";
+
+type AdminAuditDescriptor = {
+  action: AdminAuditAction;
+  adminUserId: string;
+  targetUserId: string;
+};
 
 const adminUserSummarySelect = {
   id: true,
@@ -297,25 +313,72 @@ function isSerializationConflict(error: unknown): boolean {
 
 // 最後の管理者保護は count -> update なので、write skew を DB 側で検出する。
 async function runAdminMutationTransaction<T>(
+  audit: AdminAuditDescriptor,
   callback: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
   for (let attempt = 1; attempt <= ADMIN_MUTATION_MAX_SERIALIZATION_ATTEMPTS; attempt += 1) {
     try {
-      return await prisma.$transaction(callback, {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      });
+      return await prisma.$transaction(
+        async (tx) => {
+          const result = await callback(tx);
+          await recordAuditEvent(tx, {
+            action: audit.action,
+            result: AuditResult.SUCCESS,
+            actorId: audit.adminUserId,
+            actorRole: "ADMIN",
+            targetType: AUDIT_TARGET_TYPES.USER,
+            targetId: audit.targetUserId,
+            failureReason: null,
+          });
+          return result;
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      );
     } catch (error) {
       if (!isSerializationConflict(error)) {
         throw error;
       }
 
       if (attempt === ADMIN_MUTATION_MAX_SERIALIZATION_ATTEMPTS) {
-        throw new AdminServiceError(409, ADMIN_MUTATION_CONFLICT_MESSAGE);
+        throw new AdminServiceError(
+          409,
+          ADMIN_MUTATION_CONFLICT_MESSAGE,
+          AUDIT_FAILURE_REASONS.SERIALIZATION_CONFLICT,
+        );
       }
     }
   }
 
-  throw new AdminServiceError(409, ADMIN_MUTATION_CONFLICT_MESSAGE);
+  throw new AdminServiceError(
+    409,
+    ADMIN_MUTATION_CONFLICT_MESSAGE,
+    AUDIT_FAILURE_REASONS.SERIALIZATION_CONFLICT,
+  );
+}
+
+async function runAuditedAdminMutation<T>(
+  audit: AdminAuditDescriptor,
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof AdminServiceError && error.auditFailureReason) {
+      await recordAuditEventBestEffort({
+        action: audit.action,
+        result: AuditResult.FAILURE,
+        actorId: audit.adminUserId,
+        actorRole: "ADMIN",
+        targetType: error.auditTargetId === null ? null : AUDIT_TARGET_TYPES.USER,
+        targetId: error.auditTargetId,
+        failureReason: error.auditFailureReason,
+      });
+    }
+
+    throw error;
+  }
 }
 
 export async function getAdminUsers(input: AdminUserListQuery = {}): Promise<{
@@ -387,47 +450,73 @@ export async function updateAdminUserStatus(input: {
 }): Promise<{ message: string; user: AdminUserSummary }> {
   const adminUserId = normalizeId(input.adminUserId);
   const targetUserId = normalizeId(input.targetUserId);
+  const audit: AdminAuditDescriptor = {
+    action: input.isActive ? AUDIT_ACTIONS.ADMIN_USER_REACTIVATE : AUDIT_ACTIONS.ADMIN_USER_SUSPEND,
+    adminUserId,
+    targetUserId,
+  };
 
-  if (adminUserId === targetUserId) {
-    throw new AdminServiceError(409, "自分自身には実行できません");
-  }
-
-  return await runAdminMutationTransaction(async (tx) => {
-    const targetUser = await tx.user.findUnique({
-      where: { id: targetUserId },
-      select: adminUserSummarySelect,
-    });
-
-    if (!targetUser) {
-      throw new AdminServiceError(404, "ユーザーが見つかりません");
+  return await runAuditedAdminMutation(audit, async () => {
+    if (adminUserId === targetUserId) {
+      throw new AdminServiceError(
+        409,
+        "自分自身には実行できません",
+        AUDIT_FAILURE_REASONS.SELF_OPERATION_DENIED,
+        adminUserId,
+      );
     }
 
-    if (targetUser.deletedAt) {
-      throw new AdminServiceError(409, "削除済みユーザーは変更できません");
-    }
+    return await runAdminMutationTransaction(audit, async (tx) => {
+      const targetUser = await tx.user.findUnique({
+        where: { id: targetUserId },
+        select: adminUserSummarySelect,
+      });
 
-    const now = new Date();
-    if (!input.isActive && isUsableAdmin(targetUser, now)) {
-      const usableAdminCount = await tx.user.count({ where: getUsableAdminWhere(now) });
-      if (usableAdminCount <= 1) {
-        throw new AdminServiceError(409, "最後の管理者は変更できません");
+      if (!targetUser) {
+        throw new AdminServiceError(
+          404,
+          "ユーザーが見つかりません",
+          AUDIT_FAILURE_REASONS.TARGET_NOT_FOUND,
+        );
       }
-    }
 
-    const updatedUser = await tx.user.update({
-      where: { id: targetUserId },
-      data: { isActive: input.isActive, lockedUntil: null },
-      select: adminUserSummarySelect,
+      if (targetUser.deletedAt) {
+        throw new AdminServiceError(
+          409,
+          "削除済みユーザーは変更できません",
+          AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
+          targetUser.id,
+        );
+      }
+
+      const now = new Date();
+      if (!input.isActive && isUsableAdmin(targetUser, now)) {
+        const usableAdminCount = await tx.user.count({ where: getUsableAdminWhere(now) });
+        if (usableAdminCount <= 1) {
+          throw new AdminServiceError(
+            409,
+            "最後の管理者は変更できません",
+            AUDIT_FAILURE_REASONS.LAST_ADMIN_PROTECTED,
+            targetUser.id,
+          );
+        }
+      }
+
+      const updatedUser = await tx.user.update({
+        where: { id: targetUserId },
+        data: { isActive: input.isActive, lockedUntil: null },
+        select: adminUserSummarySelect,
+      });
+
+      if (!input.isActive) {
+        await deleteUserTokens(tx, targetUserId);
+      }
+
+      return {
+        message: input.isActive ? "アカウント停止を解除しました" : "アカウントを停止しました",
+        user: toAdminUserSummary(updatedUser),
+      };
     });
-
-    if (!input.isActive) {
-      await deleteUserTokens(tx, targetUserId);
-    }
-
-    return {
-      message: input.isActive ? "アカウント停止を解除しました" : "アカウントを停止しました",
-      user: toAdminUserSummary(updatedUser),
-    };
   });
 }
 
@@ -438,47 +527,78 @@ export async function updateAdminUserRole(input: {
 }): Promise<{ message: string; user: AdminUserSummary }> {
   const adminUserId = normalizeId(input.adminUserId);
   const targetUserId = normalizeId(input.targetUserId);
+  const audit: AdminAuditDescriptor = {
+    action: AUDIT_ACTIONS.ADMIN_USER_ROLE_CHANGE,
+    adminUserId,
+    targetUserId,
+  };
 
-  if (adminUserId === targetUserId) {
-    throw new AdminServiceError(409, "自分自身には実行できません");
-  }
-
-  return await runAdminMutationTransaction(async (tx) => {
-    const targetUser = await tx.user.findUnique({
-      where: { id: targetUserId },
-      select: adminUserSummarySelect,
-    });
-
-    if (!targetUser) {
-      throw new AdminServiceError(404, "ユーザーが見つかりません");
+  return await runAuditedAdminMutation(audit, async () => {
+    if (adminUserId === targetUserId) {
+      throw new AdminServiceError(
+        409,
+        "自分自身には実行できません",
+        AUDIT_FAILURE_REASONS.SELF_OPERATION_DENIED,
+        adminUserId,
+      );
     }
 
-    if (!targetUser.isActive || targetUser.deletedAt) {
-      throw new AdminServiceError(409, "停止中または削除済みのユーザーは変更できません");
-    }
+    return await runAdminMutationTransaction(audit, async (tx) => {
+      const targetUser = await tx.user.findUnique({
+        where: { id: targetUserId },
+        select: adminUserSummarySelect,
+      });
 
-    const now = new Date();
-    if (input.role === "USER" && isUsableAdmin(targetUser, now)) {
-      const usableAdminCount = await tx.user.count({ where: getUsableAdminWhere(now) });
-      if (usableAdminCount <= 1) {
-        throw new AdminServiceError(409, "最後の管理者は変更できません");
+      if (!targetUser) {
+        throw new AdminServiceError(
+          404,
+          "ユーザーが見つかりません",
+          AUDIT_FAILURE_REASONS.TARGET_NOT_FOUND,
+        );
       }
-    }
 
-    if (input.role === "ADMIN" && !targetUser.emailVerified) {
-      throw new AdminServiceError(409, "メール認証済みで有効なユーザーのみ管理者にできます");
-    }
+      if (!targetUser.isActive || targetUser.deletedAt) {
+        throw new AdminServiceError(
+          409,
+          "停止中または削除済みのユーザーは変更できません",
+          AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
+          targetUser.id,
+        );
+      }
 
-    const updatedUser = await tx.user.update({
-      where: { id: targetUserId },
-      data: { role: input.role },
-      select: adminUserSummarySelect,
+      const now = new Date();
+      if (input.role === "USER" && isUsableAdmin(targetUser, now)) {
+        const usableAdminCount = await tx.user.count({ where: getUsableAdminWhere(now) });
+        if (usableAdminCount <= 1) {
+          throw new AdminServiceError(
+            409,
+            "最後の管理者は変更できません",
+            AUDIT_FAILURE_REASONS.LAST_ADMIN_PROTECTED,
+            targetUser.id,
+          );
+        }
+      }
+
+      if (input.role === "ADMIN" && !targetUser.emailVerified) {
+        throw new AdminServiceError(
+          409,
+          "メール認証済みで有効なユーザーのみ管理者にできます",
+          AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
+          targetUser.id,
+        );
+      }
+
+      const updatedUser = await tx.user.update({
+        where: { id: targetUserId },
+        data: { role: input.role },
+        select: adminUserSummarySelect,
+      });
+
+      return {
+        message: "ロールを変更しました",
+        user: toAdminUserSummary(updatedUser),
+      };
     });
-
-    return {
-      message: "ロールを変更しました",
-      user: toAdminUserSummary(updatedUser),
-    };
   });
 }
 
@@ -488,41 +608,67 @@ export async function forceDeleteAdminUser(input: {
 }): Promise<{ message: string }> {
   const adminUserId = normalizeId(input.adminUserId);
   const targetUserId = normalizeId(input.targetUserId);
+  const audit: AdminAuditDescriptor = {
+    action: AUDIT_ACTIONS.ADMIN_USER_FORCE_DELETE,
+    adminUserId,
+    targetUserId,
+  };
 
-  if (adminUserId === targetUserId) {
-    throw new AdminServiceError(409, "自分自身には実行できません");
-  }
-
-  return await runAdminMutationTransaction(async (tx) => {
-    const targetUser = await tx.user.findUnique({
-      where: { id: targetUserId },
-      select: adminUserSummarySelect,
-    });
-
-    if (!targetUser) {
-      throw new AdminServiceError(404, "ユーザーが見つかりません");
+  return await runAuditedAdminMutation(audit, async () => {
+    if (adminUserId === targetUserId) {
+      throw new AdminServiceError(
+        409,
+        "自分自身には実行できません",
+        AUDIT_FAILURE_REASONS.SELF_OPERATION_DENIED,
+        adminUserId,
+      );
     }
 
-    if (targetUser.deletedAt) {
-      throw new AdminServiceError(409, "ユーザーは既に削除されています");
-    }
+    return await runAdminMutationTransaction(audit, async (tx) => {
+      const targetUser = await tx.user.findUnique({
+        where: { id: targetUserId },
+        select: adminUserSummarySelect,
+      });
 
-    const now = new Date();
-    if (isUsableAdmin(targetUser, now)) {
-      const usableAdminCount = await tx.user.count({ where: getUsableAdminWhere(now) });
-      if (usableAdminCount <= 1) {
-        throw new AdminServiceError(409, "最後の管理者は変更できません");
+      if (!targetUser) {
+        throw new AdminServiceError(
+          404,
+          "ユーザーが見つかりません",
+          AUDIT_FAILURE_REASONS.TARGET_NOT_FOUND,
+        );
       }
-    }
 
-    await tx.user.update({
-      where: { id: targetUserId },
-      data: { isActive: false, deletedAt: now, lockedUntil: null },
-      select: { id: true },
+      if (targetUser.deletedAt) {
+        throw new AdminServiceError(
+          409,
+          "ユーザーは既に削除されています",
+          AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
+          targetUser.id,
+        );
+      }
+
+      const now = new Date();
+      if (isUsableAdmin(targetUser, now)) {
+        const usableAdminCount = await tx.user.count({ where: getUsableAdminWhere(now) });
+        if (usableAdminCount <= 1) {
+          throw new AdminServiceError(
+            409,
+            "最後の管理者は変更できません",
+            AUDIT_FAILURE_REASONS.LAST_ADMIN_PROTECTED,
+            targetUser.id,
+          );
+        }
+      }
+
+      await tx.user.update({
+        where: { id: targetUserId },
+        data: { isActive: false, deletedAt: now, lockedUntil: null },
+        select: { id: true },
+      });
+      await deleteUserTokens(tx, targetUserId);
+
+      return { message: "ユーザーを強制退会しました" };
     });
-    await deleteUserTokens(tx, targetUserId);
-
-    return { message: "ユーザーを強制退会しました" };
   });
 }
 

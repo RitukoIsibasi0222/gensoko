@@ -22,6 +22,9 @@ vi.mock("../lib/prisma.js", () => ({
     emailVerification: {
       deleteMany: vi.fn(),
     },
+    auditLog: {
+      create: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -199,17 +202,20 @@ describe("changeCurrentPassword", () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "user-1",
       passwordHash: "$2b$12$hash",
+      role: "USER",
     } as never);
     vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
     vi.mocked(bcrypt.hash).mockResolvedValue("$2b$12$newhash" as never);
 
     const txUserUpdate = vi.fn().mockResolvedValue({});
     const txRefreshDeleteMany = vi.fn().mockResolvedValue({ count: 1 });
+    const txAuditLogCreate = vi.fn().mockResolvedValue({});
 
     vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
       return fn({
         user: { update: txUserUpdate },
         refreshToken: { deleteMany: txRefreshDeleteMany },
+        auditLog: { create: txAuditLogCreate },
       } as never);
     });
 
@@ -226,6 +232,52 @@ describe("changeCurrentPassword", () => {
       }),
     );
     expect(txRefreshDeleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
+    expect(txAuditLogCreate).toHaveBeenCalledWith({
+      data: {
+        action: "PASSWORD_CHANGE",
+        result: "SUCCESS",
+        actorId: "user-1",
+        actorRole: "USER",
+        targetType: "USER",
+        targetId: "user-1",
+        failureReason: null,
+      },
+    });
+    expect(txAuditLogCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("監査: 保存失敗時はパスワード変更処理全体を失敗させる", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      passwordHash: "$2b$12$hash",
+      role: "USER",
+    } as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    vi.mocked(bcrypt.hash).mockResolvedValue("$2b$12$newhash" as never);
+
+    const txUserUpdate = vi.fn().mockResolvedValue({});
+    const txRefreshDeleteMany = vi.fn().mockResolvedValue({ count: 1 });
+    const txAuditLogCreate = vi.fn().mockRejectedValue(new Error("audit insert failed"));
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+      return fn({
+        user: { update: txUserUpdate },
+        refreshToken: { deleteMany: txRefreshDeleteMany },
+        auditLog: { create: txAuditLogCreate },
+      } as never);
+    });
+
+    await expect(
+      changeCurrentPassword({
+        userId: "user-1",
+        currentPassword: "OldPass1!",
+        newPassword: "NewPass1!",
+      }),
+    ).rejects.toThrow("audit insert failed");
+
+    expect(txUserUpdate).toHaveBeenCalledOnce();
+    expect(txRefreshDeleteMany).toHaveBeenCalledOnce();
+    expect(txAuditLogCreate).toHaveBeenCalledOnce();
   });
 
   it("異常系: 新旧パスワードが同一なら UserError(400) を投げる", async () => {
@@ -258,6 +310,7 @@ describe("changeCurrentPassword", () => {
       status: 400,
       message: "現在のパスワードが正しくありません",
     });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
 

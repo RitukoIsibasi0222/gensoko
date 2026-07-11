@@ -13,7 +13,7 @@ cd ~/labs/Gensoko
 docker compose run --rm hono npm ci
 docker compose run --rm sveltekit npm ci
 
-# Prisma Client の再生成（初回・依存更新後に実行）
+# Prisma Client の再生成（初回・依存更新・schema変更・DB変更を含むbranch切替後に実行）
 docker compose run --rm hono npx prisma generate
 
 # 全サービス起動（初回 or 停止後）
@@ -71,6 +71,9 @@ npm run test -- --watch
 
 # 特定ファイルのテストのみ
 npm run test -- --run src/middleware/auth.test.ts
+
+# 監査ログの実DB rollback test（Docker PostgreSQL限定）
+docker compose exec -T hono sh -lc 'AUDIT_INTEGRATION_DATABASE_URL="$DATABASE_URL" npm run test:integration:audit'
 
 # Lint チェック
 npm run lint

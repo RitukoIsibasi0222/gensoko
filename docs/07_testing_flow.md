@@ -53,9 +53,23 @@ vi.mock("../lib/prisma.js", () => ({
 ```
 
 ### インテグレーションテスト（Integration Test）
-- 対象: ルート全体（ミドルウェア + ルートハンドラ + DB）
+
+- 対象: 複数の処理とDBを組み合わせた境界（サービスtransaction、またはミドルウェア + ルートハンドラ + DB）
 - 実際の DB を使う（テスト用 DB を別途用意）
-- 今後実装予定
+- 原則は今後拡充する。監査ログのtransaction rollbackのみ、Docker PostgreSQLを使う明示実行testを実装済み
+
+#### 監査ログrollback test
+
+通常の`npm run test -- --run`ではDB接続を要求せずskipする。ローカルDocker PostgreSQLへ接続する場合だけ、専用環境変数を渡して実行する。
+
+```bash
+docker compose exec -T hono sh -lc 'AUDIT_INTEGRATION_DATABASE_URL="$DATABASE_URL" npm run test:integration:audit'
+```
+
+- `AUDIT_INTEGRATION_DATABASE_URL`は通常の`DATABASE_URL`と分離し、誤実行を防ぐ
+- 接続先hostは`localhost`、`127.0.0.1`、`postgres`だけを許可する
+- 一意なユーザーと監査rowを作成し、監査insertの主キー競合後に前段更新がrollbackすることを確認する
+- test終了時に作成データを削除する
 
 ---
 
@@ -171,4 +185,5 @@ npm run test -- --coverage
 | フェーズ2 | middleware・auth routes | ユニットテスト |
 | フェーズ3 | elements・game routes | ユニットテスト |
 | フェーズ4 | users・ranking routes | ユニットテスト |
+| フェーズ10 | 監査insert失敗時のrollback | Docker PostgreSQL integration test |
 | 将来 | API 全体 | インテグレーションテスト |

@@ -154,7 +154,7 @@
 
 - [x] Admin APIs（ユーザー一覧/詳細/停止/ロール変更/強制退会/統計） — 計画書: [docs/plans/admin-apis/plan.md](plans/admin-apis/plan.md)
 - [x] 管理者作成 CLI コマンド（UI 登録不可・環境変数両対応） — 計画書: [docs/plans/admin-create-cli/plan.md](plans/admin-create-cli/plan.md)
-- [ ] 監査ログ実装（ログイン/PW変更/管理者操作・個人情報除外） — 計画書: [docs/plans/audit-log/plan.md](plans/audit-log/plan.md)
+- [x] 監査ログ実装（ログイン/PW変更/管理者操作・個人情報除外） — 計画書: [docs/plans/audit-log/plan.md](plans/audit-log/plan.md)
 - [ ] 管理者ダッシュボード `/admin`（ユーザー一覧・管理 UI）
 
 ## フェーズ11: セキュリティ・品質仕上げ
@@ -162,6 +162,7 @@
 - [ ] bcrypt 72バイト上限の入力検証統一（UTF-8バイト数、登録・変更・リセット・管理者CLI、既存ユーザー互換性、フロント表示、72/73バイト境界テスト）
 - [ ] セキュリティヘッダーミドルウェア（CSP/HSTS/X-Frame-Options/nosniff等）
 - [ ] APIレート制限の本番設計・適用（認証系 / 一般API / `POST /game/sessions`）
+- [ ] 監査ログ本番運用設計（保持期間・容量監視・cleanup・退会後の内部ID保持方針） — 計画書: [docs/plans/audit-log/plan.md](plans/audit-log/plan.md)
 - [ ] エラートラッキング・構造化ログ導入（500通知・requestId・個人情報除外）
 - [ ] ダークモード対応（OS設定追従 + トグルボタン）
 - [ ] レスポンシブデザイン確認・修正（PC/タブレット/スマホ）
