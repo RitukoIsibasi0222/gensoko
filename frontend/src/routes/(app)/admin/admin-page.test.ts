@@ -18,6 +18,9 @@ const mocks = vi.hoisted(() => ({
   getAdminUsers: vi.fn(),
   getAdminStats: vi.fn(),
   getAdminUserDetail: vi.fn(),
+  updateAdminUserStatus: vi.fn(),
+  updateAdminUserRole: vi.fn(),
+  deleteAdminUser: vi.fn(),
   goto: vi.fn(),
   page: { url: new URL('http://localhost/admin'), state: {} as Record<string, unknown> }
 }));
@@ -44,9 +47,9 @@ vi.mock('$lib/api/admin', () => ({
   getAdminUsers: mocks.getAdminUsers,
   getAdminStats: mocks.getAdminStats,
   getAdminUserDetail: mocks.getAdminUserDetail,
-  updateAdminUserStatus: vi.fn(),
-  updateAdminUserRole: vi.fn(),
-  deleteAdminUser: vi.fn()
+  updateAdminUserStatus: mocks.updateAdminUserStatus,
+  updateAdminUserRole: mocks.updateAdminUserRole,
+  deleteAdminUser: mocks.deleteAdminUser
 }));
 vi.mock('$app/navigation', () => ({ goto: mocks.goto }));
 vi.mock('$app/state', () => ({ page: mocks.page }));
@@ -143,6 +146,15 @@ beforeEach(() => {
   mocks.getAdminUserDetail.mockImplementation(async ({ userId }: { userId: string }) => ({
     user: createDetail(USERS.find((user) => user.id === userId) ?? TARO)
   }));
+  mocks.updateAdminUserStatus.mockResolvedValue({
+    message: 'アカウントを停止しました',
+    user: { ...TARO, isActive: false }
+  });
+  mocks.updateAdminUserRole.mockResolvedValue({
+    message: 'ロールを変更しました',
+    user: { ...TARO, role: 'ADMIN' }
+  });
+  mocks.deleteAdminUser.mockResolvedValue({ message: 'ユーザーを強制退会しました' });
 });
 
 afterEach(async () => {
@@ -286,5 +298,159 @@ describe('/admin auth・authz・read orchestration', () => {
     await flushAsyncWork();
     expect(target.textContent).toContain('hanako@example.com');
     expect(target.textContent).not.toContain('taro@example.com');
+  });
+});
+
+describe('/admin mutation・sync orchestration', () => {
+  it('停止操作は対象とbefore/afterを確認して正しいPATCH引数を送る', async () => {
+    const target = renderPage();
+    await flushAsyncWork();
+
+    target.querySelector<HTMLButtonElement>('button[aria-label="taroのアカウントを停止"]')?.click();
+    await flushAsyncWork();
+
+    expect(target.textContent).toContain('有効（未退会）');
+    expect(target.textContent).toContain('停止中');
+    target.querySelector<HTMLButtonElement>('[data-confirm]')?.click();
+    await flushAsyncWork();
+
+    expect(mocks.updateAdminUserStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessToken: 'old-token',
+        userId: 'user-1',
+        isActive: false
+      })
+    );
+  });
+
+  it('USERからADMINへの変更方向を確認して正しいrole PATCHを送る', async () => {
+    const target = renderPage();
+    await flushAsyncWork();
+
+    target
+      .querySelector<HTMLButtonElement>('button[aria-label="taroのロールをADMINに変更"]')
+      ?.click();
+    await flushAsyncWork();
+
+    expect(target.textContent).toContain('USER');
+    expect(target.textContent).toContain('ADMIN');
+    target.querySelector<HTMLButtonElement>('[data-confirm]')?.click();
+    await flushAsyncWork();
+
+    expect(mocks.updateAdminUserRole).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessToken: 'old-token',
+        userId: 'user-1',
+        role: 'ADMIN'
+      })
+    );
+  });
+
+  it('強制退会は固定語が一致するまで無効で、一致後にDELETEを送る', async () => {
+    const target = renderPage();
+    await flushAsyncWork();
+
+    target.querySelector<HTMLButtonElement>('button[aria-label="taroを強制退会"]')?.click();
+    await flushAsyncWork();
+
+    const input = target.querySelector<HTMLInputElement>('#admin-force-delete-confirmation');
+    const confirmButton = target.querySelector<HTMLButtonElement>('[data-confirm]');
+    expect(confirmButton?.disabled).toBe(true);
+
+    if (input) {
+      input.value = '強制退会';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    await tick();
+    expect(confirmButton?.disabled).toBe(false);
+    confirmButton?.click();
+    await flushAsyncWork();
+
+    expect(mocks.deleteAdminUser).toHaveBeenCalledWith(
+      expect.objectContaining({ accessToken: 'old-token', userId: 'user-1' })
+    );
+  });
+
+  it('確認dialogをcancelした場合はmutation APIを呼ばない', async () => {
+    const target = renderPage();
+    await flushAsyncWork();
+
+    target.querySelector<HTMLButtonElement>('button[aria-label="taroのアカウントを停止"]')?.click();
+    await flushAsyncWork();
+    expect(target.querySelector('[role=dialog]')).not.toBeNull();
+    target.querySelector<HTMLButtonElement>('[data-cancel]')?.click();
+    await flushAsyncWork();
+
+    expect(mocks.updateAdminUserStatus).not.toHaveBeenCalled();
+    expect(mocks.updateAdminUserRole).not.toHaveBeenCalled();
+    expect(mocks.deleteAdminUser).not.toHaveBeenCalled();
+    expect(target.querySelector('[role=dialog]')).toBeNull();
+  });
+
+  it('送信中のdouble clickでもmutationは1回だけ実行する', async () => {
+    const mutationGate = deferred<{
+      message: string;
+      user: AdminUserListItem;
+    }>();
+    mocks.updateAdminUserStatus.mockImplementation(() => mutationGate.promise);
+    const target = renderPage();
+    await flushAsyncWork();
+
+    target.querySelector<HTMLButtonElement>('button[aria-label="taroのアカウントを停止"]')?.click();
+    await flushAsyncWork();
+    const confirmButton = target.querySelector<HTMLButtonElement>('[data-confirm]');
+    confirmButton?.click();
+    confirmButton?.click();
+    await flushAsyncWork();
+
+    expect(mocks.updateAdminUserStatus).toHaveBeenCalledTimes(1);
+    expect(target.querySelector('[role=dialog]')?.getAttribute('aria-busy')).toBe('true');
+
+    mutationGate.resolve({
+      message: 'アカウントを停止しました',
+      user: { ...TARO, isActive: false }
+    });
+    await flushAsyncWork();
+  });
+
+  it('409の具体messageをdialog内に保持し、mutationを再送しない', async () => {
+    mocks.updateAdminUserRole.mockRejectedValue(new ApiError(409, '最後の管理者は変更できません'));
+    const target = renderPage();
+    await flushAsyncWork();
+
+    target
+      .querySelector<HTMLButtonElement>('button[aria-label="taroのロールをADMINに変更"]')
+      ?.click();
+    await flushAsyncWork();
+    target.querySelector<HTMLButtonElement>('[data-confirm]')?.click();
+    await flushAsyncWork();
+
+    expect(target.querySelector('[role=dialog] [role=alert]')?.textContent).toContain(
+      '最後の管理者は変更できません'
+    );
+    expect(mocks.updateAdminUserRole).toHaveBeenCalledTimes(1);
+    expect(mocks.getAdminUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('成功後は最新条件でlist・stats・開いているdetailを再取得する', async () => {
+    const target = renderPage();
+    await flushAsyncWork();
+
+    target.querySelector<HTMLButtonElement>('button[aria-label="taroの詳細を表示"]')?.click();
+    await flushAsyncWork();
+    expect(mocks.getAdminUserDetail).toHaveBeenCalledTimes(1);
+
+    target.querySelector<HTMLButtonElement>('[role=dialog] button[data-action="status"]')?.click();
+    await flushAsyncWork();
+    target.querySelector<HTMLButtonElement>('[data-confirm]')?.click();
+    await flushAsyncWork();
+
+    expect(mocks.updateAdminUserStatus).toHaveBeenCalledTimes(1);
+    expect(mocks.getAdminUsers).toHaveBeenCalledTimes(2);
+    expect(mocks.getAdminStats).toHaveBeenCalledTimes(2);
+    expect(mocks.getAdminUserDetail).toHaveBeenCalledTimes(2);
+    expect(target.querySelector('[aria-live=polite]')?.textContent).toContain(
+      'アカウントを停止しました'
+    );
   });
 });

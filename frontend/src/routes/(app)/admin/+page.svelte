@@ -2,9 +2,12 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import {
+    deleteAdminUser,
     getAdminStats,
     getAdminUserDetail,
     getAdminUsers,
+    updateAdminUserRole,
+    updateAdminUserStatus,
     type AdminStats,
     type AdminUserDetail,
     type AdminUserListItem,
@@ -14,6 +17,7 @@
   } from '$lib/api/admin';
   import { ApiError } from '$lib/api/errors';
   import { parseAdminListLocation, serializeAdminListLocation } from '$lib/admin/query';
+  import AdminActionConfirmation from '$lib/components/admin/AdminActionConfirmation.svelte';
   import AdminDialog from '$lib/components/admin/AdminDialog.svelte';
   import AdminStatsSection from '$lib/components/admin/AdminStatsSection.svelte';
   import AdminUserDetailComponent from '$lib/components/admin/AdminUserDetail.svelte';
@@ -29,6 +33,10 @@
     | 'forbidden'
     | 'error';
   type AdminListAction = 'status' | 'role' | 'delete';
+  type ConfirmationAction =
+    | { type: 'status'; nextIsActive: boolean }
+    | { type: 'role'; nextRole: AdminUserRole }
+    | { type: 'delete' };
   /* eslint-disable no-unused-vars -- Svelte parserがcallback型の引数名を実変数として判定するため */
   type AuthenticatedRequest<T> = (latestAccessToken: string) => Promise<T>;
   /* eslint-enable no-unused-vars */
@@ -51,10 +59,15 @@
   let statsError = $state<string | null>(null);
 
   let isDetailOpen = $state(false);
+  let isConfirmationOpen = $state(false);
   let selectedListUser = $state<AdminUserListItem | null>(null);
   let detail = $state<AdminUserDetail | null>(null);
   let isDetailLoading = $state(false);
   let detailError = $state<string | null>(null);
+  let confirmationAction = $state<ConfirmationAction | null>(null);
+  let isMutationSubmitting = $state(false);
+  let mutationError = $state<string | null>(null);
+  let restoreDetailAfterMutation = $state(false);
   let returnFocus = $state<HTMLElement | null>(null);
   let pageHeading = $state<HTMLElement>();
   let liveMessage = $state('');
@@ -99,7 +112,7 @@
     authorizationError = null;
     users = [];
     stats = null;
-    closeDetail();
+    resetDialogState();
   }
 
   function enterForbiddenState(message: string): void {
@@ -108,7 +121,7 @@
     authorizationError = message;
     users = [];
     stats = null;
-    closeDetail();
+    resetDialogState();
   }
 
   async function getRefreshedAccessToken(): Promise<string | null> {
@@ -303,6 +316,25 @@
     isDetailLoading = false;
   }
 
+  function resetConfirmation(): void {
+    isConfirmationOpen = false;
+    confirmationAction = null;
+    mutationError = null;
+    restoreDetailAfterMutation = false;
+  }
+
+  function resetDialogState(): void {
+    closeDetail();
+    resetConfirmation();
+  }
+
+  function closeAdminDialog(): void {
+    if (isMutationSubmitting) {
+      return;
+    }
+    resetDialogState();
+  }
+
   function retryDetail(): void {
     const accessToken = authStore.accessToken;
     if (selectedListUser !== null && accessToken !== null) {
@@ -377,20 +409,118 @@
     });
   }
 
-  function handlePendingAction(
+  function createConfirmationAction(
     user: AdminUserListItem,
-    action: AdminListAction,
-    trigger: HTMLElement
-  ): void {
-    void user;
-    void action;
-    void trigger;
-    liveMessage = '管理操作は次の実装段階で有効になります';
+    action: AdminListAction
+  ): ConfirmationAction {
+    if (action === 'status') {
+      return { type: 'status', nextIsActive: !user.isActive };
+    }
+    if (action === 'role') {
+      return { type: 'role', nextRole: user.role === 'USER' ? 'ADMIN' : 'USER' };
+    }
+    return { type: 'delete' };
   }
 
-  function handlePendingDetailAction(action: AdminListAction): void {
-    void action;
-    liveMessage = '管理操作は次の実装段階で有効になります';
+  function openConfirmation(
+    user: AdminUserListItem,
+    action: AdminListAction,
+    trigger: HTMLElement,
+    fromDetail = false
+  ): void {
+    if (isMutationSubmitting) {
+      return;
+    }
+    detailController?.abort();
+    detailGeneration += 1;
+    selectedListUser = user;
+    confirmationAction = createConfirmationAction(user, action);
+    returnFocus = trigger;
+    restoreDetailAfterMutation = fromDetail;
+    mutationError = null;
+    isDetailOpen = false;
+    isConfirmationOpen = true;
+  }
+
+  function handleDetailAction(action: AdminListAction): void {
+    if (selectedListUser !== null) {
+      openConfirmation(selectedListUser, action, returnFocus ?? pageHeading ?? document.body, true);
+    }
+  }
+
+  async function synchronizeAfterMutation(
+    targetUser: AdminUserListItem,
+    shouldRestoreDetail: boolean,
+    accessToken: string
+  ): Promise<void> {
+    resetConfirmation();
+    await authorizeAndLoadUsers(accessToken, activeQuery);
+    if (accessState !== 'authorized' || !shouldRestoreDetail) {
+      selectedListUser = null;
+      return;
+    }
+
+    selectedListUser = targetUser;
+    isDetailOpen = true;
+    const latestAccessToken = authStore.accessToken ?? accessToken;
+    await loadDetail(targetUser, latestAccessToken);
+  }
+
+  async function submitMutation(): Promise<void> {
+    if (isMutationSubmitting || selectedListUser === null || confirmationAction === null) {
+      return;
+    }
+
+    const accessToken = authStore.accessToken;
+    if (accessToken === null) {
+      enterAnonymousState();
+      return;
+    }
+
+    const targetUser = selectedListUser;
+    const action = confirmationAction;
+    const shouldRestoreDetail = restoreDetailAfterMutation;
+    isMutationSubmitting = true;
+    mutationError = null;
+
+    try {
+      const response = await requestWithReauth(accessToken, (latestAccessToken) => {
+        if (action.type === 'status') {
+          return updateAdminUserStatus({
+            accessToken: latestAccessToken,
+            userId: targetUser.id,
+            isActive: action.nextIsActive
+          });
+        }
+        if (action.type === 'role') {
+          return updateAdminUserRole({
+            accessToken: latestAccessToken,
+            userId: targetUser.id,
+            role: action.nextRole
+          });
+        }
+        return deleteAdminUser({
+          accessToken: latestAccessToken,
+          userId: targetUser.id
+        });
+      });
+
+      liveMessage = response.message;
+      const latestAccessToken = authStore.accessToken ?? accessToken;
+      await synchronizeAfterMutation(targetUser, shouldRestoreDetail, latestAccessToken);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 403) {
+        enterForbiddenState(error.message);
+        return;
+      }
+      if (error instanceof ApiError && error.status === 401) {
+        enterAnonymousState();
+        return;
+      }
+      mutationError = getErrorMessage(error, '管理操作を完了できませんでした');
+    } finally {
+      isMutationSubmitting = false;
+    }
   }
 
   $effect(() => {
@@ -438,6 +568,8 @@
 </script>
 
 <div use:managePageLifecycle>
+  <p aria-live="polite" class="sr-only">{liveMessage}</p>
+
   {#if accessState === 'checking'}
     <section aria-busy="true" class="mx-auto max-w-4xl px-4 py-12 text-center">
       <p aria-live="polite" class="text-gray-600">ログイン状態を確認しています...</p>
@@ -515,29 +647,41 @@
         {nextCursor}
         isLoading={isListLoading}
         onViewDetail={openDetail}
-        onAction={handlePendingAction}
+        onAction={openConfirmation}
         onLoadNext={loadNextPage}
         onResetFilters={resetFilters}
       />
 
       <AdminDialog
-        open={isDetailOpen}
-        title={selectedListUser ? selectedListUser.username + 'の詳細' : 'ユーザー詳細'}
-        description="選択したユーザーのアカウント情報と学習状況"
+        open={isDetailOpen || isConfirmationOpen}
+        title={isConfirmationOpen ? '管理操作の確認' : 'ユーザー詳細'}
+        description={isConfirmationOpen
+          ? '対象ユーザーと変更内容を確認してください'
+          : '選択したユーザーのアカウント情報と学習状況'}
+        isBusy={isMutationSubmitting}
         {returnFocus}
         fallbackFocus={pageHeading}
-        onClose={closeDetail}
+        onClose={closeAdminDialog}
       >
-        <AdminUserDetailComponent
-          user={detail}
-          isLoading={isDetailLoading}
-          errorMessage={detailError}
-          onRetry={retryDetail}
-          onAction={handlePendingDetailAction}
-        />
+        {#if isConfirmationOpen && selectedListUser && confirmationAction}
+          <AdminActionConfirmation
+            user={selectedListUser}
+            action={confirmationAction}
+            isSubmitting={isMutationSubmitting}
+            errorMessage={mutationError}
+            onConfirm={submitMutation}
+            onCancel={closeAdminDialog}
+          />
+        {:else}
+          <AdminUserDetailComponent
+            user={detail}
+            isLoading={isDetailLoading}
+            errorMessage={detailError}
+            onRetry={retryDetail}
+            onAction={handleDetailAction}
+          />
+        {/if}
       </AdminDialog>
     </main>
   {/if}
-
-  <p aria-live="polite" class="sr-only">{liveMessage}</p>
 </div>
