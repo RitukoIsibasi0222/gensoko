@@ -896,7 +896,7 @@ DB/backendを変更しないためmigration deployは不要。契約差異を疑
 
 - 完了日: 2026-07-11
 - 実装ブランチ: feature/admin-dashboard
-- PR: 作成後追記
+- PR: #81
 
 ### 計画からの変更点
 
