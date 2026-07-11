@@ -570,7 +570,7 @@ export function recordAuditEventBestEffort(input: AuditEventInput): Promise<bool
 
 - 完了日: 2026-07-11
 - 実装ブランチ: `feature/audit-log`
-- PR: 未作成（チャットで内容確認後に作成）
+- PR: [#80](https://github.com/RitukoIsibasi0222/gensoko/pull/80)
 
 ### 計画からの変更点
 
