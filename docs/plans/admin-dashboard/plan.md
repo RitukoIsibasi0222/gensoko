@@ -187,6 +187,8 @@
 | `frontend/src/lib/api/admin.test.ts` | 新規 | request/response/error/runtime validation test |
 | `frontend/src/lib/admin/query.ts` | 新規 | URL queryとpage stateのparse/serialize/正規化 |
 | `frontend/src/lib/admin/query.test.ts` | 新規 | restore/reset/canonicalization/cursor reset test |
+| `frontend/src/lib/admin/actions.ts` | 新規 | 管理操作の禁止理由と変更方向を一覧・詳細で共通化 |
+| `frontend/src/lib/admin/actions.test.ts` | 新規 | 自己操作・状態制約・最新状態からの変更方向test |
 | `frontend/src/lib/components/admin/AdminDialog.svelte` | 新規 | admin内共有dialog shellとfocus管理 |
 | `frontend/src/lib/components/admin/AdminDialog.svelte.test.ts` | 新規 | dialog semantics、Tab、Esc、focus return |
 | `frontend/src/lib/components/admin/AdminStatsSection.svelte` | 新規 | 統計、loading、部分error、retry |
@@ -200,7 +202,7 @@
 | `frontend/src/lib/components/admin/AdminActionConfirmation.svelte` | 新規 | status/role/delete確認内容とmutation error |
 | `frontend/src/lib/components/admin/AdminActionConfirmation.svelte.test.ts` | 新規 | 対象、変更方向、typed confirmation、disabled |
 | `frontend/src/routes/(app)/admin/+page.svelte` | 新規 | guard、read/mutation orchestration、同期、競合防止 |
-| `frontend/src/routes/(app)/admin/+page.svelte.test.ts` | 新規 | auth/authz、401 single-flight、403、sync orchestration |
+| `frontend/src/routes/(app)/admin/admin-page.test.ts` | 新規 | auth/authz、401 single-flight、403、sync orchestration |
 | `frontend/src/lib/components/Header.svelte` | 修正 | ADMIN専用desktop/mobile導線 |
 | `frontend/src/lib/components/Header.svelte.test.ts` | 新規 | initializing/anonymous/USER/ADMINの導線test |
 | `docs/05_progress.md` | 修正 | 実装中・完了更新 |
@@ -325,7 +327,8 @@
 - canonicalizationは現在値と比較し、replace loopを起こさない。
 - paginationは1ページ置換型。next中は現在行を保持し、完了時に置換する。
 - APIにprevious cursorがないため前ページはbrowser backで復元する。
-- reload/戻る/進むではpage stateが保持される範囲でq/cursorを復元する。
+- 戻る/進むではpage stateからq/cursorを復元する。
+- 2026-07-11の実ブラウザ確認ではreload後にpage stateが消えたため、reload時はrole/statusだけをURLから復元し、q/cursorは先頭状態とする。
 - URLだけの直接アクセスではrole/statusのみ復元し、q/cursorは先頭状態。
 - 総件数は表示しない。現在ページ件数を総件数と誤表記しない。
 
@@ -780,29 +783,29 @@ runtime guardは内部実装とし、公開API関数の振る舞いでtestする
 | T22 | docs更新要否確認 | `docs/04_api.md` | 契約差異なし/更新根拠を記録 | Medium |
 | T23 | 進捗・計画完了更新 | progress/plan | `[x]`と実装完了記録 | High |
 
-- [ ] T1: 既存仕様・実装・計画を再確認
-- [ ] T2: 進捗を実装中へ更新
-- [ ] T3: API client Red test
-- [ ] T4: API client Green
-- [ ] T5: query/state Red test
-- [ ] T6: PageState/query helper Green
-- [ ] T7: stats/filter Red test
-- [ ] T8: stats/filter Green
-- [ ] T9: list/pagination Red test
-- [ ] T10: list/pagination Green
-- [ ] T11: dialog/detail/action Red test
-- [ ] T12: dialog/detail/action Green
-- [ ] T13: auth/authz/read Red test
-- [ ] T14: auth/authz/read Green
-- [ ] T15: mutation/sync Red test
-- [ ] T16: mutation/sync Green
-- [ ] T17: Header Red test
-- [ ] T18: Header Green
-- [ ] T19: Refactor/A11Y再監査
-- [ ] T20: 品質check
-- [ ] T21: 手動確認
-- [ ] T22: docs更新要否確認
-- [ ] T23: 進捗・計画完了更新
+- [x] T1: 既存仕様・実装・計画を再確認
+- [x] T2: 進捗を実装中へ更新
+- [x] T3: API client Red test
+- [x] T4: API client Green
+- [x] T5: query/state Red test
+- [x] T6: PageState/query helper Green
+- [x] T7: stats/filter Red test
+- [x] T8: stats/filter Green
+- [x] T9: list/pagination Red test
+- [x] T10: list/pagination Green
+- [x] T11: dialog/detail/action Red test
+- [x] T12: dialog/detail/action Green
+- [x] T13: auth/authz/read Red test
+- [x] T14: auth/authz/read Green
+- [x] T15: mutation/sync Red test
+- [x] T16: mutation/sync Green
+- [x] T17: Header Red test
+- [x] T18: Header Green
+- [x] T19: Refactor/A11Y再監査
+- [x] T20: 品質check
+- [x] T21: 手動確認
+- [x] T22: docs更新要否確認
+- [x] T23: 進捗・計画完了更新
 
 ## 品質チェック・手動確認
 
@@ -888,3 +891,74 @@ DB/backendを変更しないためmigration deployは不要。契約差異を疑
 | 個人情報非露出 | |
 | 監査ログ | |
 ```
+
+## 実装完了
+
+- 完了日: 2026-07-11
+- 実装ブランチ: feature/admin-dashboard
+- PR: #81
+
+### 計画からの変更点
+
+- strict review後、初回・filter・次ページ・mutation後同期の一覧stateを分離した。次ページ中は現在行を保持し、errorはpagination領域でretryまたは先頭復帰できる。
+- 一覧と詳細の管理操作判定をfrontend/src/lib/admin/actions.tsへ共通化し、詳細APIの最新userから変更方向を決める。
+- mutation成功をtoast/live regionで通知し、成功後同期失敗はmutation失敗と分離してread retryだけを提供する。
+- cursor付きページがmutation後に空になった場合はcursorを破棄して先頭へ戻す。
+- 実ブラウザでは戻る操作でqを復元したが、reloadではpage stateが消えた。reload時はrole/statusのみ復元する実態を設計へ反映した。
+- API契約自体は変更していないためdocs/04_api.mdは変更しない。frontend runtime validationだけを文書化済み成功message・request後状態に合わせて強化した。
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| frontend/src/app.d.ts | 修正 | admin page state型 |
+| frontend/src/lib/admin/query.ts | 新規 | query/page state正規化 |
+| frontend/src/lib/admin/query.test.ts | 新規 | query/page state test |
+| frontend/src/lib/admin/actions.ts | 新規 | 管理操作判定共通化 |
+| frontend/src/lib/admin/actions.test.ts | 新規 | 管理操作判定test |
+| frontend/src/lib/api/admin.ts | 新規 | 管理者API client・runtime validation |
+| frontend/src/lib/api/admin.test.ts | 新規 | API client test |
+| frontend/src/lib/components/admin/AdminDialog.svelte | 新規 | dialog shell・focus管理 |
+| frontend/src/lib/components/admin/AdminDialog.svelte.test.ts | 新規 | dialog A11Y test |
+| frontend/src/lib/components/admin/AdminStatsSection.svelte | 新規 | 統計UI |
+| frontend/src/lib/components/admin/AdminStatsSection.svelte.test.ts | 新規 | 統計UI test |
+| frontend/src/lib/components/admin/AdminUserFilters.svelte | 新規 | 検索・filter UI |
+| frontend/src/lib/components/admin/AdminUserFilters.svelte.test.ts | 新規 | 検索・filter test |
+| frontend/src/lib/components/admin/AdminUserList.svelte | 新規 | 一覧・pagination・禁止理由UI |
+| frontend/src/lib/components/admin/AdminUserList.svelte.test.ts | 新規 | 一覧・pagination test |
+| frontend/src/lib/components/admin/AdminUserDetail.svelte | 新規 | 詳細・最新状態の操作導線 |
+| frontend/src/lib/components/admin/AdminUserDetail.svelte.test.ts | 新規 | 詳細・禁止操作test |
+| frontend/src/lib/components/admin/AdminActionConfirmation.svelte | 新規 | 管理操作確認UI |
+| frontend/src/lib/components/admin/AdminActionConfirmation.svelte.test.ts | 新規 | 確認UI test |
+| frontend/src/routes/(app)/admin/+page.svelte | 新規 | auth/authz・read/mutation同期 |
+| frontend/src/routes/(app)/admin/admin-page.test.ts | 新規 | page orchestration test |
+| frontend/src/lib/components/Header.svelte | 修正 | 管理者導線 |
+| frontend/src/lib/components/Header.svelte.test.ts | 新規 | role別導線test |
+| frontend/src/lib/test/svelte-client.ts | 修正 | component test用tick公開 |
+| docs/05_progress.md | 修正 | 管理者dashboard完了 |
+| docs/plans/admin-dashboard/plan.md | 新規/修正 | 設計・実装記録 |
+
+### TDD・品質チェック結果
+
+| 確認 | 結果 |
+|---|---|
+| Red | strict review回帰20件中6件失敗、API境界追加3件失敗を確認 |
+| Green / Refactor | 管理操作共通化後、対象86件通過 |
+| npm run lint | 成功 |
+| npm run format / prettier --check | 成功 |
+| npm run check | 0 error / 0 warning |
+| npm run test:run | 37 files / 429 tests passed |
+| backend admin回帰 | 7 files / 42 tests passed |
+
+### 手動確認結果
+
+| 項目 | 結果・補足 |
+|---|---|
+| auth/authz | 未ログインとADMINの直接アクセス、初期化中flashなし、Header導線を確認。USER/403は自動testで確認 |
+| search/filter/pagination | trim、role filter、empty、戻る復元を確認。reloadでqが消える実挙動を記録。データ15件のためnext/error/cursorは自動testで確認 |
+| detail/mutation | 詳細表示、自己操作disabled理由、Esc、操作元focus復帰を確認。既存ユーザーへのmutationは行わず自動testで3操作を確認 |
+| error/競合 | 401 single-flight、403、409、non-JSON、sync failure、空cursor pageを自動testで確認 |
+| desktop/mobile/A11Y | table/card semantics、390x844でtable非表示・mobile list表示、横overflowなし、mobile管理者導線、dialog初期focusを確認 |
+| 個人情報非露出 | qはaddress URLへ含まれず、browser console warning/errorなし。token/raw responseのlogなし |
+| 監査ログ | manual mutationは既存データ保護のため未実施。backend service/route/audit testで回帰確認 |
+| テストデータ | CLIで作成した使い捨てADMINはlogout後にPrisma ORMで削除し、件数0を確認 |

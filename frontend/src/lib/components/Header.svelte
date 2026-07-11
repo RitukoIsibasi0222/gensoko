@@ -16,9 +16,17 @@
     { href: '/weak', label: '苦手' },
     { href: '/mypage', label: 'マイページ' }
   ];
+  const adminNavItem: NavItem = { href: '/admin', label: '管理者' };
 
   let isMobileMenuOpen = $state(false);
   const showAuthenticatedNav = $derived(!authStore.isInitializing && authStore.isLoggedIn);
+  const visibleAuthenticatedNavItems = $derived(
+    showAuthenticatedNav
+      ? authStore.user?.role === 'ADMIN'
+        ? [...authenticatedNavItems, adminNavItem]
+        : authenticatedNavItems
+      : []
+  );
 
   function closeMobileMenu(): void {
     isMobileMenuOpen = false;
@@ -72,11 +80,9 @@
       {#each primaryNavItems as item (item.href)}
         <li><a href={item.href} class="hover:text-brand">{item.label}</a></li>
       {/each}
-      {#if showAuthenticatedNav}
-        {#each authenticatedNavItems as item (item.href)}
-          <li><a href={item.href} class="hover:text-brand">{item.label}</a></li>
-        {/each}
-      {/if}
+      {#each visibleAuthenticatedNavItems as item (item.href)}
+        <li><a href={item.href} class="hover:text-brand">{item.label}</a></li>
+      {/each}
     </ul>
 
     <!-- 認証エリア：初期化完了後にログイン状態に応じて切り替え -->
@@ -124,19 +130,17 @@
               </a>
             </li>
           {/each}
-          {#if showAuthenticatedNav}
-            {#each authenticatedNavItems as item (item.href)}
-              <li>
-                <a
-                  href={item.href}
-                  class="hover:text-brand block rounded px-3 py-2 hover:bg-gray-50"
-                  onclick={closeMobileMenu}
-                >
-                  {item.label}
-                </a>
-              </li>
-            {/each}
-          {/if}
+          {#each visibleAuthenticatedNavItems as item (item.href)}
+            <li>
+              <a
+                href={item.href}
+                class="hover:text-brand block rounded px-3 py-2 hover:bg-gray-50"
+                onclick={closeMobileMenu}
+              >
+                {item.label}
+              </a>
+            </li>
+          {/each}
         </ul>
 
         <div class="border-t border-gray-100 pt-4 text-sm">
