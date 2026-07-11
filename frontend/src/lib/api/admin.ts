@@ -207,7 +207,8 @@ function isAdminUsersResponse(value: unknown): value is AdminUsersResponse {
     !isRecord(value) ||
     !Array.isArray(value.users) ||
     !value.users.every(isAdminUserListItem) ||
-    (value.nextCursor !== null && typeof value.nextCursor !== 'string')
+    (value.nextCursor !== null &&
+      (typeof value.nextCursor !== 'string' || value.nextCursor.length === 0))
   ) {
     return false;
   }
@@ -270,11 +271,16 @@ function isAdminStats(value: unknown): value is AdminStats {
 }
 
 function isAdminUserMutationResponse(value: unknown): value is AdminUserMutationResponse {
-  return isRecord(value) && typeof value.message === 'string' && isAdminUserSummary(value.user);
+  return (
+    isRecord(value) &&
+    typeof value.message === 'string' &&
+    value.message.length > 0 &&
+    isAdminUserSummary(value.user)
+  );
 }
 
 function isAdminMessageResponse(value: unknown): value is AdminMessageResponse {
-  return isRecord(value) && typeof value.message === 'string';
+  return isRecord(value) && typeof value.message === 'string' && value.message.length > 0;
 }
 
 function buildAdminUsersUrl(query: AdminUsersQuery | undefined): string {
@@ -413,12 +419,16 @@ export function updateAdminUserStatus({
   isActive,
   signal
 }: UpdateAdminUserStatusOptions): Promise<AdminUserMutationResponse> {
+  const expectedMessage = isActive ? 'アカウント停止を解除しました' : 'アカウントを停止しました';
   return requestAdminJson({
     url: buildAdminUserUrl(userId, '/status'),
     accessToken,
     method: 'PATCH',
     invalidMessage: 'アカウント状態変更のレスポンス形式が不正です',
-    isValidResponse: isAdminUserMutationResponse,
+    isValidResponse: (value): value is AdminUserMutationResponse =>
+      isAdminUserMutationResponse(value) &&
+      value.message === expectedMessage &&
+      value.user.isActive === isActive,
     body: { isActive },
     signal
   });
@@ -435,7 +445,10 @@ export function updateAdminUserRole({
     accessToken,
     method: 'PATCH',
     invalidMessage: 'ロール変更のレスポンス形式が不正です',
-    isValidResponse: isAdminUserMutationResponse,
+    isValidResponse: (value): value is AdminUserMutationResponse =>
+      isAdminUserMutationResponse(value) &&
+      value.message === 'ロールを変更しました' &&
+      value.user.role === role,
     body: { role },
     signal
   });
@@ -451,7 +464,8 @@ export function deleteAdminUser({
     accessToken,
     method: 'DELETE',
     invalidMessage: '強制退会のレスポンス形式が不正です',
-    isValidResponse: isAdminMessageResponse,
+    isValidResponse: (value): value is AdminMessageResponse =>
+      isAdminMessageResponse(value) && value.message === 'ユーザーを強制退会しました',
     signal
   });
 }

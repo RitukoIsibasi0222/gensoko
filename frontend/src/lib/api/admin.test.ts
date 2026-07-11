@@ -231,6 +231,17 @@ describe('getAdminUsers', () => {
     await expectInvalidResponse(getAdminUsers({ accessToken: 'token' }), 'ユーザー一覧');
   });
 
+  it('空のnextCursorを成功レスポンスとして受理しない', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({
+        ...VALID_LIST_RESPONSE,
+        nextCursor: ''
+      })
+    );
+
+    await expectInvalidResponse(getAdminUsers({ accessToken: 'token' }), 'ユーザー一覧');
+  });
+
   it.each([
     ['負数の件数', { totalGames: -1 }],
     ['小数の件数', { weeklyScore: 1.5 }],
@@ -513,6 +524,48 @@ describe('管理者mutation', () => {
     await expectInvalidResponse(
       deleteAdminUser({ accessToken: 'token', userId: 'user-1' }),
       '強制退会'
+    );
+  });
+
+  it('空または契約外の成功messageを拒否する', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({
+        ...VALID_MUTATION_RESPONSE,
+        message: ''
+      })
+    );
+
+    await expectInvalidResponse(
+      updateAdminUserStatus({
+        accessToken: 'token',
+        userId: 'user-1',
+        isActive: false
+      }),
+      'アカウント状態変更'
+    );
+
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ message: '削除しました' }));
+    await expectInvalidResponse(
+      deleteAdminUser({ accessToken: 'token', userId: 'user-1' }),
+      '強制退会'
+    );
+  });
+
+  it('requestと矛盾する更新ユーザー状態を拒否する', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({
+        ...VALID_MUTATION_RESPONSE,
+        user: { ...VALID_MUTATION_RESPONSE.user, isActive: true }
+      })
+    );
+
+    await expectInvalidResponse(
+      updateAdminUserStatus({
+        accessToken: 'token',
+        userId: 'user-1',
+        isActive: false
+      }),
+      'アカウント状態変更'
     );
   });
 

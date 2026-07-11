@@ -75,6 +75,7 @@ type ListProps = {
   onViewDetail: (user: AdminUserListItem, trigger: HTMLElement) => void;
   onAction: (user: AdminUserListItem, action: AdminListAction, trigger: HTMLElement) => void;
   onLoadNext: () => void;
+  onReturnToFirst?: () => void;
   onResetFilters?: () => void;
 };
 
@@ -238,18 +239,25 @@ describe('AdminUserList', () => {
 
   it('次ページerrorでも現在行を保持し、inline retryを提供する', () => {
     const onLoadNext = vi.fn();
+    const onReturnToFirst = vi.fn();
     const target = renderList({
       paginationError: 'カーソルが正しくありません',
-      onLoadNext
+      onLoadNext,
+      onReturnToFirst
     });
     const alert = target.querySelector('[role=alert]');
     const retryButton = Array.from(alert?.querySelectorAll('button') ?? []).find((button) =>
       button.textContent?.includes('再試行')
     ) as HTMLButtonElement;
+    const firstPageButton = Array.from(alert?.querySelectorAll('button') ?? []).find((button) =>
+      button.textContent?.includes('一覧の先頭へ戻る')
+    ) as HTMLButtonElement;
 
     expect(target.textContent).toContain('taro');
     expect(alert?.textContent).toContain('カーソルが正しくありません');
     retryButton.click();
+    firstPageButton.click();
     expect(onLoadNext).toHaveBeenCalledTimes(1);
+    expect(onReturnToFirst).toHaveBeenCalledTimes(1);
   });
 });

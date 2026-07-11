@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   updateAdminUserRole: vi.fn(),
   deleteAdminUser: vi.fn(),
   goto: vi.fn(),
+  toastSuccess: vi.fn(),
   page: { url: new URL('http://localhost/admin'), state: {} as Record<string, unknown> }
 }));
 
@@ -53,6 +54,9 @@ vi.mock('$lib/api/admin', () => ({
 }));
 vi.mock('$app/navigation', () => ({ goto: mocks.goto }));
 vi.mock('$app/state', () => ({ page: mocks.page }));
+vi.mock('$lib/stores/toast.svelte', () => ({
+  toastStore: { success: mocks.toastSuccess }
+}));
 
 import AdminPage from './+page.svelte';
 
@@ -155,6 +159,7 @@ beforeEach(() => {
     user: { ...TARO, role: 'ADMIN' }
   });
   mocks.deleteAdminUser.mockResolvedValue({ message: 'ユーザーを強制退会しました' });
+  mocks.goto.mockResolvedValue(undefined);
 });
 
 afterEach(async () => {
@@ -302,6 +307,28 @@ describe('/admin auth・authz・read orchestration', () => {
 });
 
 describe('/admin mutation・sync orchestration', () => {
+  it('詳細の最新状態から操作方向を決め、古い一覧状態を送信に使わない', async () => {
+    mocks.getAdminUserDetail.mockResolvedValue({
+      user: createDetail({ ...TARO, isActive: false })
+    });
+    const target = renderPage();
+    await flushAsyncWork();
+
+    target.querySelector<HTMLButtonElement>('button[aria-label="taroの詳細を表示"]')?.click();
+    await flushAsyncWork();
+    target.querySelector<HTMLButtonElement>('[role=dialog] button[data-action="status"]')?.click();
+    await flushAsyncWork();
+
+    expect(target.querySelector('[data-confirmation]')?.textContent).toContain('停止中');
+    expect(target.querySelector('[data-confirmation]')?.textContent).toContain('有効（未退会）');
+    target.querySelector<HTMLButtonElement>('[data-confirm]')?.click();
+    await flushAsyncWork();
+
+    expect(mocks.updateAdminUserStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-1', isActive: true })
+    );
+  });
+
   it('停止操作は対象とbefore/afterを確認して正しいPATCH引数を送る', async () => {
     const target = renderPage();
     await flushAsyncWork();
@@ -434,6 +461,8 @@ describe('/admin mutation・sync orchestration', () => {
   });
 
   it('成功後は最新条件でlist・stats・開いているdetailを再取得する', async () => {
+    mocks.page.url = new URL('http://localhost/admin?role=USER&status=active');
+    mocks.page.state = { adminUsers: { q: 'taro' } };
     const target = renderPage();
     await flushAsyncWork();
 
@@ -448,10 +477,107 @@ describe('/admin mutation・sync orchestration', () => {
 
     expect(mocks.updateAdminUserStatus).toHaveBeenCalledTimes(1);
     expect(mocks.getAdminUsers).toHaveBeenCalledTimes(2);
+    expect(mocks.getAdminUsers.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({
+        query: { limit: 20, q: 'taro', role: 'USER', status: 'active' }
+      })
+    );
     expect(mocks.getAdminStats).toHaveBeenCalledTimes(2);
     expect(mocks.getAdminUserDetail).toHaveBeenCalledTimes(2);
     expect(target.querySelector('[aria-live=polite]')?.textContent).toContain(
       'アカウントを停止しました'
     );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('アカウントを停止しました');
+  });
+
+  it('mutation成功後の一覧同期失敗は成功済みと明示し、read retryだけを提供する', async () => {
+    mocks.getAdminUsers
+      .mockResolvedValueOnce({ users: USERS, nextCursor: null })
+      .mockRejectedValueOnce(new ApiError(500, 'サーバーエラーが発生しました'))
+      .mockResolvedValueOnce({ users: [{ ...TARO, isActive: false }], nextCursor: null });
+    const target = renderPage();
+    await flushAsyncWork();
+
+    target.querySelector<HTMLButtonElement>('button[aria-label="taroのアカウントを停止"]')?.click();
+    await flushAsyncWork();
+    target.querySelector<HTMLButtonElement>('[data-confirm]')?.click();
+    await flushAsyncWork();
+
+    expect(target.textContent).toContain(
+      '管理操作は完了しましたが、最新情報を取得できませんでした'
+    );
+    expect(mocks.updateAdminUserStatus).toHaveBeenCalledTimes(1);
+
+    const retryButton = Array.from(target.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.includes('最新情報を再読み込み')
+    );
+    retryButton?.click();
+    await flushAsyncWork();
+
+    expect(mocks.getAdminUsers).toHaveBeenCalledTimes(3);
+    expect(mocks.updateAdminUserStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('cursorページがmutation後に空ならcursorを破棄して先頭へ戻す', async () => {
+    mocks.page.state = { adminUsers: { cursor: 'cursor-2' } };
+    mocks.getAdminUsers
+      .mockResolvedValueOnce({ users: [TARO], nextCursor: null })
+      .mockResolvedValueOnce({ users: [], nextCursor: null });
+    const target = renderPage();
+    await flushAsyncWork();
+
+    target.querySelector<HTMLButtonElement>('button[aria-label="taroのアカウントを停止"]')?.click();
+    await flushAsyncWork();
+    target.querySelector<HTMLButtonElement>('[data-confirm]')?.click();
+    await flushAsyncWork();
+
+    expect(mocks.goto).toHaveBeenCalledWith(
+      '/admin',
+      expect.objectContaining({ state: expect.objectContaining({ adminUsers: {} }) })
+    );
+  });
+});
+
+describe('/admin pagination orchestration', () => {
+  it('次ページnavigation中も現在行を保持し、二重操作を防ぐ', async () => {
+    const navigationGate = deferred<void>();
+    mocks.goto.mockImplementation(() => navigationGate.promise);
+    mocks.getAdminUsers.mockResolvedValue({ users: USERS, nextCursor: 'cursor-2' });
+    const target = renderPage();
+    await flushAsyncWork();
+
+    const nextButton = Array.from(target.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.includes('次を読み込む')
+    );
+    nextButton?.click();
+    nextButton?.click();
+    await tick();
+
+    expect(target.textContent).toContain('taro');
+    expect(nextButton?.disabled).toBe(true);
+    expect(mocks.goto).toHaveBeenCalledTimes(1);
+
+    navigationGate.resolve();
+    await flushAsyncWork();
+  });
+
+  it('次ページnavigation失敗を一覧下部に表示して再試行できる', async () => {
+    mocks.goto
+      .mockRejectedValueOnce(new Error('navigation failed'))
+      .mockResolvedValueOnce(undefined);
+    mocks.getAdminUsers.mockResolvedValue({ users: USERS, nextCursor: 'cursor-2' });
+    const target = renderPage();
+    await flushAsyncWork();
+
+    const nextButton = Array.from(target.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.includes('次を読み込む')
+    );
+    nextButton?.click();
+    await flushAsyncWork();
+
+    expect(target.querySelector('[role=alert]')?.textContent).toContain(
+      '次のユーザーを読み込めませんでした'
+    );
+    expect(target.textContent).toContain('taro');
   });
 });

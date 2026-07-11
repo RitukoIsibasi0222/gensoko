@@ -28,6 +28,7 @@
   let closeButton = $state<HTMLButtonElement>();
   let previousBodyOverflow = '';
   let isScrollLocked = false;
+  let wasOpen = false;
 
   function lockBodyScroll(): void {
     if (isScrollLocked) {
@@ -113,6 +114,7 @@
 
   $effect(() => {
     if (open) {
+      wasOpen = true;
       queueMicrotask(() => {
         const cancelButton =
           initialFocus === 'cancel'
@@ -120,6 +122,9 @@
             : null;
         (cancelButton ?? closeButton)?.focus();
       });
+    } else if (wasOpen) {
+      wasOpen = false;
+      queueMicrotask(focusAfterClose);
     }
   });
 </script>

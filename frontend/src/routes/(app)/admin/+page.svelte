@@ -12,11 +12,17 @@
     type AdminUserDetail,
     type AdminUserListItem,
     type AdminUserRole,
+    type AdminUserSummary,
     type AdminUserStatus,
     type AdminUsersQuery
   } from '$lib/api/admin';
   import { ApiError } from '$lib/api/errors';
   import { parseAdminListLocation, serializeAdminListLocation } from '$lib/admin/query';
+  import {
+    createAdminConfirmationAction,
+    type AdminConfirmationAction,
+    type AdminListAction
+  } from '$lib/admin/actions';
   import AdminActionConfirmation from '$lib/components/admin/AdminActionConfirmation.svelte';
   import AdminDialog from '$lib/components/admin/AdminDialog.svelte';
   import AdminStatsSection from '$lib/components/admin/AdminStatsSection.svelte';
@@ -24,6 +30,7 @@
   import AdminUserFilters from '$lib/components/admin/AdminUserFilters.svelte';
   import AdminUserList from '$lib/components/admin/AdminUserList.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
+  import { toastStore } from '$lib/stores/toast.svelte';
 
   type AccessState =
     | 'checking'
@@ -32,12 +39,8 @@
     | 'anonymous'
     | 'forbidden'
     | 'error';
-  type AdminListAction = 'status' | 'role' | 'delete';
   type DialogMode = 'closed' | 'detail' | 'confirmation';
-  type ConfirmationAction =
-    | { type: 'status'; nextIsActive: boolean }
-    | { type: 'role'; nextRole: AdminUserRole }
-    | { type: 'delete' };
+  type ListLoadMode = 'initial' | 'list' | 'page' | 'sync';
   /* eslint-disable no-unused-vars -- Svelte parserがcallback型の引数名を実変数として判定するため */
   type AuthenticatedRequest<T> = (latestAccessToken: string) => Promise<T>;
   /* eslint-enable no-unused-vars */
@@ -52,6 +55,10 @@
   let nextCursor = $state<string | null>(null);
   let isListLoading = $state(false);
   let listError = $state<string | null>(null);
+  let isPageLoading = $state(false);
+  let paginationError = $state<string | null>(null);
+  let isPostMutationSyncing = $state(false);
+  let postMutationSyncError = $state<string | null>(null);
   let activeQuery = $state<AdminUsersQuery>({});
   let searchDraft = $state('');
 
@@ -60,16 +67,17 @@
   let statsError = $state<string | null>(null);
 
   let dialogMode = $state<DialogMode>('closed');
-  let selectedListUser = $state<AdminUserListItem | null>(null);
+  let selectedListUser = $state<AdminUserSummary | null>(null);
   let detail = $state<AdminUserDetail | null>(null);
   let isDetailLoading = $state(false);
   let detailError = $state<string | null>(null);
-  let confirmationAction = $state<ConfirmationAction | null>(null);
+  let confirmationAction = $state<AdminConfirmationAction | null>(null);
   let isMutationSubmitting = $state(false);
   let mutationError = $state<string | null>(null);
   let restoreDetailAfterMutation = $state(false);
   let returnFocus = $state<HTMLElement | null>(null);
   let pageHeading = $state<HTMLElement>();
+  let listHeading = $state<HTMLElement>();
   let liveMessage = $state('');
 
   let listController: AbortController | null = null;
@@ -208,17 +216,36 @@
     }
   }
 
-  async function authorizeAndLoadUsers(accessToken: string, query: AdminUsersQuery): Promise<void> {
+  async function authorizeAndLoadUsers(
+    accessToken: string,
+    query: AdminUsersQuery,
+    mode: ListLoadMode = 'initial'
+  ): Promise<boolean> {
     listController?.abort();
-    statsController?.abort();
     detailController?.abort();
+    if (mode === 'initial') {
+      statsController?.abort();
+    }
     const controller = new AbortController();
     const generation = ++listGeneration;
     listController = controller;
-    accessState = 'authorizing';
-    authorizationError = null;
-    isListLoading = true;
-    listError = null;
+    if (mode === 'initial') {
+      accessState = 'authorizing';
+      authorizationError = null;
+      isListLoading = true;
+      listError = null;
+    } else if (mode === 'list') {
+      isListLoading = true;
+      listError = null;
+      isPageLoading = false;
+      paginationError = null;
+    } else if (mode === 'page') {
+      isPageLoading = true;
+      paginationError = null;
+    } else {
+      isPostMutationSyncing = true;
+      postMutationSyncError = null;
+    }
     activeQuery = query;
 
     try {
@@ -230,32 +257,51 @@
         })
       );
       if (controller.signal.aborted || generation !== listGeneration) {
-        return;
+        return false;
       }
 
       users = response.users;
       nextCursor = response.nextCursor;
       accessState = 'authorized';
       syncSuccessfulAdminRole();
-      const latestAccessToken = authStore.accessToken ?? accessToken;
-      void loadStats(latestAccessToken);
+      if (mode === 'initial' || mode === 'sync') {
+        const latestAccessToken = authStore.accessToken ?? accessToken;
+        void loadStats(latestAccessToken);
+      }
+      return true;
     } catch (error) {
       if (controller.signal.aborted || generation !== listGeneration || isAbortError(error)) {
-        return;
+        return false;
       }
       if (handleAuthorizationError(error)) {
-        return;
+        return false;
       }
-      accessState = 'error';
-      listError = getErrorMessage(error, 'ユーザー一覧を表示できませんでした');
+      const message = getErrorMessage(error, 'ユーザー一覧を表示できませんでした');
+      if (mode === 'initial') {
+        accessState = 'error';
+        listError = message;
+      } else if (mode === 'page') {
+        paginationError = message;
+      } else if (mode === 'sync') {
+        postMutationSyncError = message;
+      } else {
+        listError = message;
+      }
+      return false;
     } finally {
       if (generation === listGeneration) {
-        isListLoading = false;
+        if (mode === 'initial' || mode === 'list') {
+          isListLoading = false;
+        } else if (mode === 'page') {
+          isPageLoading = false;
+        } else {
+          isPostMutationSyncing = false;
+        }
       }
     }
   }
 
-  async function loadDetail(user: AdminUserListItem, accessToken: string): Promise<void> {
+  async function loadDetail(user: AdminUserSummary, accessToken: string): Promise<void> {
     detailController?.abort();
     const controller = new AbortController();
     const generation = ++detailGeneration;
@@ -349,9 +395,30 @@
   function retryAuthorization(): void {
     const accessToken = authStore.accessToken;
     if (accessToken !== null) {
-      void authorizeAndLoadUsers(accessToken, activeQuery);
+      void authorizeAndLoadUsers(accessToken, activeQuery, 'initial');
     } else {
       enterAnonymousState();
+    }
+  }
+
+  function retryCurrentList(): void {
+    const accessToken = authStore.accessToken;
+    if (accessToken !== null) {
+      void authorizeAndLoadUsers(accessToken, activeQuery, 'list');
+    }
+  }
+
+  function retryPagination(): void {
+    const accessToken = authStore.accessToken;
+    if (accessToken !== null && activeQuery.cursor) {
+      void authorizeAndLoadUsers(accessToken, activeQuery, 'page');
+    }
+  }
+
+  function retryPostMutationSync(): void {
+    const accessToken = authStore.accessToken;
+    if (accessToken !== null) {
+      void synchronizeAfterMutation(null, false, accessToken);
     }
   }
 
@@ -365,9 +432,9 @@
     role?: AdminUserRole;
     status?: AdminUserStatus;
     cursor?: string;
-  }): void {
+  }): Promise<void> {
     const location = serializeAdminListLocation(input);
-    void goto(buildAdminUrl(location.searchParams), {
+    return goto(buildAdminUrl(location.searchParams), {
       state: { ...page.state, adminUsers: location.pageState },
       keepFocus: true,
       noScroll: true
@@ -375,7 +442,7 @@
   }
 
   function handleSearch(q: string | undefined): void {
-    navigateList({
+    void navigateList({
       q,
       role: activeQuery.role,
       status: activeQuery.status
@@ -383,44 +450,44 @@
   }
 
   function handleRoleChange(role: AdminUserRole | undefined): void {
-    navigateList({ q: activeQuery.q, role, status: activeQuery.status });
+    void navigateList({ q: activeQuery.q, role, status: activeQuery.status });
   }
 
   function handleStatusChange(status: AdminUserStatus | undefined): void {
-    navigateList({ q: activeQuery.q, role: activeQuery.role, status });
+    void navigateList({ q: activeQuery.q, role: activeQuery.role, status });
   }
 
   function resetFilters(): void {
-    navigateList({});
+    void navigateList({});
   }
 
   function loadNextPage(): void {
-    if (nextCursor === null) {
+    if (nextCursor === null || isPageLoading) {
       return;
     }
-    navigateList({
+    isPageLoading = true;
+    paginationError = null;
+    void navigateList({
       q: activeQuery.q,
       role: activeQuery.role,
       status: activeQuery.status,
       cursor: nextCursor
+    }).catch(() => {
+      isPageLoading = false;
+      paginationError = '次のユーザーを読み込めませんでした';
     });
   }
 
-  function createConfirmationAction(
-    user: AdminUserListItem,
-    action: AdminListAction
-  ): ConfirmationAction {
-    if (action === 'status') {
-      return { type: 'status', nextIsActive: !user.isActive };
-    }
-    if (action === 'role') {
-      return { type: 'role', nextRole: user.role === 'USER' ? 'ADMIN' : 'USER' };
-    }
-    return { type: 'delete' };
+  function returnToFirstPage(): void {
+    void navigateList({
+      q: activeQuery.q,
+      role: activeQuery.role,
+      status: activeQuery.status
+    });
   }
 
   function openConfirmation(
-    user: AdminUserListItem,
+    user: AdminUserSummary,
     action: AdminListAction,
     trigger: HTMLElement,
     fromDetail = false
@@ -431,32 +498,51 @@
     detailController?.abort();
     detailGeneration += 1;
     selectedListUser = user;
-    confirmationAction = createConfirmationAction(user, action);
+    confirmationAction = createAdminConfirmationAction(user, action);
     returnFocus = trigger;
     restoreDetailAfterMutation = fromDetail;
     mutationError = null;
     dialogMode = 'confirmation';
   }
 
-  function handleDetailAction(action: AdminListAction): void {
-    if (selectedListUser !== null) {
-      openConfirmation(selectedListUser, action, returnFocus ?? pageHeading ?? document.body, true);
-    }
+  function handleDetailAction(user: AdminUserDetail, action: AdminListAction): void {
+    openConfirmation(user, action, returnFocus ?? pageHeading ?? document.body, true);
   }
 
   async function synchronizeAfterMutation(
-    targetUser: AdminUserListItem,
+    targetUser: AdminUserSummary | null,
     shouldRestoreDetail: boolean,
     accessToken: string
   ): Promise<void> {
-    resetConfirmation();
-    await authorizeAndLoadUsers(accessToken, activeQuery);
-    if (accessState !== 'authorized' || !shouldRestoreDetail) {
+    const synchronized = await authorizeAndLoadUsers(accessToken, activeQuery, 'sync');
+    if (!synchronized) {
+      resetConfirmation();
+      return;
+    }
+
+    if (activeQuery.cursor && users.length === 0) {
+      const firstPageQuery = { ...activeQuery };
+      delete firstPageQuery.cursor;
+      resetConfirmation();
+      liveMessage = '一覧の先頭へ戻りました';
+      try {
+        await navigateList(firstPageQuery);
+      } catch {
+        postMutationSyncError = '一覧の先頭を読み込めませんでした';
+      }
+      return;
+    }
+
+    if (!shouldRestoreDetail || targetUser === null) {
+      resetConfirmation();
       selectedListUser = null;
       return;
     }
 
     selectedListUser = targetUser;
+    confirmationAction = null;
+    mutationError = null;
+    restoreDetailAfterMutation = false;
     dialogMode = 'detail';
     const latestAccessToken = authStore.accessToken ?? accessToken;
     await loadDetail(targetUser, latestAccessToken);
@@ -502,6 +588,7 @@
       });
 
       liveMessage = response.message;
+      toastStore.success(response.message);
       const latestAccessToken = authStore.accessToken ?? accessToken;
       await synchronizeAfterMutation(targetUser, shouldRestoreDetail, latestAccessToken);
     } catch (error) {
@@ -554,7 +641,9 @@
         noScroll: true
       });
     }
-    void authorizeAndLoadUsers(accessToken, location.query);
+    const loadMode: ListLoadMode =
+      accessState === 'authorized' ? (location.query.cursor ? 'page' : 'list') : 'initial';
+    void authorizeAndLoadUsers(accessToken, location.query, loadMode);
   });
 </script>
 
@@ -625,21 +714,57 @@
         {searchDraft}
         role={activeQuery.role}
         status={activeQuery.status}
-        isLoading={isListLoading}
+        isLoading={isListLoading || isPageLoading || isPostMutationSyncing}
         onSearch={handleSearch}
         onRoleChange={handleRoleChange}
         onStatusChange={handleStatusChange}
         onReset={resetFilters}
       />
 
+      {#if listError !== null}
+        <div role="alert" class="rounded-xl border border-red-200 bg-red-50 p-4">
+          <p class="text-sm text-red-700">{listError}</p>
+          <button
+            type="button"
+            class="mt-3 rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100"
+            onclick={retryCurrentList}
+          >
+            ユーザー一覧を再読み込み
+          </button>
+        </div>
+      {/if}
+
+      {#if postMutationSyncError !== null}
+        <div role="alert" class="rounded-xl border border-amber-300 bg-amber-50 p-4">
+          <p class="font-semibold text-amber-950">
+            管理操作は完了しましたが、最新情報を取得できませんでした
+          </p>
+          <p class="mt-1 text-sm text-amber-900">{postMutationSyncError}</p>
+          <button
+            type="button"
+            disabled={isPostMutationSyncing}
+            class="mt-3 rounded-lg border border-amber-400 bg-white px-3 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:text-gray-400"
+            onclick={retryPostMutationSync}
+          >
+            {isPostMutationSyncing ? '再読み込み中...' : '最新情報を再読み込み'}
+          </button>
+        </div>
+      {:else if isPostMutationSyncing}
+        <p aria-live="polite" class="text-sm text-gray-600">最新情報を同期しています...</p>
+      {/if}
+
       <AdminUserList
         {users}
         currentUserId={authStore.user?.id}
         {nextCursor}
         isLoading={isListLoading}
+        {isPageLoading}
+        {paginationError}
+        bind:headingElement={listHeading}
         onViewDetail={openDetail}
         onAction={openConfirmation}
-        onLoadNext={loadNextPage}
+        onLoadNext={paginationError === null ? loadNextPage : retryPagination}
+        onReturnToFirst={returnToFirstPage}
         onResetFilters={resetFilters}
       />
 
@@ -652,7 +777,7 @@
         isBusy={isMutationSubmitting}
         initialFocus={dialogMode === 'confirmation' ? 'cancel' : 'close'}
         {returnFocus}
-        fallbackFocus={pageHeading}
+        fallbackFocus={listHeading ?? pageHeading}
         onClose={closeAdminDialog}
       >
         {#if dialogMode === 'confirmation' && selectedListUser && confirmationAction}
@@ -667,6 +792,7 @@
         {:else}
           <AdminUserDetailComponent
             user={detail}
+            currentUserId={authStore.user?.id}
             isLoading={isDetailLoading}
             errorMessage={detailError}
             onRetry={retryDetail}

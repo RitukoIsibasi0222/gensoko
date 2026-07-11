@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { AdminUserListItem } from '$lib/api/admin';
-
-  type AdminListAction = 'status' | 'role' | 'delete';
+  import { getAdminActionBlockReason, type AdminListAction } from '$lib/admin/actions';
 
   /* eslint-disable no-unused-vars -- Svelte parserがcallback型の引数名を実変数として判定するため */
   type Props = {
@@ -11,9 +10,11 @@
     isLoading?: boolean;
     isPageLoading?: boolean;
     paginationError?: string | null;
+    headingElement?: HTMLElement;
     onViewDetail: (user: AdminUserListItem, trigger: HTMLElement) => void;
     onAction: (user: AdminUserListItem, action: AdminListAction, trigger: HTMLElement) => void;
     onLoadNext: () => void;
+    onReturnToFirst?: () => void;
     onResetFilters?: () => void;
   };
   /* eslint-enable no-unused-vars */
@@ -25,9 +26,11 @@
     isLoading = false,
     isPageLoading = false,
     paginationError = null,
+    headingElement = $bindable(),
     onViewDetail,
     onAction,
     onLoadNext,
+    onReturnToFirst,
     onResetFilters
   }: Props = $props();
 
@@ -46,34 +49,6 @@
     return user.lockedUntil !== null && Date.parse(user.lockedUntil) > Date.now();
   }
 
-  function getGeneralBlockReason(user: AdminUserListItem): string | null {
-    if (user.id === currentUserId) {
-      return '自分自身には管理操作を実行できません';
-    }
-    if (user.deletedAt !== null) {
-      return '退会済みユーザーは変更できません';
-    }
-    return null;
-  }
-
-  function getActionBlockReason(user: AdminUserListItem, action: AdminListAction): string | null {
-    const generalReason = getGeneralBlockReason(user);
-    if (generalReason) {
-      return generalReason;
-    }
-
-    if (action === 'role') {
-      if (!user.isActive) {
-        return '停止中のユーザーはロール変更できません';
-      }
-      if (user.role === 'USER' && !user.emailVerified) {
-        return 'メール未確認のユーザーは管理者にできません';
-      }
-    }
-
-    return null;
-  }
-
   function getStatusActionLabel(user: AdminUserListItem): string {
     return user.isActive ? 'アカウントを停止' : 'アカウント停止を解除';
   }
@@ -82,19 +57,33 @@
     return user.role === 'USER' ? 'ADMINに変更' : 'USERに変更';
   }
 
+  function getBlockReasonId(
+    user: AdminUserListItem,
+    action: AdminListAction,
+    view: 'desktop' | 'mobile'
+  ): string | undefined {
+    const reason = getAdminActionBlockReason(user, action, currentUserId);
+    if (reason === null) {
+      return undefined;
+    }
+    const statusReason = getAdminActionBlockReason(user, 'status', currentUserId);
+    const reasonKey = reason === statusReason ? 'status' : action;
+    return view + '-' + user.id + '-' + reasonKey + '-block-reason';
+  }
+
   function handleDetail(user: AdminUserListItem, event: MouseEvent): void {
     onViewDetail(user, event.currentTarget as HTMLElement);
   }
 
   function handleAction(user: AdminUserListItem, action: AdminListAction, event: MouseEvent): void {
-    if (getActionBlockReason(user, action)) {
+    if (getAdminActionBlockReason(user, action, currentUserId)) {
       return;
     }
     onAction(user, action, event.currentTarget as HTMLElement);
   }
 </script>
 
-{#snippet actionButtons(user: AdminUserListItem)}
+{#snippet actionButtons(user: AdminUserListItem, view: 'desktop' | 'mobile')}
   <div class="flex flex-wrap gap-2">
     <button
       type="button"
@@ -108,8 +97,8 @@
       type="button"
       data-admin-action="status"
       aria-label={user.username + 'の' + getStatusActionLabel(user)}
-      title={getActionBlockReason(user, 'status') ?? undefined}
-      disabled={getActionBlockReason(user, 'status') !== null}
+      aria-describedby={getBlockReasonId(user, 'status', view)}
+      disabled={getAdminActionBlockReason(user, 'status', currentUserId) !== null}
       class="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
       onclick={(event) => handleAction(user, 'status', event)}
     >
@@ -119,8 +108,8 @@
       type="button"
       data-admin-action="role"
       aria-label={user.username + 'のロールを' + getRoleActionLabel(user)}
-      title={getActionBlockReason(user, 'role') ?? undefined}
-      disabled={getActionBlockReason(user, 'role') !== null}
+      aria-describedby={getBlockReasonId(user, 'role', view)}
+      disabled={getAdminActionBlockReason(user, 'role', currentUserId) !== null}
       class="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
       onclick={(event) => handleAction(user, 'role', event)}
     >
@@ -130,8 +119,8 @@
       type="button"
       data-admin-action="delete"
       aria-label={user.username + 'を強制退会'}
-      title={getActionBlockReason(user, 'delete') ?? undefined}
-      disabled={getActionBlockReason(user, 'delete') !== null}
+      aria-describedby={getBlockReasonId(user, 'delete', view)}
+      disabled={getAdminActionBlockReason(user, 'delete', currentUserId) !== null}
       class="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
       onclick={(event) => handleAction(user, 'delete', event)}
     >
@@ -148,7 +137,12 @@
   <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
     <div>
       <p class="text-brand text-sm font-semibold">Users</p>
-      <h2 id="admin-user-list-heading" tabindex="-1" class="text-ink mt-1 text-xl font-bold">
+      <h2
+        bind:this={headingElement}
+        id="admin-user-list-heading"
+        tabindex="-1"
+        class="text-ink mt-1 text-xl font-bold"
+      >
         ユーザー一覧
       </h2>
     </div>
@@ -187,7 +181,9 @@
         </thead>
         <tbody class="divide-y divide-gray-100">
           {#each users as user (user.id)}
-            {@const generalBlockReason = getGeneralBlockReason(user)}
+            {@const statusBlockReason = getAdminActionBlockReason(user, 'status', currentUserId)}
+            {@const roleBlockReason = getAdminActionBlockReason(user, 'role', currentUserId)}
+            {@const deleteBlockReason = getAdminActionBlockReason(user, 'delete', currentUserId)}
             <tr class="align-top">
               <th scope="row" class="px-4 py-4 font-semibold text-gray-900">
                 {user.username}
@@ -214,9 +210,30 @@
                 <span class="mt-1 block text-xs">正答率 {user.stats.accuracyRate}%</span>
               </td>
               <td class="px-4 py-4">
-                {@render actionButtons(user)}
-                {#if generalBlockReason}
-                  <p class="mt-2 max-w-xs text-xs text-gray-600">{generalBlockReason}</p>
+                {@render actionButtons(user, 'desktop')}
+                {#if statusBlockReason}
+                  <p
+                    id={'desktop-' + user.id + '-status-block-reason'}
+                    class="mt-2 max-w-xs text-xs text-gray-600"
+                  >
+                    {statusBlockReason}
+                  </p>
+                {/if}
+                {#if roleBlockReason && roleBlockReason !== statusBlockReason}
+                  <p
+                    id={'desktop-' + user.id + '-role-block-reason'}
+                    class="mt-1 max-w-xs text-xs text-gray-600"
+                  >
+                    {roleBlockReason}
+                  </p>
+                {/if}
+                {#if deleteBlockReason && deleteBlockReason !== statusBlockReason}
+                  <p
+                    id={'desktop-' + user.id + '-delete-block-reason'}
+                    class="mt-1 max-w-xs text-xs text-gray-600"
+                  >
+                    {deleteBlockReason}
+                  </p>
                 {/if}
               </td>
             </tr>
@@ -227,7 +244,9 @@
 
     <ul data-mobile-admin-list class="grid gap-3 p-4 md:hidden">
       {#each users as user (user.id)}
-        {@const generalBlockReason = getGeneralBlockReason(user)}
+        {@const statusBlockReason = getAdminActionBlockReason(user, 'status', currentUserId)}
+        {@const roleBlockReason = getAdminActionBlockReason(user, 'role', currentUserId)}
+        {@const deleteBlockReason = getAdminActionBlockReason(user, 'delete', currentUserId)}
         <li data-user-id={user.id} class="rounded-xl border border-gray-200 p-4">
           <div class="flex items-start justify-between gap-3">
             <div>
@@ -259,9 +278,27 @@
           </dl>
 
           <div class="mt-4">
-            {@render actionButtons(user)}
-            {#if generalBlockReason}
-              <p class="mt-2 text-xs text-gray-600">{generalBlockReason}</p>
+            {@render actionButtons(user, 'mobile')}
+            {#if statusBlockReason}
+              <p
+                id={'mobile-' + user.id + '-status-block-reason'}
+                class="mt-2 text-xs text-gray-600"
+              >
+                {statusBlockReason}
+              </p>
+            {/if}
+            {#if roleBlockReason && roleBlockReason !== statusBlockReason}
+              <p id={'mobile-' + user.id + '-role-block-reason'} class="mt-1 text-xs text-gray-600">
+                {roleBlockReason}
+              </p>
+            {/if}
+            {#if deleteBlockReason && deleteBlockReason !== statusBlockReason}
+              <p
+                id={'mobile-' + user.id + '-delete-block-reason'}
+                class="mt-1 text-xs text-gray-600"
+              >
+                {deleteBlockReason}
+              </p>
             {/if}
           </div>
         </li>
@@ -284,6 +321,16 @@
           >
             再試行
           </button>
+          {#if onReturnToFirst}
+            <button
+              type="button"
+              disabled={isPageLoading}
+              class="mt-2 ml-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:text-gray-400"
+              onclick={onReturnToFirst}
+            >
+              一覧の先頭へ戻る
+            </button>
+          {/if}
         </div>
       {/if}
 

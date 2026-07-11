@@ -36,8 +36,9 @@ type DetailProps = {
   user: AdminUserDetailData | null;
   isLoading?: boolean;
   errorMessage?: string | null;
+  currentUserId?: string;
   onRetry?: () => void;
-  onAction: (action: DetailAction) => void;
+  onAction: (user: AdminUserDetailData, action: DetailAction) => void;
 };
 
 let mounted: ReturnType<typeof mount> | null = null;
@@ -113,6 +114,33 @@ describe('AdminUserDetail', () => {
     buttons.find((button) => button.dataset.action === 'role')?.click();
     buttons.find((button) => button.dataset.action === 'delete')?.click();
 
-    expect(onAction.mock.calls).toEqual([['status'], ['role'], ['delete']]);
+    expect(onAction.mock.calls).toEqual([
+      [USER, 'status'],
+      [USER, 'role'],
+      [USER, 'delete']
+    ]);
+  });
+
+  it('自分自身・退会済み・停止中role変更をdisabledにして理由を関連付ける', async () => {
+    const selfTarget = renderDetail({ currentUserId: USER.id });
+    const selfButtons = Array.from(
+      selfTarget.querySelectorAll<HTMLButtonElement>('button[data-action]')
+    );
+    expect(selfButtons.every((button) => button.disabled)).toBe(true);
+    expect(selfTarget.textContent).toContain('自分自身には管理操作を実行できません');
+
+    await unmount(mounted!);
+    mounted = null;
+    document.body.replaceChildren();
+
+    const suspendedTarget = renderDetail({
+      user: { ...USER, isActive: false }
+    });
+    const roleButton = suspendedTarget.querySelector<HTMLButtonElement>(
+      'button[data-action="role"]'
+    );
+    expect(roleButton?.disabled).toBe(true);
+    expect(roleButton?.getAttribute('aria-describedby')).toBe('admin-detail-role-block-reason');
+    expect(suspendedTarget.textContent).toContain('停止中のユーザーはロール変更できません');
   });
 });

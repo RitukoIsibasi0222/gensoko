@@ -1,19 +1,26 @@
 <script lang="ts">
   import type { AdminUserDetail } from '$lib/api/admin';
-
-  type DetailAction = 'status' | 'role' | 'delete';
+  import { getAdminActionBlockReason, type AdminListAction } from '$lib/admin/actions';
 
   /* eslint-disable no-unused-vars -- Svelte parserがcallback型の引数名を実変数として判定するため */
   type Props = {
     user: AdminUserDetail | null;
     isLoading?: boolean;
     errorMessage?: string | null;
+    currentUserId?: string;
     onRetry?: () => void;
-    onAction: (action: DetailAction) => void;
+    onAction: (user: AdminUserDetail, action: AdminListAction) => void;
   };
   /* eslint-enable no-unused-vars */
 
-  let { user, isLoading = false, errorMessage = null, onRetry, onAction }: Props = $props();
+  let {
+    user,
+    isLoading = false,
+    errorMessage = null,
+    currentUserId,
+    onRetry,
+    onAction
+  }: Props = $props();
 
   function formatNumber(value: number): string {
     return value.toLocaleString('ja-JP');
@@ -28,6 +35,16 @@
       return '退会済み';
     }
     return detail.isActive ? '有効（未退会）' : '停止中';
+  }
+
+  function getBlockReasonId(detail: AdminUserDetail, action: AdminListAction): string | undefined {
+    const reason = getAdminActionBlockReason(detail, action, currentUserId);
+    if (reason === null) {
+      return undefined;
+    }
+    const statusReason = getAdminActionBlockReason(detail, 'status', currentUserId);
+    const reasonKey = reason === statusReason ? 'status' : action;
+    return 'admin-detail-' + reasonKey + '-block-reason';
   }
 </script>
 
@@ -52,6 +69,9 @@
       {/if}
     </div>
   {:else if user}
+    {@const statusBlockReason = getAdminActionBlockReason(user, 'status', currentUserId)}
+    {@const roleBlockReason = getAdminActionBlockReason(user, 'role', currentUserId)}
+    {@const deleteBlockReason = getAdminActionBlockReason(user, 'delete', currentUserId)}
     <div class="grid gap-5">
       <section aria-labelledby="admin-user-profile-heading">
         <h3 id="admin-user-profile-heading" class="font-semibold text-gray-900">アカウント情報</h3>
@@ -135,28 +155,47 @@
         <button
           type="button"
           data-action="status"
+          aria-describedby={getBlockReasonId(user, 'status')}
+          disabled={statusBlockReason !== null}
           class="rounded-lg border border-amber-300 px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50"
-          onclick={() => onAction('status')}
+          onclick={() => onAction(user, 'status')}
         >
           {user.isActive ? 'アカウントを停止' : '停止を解除'}
         </button>
         <button
           type="button"
           data-action="role"
+          aria-describedby={getBlockReasonId(user, 'role')}
+          disabled={roleBlockReason !== null}
           class="rounded-lg border border-blue-300 px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
-          onclick={() => onAction('role')}
+          onclick={() => onAction(user, 'role')}
         >
           ロールを変更
         </button>
         <button
           type="button"
           data-action="delete"
+          aria-describedby={getBlockReasonId(user, 'delete')}
+          disabled={deleteBlockReason !== null}
           class="rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
-          onclick={() => onAction('delete')}
+          onclick={() => onAction(user, 'delete')}
         >
           強制退会
         </button>
       </div>
+      {#if statusBlockReason}
+        <p id="admin-detail-status-block-reason" class="text-sm text-gray-600">
+          {statusBlockReason}
+        </p>
+      {/if}
+      {#if roleBlockReason && roleBlockReason !== statusBlockReason}
+        <p id="admin-detail-role-block-reason" class="text-sm text-gray-600">{roleBlockReason}</p>
+      {/if}
+      {#if deleteBlockReason && deleteBlockReason !== statusBlockReason}
+        <p id="admin-detail-delete-block-reason" class="text-sm text-gray-600">
+          {deleteBlockReason}
+        </p>
+      {/if}
     </div>
   {:else}
     <p class="rounded-xl bg-gray-50 p-4 text-sm text-gray-600">
