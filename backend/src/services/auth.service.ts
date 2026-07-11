@@ -539,5 +539,15 @@ export async function resetPassword(input: { token: string; password: string }):
     });
     // 3. 全リフレッシュトークン削除（全デバイスからログアウト）
     await tx.refreshToken.deleteMany({ where: { userId: record.userId } });
+    // 4. パスワードリセット成功の監査証跡
+    await recordAuditEvent(tx, {
+      action: AUDIT_ACTIONS.PASSWORD_RESET,
+      result: AuditResult.SUCCESS,
+      actorId: null,
+      actorRole: null,
+      targetType: AUDIT_TARGET_TYPES.USER,
+      targetId: record.userId,
+      failureReason: null,
+    });
   });
 }

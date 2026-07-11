@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import type { Role } from "@prisma/client";
+import { AuditResult, type Role } from "@prisma/client";
 import { normalizePassword } from "../lib/normalize.js";
 import { hashPassword } from "../lib/password.js";
 import {
@@ -10,6 +10,8 @@ import {
 import { isUniqueConstraintViolation } from "../lib/prisma-errors.js";
 import { prisma } from "../lib/prisma.js";
 import { getWeeklyScoreWeekStart, isSameWeeklyScoreWeek } from "../lib/weekly-score.js";
+import { AUDIT_ACTIONS, AUDIT_TARGET_TYPES } from "./audit-events.js";
+import { recordAuditEvent } from "./audit.service.js";
 
 export class UserError extends Error {
   constructor(
@@ -115,7 +117,7 @@ export async function changeCurrentPassword(input: {
 
   const user = await prisma.user.findUnique({
     where: { id: input.userId },
-    select: { id: true, passwordHash: true },
+    select: { id: true, passwordHash: true, role: true },
   });
 
   if (!user) {
@@ -135,6 +137,15 @@ export async function changeCurrentPassword(input: {
       data: { passwordHash: newPasswordHash },
     });
     await tx.refreshToken.deleteMany({ where: { userId: input.userId } });
+    await recordAuditEvent(tx, {
+      action: AUDIT_ACTIONS.PASSWORD_CHANGE,
+      result: AuditResult.SUCCESS,
+      actorId: user.id,
+      actorRole: user.role,
+      targetType: AUDIT_TARGET_TYPES.USER,
+      targetId: user.id,
+      failureReason: null,
+    });
   });
 }
 
