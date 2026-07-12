@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount, tick, unmount } from '$lib/test/svelte-client';
 import { STRONG_PASSWORD_73_BYTES } from '$lib/test/password-byte-boundary-fixtures';
-import { PASSWORD_TOO_LONG_MESSAGE } from '$lib/validation/password';
+import { PASSWORD_BYTE_LIMIT_HINT, PASSWORD_TOO_LONG_MESSAGE } from '$lib/validation/password';
 
 const mocks = vi.hoisted(() => ({
   changeCurrentPassword: vi.fn(),
@@ -76,6 +76,7 @@ async function submitPasswordForm(
   setInputValue(confirmPasswordInput, values.confirm);
   form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
   await tick();
+  await tick();
 }
 
 beforeEach(() => {
@@ -99,6 +100,16 @@ afterEach(async () => {
 });
 
 describe('/settings password field error ownership', () => {
+  it('新しいパスワードへ上限hintを常時関連付け、文字数maxlengthは設定しない', async () => {
+    const target = await renderPage();
+    const newPasswordInput = target.querySelector('#new-password') as HTMLInputElement;
+    const hint = target.querySelector('#new-password-hint');
+
+    expect(hint?.textContent).toContain(PASSWORD_BYTE_LIMIT_HINT);
+    expect(newPasswordInput.getAttribute('aria-describedby')).toBe('new-password-hint');
+    expect(newPasswordInput.hasAttribute('maxlength')).toBe(false);
+  });
+
   it('assigns a 73-byte error only to the new password field', async () => {
     const target = await renderPage();
     await submitPasswordForm(target, {
@@ -116,7 +127,10 @@ describe('/settings password field error ownership', () => {
       PASSWORD_TOO_LONG_MESSAGE
     );
     expect(newPasswordInput.getAttribute('aria-invalid')).toBe('true');
-    expect(newPasswordInput.getAttribute('aria-describedby')).toBe('new-password-error');
+    expect(newPasswordInput.getAttribute('aria-describedby')).toBe(
+      'new-password-hint new-password-error'
+    );
+    expect(document.activeElement).toBe(newPasswordInput);
     expect(currentPasswordInput.hasAttribute('aria-invalid')).toBe(false);
     expect(confirmPasswordInput.hasAttribute('aria-invalid')).toBe(false);
   });

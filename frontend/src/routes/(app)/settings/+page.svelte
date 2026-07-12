@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { goto } from '$app/navigation';
   import { ApiError } from '$lib/api/errors';
   import {
@@ -10,7 +11,7 @@
   } from '$lib/api/users';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
-  import { validatePassword } from '$lib/validation/password';
+  import { PASSWORD_BYTE_LIMIT_HINT, validatePassword } from '$lib/validation/password';
   import { validateUsername } from '$lib/validation/username';
   import {
     validateConfirmPassword,
@@ -27,6 +28,9 @@
   let currentPassword = $state('');
   let newPassword = $state('');
   let confirmPassword = $state('');
+  let currentPasswordInput = $state<HTMLInputElement>();
+  let newPasswordInput = $state<HTMLInputElement>();
+  let confirmPasswordInput = $state<HTMLInputElement>();
 
   let deleteCurrentPassword = $state('');
   let deleteAcknowledged = $state(false);
@@ -218,6 +222,13 @@
       normalizedConfirmPassword
     );
     if (currentPasswordError || newPasswordError || confirmPasswordError) {
+      await tick();
+      const firstInvalidInput = currentPasswordError
+        ? currentPasswordInput
+        : newPasswordError
+          ? newPasswordInput
+          : confirmPasswordInput;
+      firstInvalidInput?.focus();
       return;
     }
 
@@ -419,6 +430,7 @@
             id="current-password"
             type="password"
             bind:value={currentPassword}
+            bind:this={currentPasswordInput}
             autocomplete="current-password"
             aria-invalid={currentPasswordError ? 'true' : undefined}
             aria-describedby={currentPasswordError ? 'current-password-error' : undefined}
@@ -439,11 +451,17 @@
             id="new-password"
             type="password"
             bind:value={newPassword}
+            bind:this={newPasswordInput}
             autocomplete="new-password"
             aria-invalid={newPasswordError ? 'true' : undefined}
-            aria-describedby={newPasswordError ? 'new-password-error' : undefined}
+            aria-describedby={newPasswordError
+              ? 'new-password-hint new-password-error'
+              : 'new-password-hint'}
             class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
           />
+          <p id="new-password-hint" class="mt-1 text-sm text-gray-600">
+            {PASSWORD_BYTE_LIMIT_HINT}
+          </p>
           {#if newPasswordError}
             <p id="new-password-error" class="mt-1 text-sm text-red-600">
               {newPasswordError}
@@ -459,6 +477,7 @@
             id="confirm-password"
             type="password"
             bind:value={confirmPassword}
+            bind:this={confirmPasswordInput}
             autocomplete="new-password"
             aria-invalid={confirmPasswordError ? 'true' : undefined}
             aria-describedby={confirmPasswordError ? 'confirm-password-error' : undefined}

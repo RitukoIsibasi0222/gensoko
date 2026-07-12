@@ -3,6 +3,7 @@
   import { API_BASE_URL } from '$lib/api/config';
   import { ApiError, parseErrorResponse } from '$lib/api/errors';
   import { toastStore } from '$lib/stores/toast.svelte';
+  import { PASSWORD_BYTE_LIMIT_HINT } from '$lib/validation/password';
   import { validateUsername, validateEmail, validatePassword } from './validation';
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/stores/auth.svelte';
@@ -232,7 +233,7 @@
           </button>
         </div>
         <p id="password-hint" class="mt-1 text-sm text-gray-600">
-          UTF-8で72バイト以内（日本語や絵文字は1文字で複数バイトになります）
+          {PASSWORD_BYTE_LIMIT_HINT}
         </p>
         {#if passwordError}
           <p id="password-error" class="mt-1 text-sm text-red-600">{passwordError}</p>

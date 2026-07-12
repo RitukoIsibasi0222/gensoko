@@ -6,10 +6,7 @@
   import { ApiError, parseErrorResponse } from '$lib/api/errors';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
-  import { validatePassword } from '$lib/validation/password';
-
-  const PASSWORD_BYTE_LIMIT_HINT =
-    'UTF-8\u306772\u30d0\u30a4\u30c8\u4ee5\u5185\uff08\u65e5\u672c\u8a9e\u3084\u7d75\u6587\u5b57\u306f1\u6587\u5b57\u3067\u8907\u6570\u30d0\u30a4\u30c8\u306b\u306a\u308a\u307e\u3059\uff09';
+  import { PASSWORD_BYTE_LIMIT_HINT, validatePassword } from '$lib/validation/password';
 
   // フォーム入力値
   let password = $state('');
