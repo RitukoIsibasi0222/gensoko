@@ -153,7 +153,8 @@ X-Permitted-Cross-Domain-Policies: none
 - 許可オリジンを**ホワイトリスト**で管理（`*` ワイルドカード禁止）
 - 許可値は環境変数 `FRONTEND_URL` から読み込む
 - 開発環境: `http://localhost:5174`
-- 本番環境: 公開ドメインのみ
+- 本番環境: 公開ドメインのみ。`FRONTEND_URL` は必須とし、未設定・空文字ならapp構築時にfail-fastする
+- localhostへのfallbackはdevelopment/testだけに限定し、CORSと認証メールURLで同じ共通設定を使う
 - credentials、`Content-Type`、`Authorization` の既存許可設定を維持する
 
 ### CSRF対策

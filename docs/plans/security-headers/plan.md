@@ -179,11 +179,14 @@
 
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
-| `backend/src/app.ts` | 新規 | Hono app factory、middleware 順序、route 登録、共通404/500 handlerを集約 |
+| `backend/src/app.ts` | 新規 | Hono app factory、middleware 順序、route 登録、共通404/500 handler、production CORS fail-fastを集約 |
 | `backend/src/app.test.ts` | 新規 | 実配線、health、404/500 JSON、401、preflight、CORS 共存を検証 |
 | `backend/src/index.ts` | 修正 | `createApp()` を呼び Node server 起動だけを担当 |
+| `backend/src/lib/config.ts` | 新規 | CORS・認証メールで共有するFRONTEND_URL解決とproduction fail-fast |
+| `backend/src/lib/config.test.ts` | 新規 | production必須・development fallback・NODE_ENV判定を検証 |
 | `backend/src/middleware/security/index.ts` | 修正 | 明示設定した security headers middlewareを実装 |
 | `backend/src/middleware/security/security.test.ts` | 新規 | header 値、環境差、200/500、上書き方針を検証 |
+| `backend/src/services/auth.service.ts` | 修正 | 認証メールURLを共通FRONTEND_URL設定へ統一 |
 | `backend/.env.example` | 修正 | `NODE_ENV` と HSTS production 判定を説明 |
 | `docker-compose.yml` | 修正 | ローカル backend の `NODE_ENV=development` を明示 |
 | `docs/02_security.md` | 修正 | API header 仕様、frontend CSP との責務境界、CORS 開発 origin を修正 |
@@ -256,6 +259,7 @@ response
 - 200/201/400/401/403/404/409/429/500 と preflight に同じ非 HSTS header を付与する。
 - HSTS は production response のみに付与する。
 - CORS の `Access-Control-Allow-Origin` は `FRONTEND_URL`、credentials は true を維持する。
+- productionでは `FRONTEND_URL` を必須とし、未設定・空文字ならapp構築時にfail-fastする。development/testだけlocalhostへfallbackする。
 - セキュリティヘッダーを CORS allowlist の代替にしない。
 
 ## UI / A11Y 方針
@@ -381,6 +385,8 @@ response
 - [x] R3: HSTS `includeSubDomains` のhost scopeとrelease gateを明確化
 - [x] R4: security/API docs・対象ファイル・実装完了記録を実態へ整合
 - [x] R5: format・lint・format:check・build・全testで回帰確認
+- [x] R6: PR reviewのraw test error logを固定イベント名へ統一
+- [x] R7: FRONTEND_URLを共通設定へ集約しproduction未設定をfail-fast
 
 ### タブ区切り
 
@@ -522,6 +528,7 @@ T15	承認後にpush・PR作成	git・GitHub	高
 - app factory分離時のroute登録漏れを直接検知するため、app-level testへauth/admin/elements/game/ranking/users/weakの全prefix確認を追加した。
 - 再レビューで、未知404と未捕捉500がHono既定の英語plain textになり、共通API仕様と日本語エラー規約に反する不整合を検出した。app-level `notFound` / `onError` を追加し、内部例外情報を含まない日本語JSONへ統一した。
 - 追加レビューで `console.error(error)` がDB接続情報やtoken等をraw例外から漏らし得ることを検出した。固定イベント名だけを記録する実装へ変更し、secretを含むtest例外がログへ渡らないことをTDDで固定した。
+- PR reviewで、test helperにもraw `Error` 出力が残っている点と、productionの `FRONTEND_URL` 未設定がlocalhostへfallbackする点を検出した。test helperも固定イベント名へ統一し、CORSと認証メールURLの環境設定を `lib/config.ts` へ集約してproductionではfail-fastするよう変更した。
 - HSTSの `includeSubDomains` は応答hostの配下にのみ適用され、親domain・兄弟hostには遡及しないことと、対象host未確認時はproductionへ出さないrelease gateを明記した。
 - ブラウザでは公開APIを使うトップ・元素一覧、ログイン画面、空欄validationを確認した。認証情報を使うlogin/refresh/logoutの手動操作は行わず、既存を含むbackend自動テストで回帰を確認した。
 - ユーザー指定の確認フローに合わせ、commit、PR本文のチャット確認、承認後のpush・PR作成を別タスクへ分割した。
@@ -545,6 +552,7 @@ T15	承認後にpush・PR作成	git・GitHub	高
 
 - Red: 初回実装では `security.test.ts` は未実装関数により7件失敗、`app.test.ts` は未作成moduleによりcollection失敗を確認した。再レビューでは既存14件を維持したまま、未知404・未捕捉500の新規2件がplain text responseのため失敗した。追加レビューではraw `Error` が `console.error` へ渡る1件の失敗を確認した。
 - Green: middlewareとapp factoryの初回実装後に対象testを通過させ、再レビューでは共通404/500 handler追加後に対象2ファイル・16件が全通過した。ログ非機密化後は `app.test.ts` 9件が全通過した。
+- PR review対応: Redでconfig module未実装、production未設定がthrowしない、空文字development fallback不成立を確認した。Greenでconfig/app/security/register/forgot-passwordの5 files・39 testsが全通過した。
 - Refactor: 全route prefix回帰test、共通エラー契約、内部情報非開示testを追加した。期待済み500 errorのstderrはtest内spyで抑制した。
 
 ### 品質・手動確認結果
@@ -553,7 +561,7 @@ T15	承認後にpush・PR作成	git・GitHub	高
 - backend lint: 成功
 - backend format:check: 成功
 - backend build: 成功
-- backend test: 52 files・488 tests全通過。監査ログintegration 1 file・1 testは専用DB環境変数なしの通常実行でskip
+- backend test: 53 files・494 tests全通過。監査ログintegration 1 file・1 testは専用DB環境変数なしの通常実行でskip
 - Docker設定: `docker compose config --quiet`成功。Hono containerだけを`NODE_ENV=development`で再作成
 - Docker/API: health 200、404、認証なし401、許可・未許可originのOPTIONSを確認。全対象responseへsecurity headerが付き、developmentではHSTSなし
 - browser/CORS/A11Y: トップとランキングプレビュー、元素一覧118件、ログイン画面を確認。空欄errorは`alert`。warning/error 0件
@@ -562,11 +570,14 @@ T15	承認後にpush・PR作成	git・GitHub	高
 
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
-| `backend/src/app.ts` | 新規 | Hono app factory、middleware順序、route登録、共通404/500 handler |
+| `backend/src/app.ts` | 新規 | Hono app factory、middleware順序、route登録、共通404/500 handler、production CORS fail-fast |
 | `backend/src/app.test.ts` | 新規 | 実配線、health、404/500 JSON、401、preflight、CORS、route prefix test |
 | `backend/src/index.ts` | 修正 | app factoryを呼ぶNode server起動entryへ縮小 |
+| `backend/src/lib/config.ts` | 新規 | CORS・認証メール共通のFRONTEND_URL解決 |
+| `backend/src/lib/config.test.ts` | 新規 | production必須・development fallback test |
 | `backend/src/middleware/security/index.ts` | 修正 | 明示設定したsecurity headers middlewareを実装 |
 | `backend/src/middleware/security/security.test.ts` | 新規 | exact header、環境差、200/500、上書きtest |
+| `backend/src/services/auth.service.ts` | 修正 | 認証メールURLを共通設定へ統一 |
 | `backend/.env.example` | 修正 | `NODE_ENV`とHSTS production判定を説明 |
 | `docker-compose.yml` | 修正 | ローカルHonoの`NODE_ENV=development`を明示 |
 | `docs/02_security.md` | 修正 | API header仕様、frontend CSPとの責務境界、CORS originを更新 |
