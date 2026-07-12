@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount, tick, unmount } from '$lib/test/svelte-client';
-import { PASSWORD_TOO_LONG_MESSAGE } from '$lib/validation/password';
+import { PASSWORD_BYTE_LIMIT_HINT, PASSWORD_TOO_LONG_MESSAGE } from '$lib/validation/password';
 import { STRONG_PASSWORD_73_BYTES } from '$lib/test/password-byte-boundary-fixtures';
 
 const mocks = vi.hoisted(() => ({
@@ -22,8 +22,6 @@ vi.mock('$lib/stores/toast.svelte', () => ({
 }));
 
 import RegisterPage from './+page.svelte';
-
-const PASSWORD_HINT = 'UTF-8で72バイト以内（日本語や絵文字は1文字で複数バイトになります）';
 
 let mounted: ReturnType<typeof mount> | null = null;
 
@@ -76,7 +74,7 @@ describe('/register password byte limit UI/A11Y', () => {
     const hint = target.querySelector('#password-hint');
 
     expect(hint).not.toBeNull();
-    expect(hint?.textContent).toContain(PASSWORD_HINT);
+    expect(hint?.textContent).toContain(PASSWORD_BYTE_LIMIT_HINT);
     expect(passwordInput.getAttribute('aria-describedby')).toBe('password-hint');
     expect(passwordInput.hasAttribute('maxlength')).toBe(false);
   });
