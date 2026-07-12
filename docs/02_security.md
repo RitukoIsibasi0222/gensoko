@@ -123,7 +123,9 @@
 - HTTP から HTTPS へのリダイレクトは Cloudflare/Vercel 等の配信基盤で設定する。Hono API ミドルウェアはリダイレクトを担当しない。
 - Hono API は `NODE_ENV=production` の場合だけ `Strict-Transport-Security: max-age=31536000; includeSubDomains` を付与する。
 - ローカルの development/test は HTTP で動作するため HSTS を付与しない。
-- HSTS preload は採用しない。本番有効化前に、対象ドメインと全サブドメインが HTTPS 対応済みであることを確認する。
+- `includeSubDomains` が対象にするのは、HSTSを返したAPIホストの配下である。例えば `api.example.com` から返した場合、`example.com` や `www.example.com` には遡及せず、`*.api.example.com` に適用される。
+- HSTS preload は採用しない。本番有効化前に、実際に応答するAPIホストとその配下の全ホストがHTTPS対応済みであることを確認する。確認できない場合は `includeSubDomains` を有効化したままリリースしない。
+- HSTSはブラウザに記憶され、コードをrevertしても即時解除できない。緊急時はHTTPSで `max-age=0` を返すが、既に到達不能になった配下ホストには解除responseを届けられないため、事前確認を必須のリリースゲートとする。
 
 ### Hono API のセキュリティヘッダー
 
@@ -143,6 +145,8 @@ X-Permitted-Cross-Domain-Policies: none
 - `X-Powered-By` は削除する。
 - API JSON では不要な `Cross-Origin-Opener-Policy`、`Cross-Origin-Embedder-Policy`、`Origin-Agent-Cluster`、`X-DNS-Prefetch-Control`、`X-Download-Options` は付与しない。
 - この CSP は JSON API を deny-by-default にするための設定であり、Vercel/SvelteKit が返す HTML の script・style・image を制御しない。フロントエンド HTML の CSP は別の配信設定で実装する。
+- 未知のパスは404と `{ "error": "エンドポイントが見つかりません" }`、未捕捉例外は500と `{ "error": "サーバーエラーが発生しました" }` を返す。例外メッセージ、stack trace、内部パス、接続情報はclient responseへ含めない。
+- 未捕捉例外を `console.error` へraw objectのまま渡さず、固定イベント名だけを記録する。安全な詳細情報を扱う構造化ログは、SEC-008の別タスクで許可fieldとredactionを定義してから導入する。
 
 ### CORS
 

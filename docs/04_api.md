@@ -27,6 +27,8 @@ Hono API が生成する正常・エラー・404・CORS preflight レスポン�
 - API用CSPはJSONレスポンスを対象とし、Vercel/SvelteKitが返すHTMLのCSPを代替しない。
 - Cloudflare、リバースプロキシ、CDN等がHonoの外側で生成する502/504等のレスポンスは、このミドルウェアの保証対象外とする。
 - CORSの許可origin、credentials、許可method・headerは既存契約を維持し、セキュリティヘッダーをCORS allowlistの代替にしない。
+- Hono appでrouteが一致しない場合は404と `{ "error": "エンドポイントが見つかりません" }` を返す。
+- Hono app内の未捕捉例外は500と `{ "error": "サーバーエラーが発生しました" }` を返し、内部の例外messageやstack traceをresponseへ含めない。server logにもraw例外を出さず、固定イベント名だけを記録する。
 
 ---
 
