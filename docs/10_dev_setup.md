@@ -150,6 +150,8 @@ services:
       - "3000:3000"
     volumes:
       - ./backend:/app
+    env_file:
+      - ./backend/.env
     environment:
       - DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko
       - JWT_SECRET=your-super-secret-key-change-this
@@ -157,7 +159,6 @@ services:
       - MAIL_PORT=1025
       - FRONTEND_URL=http://localhost:5174
       - RATE_LIMIT_STORE=memory
-      - RATE_LIMIT_KEY_SECRET=${RATE_LIMIT_KEY_SECRET:?RATE_LIMIT_KEY_SECRETを設定してください}
     command: sh -c "npm install && npm run dev"
     depends_on:
       - postgres
@@ -282,14 +283,15 @@ RATE_LIMIT_KEY_SECRET="<32バイト以上のランダム値をbase64化した文
 
 developmentではプロセス内のmemory storeを使用する。これは本番用Durable Objectと同じstore契約を使うが、Docker再起動やbackend再起動でカウントはリセットされる。
 
-秘密鍵は次のコマンドで生成し、Git管理外の `.env` にだけ保存する。
+秘密鍵は次のコマンドで生成し、Git管理外の `backend/.env` にだけ保存する。
 
 ```bash
 openssl rand -base64 32
 ```
 
-- backendを直接起動する場合は `backend/.env` に設定する。
-- Docker Compose例の `${RATE_LIMIT_KEY_SECRET:?...}` を使う場合は、Composeが読み込むリポジトリルートのGit管理外 `.env` に同じ値を設定する。
+- backendの直接起動とDocker Composeは、どちらも `backend/.env` の同じ値を使用する。
+- Docker Composeでは `env_file` で `backend/.env` を読み込み、コンテナ内だけ異なる値（`DATABASE_URL`など）は `environment` で上書きする。
+- リポジトリルートにCompose補間用の `.env` を重複作成しない。
 - `RATE_LIMIT_KEY_SECRET` はレート制限キー専用とし、`JWT_SECRET`を流用しない。
 - `RATE_LIMIT_STORE=memory` はdevelopment/test専用である。productionでは `durable-object` 以外を起動時に拒否し、memory storeへfallbackしない。
 - レート制限のIP取得に `TRUST_PROXY`、`X-Forwarded-For`、`X-Real-IP`は使用しない。Node developmentではsocket address、Workers productionでは検証済み `CF-Connecting-IP` を使う。
