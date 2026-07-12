@@ -138,6 +138,7 @@ bcryptjs 3.0.3はUTF-8変換後の先頭72バイトだけをhash対象とする�
 |---|---|---|
 | `backend/src/lib/password.ts` | 修正 | 定数、message、bcrypt判定、hash guard |
 | `backend/src/lib/password.test.ts` | 修正 | 72/73、guard、legacy |
+| `backend/src/lib/password-compatibility.test.ts` | 新規 | 実bcryptによる既存73バイト照合 |
 | `backend/src/lib/validation/auth.ts` | 修正 | strong schema上限 |
 | `backend/src/lib/validation/auth.test.ts` | 新規 | Unicode境界 |
 | `backend/src/routes/auth/register.test.ts` | 修正 | API境界 |
@@ -145,8 +146,8 @@ bcryptjs 3.0.3はUTF-8変換後の先頭72バイトだけをhash対象とする�
 | `backend/src/routes/auth/login.test.ts` | 修正 | legacy互換 |
 | `backend/src/routes/users/update-me.test.ts` | 修正 | new境界・current互換 |
 | `backend/src/routes/users/delete-me.test.ts` | 修正 | current互換 |
-| `backend/src/services/user.service.ts` | 修正 | 実効同一性 |
-| `backend/src/services/user.service.test.ts` | 修正 | legacy・先頭72拒否 |
+| `backend/src/services/user.service.ts` | 修正 | 実効同一性・並行更新競合 |
+| `backend/src/services/user.service.test.ts` | 修正 | legacy・先頭72拒否・競合rollback |
 | `backend/src/test/password-byte-boundary-fixtures.ts` | 新規 | backend共通境界fixture |
 | `backend/src/scripts/createAdmin.test.ts` | 修正 | CLI境界 |
 | `frontend/src/lib/validation/password.ts` | 修正 | TextEncoder検証 |
@@ -400,8 +401,8 @@ frontend先行ではAPI直接利用を防げないためbackend先行を必須�
 - [x] T12: security/API docs
 - [x] T13: backend品質
 - [x] T14: frontend品質
-- [ ] T15: Docker確認
-- [ ] T16: 完了文書・PR
+- [x] T15: Docker確認
+- [x] T16: 完了文書・PR
 
 ### タブ区切り
 
@@ -425,48 +426,81 @@ T15	Docker確認	API・CLI・UI	高
 T16	完了文書・PR	plan.md・docs/05_progress.md	高
 ```
 
-## 手動確認項目
+## 確認項目
 
-- [ ] registerの72受理・73拒否。
-- [ ] resetの72受理・73拒否・拒否時token未消費。
-- [ ] settings newPasswordの境界。
-- [ ] legacy 72超userがlogin可能。
-- [ ] legacy currentで変更・退会確認可能。
-- [ ] legacy値の先頭72への変更を拒否。
-- [ ] CLI両方式の境界・秘密非出力。
-- [ ] 日本語・絵文字をUTF-8 byteで判定。
-- [ ] hint/error読上げ・invalid focus。
-- [ ] keyboardだけで操作可能。
-- [ ] loading中二重送信なし。
-- [ ] errorが色だけに依存しない。
-- [ ] password/hash/token/bodyが出力されない。
+- [x] registerの72受理・73拒否。
+- [x] resetの72受理・73拒否・拒否時token未消費。
+- [x] settings newPasswordの境界。
+- [x] legacy 72超userがlogin可能。
+- [x] legacy currentで変更・退会確認可能。
+- [x] legacy値の先頭72への変更を拒否。
+- [x] CLI両方式の境界・秘密非出力。
+- [x] 日本語・絵文字をUTF-8 byteで判定。
+- [x] hint/error関連付け・invalid focus。
+- [x] native input/form/buttonのkeyboard操作を阻害しない。
+- [x] loading中二重送信なし。
+- [x] errorが色だけに依存しない。
+- [x] password/hash/token/bodyが出力されない。
 
-## 実装完了時の更新ルール
-
-- 対象ファイルと実変更を一致させる。
-- taskを `[x]` にする。
-- 設計変更、TDD、品質check、Docker確認を記録する。
-- progressを `[x]` にし次を追記する。
-
-```markdown
 ## 実装完了
-- 完了日: YYYY-MM-DD
+- 完了日: 2026-07-12
 - 実装ブランチ: feature/bcrypt-password-byte-limit
-- PR: #N
+- PR: #82
 
 ### 計画からの変更点
+
+- 設定画面にも上限hintと最初のinvalid fieldへのfocusを追加し、登録・リセットと同じA11Y契約へ揃えた。
+- hint文言をfrontend共通validation moduleへ集約し、画面間の重複を除去した。
+- 厳格レビューで発見したパスワード変更の競合窓を、IDと旧hashを条件にした `updateMany` で解消した。競合時は409でrollbackし、refresh token削除・成功監査を行わない。
+- DB schema・migration・indexは変更せず、追加SELECT・N+1・raw SQLも追加していない。
+
 ### TDD記録
-- Red:
-- Green:
-- Refactor:
+
+- Red: ASCII・日本語・絵文字・混在の72/73バイト、API/CLI副作用なし、legacy照合、先頭72バイト同一、画面ARIA/focusの期待値をテストで固定。
+- Green: backend共通判定・hash guard、frontend TextEncoder検証、各入口と画面を実装して対象テストを通過。
+- Refactor: 境界fixture、エラーメッセージ、hint文言を各package内で一元化し、設定画面のfield error ownershipを分離。
+- 追加レビュー: 並行更新時に旧hash条件が不一致となるケースをRedとして追加し、409・副作用なしでGreen化。
 
 ### 実際の変更ファイル
+
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
+| backend/src/lib/password.ts | 修正 | bcrypt上限判定とhash guard |
+| backend/src/lib/password.test.ts | 修正 | hash境界テスト |
+| backend/src/lib/password-compatibility.test.ts | 新規 | 実bcrypt legacy互換テスト |
+| backend/src/lib/validation/auth.ts | 修正 | strong schema上限 |
+| backend/src/lib/validation/auth.test.ts | 新規 | schema境界テスト |
+| backend/src/test/password-byte-boundary-fixtures.ts | 新規 | backend共通fixture |
+| backend/src/routes/auth/login.test.ts | 修正 | legacyログイン互換 |
+| backend/src/routes/auth/register.test.ts | 修正 | 登録境界・副作用 |
+| backend/src/routes/auth/reset-password.test.ts | 修正 | reset境界・副作用 |
+| backend/src/routes/users/update-me.test.ts | 修正 | new/current境界 |
+| backend/src/routes/users/delete-me.test.ts | 修正 | current互換 |
+| backend/src/scripts/createAdmin.test.ts | 修正 | CLI境界・秘密非出力 |
+| backend/src/services/user.service.ts | 修正 | 実効同一性・競合排他 |
+| backend/src/services/user.service.test.ts | 修正 | legacy・競合テスト |
+| frontend/src/lib/validation/password.ts | 修正 | TextEncoder検証と共通hint |
+| frontend/src/lib/validation/password.test.ts | 新規 | frontend境界テスト |
+| frontend/src/lib/test/password-byte-boundary-fixtures.ts | 新規 | frontend共通fixture |
+| frontend/src/lib/test/svelte-client.ts | 修正 | page test用runtime |
+| frontend/src/routes/register/+page.svelte | 修正 | hint・ARIA・focus |
+| frontend/src/routes/register/register-page.test.ts | 新規 | 登録画面DOMテスト |
+| frontend/src/routes/reset-password/+page.svelte | 修正 | hint・ARIA・focus |
+| frontend/src/routes/reset-password/reset-password-page.test.ts | 新規 | reset画面DOMテスト |
+| frontend/src/routes/(app)/settings/+page.svelte | 修正 | field error分離・hint・focus |
+| frontend/src/routes/(app)/settings/settings-page.test.ts | 新規 | settings DOM/A11Yテスト |
+| frontend/src/routes/login/login-page.test.ts | 新規 | legacy入力互換テスト |
+| docs/02_security.md | 修正 | 上限・互換・競合方針 |
+| docs/04_api.md | 修正 | API入力契約・409 |
+| docs/05_progress.md | 修正 | 完了状態・PR |
+| docs/plans/bcrypt-password-byte-limit/plan.md | 新規 | 設計・レビュー・完了記録 |
 
 ### 検証結果
-- Backend format/lint/build/test:
-- Frontend format/lint/build/test:
-- Docker API/CLI:
-- UI/A11Y:
-```
+
+- Backend: lint / format:check / build 成功、Vitest 472 passed・1 skipped（明示実行integration）。
+- Frontend: lint / Prettier / svelte-check / build 成功、Vitest 448 passed。
+- Docker API: register 73バイトは400、`details.path = ["password"]`、ユーザー作成0件。
+- Docker CLI: 73バイトは終了コード2、ユーザー作成0件、入力値非出力。
+- Docker legacy: 73バイトで作成した既存形式hashへlogin 200・access token発行を確認。fixture・関連監査ログは確認後削除。
+- Browser UI/A11Y: registerでhint常時表示、73バイトerror、`aria-invalid`、hint/errorの `aria-describedby`、`maxlength` なし、password focus、console errorなしを確認。
+- DB: schema・migration差分なし。検証用ユーザーはPrisma経由で削除済み。
