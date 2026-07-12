@@ -111,10 +111,6 @@ export async function changeCurrentPassword(input: {
   const normalizedCurrentPassword = normalizePassword(input.currentPassword);
   const normalizedNewPassword = normalizePassword(input.newPassword);
 
-  if (normalizedCurrentPassword === normalizedNewPassword) {
-    throw new UserError(400, "新しいパスワードは現在のパスワードと異なるものにしてください");
-  }
-
   const user = await prisma.user.findUnique({
     where: { id: input.userId },
     select: { id: true, passwordHash: true, role: true },
@@ -129,13 +125,24 @@ export async function changeCurrentPassword(input: {
     throw new UserError(400, "現在のパスワードが正しくありません");
   }
 
+  const isNewPasswordSame = await bcrypt.compare(normalizedNewPassword, user.passwordHash);
+  if (isNewPasswordSame) {
+    throw new UserError(400, "新しいパスワードは現在のパスワードと異なるものにしてください");
+  }
+
   const newPasswordHash = await hashPassword(normalizedNewPassword);
 
   await prisma.$transaction(async (tx) => {
-    await tx.user.update({
-      where: { id: input.userId },
+    const passwordUpdate = await tx.user.updateMany({
+      where: {
+        id: input.userId,
+        passwordHash: user.passwordHash,
+      },
       data: { passwordHash: newPasswordHash },
     });
+    if (passwordUpdate.count !== 1) {
+      throw new UserError(409, "パスワードが既に変更されています。再ログインしてください");
+    }
     await tx.refreshToken.deleteMany({ where: { userId: input.userId } });
     await recordAuditEvent(tx, {
       action: AUDIT_ACTIONS.PASSWORD_CHANGE,

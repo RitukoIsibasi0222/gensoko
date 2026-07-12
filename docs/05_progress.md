@@ -159,7 +159,7 @@
 
 ## フェーズ11: セキュリティ・品質仕上げ
 
-- [ ] bcrypt 72バイト上限の入力検証統一（UTF-8バイト数、登録・変更・リセット・管理者CLI、既存ユーザー互換性、フロント表示、72/73バイト境界テスト）
+- [x] bcrypt 72バイト上限の入力検証統一（UTF-8バイト数、登録・変更・リセット・管理者CLI、既存ユーザー互換性、フロント表示、72/73バイト境界テスト） — 計画書: [`docs/plans/bcrypt-password-byte-limit/plan.md`](plans/bcrypt-password-byte-limit/plan.md) / PR: #82
 - [ ] セキュリティヘッダーミドルウェア（CSP/HSTS/X-Frame-Options/nosniff等）
 - [ ] APIレート制限の本番設計・適用（認証系 / 一般API / `POST /game/sessions`）
 - [ ] 監査ログ本番運用設計（保持期間・容量監視・cleanup・退会後の内部ID保持方針） — 計画書: [docs/plans/audit-log/plan.md](plans/audit-log/plan.md)

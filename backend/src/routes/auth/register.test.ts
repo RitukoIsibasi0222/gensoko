@@ -35,7 +35,12 @@ vi.mock("crypto", async (importOriginal) => {
 });
 
 import { mailer } from "../../lib/mail.js";
+import { PASSWORD_TOO_LONG_MESSAGE } from "../../lib/password.js";
 import { prisma } from "../../lib/prisma.js";
+import {
+  STRONG_PASSWORD_72_BYTES,
+  STRONG_PASSWORD_73_BYTES,
+} from "../../test/password-byte-boundary-fixtures.js";
 
 const app = new Hono();
 app.route("/auth", authRouter);
@@ -63,7 +68,7 @@ describe("POST /auth/register", () => {
       body: JSON.stringify({
         username: "taro123",
         email: "taro@example.com",
-        password: "Pass1234!",
+        password: STRONG_PASSWORD_72_BYTES,
       }),
     });
 
@@ -98,6 +103,31 @@ describe("POST /auth/register", () => {
     });
 
     expect(res.status).toBe(400);
+  });
+
+  it("バリデーション: 73バイトのパスワードは400を返し副作用を開始しない", async () => {
+    const res = await app.request("/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "taro123",
+        email: "taro@example.com",
+        password: STRONG_PASSWORD_73_BYTES,
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: "バリデーションエラー",
+      details: [
+        expect.objectContaining({
+          message: PASSWORD_TOO_LONG_MESSAGE,
+          path: ["password"],
+        }),
+      ],
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(mailer.sendMail).not.toHaveBeenCalled();
   });
 
   it("バリデーション: username が不正な形式の場合は 400 を返す", async () => {

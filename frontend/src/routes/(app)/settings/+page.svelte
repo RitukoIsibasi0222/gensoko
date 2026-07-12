@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { goto } from '$app/navigation';
   import { ApiError } from '$lib/api/errors';
   import {
@@ -10,7 +11,7 @@
   } from '$lib/api/users';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
-  import { validatePassword } from '$lib/validation/password';
+  import { PASSWORD_BYTE_LIMIT_HINT, validatePassword } from '$lib/validation/password';
   import { validateUsername } from '$lib/validation/username';
   import {
     validateConfirmPassword,
@@ -27,6 +28,9 @@
   let currentPassword = $state('');
   let newPassword = $state('');
   let confirmPassword = $state('');
+  let currentPasswordInput = $state<HTMLInputElement>();
+  let newPasswordInput = $state<HTMLInputElement>();
+  let confirmPasswordInput = $state<HTMLInputElement>();
 
   let deleteCurrentPassword = $state('');
   let deleteAcknowledged = $state(false);
@@ -40,7 +44,10 @@
   let isDeleting = $state(false);
 
   let profileError = $state<string | null>(null);
-  let passwordError = $state<string | null>(null);
+  let passwordFormError = $state<string | null>(null);
+  let currentPasswordError = $state<string | null>(null);
+  let newPasswordError = $state<string | null>(null);
+  let confirmPasswordError = $state<string | null>(null);
   let deleteError = $state<string | null>(null);
 
   $effect(() => {
@@ -74,7 +81,7 @@
     } else if (target === 'profile') {
       profileError = AUTH_REQUIRED_MESSAGE;
     } else if (target === 'password') {
-      passwordError = AUTH_REQUIRED_MESSAGE;
+      passwordFormError = AUTH_REQUIRED_MESSAGE;
     } else {
       deleteError = AUTH_REQUIRED_MESSAGE;
     }
@@ -204,17 +211,24 @@
     const normalizedNewPassword = newPassword.trim();
     const normalizedConfirmPassword = confirmPassword.trim();
 
-    passwordError = validateCurrentPassword(normalizedCurrentPassword);
-    if (!passwordError) {
-      passwordError = validatePassword(normalizedNewPassword);
+    passwordFormError = null;
+    currentPasswordError = validateCurrentPassword(normalizedCurrentPassword);
+    newPasswordError = validatePassword(normalizedNewPassword);
+    if (!newPasswordError && normalizedCurrentPassword === normalizedNewPassword) {
+      newPasswordError = '新しいパスワードは現在のパスワードと異なるものにしてください';
     }
-    if (!passwordError && normalizedCurrentPassword === normalizedNewPassword) {
-      passwordError = '新しいパスワードは現在のパスワードと異なるものにしてください';
-    }
-    if (!passwordError) {
-      passwordError = validateConfirmPassword(normalizedNewPassword, normalizedConfirmPassword);
-    }
-    if (passwordError) {
+    confirmPasswordError = validateConfirmPassword(
+      normalizedNewPassword,
+      normalizedConfirmPassword
+    );
+    if (currentPasswordError || newPasswordError || confirmPasswordError) {
+      await tick();
+      const firstInvalidInput = currentPasswordError
+        ? currentPasswordInput
+        : newPasswordError
+          ? newPasswordInput
+          : confirmPasswordInput;
+      firstInvalidInput?.focus();
       return;
     }
 
@@ -224,7 +238,6 @@
     }
 
     isPasswordSubmitting = true;
-    passwordError = null;
 
     try {
       await changeCurrentPassword({
@@ -244,11 +257,11 @@
         if (await handleUnauthorized(error)) {
           return;
         }
-        passwordError = error.message;
+        passwordFormError = error.message;
         toastStore.fromApiError(error);
       } else {
-        passwordError = NETWORK_ERROR_MESSAGE;
-        toastStore.error(passwordError);
+        passwordFormError = NETWORK_ERROR_MESSAGE;
+        toastStore.error(passwordFormError);
       }
     } finally {
       isPasswordSubmitting = false;
@@ -399,13 +412,13 @@
       </p>
 
       <form class="mt-4 space-y-4" novalidate onsubmit={handlePasswordSubmit}>
-        {#if passwordError}
+        {#if passwordFormError}
           <div
-            id="password-error"
+            id="password-form-error"
             role="alert"
             class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
           >
-            {passwordError}
+            {passwordFormError}
           </div>
         {/if}
 
@@ -417,11 +430,17 @@
             id="current-password"
             type="password"
             bind:value={currentPassword}
+            bind:this={currentPasswordInput}
             autocomplete="current-password"
-            aria-invalid={passwordError ? 'true' : undefined}
-            aria-describedby={passwordError ? 'password-error' : undefined}
+            aria-invalid={currentPasswordError ? 'true' : undefined}
+            aria-describedby={currentPasswordError ? 'current-password-error' : undefined}
             class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
           />
+          {#if currentPasswordError}
+            <p id="current-password-error" class="mt-1 text-sm text-red-600">
+              {currentPasswordError}
+            </p>
+          {/if}
         </div>
 
         <div>
@@ -432,11 +451,22 @@
             id="new-password"
             type="password"
             bind:value={newPassword}
+            bind:this={newPasswordInput}
             autocomplete="new-password"
-            aria-invalid={passwordError ? 'true' : undefined}
-            aria-describedby={passwordError ? 'password-error' : undefined}
+            aria-invalid={newPasswordError ? 'true' : undefined}
+            aria-describedby={newPasswordError
+              ? 'new-password-hint new-password-error'
+              : 'new-password-hint'}
             class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
           />
+          <p id="new-password-hint" class="mt-1 text-sm text-gray-600">
+            {PASSWORD_BYTE_LIMIT_HINT}
+          </p>
+          {#if newPasswordError}
+            <p id="new-password-error" class="mt-1 text-sm text-red-600">
+              {newPasswordError}
+            </p>
+          {/if}
         </div>
 
         <div>
@@ -447,11 +477,17 @@
             id="confirm-password"
             type="password"
             bind:value={confirmPassword}
+            bind:this={confirmPasswordInput}
             autocomplete="new-password"
-            aria-invalid={passwordError ? 'true' : undefined}
-            aria-describedby={passwordError ? 'password-error' : undefined}
+            aria-invalid={confirmPasswordError ? 'true' : undefined}
+            aria-describedby={confirmPasswordError ? 'confirm-password-error' : undefined}
             class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
           />
+          {#if confirmPasswordError}
+            <p id="confirm-password-error" class="mt-1 text-sm text-red-600">
+              {confirmPasswordError}
+            </p>
+          {/if}
         </div>
 
         <button

@@ -51,6 +51,11 @@ import {
   updateCurrentUsername,
   UserError,
 } from "../../services/user.service.js";
+import { PASSWORD_TOO_LONG_MESSAGE } from "../../lib/password.js";
+import {
+  STRONG_PASSWORD_72_BYTES,
+  STRONG_PASSWORD_73_BYTES,
+} from "../../test/password-byte-boundary-fixtures.js";
 
 const app = new Hono();
 app.route("/users", usersRouter);
@@ -139,7 +144,10 @@ describe("PATCH /users/me", () => {
         Authorization: "Bearer valid-token",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ currentPassword: "OldPass1!", newPassword: "NewPass1!" }),
+      body: JSON.stringify({
+        currentPassword: "OldPass1!",
+        newPassword: STRONG_PASSWORD_72_BYTES,
+      }),
     });
 
     expect(res.status).toBe(200);
@@ -157,6 +165,55 @@ describe("PATCH /users/me", () => {
         (cookie) => cookie.includes("refreshToken=") && cookie.includes("Path=/auth/refresh"),
       ),
     ).toBe(true);
+  });
+
+  it("73バイトのnewPasswordは400を返しサービス層を呼び出さない", async () => {
+    const res = await app.request("/users/me", {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        currentPassword: "OldPass1!",
+        newPassword: STRONG_PASSWORD_73_BYTES,
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: "バリデーションエラー",
+      details: [
+        expect.objectContaining({
+          message: PASSWORD_TOO_LONG_MESSAGE,
+          path: ["newPassword"],
+        }),
+      ],
+    });
+    expect(changeCurrentPassword).not.toHaveBeenCalled();
+  });
+
+  it("73バイトのcurrentPasswordは上限拒否せず完全な値をサービス層へ渡す", async () => {
+    vi.mocked(changeCurrentPassword).mockResolvedValue();
+
+    const res = await app.request("/users/me", {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        currentPassword: STRONG_PASSWORD_73_BYTES,
+        newPassword: "NewPass1!",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(changeCurrentPassword).toHaveBeenCalledWith({
+      userId: "user-1",
+      currentPassword: STRONG_PASSWORD_73_BYTES,
+      newPassword: "NewPass1!",
+    });
   });
 
   it("現在のパスワード誤り時は400を返す", async () => {
