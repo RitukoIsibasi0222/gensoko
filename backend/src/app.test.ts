@@ -57,7 +57,30 @@ describe("createApp", () => {
     const response = await createConfiguredApp(false).request("/not-found");
 
     expect(response.status).toBe(404);
+    expect(response.headers.get("Content-Type")).toContain("application/json");
+    expect(await response.json()).toEqual({ error: "エンドポイントが見つかりません" });
     expectSecurityHeaders(response);
+  });
+
+  it("未捕捉例外を内部情報を含まない日本語JSONへ変換する", async () => {
+    const app = createConfiguredApp(false);
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    app.get("/test-unhandled-error", () => {
+      throw new Error("DB接続先: postgres://secret@example.invalid");
+    });
+
+    try {
+      const response = await app.request("/test-unhandled-error");
+
+      expect(response.status).toBe(500);
+      expect(response.headers.get("Content-Type")).toContain("application/json");
+      expect(await response.json()).toEqual({ error: "サーバーエラーが発生しました" });
+      expectSecurityHeaders(response);
+      expect(consoleErrorSpy).toHaveBeenCalledWith("未捕捉のサーバーエラーが発生しました");
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it("認証なしの401レスポンスにもセキュリティヘッダーを付与する", async () => {

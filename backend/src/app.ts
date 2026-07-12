@@ -15,8 +15,18 @@ export type CreateAppOptions = {
   isProduction: boolean;
 };
 
+const NOT_FOUND_MESSAGE = "エンドポイントが見つかりません";
+const INTERNAL_SERVER_ERROR_MESSAGE = "サーバーエラーが発生しました";
+const UNHANDLED_ERROR_LOG_MESSAGE = "未捕捉のサーバーエラーが発生しました";
+
 export const createApp = ({ isProduction }: CreateAppOptions) => {
   const app = new Hono<{ Variables: AppVariables }>();
+
+  app.notFound((c) => c.json({ error: NOT_FOUND_MESSAGE }, 404));
+  app.onError((_error, c) => {
+    console.error(UNHANDLED_ERROR_LOG_MESSAGE);
+    return c.json({ error: INTERNAL_SERVER_ERROR_MESSAGE }, 500);
+  });
 
   // CORSのpreflight早期応答にも付与するため、securityはCORSより外側に置く。
   app.use("*", logger());

@@ -6,11 +6,16 @@ const EXPECTED_CSP =
   "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
 const EXPECTED_HSTS = "max-age=31536000; includeSubDomains";
 const EXPECTED_PERMISSIONS_POLICY = "camera=(), microphone=(), geolocation=()";
+const INTERNAL_SERVER_ERROR_MESSAGE = "サーバーエラーが発生しました";
 
 const createTestApp = (isProduction: boolean) => {
   const app = new Hono();
 
   app.use("*", createSecurityHeadersMiddleware({ isProduction }));
+  app.onError((error, c) => {
+    console.error(error);
+    return c.json({ error: INTERNAL_SERVER_ERROR_MESSAGE }, 500);
+  });
   app.get("/", (c) => c.json({ ok: true }));
   app.get("/error", () => {
     throw new Error("テスト用エラー");
@@ -78,14 +83,14 @@ describe("createSecurityHeadersMiddleware", () => {
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
   });
 
-  it("downstreamの500レスポンスにもヘッダーを付与しstatusとbodyを変えない", async () => {
+  it("downstreamの500 JSONにもヘッダーを付与し共通エラー契約を維持する", async () => {
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     try {
       const response = await createTestApp(false).request("/error");
 
       expect(response.status).toBe(500);
-      expect(await response.text()).toBe("Internal Server Error");
+      expect(await response.json()).toEqual({ error: INTERNAL_SERVER_ERROR_MESSAGE });
       expectCommonSecurityHeaders(response);
       expect(consoleErrorSpy).toHaveBeenCalledOnce();
     } finally {
