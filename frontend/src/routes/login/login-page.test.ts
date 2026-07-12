@@ -31,6 +31,20 @@ function setInputValue(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function mountAndSubmitLogin(): HTMLDivElement {
+  const target = document.createElement('div');
+  document.body.appendChild(target);
+  mounted = mount(LoginPage, { target });
+
+  setInputValue(target.querySelector('#email') as HTMLInputElement, 'taro@example.com');
+  setInputValue(target.querySelector('#password') as HTMLInputElement, 'StrongPass1!');
+  (target.querySelector('form') as HTMLFormElement).dispatchEvent(
+    new SubmitEvent('submit', { bubbles: true, cancelable: true })
+  );
+
+  return target;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.fetch.mockResolvedValue({
@@ -76,5 +90,53 @@ describe('/login existing-password compatibility', () => {
       password: STRONG_PASSWORD_73_BYTES
     });
     expect(passwordInput.hasAttribute('maxlength')).toBe(false);
+  });
+});
+
+describe('/login rate-limit error handling', () => {
+  it('429 JSONの日本語messageをrole=alertへ表示する', async () => {
+    const message = 'リクエストが多すぎます。しばらく待ってから再試行してください';
+    mocks.fetch.mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: vi.fn().mockResolvedValue({ error: message })
+    });
+
+    const target = mountAndSubmitLogin();
+
+    await vi.waitFor(() => {
+      expect(target.querySelector('[role="alert"]')?.textContent).toContain(message);
+    });
+    expect((target.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(
+      false
+    );
+  });
+
+  it('非JSONの429はログイン用fallbackをrole=alertへ表示する', async () => {
+    mocks.fetch.mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: vi.fn().mockRejectedValue(new SyntaxError('Unexpected token'))
+    });
+
+    const target = mountAndSubmitLogin();
+
+    await vi.waitFor(() => {
+      expect(target.querySelector('[role="alert"]')?.textContent).toContain(
+        'リクエストが多すぎます。しばらく経ってから再試行してください'
+      );
+    });
+  });
+
+  it('ネットワークエラーは接続確認messageをrole=alertへ表示する', async () => {
+    mocks.fetch.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    const target = mountAndSubmitLogin();
+
+    await vi.waitFor(() => {
+      expect(target.querySelector('[role="alert"]')?.textContent).toContain(
+        'ネットワークエラーが発生しました。接続を確認してください'
+      );
+    });
   });
 });

@@ -792,7 +792,7 @@ DOはschemaを`new_sqlite_classes` migrationとして追加し、stagingとprodu
 - [x] T9: store契約/memory/middlewareを実装する
 - [x] T10: app/route integrationをRed化する
 - [x] T11: app/auth/users/gameへ配線する
-- [ ] T12: frontend回帰testを追加する
+- [x] T12: frontend回帰testを追加する
 - [ ] T13: Durable Object testをRed化する
 - [ ] T14: SQLite-backed Durable Object/store adapterを実装する
 - [ ] T15: staging WAF/DOを適用する

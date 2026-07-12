@@ -37,6 +37,47 @@ describe('parseErrorBody', () => {
 });
 
 describe('parseErrorResponse', () => {
+  it.each([
+    [429, 'リクエストが多すぎます。しばらく待ってから再試行してください'],
+    [503, '一時的に利用できません。しばらく待ってから再試行してください']
+  ])(
+    'レート制限系のJSON応答(%i)はstatus・日本語message・bodyを保持する',
+    async (status, message) => {
+      const body = { error: message };
+      const response = new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      try {
+        await parseErrorResponse(response, 'フォールバックメッセージ');
+        expect.fail('ApiError が throw されるべき');
+      } catch (error) {
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(status);
+        expect((error as ApiError).message).toBe(message);
+        expect((error as ApiError).body).toEqual(body);
+      }
+    }
+  );
+
+  it('非JSONの429応答は指定したfallbackとbody=nullを保持する', async () => {
+    const response = new Response('Too Many Requests', {
+      status: 429,
+      headers: { 'Content-Type': 'text/plain' }
+    });
+
+    try {
+      await parseErrorResponse(response, 'しばらく待ってから再試行してください');
+      expect.fail('ApiError が throw されるべき');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(429);
+      expect((error as ApiError).message).toBe('しばらく待ってから再試行してください');
+      expect((error as ApiError).body).toBeNull();
+    }
+  });
+
   it('details[0].message を優先してメッセージにする', async () => {
     const response = new Response(
       JSON.stringify({ error: 'エラー', details: [{ message: 'バリデーションエラー詳細' }] }),

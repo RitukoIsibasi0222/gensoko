@@ -368,6 +368,74 @@ describe('submitGameSession', () => {
     ).rejects.toThrow('問題セットの有効期限が切れています');
   });
 
+  it('レート制限: 429 JSONのstatus・日本語message・bodyを保持する', async () => {
+    const body = {
+      error: 'リクエストが多すぎます。しばらく待ってから再試行してください'
+    };
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(body), {
+        status: 429,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    try {
+      await submitGameSession({
+        questionSetId: 'question-set-1',
+        mode: 'SYMBOL_TO_NAME_LV1',
+        accessToken: 'test-access-token',
+        durationSec: 4,
+        answers: [{ questionId: 'q1', chosenChoiceId: '1', answerTimeSec: 4 }]
+      });
+      expect.fail('ApiError が throw されるべき');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(429);
+      expect((error as ApiError).message).toBe(body.error);
+      expect((error as ApiError).body).toEqual(body);
+    }
+  });
+
+  it('レート制限: 非JSONの429はゲーム送信用fallbackとbody=nullを保持する', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response('Too Many Requests', {
+        status: 429,
+        headers: { 'Content-Type': 'text/plain' }
+      })
+    );
+
+    try {
+      await submitGameSession({
+        questionSetId: 'question-set-1',
+        mode: 'SYMBOL_TO_NAME_LV1',
+        accessToken: 'test-access-token',
+        durationSec: 4,
+        answers: [{ questionId: 'q1', chosenChoiceId: '1', answerTimeSec: 4 }]
+      });
+      expect.fail('ApiError が throw されるべき');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(429);
+      expect((error as ApiError).message).toBe('ゲーム結果の送信に失敗しました');
+      expect((error as ApiError).body).toBeNull();
+    }
+  });
+
+  it('ネットワークエラー: fetchの拒否理由を上位の画面処理へ伝播する', async () => {
+    const networkError = new TypeError('Failed to fetch');
+    vi.mocked(fetch).mockRejectedValue(networkError);
+
+    await expect(
+      submitGameSession({
+        questionSetId: 'question-set-1',
+        mode: 'SYMBOL_TO_NAME_LV1',
+        accessToken: 'test-access-token',
+        durationSec: 4,
+        answers: [{ questionId: 'q1', chosenChoiceId: '1', answerTimeSec: 4 }]
+      })
+    ).rejects.toBe(networkError);
+  });
+
   it('HTTPエラー: 非 JSON レスポンスの場合はデフォルトメッセージを使う', async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response('Bad Gateway', {
