@@ -12,7 +12,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko
       - NODE_ENV=development
-      - JWT_SECRET=your-super-secret-key-change-this
       - MAIL_HOST=mailpit
       - MAIL_PORT=1025
       - FRONTEND_URL=http://localhost:5174
