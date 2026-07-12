@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { getFrontendUrl } from "./lib/config.js";
 import { createSecurityHeadersMiddleware } from "./middleware/security/index.js";
 import { adminRouter } from "./routes/admin/index.js";
 import { authRouter } from "./routes/auth/index.js";
@@ -21,6 +22,7 @@ const UNHANDLED_ERROR_LOG_MESSAGE = "未捕捉のサーバーエラーが発生�
 
 export const createApp = ({ isProduction }: CreateAppOptions) => {
   const app = new Hono<{ Variables: AppVariables }>();
+  const frontendUrl = getFrontendUrl({ isProduction });
 
   app.notFound((c) => c.json({ error: NOT_FOUND_MESSAGE }, 404));
   app.onError((_error, c) => {
@@ -34,7 +36,7 @@ export const createApp = ({ isProduction }: CreateAppOptions) => {
   app.use(
     "*",
     cors({
-      origin: process.env.FRONTEND_URL ?? "http://localhost:5174",
+      origin: frontendUrl,
       allowHeaders: ["Content-Type", "Authorization"],
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       credentials: true,

@@ -2,17 +2,13 @@ import { AuditResult, type Prisma, type Role } from "@prisma/client";
 import { createHash, randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { sign } from "hono/jwt";
+import { getFrontendUrl } from "../lib/config.js";
 import { mailer } from "../lib/mail.js";
 import { normalizePassword } from "../lib/normalize.js";
 import { hashPassword } from "../lib/password.js";
 import { prisma } from "../lib/prisma.js";
 import { AUDIT_ACTIONS, AUDIT_FAILURE_REASONS, AUDIT_TARGET_TYPES } from "./audit-events.js";
 import { recordAuditEvent, recordAuditEventBestEffort } from "./audit.service.js";
-
-/** フロントエンドのベース URL を返す。環境変数が未設定の場合は開発用デフォルトを使用する */
-function getFrontendBaseUrl(): string {
-  return process.env.FRONTEND_URL ?? "http://localhost:5174";
-}
 
 export class AuthError extends Error {
   constructor(
@@ -105,7 +101,7 @@ export async function register(input: {
 
   // 5. メール送信（DB 確定後に実行。DB トランザクション内で外部 I/O を待たないよう分離）
   // 送信失敗時はユーザーを補償的に削除する（EmailVerification は onDelete: Cascade で自動削除）
-  const verifyUrl = `${getFrontendBaseUrl()}/verify-email?token=${token}`;
+  const verifyUrl = `${getFrontendUrl()}/verify-email?token=${token}`;
   try {
     await mailer.sendMail({
       from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
@@ -515,7 +511,7 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
   const token = randomBytes(32).toString("hex");
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
-  const resetUrl = `${getFrontendBaseUrl()}/reset-password?token=${token}`;
+  const resetUrl = `${getFrontendUrl()}/reset-password?token=${token}`;
 
   // 4. トークンをDBに確定（upsert で原子的に置き換え）
   await prisma.passwordResetToken.upsert({

@@ -123,6 +123,24 @@ describe("createApp", () => {
     expect(developmentResponse.headers.has("Strict-Transport-Security")).toBe(false);
   });
 
+  it("productionでFRONTEND_URLが未設定ならapp構築時にfail-fastする", () => {
+    vi.stubEnv("FRONTEND_URL", "");
+
+    expect(() => createApp({ isProduction: true })).toThrow(
+      "production環境ではFRONTEND_URLの設定が必要です",
+    );
+  });
+
+  it("developmentではFRONTEND_URL未設定時にlocalhostを許可する", async () => {
+    vi.stubEnv("FRONTEND_URL", "");
+    const response = await createApp({ isProduction: false }).request(
+      "/api/v1/auth/login",
+      createPreflightRequest(ALLOWED_ORIGIN),
+    );
+
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(ALLOWED_ORIGIN);
+  });
+
   it("app factory分離後も既存の全route prefixを登録する", () => {
     const registeredPaths = createConfiguredApp(false).routes.map(({ path }) => path);
     const expectedPrefixes = [

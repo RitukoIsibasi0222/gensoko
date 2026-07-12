@@ -7,13 +7,14 @@ const EXPECTED_CSP =
 const EXPECTED_HSTS = "max-age=31536000; includeSubDomains";
 const EXPECTED_PERMISSIONS_POLICY = "camera=(), microphone=(), geolocation=()";
 const INTERNAL_SERVER_ERROR_MESSAGE = "サーバーエラーが発生しました";
+const UNHANDLED_ERROR_LOG_MESSAGE = "未捕捉のサーバーエラーが発生しました";
 
 const createTestApp = (isProduction: boolean) => {
   const app = new Hono();
 
   app.use("*", createSecurityHeadersMiddleware({ isProduction }));
-  app.onError((error, c) => {
-    console.error(error);
+  app.onError((_error, c) => {
+    console.error(UNHANDLED_ERROR_LOG_MESSAGE);
     return c.json({ error: INTERNAL_SERVER_ERROR_MESSAGE }, 500);
   });
   app.get("/", (c) => c.json({ ok: true }));
@@ -92,7 +93,7 @@ describe("createSecurityHeadersMiddleware", () => {
       expect(response.status).toBe(500);
       expect(await response.json()).toEqual({ error: INTERNAL_SERVER_ERROR_MESSAGE });
       expectCommonSecurityHeaders(response);
-      expect(consoleErrorSpy).toHaveBeenCalledOnce();
+      expect(consoleErrorSpy).toHaveBeenCalledWith(UNHANDLED_ERROR_LOG_MESSAGE);
     } finally {
       consoleErrorSpy.mockRestore();
     }
