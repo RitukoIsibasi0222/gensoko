@@ -48,7 +48,7 @@ export const createApp = ({ isProduction, rateLimit: rateLimitDependencies }: Cr
   );
 
   // store・秘密鍵・信頼済みIP取得方法はapp単位で注入し、route間で共有する。
-  app.use("/api/v1/*", async (c, next) => {
+  app.use("*", async (c, next) => {
     c.set("rateLimit", rateLimitDependencies);
     await next();
   });

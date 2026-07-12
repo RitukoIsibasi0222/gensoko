@@ -52,7 +52,7 @@ async function createBucket(input: {
 
     return { policyId: input.policyId, keyDigest };
   } catch {
-    // Treat runtime HMAC failures as unavailable keys without exposing raw errors.
+    // runtimeのHMAC障害はraw errorを露出せず、キー取得不能として扱う。
     return { policyId: input.policyId, keyDigest: null };
   }
 }
@@ -64,7 +64,7 @@ async function resolveIpSafely(
   try {
     return await dependencies.resolveIp(context);
   } catch {
-    // Let the middleware apply the policy failure mode without exposing resolver errors.
+    // resolverのraw errorを露出せず、middlewareにpolicyのfailure modeを適用させる。
     return null;
   }
 }
