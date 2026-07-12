@@ -133,10 +133,16 @@ export async function changeCurrentPassword(input: {
   const newPasswordHash = await hashPassword(normalizedNewPassword);
 
   await prisma.$transaction(async (tx) => {
-    await tx.user.update({
-      where: { id: input.userId },
+    const passwordUpdate = await tx.user.updateMany({
+      where: {
+        id: input.userId,
+        passwordHash: user.passwordHash,
+      },
       data: { passwordHash: newPasswordHash },
     });
+    if (passwordUpdate.count !== 1) {
+      throw new UserError(409, "パスワードが既に変更されています。再ログインしてください");
+    }
     await tx.refreshToken.deleteMany({ where: { userId: input.userId } });
     await recordAuditEvent(tx, {
       action: AUDIT_ACTIONS.PASSWORD_CHANGE,

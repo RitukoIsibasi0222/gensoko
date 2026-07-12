@@ -236,13 +236,13 @@ describe("changeCurrentPassword", () => {
       .mockResolvedValueOnce(false as never);
     vi.mocked(bcrypt.hash).mockResolvedValue("$2b$12$newhash" as never);
 
-    const txUserUpdate = vi.fn().mockResolvedValue({});
+    const txUserUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
     const txRefreshDeleteMany = vi.fn().mockResolvedValue({ count: 1 });
     const txAuditLogCreate = vi.fn().mockResolvedValue({});
 
     vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
       return fn({
-        user: { update: txUserUpdate },
+        user: { updateMany: txUserUpdateMany },
         refreshToken: { deleteMany: txRefreshDeleteMany },
         auditLog: { create: txAuditLogCreate },
       } as never);
@@ -254,9 +254,12 @@ describe("changeCurrentPassword", () => {
       newPassword: "NewPass1!",
     });
 
-    expect(txUserUpdate).toHaveBeenCalledWith(
+    expect(txUserUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "user-1" },
+        where: {
+          id: "user-1",
+          passwordHash: "$2b$12$hash",
+        },
         data: { passwordHash: "$2b$12$newhash" },
       }),
     );
@@ -286,13 +289,13 @@ describe("changeCurrentPassword", () => {
       .mockResolvedValueOnce(false as never);
     vi.mocked(bcrypt.hash).mockResolvedValue("$2b$12$newhash" as never);
 
-    const txUserUpdate = vi.fn().mockResolvedValue({});
+    const txUserUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
     const txRefreshDeleteMany = vi.fn().mockResolvedValue({ count: 1 });
     const txAuditLogCreate = vi.fn().mockRejectedValue(new Error("audit insert failed"));
 
     vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
       return fn({
-        user: { update: txUserUpdate },
+        user: { updateMany: txUserUpdateMany },
         refreshToken: { deleteMany: txRefreshDeleteMany },
         auditLog: { create: txAuditLogCreate },
       } as never);
@@ -306,9 +309,54 @@ describe("changeCurrentPassword", () => {
       }),
     ).rejects.toThrow("audit insert failed");
 
-    expect(txUserUpdate).toHaveBeenCalledOnce();
+    expect(txUserUpdateMany).toHaveBeenCalledOnce();
     expect(txRefreshDeleteMany).toHaveBeenCalledOnce();
     expect(txAuditLogCreate).toHaveBeenCalledOnce();
+  });
+
+  it("競合系: 照合後にパスワードが変更済みなら409で副作用を開始しない", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      passwordHash: "$2b$12$oldhash",
+      role: "USER",
+    } as never);
+    vi.mocked(bcrypt.compare)
+      .mockResolvedValueOnce(true as never)
+      .mockResolvedValueOnce(false as never);
+    vi.mocked(bcrypt.hash).mockResolvedValue("$2b$12$newhash" as never);
+
+    const txUserUpdateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const txRefreshDeleteMany = vi.fn();
+    const txAuditLogCreate = vi.fn();
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+      return fn({
+        user: { updateMany: txUserUpdateMany },
+        refreshToken: { deleteMany: txRefreshDeleteMany },
+        auditLog: { create: txAuditLogCreate },
+      } as never);
+    });
+
+    await expect(
+      changeCurrentPassword({
+        userId: "user-1",
+        currentPassword: "OldPass1!",
+        newPassword: "NewPass1!",
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "パスワードが既に変更されています。再ログインしてください",
+    });
+
+    expect(txUserUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: "user-1",
+        passwordHash: "$2b$12$oldhash",
+      },
+      data: { passwordHash: "$2b$12$newhash" },
+    });
+    expect(txRefreshDeleteMany).not.toHaveBeenCalled();
+    expect(txAuditLogCreate).not.toHaveBeenCalled();
   });
 
   it("異常系: 新旧パスワードが同一なら UserError(400) を投げる", async () => {
