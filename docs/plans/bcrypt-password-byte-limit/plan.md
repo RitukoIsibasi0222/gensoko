@@ -36,6 +36,7 @@ DBのbcryptハッシュから元のパスワード長は判別できないため
 | 独自UTF-8計算はbcryptとずれ得る | 確認できた事実: bcryptjs 3.0.3は `truncates()` を公開 | Unicode端点の差 | backendは同APIをラップ | High |
 | 照合入力へ上限を適用できない | 確認できた事実: login/currentPasswordはstrong schemaを使わない | 既存利用者締め出し | 新規保存用schemaと照合schemaを分離 | High |
 | 文字列比較では実効同一性を検出不能 | 確認できた事実: change serviceは完全一致だけを拒否 | 旧73バイト以上から先頭72へ変更しても資格情報不変 | 新値も既存hashへcompare | High |
+| 照合後の無条件更新に競合窓がある | 確認できた事実: 旧実装はIDだけでupdate | 同じcurrentPasswordの並行要求が両方成功し後勝ちになる | IDと旧hashを条件にupdateManyし、0件は409でrollback | High |
 | package間で定数を物理共有できない | 確認できた事実: backend/frontendは別package | 定数・messageのドリフト | 各packageで一元化し契約testで同期 | Medium |
 | API client変更は不要 | 確認できた事実: users clientはpayloadとZod detailsを保持 | 不要な回帰範囲 | page validationとerror回帰testのみ | Low |
 
@@ -146,10 +147,12 @@ bcryptjs 3.0.3はUTF-8変換後の先頭72バイトだけをhash対象とする�
 | `backend/src/routes/users/delete-me.test.ts` | 修正 | current互換 |
 | `backend/src/services/user.service.ts` | 修正 | 実効同一性 |
 | `backend/src/services/user.service.test.ts` | 修正 | legacy・先頭72拒否 |
+| `backend/src/test/password-byte-boundary-fixtures.ts` | 新規 | backend共通境界fixture |
 | `backend/src/scripts/createAdmin.test.ts` | 修正 | CLI境界 |
 | `frontend/src/lib/validation/password.ts` | 修正 | TextEncoder検証 |
 | `frontend/src/lib/validation/password.test.ts` | 新規 | 共通境界 |
-| `frontend/src/routes/register/validation.test.ts` | 修正 | 重複整理 |
+| `frontend/src/lib/test/password-byte-boundary-fixtures.ts` | 新規 | frontend共通境界fixture |
+| `frontend/src/lib/test/svelte-client.ts` | 修正 | page test用client runtime |
 | `frontend/src/routes/register/+page.svelte` | 修正 | hint/ARIA/focus |
 | `frontend/src/routes/register/register-page.test.ts` | 新規 | UI test |
 | `frontend/src/routes/reset-password/+page.svelte` | 修正 | hint/ARIA/focus |
@@ -187,7 +190,9 @@ page testが既存harnessでは過度に複雑な場合、共通validationと薄
 2. 不一致なら既存400。new compare/hashなし。
 3. 一致後、newも同じhashへcompareする。
 4. trueなら文字列が異なっても既存の「異なるもの」400。
-5. falseだけ新hash・transaction・token削除・監査へ進む。
+5. falseだけ新hash・transactionへ進む。
+6. transaction内でIDと照合時の旧hashを条件に更新し、0件なら競合として409でrollbackする。
+7. 1件更新時だけtoken削除・監査へ進む。
 
 ### UI / A11Y
 
@@ -204,6 +209,7 @@ page testが既存harnessでは過度に複雑な場合、共通validationと薄
 
 - schema、migration、index、relation、unique、nullable、cascade変更なし。
 - query追加、N+1、raw SQLなし。
+- パスワード更新は主キーIDと旧hashを条件にした単一の `updateMany` とし、追加SELECTなしで並行更新を検出する。
 - 既存hash更新なし。新hash形式・cost 12は不変。
 - DB変更が必要なら停止し、expand/contract、deploy、rollback、Playwrightを追加して再レビューする。
 
@@ -282,6 +288,7 @@ fixtureは全強度条件を満たし、test内で実byte数72/73をassertする
 | legacy currentから別new | 成功 |
 | legacy currentから先頭72 | bcrypt上同一で400 |
 | current不一致 | new compareなしで400 |
+| 照合後に別要求が先行してhash更新 | 409・token削除なし・成功監査なし |
 | validation | error/details/path/message |
 | 他status | 既存仕様維持 |
 
@@ -393,7 +400,7 @@ frontend先行ではAPI直接利用を防げないためbackend先行を必須�
 - [x] T12: security/API docs
 - [x] T13: backend品質
 - [x] T14: frontend品質
-- [x] T15: Docker確認
+- [ ] T15: Docker確認
 - [ ] T16: 完了文書・PR
 
 ### タブ区切り
