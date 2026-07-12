@@ -18,6 +18,14 @@
 | POST | `/auth/forgot-password` | パスワードリセットメール送信 | なし |
 | POST | `/auth/reset-password` | パスワードリセット実行 | なし |
 
+### パスワード入力の共通方針
+
+- 新しくbcryptハッシュとして保存する `/auth/register` の `password`、`/auth/reset-password` の `password`、`PATCH /users/me` の `newPassword` は、正規化後のUTF-8表現で72バイト以内とする。
+- 73バイト以上は400バリデーションエラーとし、`details[].message` は「パスワードはUTF-8で72バイト以内にしてください」とする。
+- `details[].path` は登録・リセットでは `["password"]`、パスワード変更では `["newPassword"]` とする。
+- 照合用のログイン `password`、パスワード変更・アカウント削除の `currentPassword` には72バイト上限を適用しない。既存ユーザー互換性のため、正規化後の完全な値を比較する。
+- バイト数は文字数ではなくUTF-8表現で数える。ASCII、日本語、絵文字のいずれも72バイトは受理し、73バイトは新規保存値として拒否する。
+
 ### POST `/auth/register`
 ```
 Request:
@@ -82,9 +90,30 @@ Error:
 
 ### POST `/auth/reset-password`
 
+Request:
+
+    {
+      "token": "64文字のhexトークン",
+      "password": "NewPass1!"
+    }
+
+Response 200:
+
+    {
+      "message": "パスワードをリセットしました"
+    }
+
+- `password` は強度要件とUTF-8・72バイト上限に従う。
+- 72バイト超過を含む入力検証失敗時は、トークン検索・パスワード更新・トークン削除を開始しない。
 - 成功時だけ `PASSWORD_RESET / SUCCESS` を、password更新・reset token削除・refresh token削除と同一transactionで記録する。
 - actorは`null`、targetはtoken recordから特定した内部user IDとする。無効・期限切れ・使用済みtokenによる失敗は監査対象外。
 - password、password hash、reset token、token hash、request body、raw errorは保存しない。
+
+Error:
+- 400: バリデーションエラー / トークンの有効期限が切れています / 無効または期限切れのトークンです
+- 404: 無効なトークンです
+- 429: リクエストが多すぎます。しばらく待ってから再試行してください
+- 500: サーバーエラーが発生しました
 
 ---
 
@@ -481,6 +510,7 @@ Error:
 
 > **注意**: `details` フィールドはバリデーションエラー時にのみ追加されます（Zod の Issue 配列）。
 > その他のエラー（401/403/404等）は基本形式のみです。
+> パスワードのUTF-8・72バイト上限違反も同じ形式で返し、`message` と `path` は上記「パスワード入力の共通方針」に従います。
 
 **ステータスコード一覧**:
 
@@ -731,8 +761,9 @@ Cookie:
 
 Validation:
 - `username` は username schema に従う
-- `currentPassword` は空文字不可
-- `newPassword` は strong password schema に従う
+- `currentPassword` は空文字不可。既存ユーザー照合値のためUTF-8・72バイト上限は適用しない
+- `newPassword` は strong password schema とUTF-8・72バイト上限に従う
+- `newPassword` が既存ハッシュとbcrypt上同一になる場合は拒否する。既存の72バイト超パスワードの先頭72バイトへの変更も同一として扱う
 - `username` と `currentPassword/newPassword` を混在させた payload は 400
 - username 変更は同じ username の場合も 200 で現在値を返す
 
@@ -755,6 +786,10 @@ Request:
     {
       "currentPassword": "Pass1234!"
     }
+
+Validation:
+- `currentPassword` は空文字不可
+- 既存ユーザー照合値のためUTF-8・72バイト上限は適用せず、正規化後の完全な値を比較する
 
 Response 200:
 

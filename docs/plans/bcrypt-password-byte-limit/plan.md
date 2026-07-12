@@ -379,21 +379,21 @@ frontend先行ではAPI直接利用を防げないためbackend先行を必須�
 | T15 | Docker確認 | 境界・legacy・keyboard | High |
 | T16 | 完了文書・PR | `[x]`・完了・PR | High |
 
-- [ ] T1: 経路棚卸し・進捗更新
-- [ ] T2: backend共通境界Red
-- [ ] T3: API/CLI/互換性Red
-- [ ] T4: backend判定・guard
-- [ ] T5: 実効同一性
-- [ ] T6: backend Refactor
-- [ ] T7: frontend validation
-- [ ] T8: register UI/A11Y
-- [ ] T9: reset UI/A11Y
-- [ ] T10: settings error分離
-- [ ] T11: 照合入力UI互換
-- [ ] T12: security/API docs
-- [ ] T13: backend品質
-- [ ] T14: frontend品質
-- [ ] T15: Docker確認
+- [x] T1: 経路棚卸し・進捗更新
+- [x] T2: backend共通境界Red
+- [x] T3: API/CLI/互換性Red
+- [x] T4: backend判定・guard
+- [x] T5: 実効同一性
+- [x] T6: backend Refactor
+- [x] T7: frontend validation
+- [x] T8: register UI/A11Y
+- [x] T9: reset UI/A11Y
+- [x] T10: settings error分離
+- [x] T11: 照合入力UI互換
+- [x] T12: security/API docs
+- [x] T13: backend品質
+- [x] T14: frontend品質
+- [x] T15: Docker確認
 - [ ] T16: 完了文書・PR
 
 ### タブ区切り
