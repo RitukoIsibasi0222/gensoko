@@ -864,15 +864,16 @@ Workers test scriptと`wrangler dev`確認コマンドは、フェーズ12で採
 | `backend/src/middleware/rateLimit/key.ts`, `key.test.ts` | 新規 | actor正規化、IP信頼境界、HMAC key |
 | `backend/src/middleware/rateLimit/store.ts` | 新規 | store・bucket・依存注入契約 |
 | `backend/src/middleware/rateLimit/in-memory-store.ts`, `in-memory-store.test.ts` | 新規 | development/test用fixed-window store |
-| `backend/src/middleware/rateLimit/buckets.ts` | 新規 | IP/email/user bucket resolver |
+| `backend/src/middleware/rateLimit/buckets.ts`, `buckets.test.ts` | 新規・修正 | IP/email/user bucket resolverとキー解決障害時のfailure mode test |
 | `backend/src/middleware/rateLimit/index.ts`, `rateLimit.test.ts` | 修正 | 複数bucket・429/503・failure mode |
-| `backend/src/app.ts`, `app.test.ts`, `app.rate-limit.test.ts` | 修正・新規 | app依存注入、general policy、実middleware統合test |
+| `backend/src/app.ts`, `app.test.ts`, `app.rate-limit.test.ts`, `app.rate-limit-route-matrix.test.ts` | 修正・新規 | app依存注入、general policy、実middleware統合・route分類test |
 | `backend/src/index.ts`, `backend/src/types/index.ts` | 修正 | Node store/IP resolverとHono context型 |
 | `backend/src/routes/auth/index.ts` | 修正 | IP・操作別email policyを配線 |
 | `backend/src/routes/game/index.ts` | 修正 | questionsとsubmit IP/user policyを配線 |
 | `backend/src/routes/users/index.ts` | 修正 | password変更・退会のIP/user policyを配線 |
 | `frontend/src/lib/api/errors.test.ts`, `game.test.ts` | 修正 | JSON・非JSON・network回帰test |
 | `frontend/src/routes/login/login-page.test.ts` | 修正 | 429/networkの`role=alert`表示test |
+| `frontend/src/routes/(app)/game/play/game-play-rate-limit.test.ts` | 新規 | 問題取得・結果送信429の`role=alert`と再試行導線test |
 | `docs/02_security.md`, `04_api.md`, `05_progress.md` | 修正 | security/API/進捗契約を更新 |
 | `docs/10_dev_setup.md`, `11_deployment.md` | 修正 | local設定、本番二層防御、フェーズ12引き継ぎ |
 | `docs/plans/api-rate-limit-production/plan.md` | 修正 | task実績と先行実装記録を更新 |
@@ -883,6 +884,18 @@ Workers test scriptと`wrangler dev`確認コマンドは、フェーズ12で採
 - Frontend: format、lint、Svelte check成功。42 test files / 459 tests成功。
 - Workers runtime test: 未実施（Workers test基盤未実装）。
 - staging/production、WAF、A11Y、監視、rollback: 未実施。T13〜T15・T17〜T19としてフェーズ12基盤後に行う。
+
+### 追加レビュー・改善（2026-07-12）
+
+- 変更対象の`docs/02_security.md`、`04_api.md`、`05_progress.md`、`10_dev_setup.md`、`11_deployment.md`、本計画書を全文確認し、policy値・middleware順序・フェーズ12未完了境界を再照合した。
+- IP resolverまたはHMAC生成が例外を投げた場合に一律500となり、generalのfail-openとsensitiveのfail-closed 503を迂回する不具合をRed testで再現した。raw errorを露出せずキー取得不能へ変換し、policyのfailure modeを適用するよう修正した。
+- 一般APIのroute分類をelements / ranking / weak / users / admin / gameで、共有`AUTH_IP`をregister / login / forgot-password / reset-passwordでintegration test化した。
+- ゲーム画面で問題取得・結果送信の429が`role="alert"`へ通知され、再試行・新規開始ボタンが利用可能であることをcomponent testで固定した。
+- Prisma schema / migration / queryは変更していない。rate limit状態を業務PostgreSQLへ保存しないため、新規index・N+1・既存データ移行・expand/contract・rollback対象は発生しない。
+- `docs/04_api.md`の429クライアント例がbackend messageを固定文言で上書きしていたため、429/503とも既存messageを保持する例へ修正した。
+- Backend: format、lint、format check、build成功。59 test files / 561 tests成功、実DB専用1 testは既存条件によりskip。
+- Frontend: format、lint、Svelte check成功。43 test files / 461 tests成功。
+- Workers runtime、staging/production、WAF実機、監視、rollbackは未実施のままであり、本番適用完了とは扱わない。
 
 ### フェーズ12引き継ぎ
 

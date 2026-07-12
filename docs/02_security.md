@@ -106,6 +106,7 @@
 - 認証系のメールアドレスはZod検証後にレート制限専用として `trim().toLowerCase()` を1回だけ行い、操作scope付きのHMACへ変換する。認証・DB保存時のメールアドレス仕様は変更しない。
 - 生のIP、メールアドレス、ユーザーID、HMAC digest、body、token、Cookie、Authorizationをrate limit storeやログへ保存しない。
 - productionではCloudflareが付与した単一の `CF-Connecting-IP` だけを検証して使用し、`X-Forwarded-For` と `X-Real-IP` は信頼しない。IPv6は同一 `/64` を同じactorとして扱う。
+- IP resolverまたはHMAC生成が失敗した場合はキー取得不能として扱い、raw errorを記録せずpolicyのfail-open / fail-closedを適用する。
 
 ### 本番環境での実装方針
 

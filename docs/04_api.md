@@ -608,6 +608,7 @@ Content-Type: application/json
 - email制限はZod検証成功後に適用します。不正JSON・不正emailはIPバケットだけを消費します。
 - `POST /game/sessions` は専用IP制限、認証、専用user制限、Zod検証の順です。未認証リクエストはIPバケットを消費しますがuserバケットを消費しません。
 - `GET /game/sessions` と `GET /game/sessions/:sessionId` はgame submit専用バケットを消費しません。
+- IP resolverまたはHMAC生成が失敗した場合は、raw errorを返さずキー取得不能としてpolicyのfail-open / fail-closedを適用します。
 - Cloudflare WAFがHono到達前に返すedge responseは、このJSON・CORS・`Retry-After`契約の保証対象外です。クライアントは非JSONレスポンスやnetwork errorでも既定メッセージを表示してください。
 
 **重要**: 502/504 を含むエラー時は **非 JSON**（HTML、プレーンテキスト等）が返る可能性があります。
@@ -679,7 +680,9 @@ function toJpMessage(status: number, fallback: string): string {
       // 例: "メールアドレスは既に使用されています"
       return fallback;
     case 429:
-      return 'しばらく待ってから再試行してください';
+      return fallback;
+    case 503:
+      return fallback;
     case 500:
       return 'サーバーエラーが発生しました';
     default:
