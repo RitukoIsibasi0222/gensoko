@@ -90,23 +90,33 @@
 
 `backend/src/app.ts`:
 ```typescript
+import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { getFrontendUrl } from "./lib/config.js";
 
-const frontendUrl = getFrontendUrl({ isProduction });
+type CreateAppOptions = {
+  isProduction: boolean;
+};
 
-app.use(
-  "*",
-  cors({
-    origin: frontendUrl,
-    allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    credentials: true,
-  }),
-);
+export const createApp = ({ isProduction }: CreateAppOptions) => {
+  const app = new Hono();
+  const frontendUrl = getFrontendUrl({ isProduction });
+
+  app.use(
+    "*",
+    cors({
+      origin: frontendUrl,
+      allowHeaders: ["Content-Type", "Authorization"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      credentials: true,
+    }),
+  );
+
+  return app;
+};
 ```
 
-`NODE_ENV=production` では `FRONTEND_URL` を必須とし、未設定・空文字ならapp構築時にエラーで停止する。localhostへのfallbackはdevelopment/testだけで使用する。
+`NODE_ENV=production` では `FRONTEND_URL` を必須とし、未設定・空文字ならapp構築時にエラーで停止する。HTTP(S)のorigin形式だけを許可し、path、query、hash、認証情報付きURLは拒否する。localhostへのfallbackはdevelopment/testだけで使用する。
 
 ---
 

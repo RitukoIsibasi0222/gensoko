@@ -151,7 +151,7 @@ X-Permitted-Cross-Domain-Policies: none
 ### CORS
 
 - 許可オリジンを**ホワイトリスト**で管理（`*` ワイルドカード禁止）
-- 許可値は環境変数 `FRONTEND_URL` から読み込む
+- 許可値は環境変数 `FRONTEND_URL` から読み込む。HTTP(S)のorigin形式だけを許可し、path、query、hash、認証情報付きURLは起動時に拒否する
 - 開発環境: `http://localhost:5174`
 - 本番環境: 公開ドメインのみ。`FRONTEND_URL` は必須とし、未設定・空文字ならapp構築時にfail-fastする
 - localhostへのfallbackはdevelopment/testだけに限定し、CORSと認証メールURLで同じ共通設定を使う
