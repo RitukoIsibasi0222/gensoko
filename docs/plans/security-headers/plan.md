@@ -337,48 +337,57 @@ response
 
 | ID | 内容 | 対象ファイル | 完了条件 | 優先度 |
 |---|---|---|---|---|
-| T1 | 既存仕様・Hono 実装・デプロイ前提を再確認 | docs、backend、Hono package | 事実と要確認事項が更新され、progress が `[-]` | High |
-| T2 | security unit test を Red で追加 | `security.test.ts` | exact header、production 差、200/500 の期待失敗を確認 | High |
-| T3 | app-level test を Red で追加 | `app.test.ts` | health/404/401/OPTIONS/CORS の期待失敗を確認 | High |
-| T4 | security middleware を実装 | `middleware/security/index.ts` | 明示 options と環境別 HSTS が unit test Green | High |
-| T5 | app factory と実配線を実装 | `app.ts`, `index.ts` | logger/security/CORS/routes 順で app test Green | High |
-| T6 | 環境設定例を更新 | `.env.example`, `docker-compose.yml` | development/production 判定が明記される | Medium |
-| T7 | Refactor と回帰 test | backend 関連 | 重複なし、既存 status/body/Cookie/CORS 不変 | High |
-| T8 | security/API docs を更新 | `docs/02_security.md`, `docs/04_api.md` | header 値と frontend CSP 非スコープが実装一致 | High |
-| T9 | backend 品質チェック | backend | format/lint/format:check/build/全 test が成功 | High |
-| T10 | Docker・ブラウザ手動確認 | backend/frontend | health/404/401/OPTIONS/API 疎通が成功 | High |
-| T11 | 実態・進捗・完了記録を更新 | plan、`docs/05_progress.md` | 対象表、`[x]`、実装完了が実態一致 | High |
-| T12 | commit・push・PR | git/GitHub | 種別別 commit、feature branch push、develop 向け PR | High |
+| T1 | 既存仕様・Hono 実装・環境差を再確認 | docs、backend、Hono package | 事実・要確認事項・実装方針が確定 | High |
+| T2 | 進捗を実装中へ更新 | `docs/05_progress.md` | 対象タスクが `[-]` | High |
+| T3 | security unit test を Red で追加 | `security.test.ts` | exact header、production 差、200/500 の期待失敗を確認 | High |
+| T4 | app-level test を Red で追加 | `app.test.ts` | health/404/401/OPTIONS/CORS の期待失敗を確認 | High |
+| T5 | security middleware を実装 | `middleware/security/index.ts` | 明示 options と環境別 HSTS が unit test Green | High |
+| T6 | app factory と実配線を実装 | `app.ts`, `index.ts` | logger/security/CORS/routes 順で app test Green | High |
+| T7 | 環境設定例を更新 | `.env.example`, `docker-compose.yml` | development/production 判定が明記される | Medium |
+| T8 | Refactor と回帰 test | backend 関連 | 重複なし、既存 status/body/Cookie/CORS 不変 | High |
+| T9 | security/API docs を更新 | `docs/02_security.md`, `docs/04_api.md` | header 値と frontend CSP 非スコープが実装一致 | High |
+| T10 | backend 品質チェック | backend | format/lint/format:check/build/全 test が成功 | High |
+| T11 | Docker・ブラウザ手動確認 | backend/frontend | health/404/401/OPTIONS/API 疎通が成功 | High |
+| T12 | 実態・進捗・完了記録を更新 | plan、`docs/05_progress.md` | 対象表、`[x]`、実装完了が実態一致 | High |
+| T13 | 変更種別ごとに commit | git | 機能・設定・docs を目的別に記録 | High |
+| T14 | PR 本文案をチャットで確認 | チャット | 調査・設計根拠・TDD・検証結果を日本語で提示 | High |
+| T15 | 承認後に push・PR 作成 | git/GitHub | feature branchをpushし、develop向けPRを作成 | High |
 
-- [ ] T1: 既存仕様・Hono 実装・デプロイ前提を再確認
-- [ ] T2: security unit test を Red で追加
-- [ ] T3: app-level test を Red で追加
-- [ ] T4: security middleware を実装
-- [ ] T5: app factory と実配線を実装
-- [ ] T6: 環境設定例を更新
-- [ ] T7: Refactor と回帰 test
-- [ ] T8: security/API docs を更新
-- [ ] T9: backend 品質チェック
-- [ ] T10: Docker・ブラウザ手動確認
-- [ ] T11: 実態・進捗・完了記録を更新
-- [ ] T12: commit・push・PR
+- [x] T1: 既存仕様・Hono 実装・環境差を再確認
+- [x] T2: 進捗を実装中へ更新
+- [x] T3: security unit test を Red で追加
+- [x] T4: app-level test を Red で追加
+- [x] T5: security middleware を実装
+- [x] T6: app factory と実配線を実装
+- [x] T7: 環境設定例を更新
+- [x] T8: Refactor と回帰 test
+- [x] T9: security/API docs を更新
+- [x] T10: backend 品質チェック
+- [x] T11: Docker・ブラウザ手動確認
+- [x] T12: 実態・進捗・完了記録を更新
+- [x] T13: 変更種別ごとに commit
+- [ ] T14: PR 本文案をチャットで確認
+- [ ] T15: 承認後に push・PR 作成
 
 ### タブ区切り
 
 ```text
 タスクID	タスク内容	ファイル	優先度
-T1	既存仕様・Hono実装・デプロイ前提の再確認	docs・backend・Hono package	高
-T2	security unit test Red	backend/src/middleware/security/security.test.ts	高
-T3	app-level test Red	backend/src/app.test.ts	高
-T4	security middleware実装	backend/src/middleware/security/index.ts	高
-T5	app factory・実配線	backend/src/app.ts・backend/src/index.ts	高
-T6	環境設定例更新	backend/.env.example・docker-compose.yml	中
-T7	Refactor・回帰test	backend関連	高
-T8	security/API docs更新	docs/02_security.md・docs/04_api.md	高
-T9	backend品質チェック	backend	高
-T10	Docker・ブラウザ手動確認	backend・frontend	高
-T11	完了記録更新	plan.md・docs/05_progress.md	高
-T12	commit・push・PR	git・GitHub	高
+T1	既存仕様・Hono実装・環境差の再確認	docs・backend・Hono package	高
+T2	進捗を実装中へ更新	docs/05_progress.md	高
+T3	security unit test Red	backend/src/middleware/security/security.test.ts	高
+T4	app-level test Red	backend/src/app.test.ts	高
+T5	security middleware実装	backend/src/middleware/security/index.ts	高
+T6	app factory・実配線	backend/src/app.ts・backend/src/index.ts	高
+T7	環境設定例更新	backend/.env.example・docker-compose.yml	中
+T8	Refactor・回帰test	backend関連	高
+T9	security/API docs更新	docs/02_security.md・docs/04_api.md	高
+T10	backend品質チェック	backend	高
+T11	Docker・ブラウザ手動確認	backend・frontend	高
+T12	完了記録更新	plan.md・docs/05_progress.md	高
+T13	変更種別ごとにcommit	git	高
+T14	PR本文案をチャットで確認	チャット	高
+T15	承認後にpush・PR作成	git・GitHub	高
 ```
 
 ## テストケース一覧
@@ -487,3 +496,63 @@ T12	commit・push・PR	git・GitHub	高
 |---|---|---|
 |  |  |  |
 ```
+
+## 実装完了
+
+- 完了日: 2026-07-12
+- 実装ブランチ: `feature/security-headers`
+- PR: 作成前（本文案のチャット確認後に作成）
+
+### 計画からの変更点
+
+- app factory分離時のroute登録漏れを直接検知するため、app-level testへauth/admin/elements/game/ranking/users/weakの全prefix確認を追加した。
+- ブラウザでは公開APIを使うトップ・元素一覧、ログイン画面、空欄validationを確認した。認証情報を使うlogin/refresh/logoutの手動操作は行わず、既存を含むbackend自動テストで回帰を確認した。
+- ユーザー指定の確認フローに合わせ、commit、PR本文のチャット確認、承認後のpush・PR作成を別タスクへ分割した。
+
+### 確定したセキュリティヘッダー
+
+| ヘッダー | 最終設定値 | 適用環境 | 備考 |
+|---|---|---|---|
+| `Content-Security-Policy` | `default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'` | 全環境 | JSON API用。SvelteKit HTMLは別責務 |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | productionのみ | preloadなし |
+| `X-Frame-Options` | `DENY` | 全環境 | CSP frame-ancestorsと併用 |
+| `X-Content-Type-Options` | `nosniff` | 全環境 | MIME sniffing防止 |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | 全環境 | cross-originへpath/queryを送らない |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` | 全環境 | 不要機能を拒否 |
+| `Cross-Origin-Resource-Policy` | `same-origin` | 全環境 | CORS mode fetchとの共存を確認 |
+| `X-XSS-Protection` | `0` | 全環境 | 旧auditorを無効化 |
+| `X-Permitted-Cross-Domain-Policies` | `none` | 全環境 | legacy policy拒否 |
+| `X-Powered-By` | 削除 | 全環境 | 実装情報を露出しない |
+
+### TDD 実施記録
+
+- Red: `security.test.ts`は未実装関数により7件失敗、`app.test.ts`は未作成moduleによりcollection失敗を確認した。
+- Green: middlewareとapp factoryを実装し、2ファイル・14件が全通過した。
+- Refactor: 全route prefix回帰testを追加し、対象2ファイル・15件、関連5ファイル・60件が全通過した。期待済み500 errorのstderrはtest内spyで抑制した。
+
+### 品質・手動確認結果
+
+- backend format: 成功。全対象ファイルunchanged
+- backend lint: 成功
+- backend format:check: 成功
+- backend build: 成功
+- backend test: 52 files・487 tests全通過。監査ログintegration 1 file・1 testは専用DB環境変数なしの通常実行でskip
+- Docker設定: `docker compose config --quiet`成功。Hono containerだけを`NODE_ENV=development`で再作成
+- Docker/API: health 200、404、認証なし401、許可・未許可originのOPTIONSを確認。全対象responseへsecurity headerが付き、developmentではHSTSなし
+- browser/CORS/A11Y: トップとランキングプレビュー、元素一覧118件、ログイン画面を確認。空欄errorは`alert`。warning/error 0件
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `backend/src/app.ts` | 新規 | Hono app factory、middleware順序、route登録 |
+| `backend/src/app.test.ts` | 新規 | 実配線、health、404、401、preflight、CORS、route prefix test |
+| `backend/src/index.ts` | 修正 | app factoryを呼ぶNode server起動entryへ縮小 |
+| `backend/src/middleware/security/index.ts` | 修正 | 明示設定したsecurity headers middlewareを実装 |
+| `backend/src/middleware/security/security.test.ts` | 新規 | exact header、環境差、200/500、上書きtest |
+| `backend/.env.example` | 修正 | `NODE_ENV`とHSTS production判定を説明 |
+| `docker-compose.yml` | 修正 | ローカルHonoの`NODE_ENV=development`を明示 |
+| `docs/02_security.md` | 修正 | API header仕様、frontend CSPとの責務境界、CORS originを更新 |
+| `docs/04_api.md` | 修正 | 全API共通response header契約を追加 |
+| `docs/05_progress.md` | 修正 | 対象タスクを完了へ更新 |
+| `docs/plans/security-headers/plan.md` | 修正 | タスク、TDD、品質・手動確認、実装完了記録を更新 |

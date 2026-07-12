@@ -118,23 +118,39 @@
 
 ## SEC-006: 通信セキュリティ
 
-### HTTPSの強制
-- HTTP アクセスは HTTPS へ **301リダイレクト**
-- HSTSヘッダー: `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+### HTTPS・HSTS
 
-### セキュリティヘッダー（全レスポンスに付与）
+- HTTP から HTTPS へのリダイレクトは Cloudflare/Vercel 等の配信基盤で設定する。Hono API ミドルウェアはリダイレクトを担当しない。
+- Hono API は `NODE_ENV=production` の場合だけ `Strict-Transport-Security: max-age=31536000; includeSubDomains` を付与する。
+- ローカルの development/test は HTTP で動作するため HSTS を付与しない。
+- HSTS preload は採用しない。本番有効化前に、対象ドメインと全サブドメインが HTTPS 対応済みであることを確認する。
+
+### Hono API のセキュリティヘッダー
+
+Hono が生成する正常・エラー・404・CORS preflight レスポンスへ、以下を共通付与する。
+
 ```
-Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'
+Content-Security-Policy: default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
 Referrer-Policy: strict-origin-when-cross-origin
 Permissions-Policy: camera=(), microphone=(), geolocation=()
+Cross-Origin-Resource-Policy: same-origin
+X-XSS-Protection: 0
+X-Permitted-Cross-Domain-Policies: none
 ```
 
+- `X-Powered-By` は削除する。
+- API JSON では不要な `Cross-Origin-Opener-Policy`、`Cross-Origin-Embedder-Policy`、`Origin-Agent-Cluster`、`X-DNS-Prefetch-Control`、`X-Download-Options` は付与しない。
+- この CSP は JSON API を deny-by-default にするための設定であり、Vercel/SvelteKit が返す HTML の script・style・image を制御しない。フロントエンド HTML の CSP は別の配信設定で実装する。
+
 ### CORS
+
 - 許可オリジンを**ホワイトリスト**で管理（`*` ワイルドカード禁止）
-- 開発環境: `http://localhost:3000`
+- 許可値は環境変数 `FRONTEND_URL` から読み込む
+- 開発環境: `http://localhost:5174`
 - 本番環境: 公開ドメインのみ
+- credentials、`Content-Type`、`Authorization` の既存許可設定を維持する
 
 ### CSRF対策
 - リフレッシュトークンCookieの `SameSite=Strict` で対策
