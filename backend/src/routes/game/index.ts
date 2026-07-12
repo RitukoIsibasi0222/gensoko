@@ -3,6 +3,11 @@ import type { GameMode } from "@prisma/client";
 import { Hono } from "hono";
 import { z } from "zod";
 import { authMiddleware } from "../../middleware/auth/index.js";
+import {
+  createIpBucketResolver,
+  createUserBucketResolver,
+  getRateLimitStore,
+} from "../../middleware/rateLimit/buckets.js";
 import { rateLimit } from "../../middleware/rateLimit/index.js";
 import {
   createGameQuestionSet,
@@ -39,21 +44,18 @@ const ANSWER_FORMAT_ERROR_MESSAGE = "回答形式が正しくありません";
 const DURATION_ERROR_MESSAGE = "回答時間が正しくありません";
 
 const gameQuestionsRateLimit = rateLimit({
-  windowMs: 60 * 1000,
-  max: 30,
-  trustProxy: process.env.TRUST_PROXY === "true",
+  getStore: getRateLimitStore,
+  resolveBuckets: createIpBucketResolver("GAME_QUESTIONS_IP"),
 });
 
-const gameSessionsRateLimit = rateLimit({
-  windowMs: 60 * 1000,
-  max: 10,
-  trustProxy: process.env.TRUST_PROXY === "true",
+const gameSubmitIpRateLimit = rateLimit({
+  getStore: getRateLimitStore,
+  resolveBuckets: createIpBucketResolver("GAME_SUBMIT_IP"),
 });
 
-const gameSessionHistoryRateLimit = rateLimit({
-  windowMs: 60 * 1000,
-  max: 60,
-  trustProxy: process.env.TRUST_PROXY === "true",
+const gameSubmitUserRateLimit = rateLimit({
+  getStore: getRateLimitStore,
+  resolveBuckets: createUserBucketResolver("GAME_SUBMIT_USER"),
 });
 
 export const gameQuestionsQuerySchema = z
@@ -151,7 +153,6 @@ gameRouter.get(
 
 gameRouter.get(
   "/sessions/:sessionId",
-  gameSessionsRateLimit,
   authMiddleware,
   zValidator("param", gameSessionParamsSchema, (result, c) => {
     if (!result.success) {
@@ -187,8 +188,9 @@ gameRouter.get(
 
 gameRouter.post(
   "/sessions",
-  gameSessionsRateLimit,
+  gameSubmitIpRateLimit,
   authMiddleware,
+  gameSubmitUserRateLimit,
   zValidator("json", gameSessionBodySchema, (result, c) => {
     if (!result.success) {
       return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
@@ -286,7 +288,6 @@ export const gameSessionHistoryQuerySchema = z
 
 gameRouter.get(
   "/sessions",
-  gameSessionHistoryRateLimit,
   authMiddleware,
   zValidator("query", gameSessionHistoryQuerySchema, (result, c) => {
     if (!result.success) {

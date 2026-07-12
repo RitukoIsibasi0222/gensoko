@@ -1,154 +1,210 @@
 import { Hono } from "hono";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
-// test-setup.ts のグローバルモックを解除する（vi.doUnmock はホイストされないため、
-// vi.resetModules + dynamic import と組み合わせてリアル実装を確実にロードする）
 vi.doUnmock("./index.js");
 
-type RateLimitFn = typeof import("./index.js").rateLimit;
-let rateLimit: RateLimitFn;
+type RateLimitModule = typeof import("./index.js");
+let rateLimit: RateLimitModule["rateLimit"];
 
 beforeAll(async () => {
   vi.resetModules();
   ({ rateLimit } = await import("./index.js"));
 });
 
+function createResult({
+  allowed,
+  retryAfterSec = 0,
+}: {
+  allowed: boolean;
+  retryAfterSec?: number;
+}) {
+  return {
+    allowed,
+    limit: 10,
+    remaining: allowed ? 9 : 0,
+    resetAtMs: 60_000,
+    retryAfterSec,
+  };
+}
+
+function createApp(options: Parameters<RateLimitModule["rateLimit"]>[0]) {
+  const app = new Hono();
+  app.use(rateLimit(options));
+  app.get("/", (c) => c.json({ ok: true }));
+  return app;
+}
+
 describe("rateLimit middleware", () => {
-  afterEach(() => {
-    vi.useRealTimers();
+  it("同じ段階の全bucketが許可された場合だけhandlerへ進む", async () => {
+    const consume = vi.fn().mockResolvedValue(createResult({ allowed: true }));
+    const app = createApp({
+      getStore: () => ({ consume }),
+      resolveBuckets: async () => [
+        { policyId: "GAME_SUBMIT_IP", keyDigest: "ip-digest" },
+        { policyId: "GAME_SUBMIT_USER", keyDigest: "user-digest" },
+      ],
+    });
+
+    const response = await app.request("/");
+
+    expect(response.status).toBe(200);
+    expect(consume).toHaveBeenCalledTimes(2);
+    expect(consume).toHaveBeenNthCalledWith(1, {
+      policyId: "GAME_SUBMIT_IP",
+      keyDigest: "ip-digest",
+    });
+    expect(consume).toHaveBeenNthCalledWith(2, {
+      policyId: "GAME_SUBMIT_USER",
+      keyDigest: "user-digest",
+    });
   });
 
-  it("max 以下のリクエストは通過する", async () => {
-    const app = new Hono();
-    app.use(rateLimit({ windowMs: 60_000, max: 3, trustProxy: true }));
-    app.get("/", (c) => c.json({ ok: true }));
+  it("先頭bucketが超過していても同じ段階の全bucketを試行する", async () => {
+    const consume = vi
+      .fn()
+      .mockResolvedValueOnce(createResult({ allowed: false, retryAfterSec: 10 }))
+      .mockResolvedValueOnce(createResult({ allowed: true }));
+    const app = createApp({
+      getStore: () => ({ consume }),
+      resolveBuckets: async () => [
+        { policyId: "GAME_SUBMIT_IP", keyDigest: "ip-digest" },
+        { policyId: "GAME_SUBMIT_USER", keyDigest: "user-digest" },
+      ],
+    });
 
-    for (let i = 0; i < 3; i++) {
-      const res = await app.request("/", {
-        headers: { "x-forwarded-for": "1.2.3.4" },
-      });
-      expect(res.status).toBe(200);
-    }
+    const response = await app.request("/");
+
+    expect(response.status).toBe(429);
+    expect(consume).toHaveBeenCalledTimes(2);
   });
 
-  it("max を超えると 429 を返す", async () => {
-    const app = new Hono();
-    app.use(rateLimit({ windowMs: 60_000, max: 2, trustProxy: true }));
-    app.get("/", (c) => c.json({ ok: true }));
+  it("複数bucket超過時は最大Retry-Afterと日本語JSONを返す", async () => {
+    const consume = vi
+      .fn()
+      .mockResolvedValueOnce(createResult({ allowed: false, retryAfterSec: 12 }))
+      .mockResolvedValueOnce(createResult({ allowed: false, retryAfterSec: 47 }));
+    const app = createApp({
+      getStore: () => ({ consume }),
+      resolveBuckets: async () => [
+        { policyId: "GAME_SUBMIT_IP", keyDigest: "ip-digest" },
+        { policyId: "GAME_SUBMIT_USER", keyDigest: "user-digest" },
+      ],
+    });
 
-    const headers = { "x-forwarded-for": "1.2.3.4" };
-    await app.request("/", { headers });
-    await app.request("/", { headers });
+    const response = await app.request("/");
 
-    const res = await app.request("/", { headers });
-    expect(res.status).toBe(429);
-    const body = await res.json();
-    expect(body).toHaveProperty("error");
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("47");
+    await expect(response.json()).resolves.toEqual({
+      error: "リクエストが多すぎます。しばらく待ってから再試行してください",
+    });
   });
 
-  it("ウィンドウが経過するとカウントがリセットされる", async () => {
-    vi.useFakeTimers();
-    const app = new Hono();
-    app.use(rateLimit({ windowMs: 10_000, max: 2, trustProxy: true }));
-    app.get("/", (c) => c.json({ ok: true }));
+  it("fail-closed policyのstore障害時は503を優先する", async () => {
+    const consume = vi
+      .fn()
+      .mockResolvedValueOnce(createResult({ allowed: false, retryAfterSec: 20 }))
+      .mockRejectedValueOnce(new Error("接続先や秘密情報を含み得るraw error"));
+    const onStoreError = vi.fn();
+    const app = createApp({
+      getStore: () => ({ consume }),
+      resolveBuckets: async () => [
+        { policyId: "GAME_SUBMIT_IP", keyDigest: "ip-digest" },
+        { policyId: "GAME_SUBMIT_USER", keyDigest: "user-digest" },
+      ],
+      onStoreError,
+    });
 
-    const headers = { "x-forwarded-for": "1.2.3.4" };
-    await app.request("/", { headers });
-    await app.request("/", { headers });
+    const response = await app.request("/");
 
-    // max 超過
-    const res1 = await app.request("/", { headers });
-    expect(res1.status).toBe(429);
-
-    // ウィンドウ経過
-    vi.advanceTimersByTime(10_001);
-
-    const res2 = await app.request("/", { headers });
-    expect(res2.status).toBe(200);
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("60");
+    await expect(response.json()).resolves.toEqual({
+      error: "一時的に利用できません。しばらく待ってから再試行してください",
+    });
+    expect(onStoreError).toHaveBeenCalledWith({
+      event: "rate_limit_store_error",
+      policyId: "GAME_SUBMIT_USER",
+    });
+    expect(JSON.stringify(onStoreError.mock.calls)).not.toContain("raw error");
   });
 
-  it("異なる IP は独立してカウントされる", async () => {
-    const app = new Hono();
-    app.use(rateLimit({ windowMs: 60_000, max: 1, trustProxy: true }));
-    app.get("/", (c) => c.json({ ok: true }));
+  it("fail-open policyのstore障害時は固定eventを記録してhandlerへ進む", async () => {
+    const consume = vi.fn().mockRejectedValue(new Error("raw error"));
+    const onStoreError = vi.fn();
+    const app = createApp({
+      getStore: () => ({ consume }),
+      resolveBuckets: async () => [{ policyId: "GENERAL_API_IP", keyDigest: "ip-digest" }],
+      onStoreError,
+    });
 
-    // IP1 が max に達する
-    await app.request("/", { headers: { "x-forwarded-for": "1.2.3.4" } });
-    const res1 = await app.request("/", { headers: { "x-forwarded-for": "1.2.3.4" } });
-    expect(res1.status).toBe(429);
+    const response = await app.request("/");
 
-    // IP2 は別カウント → 通過する
-    const res2 = await app.request("/", { headers: { "x-forwarded-for": "5.6.7.8" } });
-    expect(res2.status).toBe(200);
+    expect(response.status).toBe(200);
+    expect(onStoreError).toHaveBeenCalledWith({
+      event: "rate_limit_store_error",
+      policyId: "GENERAL_API_IP",
+    });
+    expect(JSON.stringify(onStoreError.mock.calls)).not.toContain("raw error");
   });
 
-  it("x-real-ip ヘッダーも IP として使用する", async () => {
-    const app = new Hono();
-    app.use(rateLimit({ windowMs: 60_000, max: 1, trustProxy: true }));
-    app.get("/", (c) => c.json({ ok: true }));
+  it("fail-closed policyのkey欠損時はunknown bucketを作らず503を返す", async () => {
+    const consume = vi.fn();
+    const onKeyUnavailable = vi.fn();
+    const app = createApp({
+      getStore: () => ({ consume }),
+      resolveBuckets: async () => [{ policyId: "AUTH_IP", keyDigest: null }],
+      onKeyUnavailable,
+    });
 
-    await app.request("/", { headers: { "x-real-ip": "10.0.0.1" } });
-    const res = await app.request("/", { headers: { "x-real-ip": "10.0.0.1" } });
-    expect(res.status).toBe(429);
+    const response = await app.request("/");
+
+    expect(response.status).toBe(503);
+    expect(consume).not.toHaveBeenCalled();
+    expect(onKeyUnavailable).toHaveBeenCalledWith({
+      event: "rate_limit_key_unavailable",
+      policyId: "AUTH_IP",
+    });
   });
 
-  it("store がエントリ上限を超えたとき期限切れエントリを削除し、それでも上限超なら最古エントリを強制削除する", async () => {
-    vi.useFakeTimers();
-    const app = new Hono();
-    // maxStoreSize を 3 に設定して上限テストを行う
-    app.use(rateLimit({ windowMs: 10_000, max: 100, maxStoreSize: 3, trustProxy: true }));
-    app.get("/", (c) => c.json({ ok: true }));
+  it("fail-open policyのkey欠損時はunknown bucketを作らずhandlerへ進む", async () => {
+    const consume = vi.fn();
+    const resolveBuckets = vi.fn(async () => [
+      { policyId: "GENERAL_API_IP" as const, keyDigest: null },
+    ]);
+    const onKeyUnavailable = vi.fn();
+    const app = createApp({
+      getStore: () => ({ consume }),
+      resolveBuckets,
+      onKeyUnavailable,
+    });
 
-    // 4 つの IP でリクエスト → store.size = 4（maxStoreSize=3 を超える）
-    // ※ クリーンアップは store.size > maxStoreSize のときのみ走るため、
-    //   3件目追加時点では走らず、4件目追加後に size=4 になる
-    await app.request("/", { headers: { "x-forwarded-for": "1.1.1.1" } });
-    await app.request("/", { headers: { "x-forwarded-for": "2.2.2.2" } });
-    await app.request("/", { headers: { "x-forwarded-for": "3.3.3.3" } });
-    await app.request("/", { headers: { "x-forwarded-for": "4.4.4.4" } });
+    const response = await app.request("/");
 
-    // ウィンドウを経過させてから 5 つ目の IP でリクエスト
-    // → store.size(4) > maxStoreSize(3) → 期限切れ 4 件を一括削除 → size=0 → 5件目追加
-    vi.advanceTimersByTime(10_001);
-
-    const res = await app.request("/", { headers: { "x-forwarded-for": "5.5.5.5" } });
-    expect(res.status).toBe(200);
+    expect(response.status).toBe(200);
+    expect(resolveBuckets).toHaveBeenCalledOnce();
+    expect(consume).not.toHaveBeenCalled();
+    expect(onKeyUnavailable).toHaveBeenCalledWith({
+      event: "rate_limit_key_unavailable",
+      policyId: "GENERAL_API_IP",
+    });
   });
 
-  it("trustProxy: true のとき XFF がなければ x-real-ip にフォールバックする", async () => {
-    const app = new Hono();
-    app.use(rateLimit({ windowMs: 60_000, max: 1, trustProxy: true }));
-    app.get("/", (c) => c.json({ ok: true }));
+  it("whenがfalseの場合はbucket解決とstore取得を行わない", async () => {
+    const getStore = vi.fn();
+    const resolveBuckets = vi.fn();
+    const when = vi.fn(() => false);
+    const app = createApp({
+      getStore,
+      resolveBuckets,
+      when,
+    });
 
-    // XFF なし、x-real-ip だけ送信 → x-real-ip がバケットキーになる
-    await app.request("/", { headers: { "x-real-ip": "10.0.0.2" } });
-    const res = await app.request("/", { headers: { "x-real-ip": "10.0.0.2" } });
-    expect(res.status).toBe(429);
-  });
+    const response = await app.request("/");
 
-  it("trustProxy: true のとき XFF も x-real-ip もなければ 'unknown' にフォールバックする", async () => {
-    const app = new Hono();
-    // trustProxy: true だが両ヘッダー未設定 → socketIp（テスト環境: "unknown"）
-    app.use(rateLimit({ windowMs: 60_000, max: 1, trustProxy: true }));
-    app.get("/", (c) => c.json({ ok: true }));
-
-    // ヘッダーなしで 2 回リクエスト → 同じ "unknown" バケットで 429
-    await app.request("/");
-    const res = await app.request("/");
-    expect(res.status).toBe(429);
-  });
-
-  it("trustProxy: false のとき x-forwarded-for を無視して 'unknown' を IP として使用する", async () => {
-    const app = new Hono();
-    // trustProxy: false（デフォルト）: XFF を信頼しない → 全リクエストが同一バケット "unknown"
-    app.use(rateLimit({ windowMs: 60_000, max: 1, trustProxy: false }));
-    app.get("/", (c) => c.json({ ok: true }));
-
-    // XFF で異なる IP を送っても同一バケットとして扱われる
-    const res1 = await app.request("/", { headers: { "x-forwarded-for": "1.2.3.4" } });
-    expect(res1.status).toBe(200);
-    const res2 = await app.request("/", { headers: { "x-forwarded-for": "5.6.7.8" } });
-    // 異なる IP ヘッダーを送っても同じ "unknown" バケット → 429
-    expect(res2.status).toBe(429);
+    expect(response.status).toBe(200);
+    expect(when).toHaveBeenCalledOnce();
+    expect(getStore).not.toHaveBeenCalled();
+    expect(resolveBuckets).not.toHaveBeenCalled();
   });
 });

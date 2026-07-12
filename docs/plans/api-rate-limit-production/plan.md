@@ -788,10 +788,10 @@ DOはschemaを`new_sqlite_classes` migrationとして追加し、stagingとprodu
 - [x] T5: policy/configを実装する
 - [x] T6: key/resolver testをRed化する
 - [x] T7: key/resolverを実装する
-- [ ] T8: memory store/middleware testをRed化する
-- [ ] T9: store契約/memory/middlewareを実装する
-- [ ] T10: app/route integrationをRed化する
-- [ ] T11: app/auth/users/gameへ配線する
+- [x] T8: memory store/middleware testをRed化する
+- [x] T9: store契約/memory/middlewareを実装する
+- [x] T10: app/route integrationをRed化する
+- [x] T11: app/auth/users/gameへ配線する
 - [ ] T12: frontend回帰testを追加する
 - [ ] T13: Durable Object testをRed化する
 - [ ] T14: SQLite-backed Durable Object/store adapterを実装する
