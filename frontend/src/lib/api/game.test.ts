@@ -396,6 +396,34 @@ describe('submitGameSession', () => {
     }
   });
 
+  it('レート制限store障害: 503 JSONのstatus・日本語message・bodyを保持する', async () => {
+    const body = {
+      error: '一時的に利用できません。しばらく待ってから再試行してください'
+    };
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(body), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    try {
+      await submitGameSession({
+        questionSetId: 'question-set-1',
+        mode: 'SYMBOL_TO_NAME_LV1',
+        accessToken: 'test-access-token',
+        durationSec: 4,
+        answers: [{ questionId: 'q1', chosenChoiceId: '1', answerTimeSec: 4 }]
+      });
+      expect.fail('ApiError が throw されるべき');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(503);
+      expect((error as ApiError).message).toBe(body.error);
+      expect((error as ApiError).body).toEqual(body);
+    }
+  });
+
   it('レート制限: 非JSONの429はゲーム送信用fallbackとbody=nullを保持する', async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response('Too Many Requests', {

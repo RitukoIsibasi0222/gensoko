@@ -112,6 +112,24 @@ describe('/login rate-limit error handling', () => {
     );
   });
 
+  it('503 JSONの日本語messageをrole=alertへ表示する', async () => {
+    const message = '一時的に利用できません。しばらく待ってから再試行してください';
+    mocks.fetch.mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: vi.fn().mockResolvedValue({ error: message })
+    });
+
+    const target = mountAndSubmitLogin();
+
+    await vi.waitFor(() => {
+      expect(target.querySelector('[role="alert"]')?.textContent).toContain(message);
+    });
+    expect((target.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(
+      false
+    );
+  });
+
   it('非JSONの429はログイン用fallbackをrole=alertへ表示する', async () => {
     mocks.fetch.mockResolvedValue({
       ok: false,

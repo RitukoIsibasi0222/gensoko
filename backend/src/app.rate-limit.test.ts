@@ -5,6 +5,9 @@ import type { RateLimitConsumeInput, RateLimitResult } from "./middleware/rateLi
 import type { AppVariables } from "./types/index.js";
 
 const CLIENT_IP = "203.0.113.7";
+const ALLOWED_ORIGIN = "http://localhost:5174";
+const EXPECTED_CSP =
+  "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
 const KEY_SECRET = Buffer.from("0123456789abcdef0123456789abcdef").toString("base64");
 const VALID_REGISTER_BODY = {
   username: "rate_limit_user",
@@ -65,20 +68,22 @@ function createDecision(allowed: boolean): RateLimitResult {
   };
 }
 
-function createRateLimitedApp(shouldAllow: (policyId: RateLimitPolicyId) => boolean) {
-  const consume = vi.fn(async ({ policyId }: RateLimitConsumeInput) =>
-    createDecision(shouldAllow(policyId)),
-  );
+function createAppWithConsume(consume: (input: RateLimitConsumeInput) => Promise<RateLimitResult>) {
+  const consumeMock = vi.fn(consume);
   const app = createApp({
     isProduction: false,
     rateLimit: {
-      getStore: () => ({ consume }),
+      getStore: () => ({ consume: consumeMock }),
       keySecret: KEY_SECRET,
       resolveIp: () => CLIENT_IP,
     },
   });
 
-  return { app, consume };
+  return { app, consume: consumeMock };
+}
+
+function createRateLimitedApp(shouldAllow: (policyId: RateLimitPolicyId) => boolean) {
+  return createAppWithConsume(async ({ policyId }) => createDecision(shouldAllow(policyId)));
 }
 
 function consumedPolicyIds(consume: ReturnType<typeof vi.fn>): RateLimitPolicyId[] {
@@ -117,6 +122,48 @@ describe("app rate limit integration", () => {
 
     expect(response.status).toBe(429);
     expect(consumedPolicyIds(consume)).toEqual(["GENERAL_API_IP"]);
+  });
+
+  it("429でもCORS・security header・Retry-After・日本語JSONを維持する", async () => {
+    const { app } = createRateLimitedApp((policyId) => policyId !== "GENERAL_API_IP");
+
+    const response = await app.request("/api/v1/elements", {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(ALLOWED_ORIGIN);
+    expect(response.headers.get("Content-Security-Policy")).toBe(EXPECTED_CSP);
+    expect(response.headers.get("Retry-After")).toBe("30");
+    expect(await response.json()).toEqual({
+      error: "リクエストが多すぎます。しばらく待ってから再試行してください",
+    });
+  });
+
+  it("sensitive store障害の503でもCORS・security header・Retry-Afterを維持する", async () => {
+    const { app } = createAppWithConsume(async ({ policyId }) => {
+      if (policyId === "AUTH_IP") {
+        throw new Error("secret store error");
+      }
+      return createDecision(true);
+    });
+
+    const response = await app.request("/api/v1/auth/register", {
+      method: "POST",
+      headers: {
+        Origin: ALLOWED_ORIGIN,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(ALLOWED_ORIGIN);
+    expect(response.headers.get("Content-Security-Policy")).toBe(EXPECTED_CSP);
+    expect(response.headers.get("Retry-After")).toBe("60");
+    expect(await response.json()).toEqual({
+      error: "一時的に利用できません。しばらく待ってから再試行してください",
+    });
   });
 
   it("認証routeはgeneral→AUTH_IPの順で不正bodyもIP bucketを消費する", async () => {
