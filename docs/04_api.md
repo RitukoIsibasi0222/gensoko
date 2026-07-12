@@ -6,6 +6,33 @@
 
 ---
 
+## 全API共通レスポンスヘッダー
+
+Hono API が生成する正常・エラー・404・CORS preflight レスポンスには、以下のセキュリティヘッダーを付与する。
+
+| ヘッダー | 値 | 適用環境 |
+|---|---|---|
+| `Content-Security-Policy` | `default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'` | 全環境 |
+| `X-Frame-Options` | `DENY` | 全環境 |
+| `X-Content-Type-Options` | `nosniff` | 全環境 |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | 全環境 |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` | 全環境 |
+| `Cross-Origin-Resource-Policy` | `same-origin` | 全環境 |
+| `X-XSS-Protection` | `0` | 全環境 |
+| `X-Permitted-Cross-Domain-Policies` | `none` | 全環境 |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | productionのみ |
+
+- `X-Powered-By` は削除する。
+- development/testではHSTSを付与しない。
+- API用CSPはJSONレスポンスを対象とし、Vercel/SvelteKitが返すHTMLのCSPを代替しない。
+- Cloudflare、リバースプロキシ、CDN等がHonoの外側で生成する502/504等のレスポンスは、このミドルウェアの保証対象外とする。
+- CORSの許可origin、credentials、許可method・headerは既存契約を維持し、セキュリティヘッダーをCORS allowlistの代替にしない。
+- productionの `FRONTEND_URL` は必須で、HTTP(S)のorigin形式だけを許可する。未設定・空文字・path/query/認証情報付きURLはapp構築時に拒否し、development/testだけ `http://localhost:5174` へfallbackする。
+- Hono appでrouteが一致しない場合は404と `{ "error": "エンドポイントが見つかりません" }` を返す。
+- Hono app内の未捕捉例外は500と `{ "error": "サーバーエラーが発生しました" }` を返し、内部の例外messageやstack traceをresponseへ含めない。server logにもraw例外を出さず、固定イベント名だけを記録する。
+
+---
+
 ## 認証 `/api/v1/auth`
 
 | メソッド | パス | 説明 | 認証 |

@@ -9,6 +9,7 @@ services:
       - hono_node_modules:/app/node_modules
     environment:
       - DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko
+      - NODE_ENV=development
       - JWT_SECRET=your-super-secret-key-change-this
       - MAIL_HOST=mailpit
       - MAIL_PORT=1025

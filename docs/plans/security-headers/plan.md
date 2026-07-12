@@ -95,13 +95,14 @@
 - development/test と production の HSTS 差分。
 - `logger -> security -> CORS -> routes` のグローバル配線。
 - app factory 分離による実配線テスト。
+- 未知404・未捕捉500を既存の日本語JSONエラー契約へ統一するグローバルハンドラー。
 - 正常、404、401、500、CORS preflight のテスト。
 - `docs/02_security.md`、`docs/04_api.md`、`docs/05_progress.md` の整合。
 
 ## 非スコープ
 
 - Prisma schema、migration、seed、DB データ、index の変更。
-- API endpoint、request/response body、status、認証・認可、rate limit の変更。
+- 既存endpointのrequest/response body、status、認証・認可、rate limit の変更。例外として、Hono既定だった未知404・未捕捉500だけを既存API仕様の日本語JSON形式へ統一する。
 - frontend component、store、API client、画面 A11Y の変更。
 - Vercel/SvelteKit が返す HTML の CSP・security headers 実装。
 - HTTP から HTTPS への 301 redirect。Cloudflare/Vercel の edge 設定で扱う。
@@ -118,7 +119,7 @@
 - `docs/05_progress.md` フェーズ11に対象タスクが未完了で存在する。
 - `backend/src/middleware/security/index.ts` は `// TODO: implement` のみである。
 - `backend/src/index.ts` は logger と CORS を全パスへ適用するが、security middleware を登録していない。
-- CORS origin は `FRONTEND_URL`、未設定時は `http://localhost:5174`、credentials は true である。
+- CORS origin は共通 `getFrontendUrl()` で解決する。productionでは `FRONTEND_URL` が必須、development/testでは未設定時に `http://localhost:5174`、credentialsはtrueである。
 - backend は Hono 4.12.17 を利用し、`hono/secure-headers` を追加依存なしで import できる。
 - Hono `secureHeaders` は downstream 完了後に `ctx.res.headers.set()` するため、中央ポリシーで同名ヘッダーを上書きできる。
 - Hono compose は downstream error を app error handler の Response へ変換して外側 middleware に戻すため、security を外側に置けば 500 にも付与できる。
@@ -178,11 +179,14 @@
 
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
-| `backend/src/app.ts` | 新規 | Hono app factory、middleware 順序、route 登録を集約 |
-| `backend/src/app.test.ts` | 新規 | 実配線、health、404、401、preflight、CORS 共存を検証 |
+| `backend/src/app.ts` | 新規 | Hono app factory、middleware 順序、route 登録、共通404/500 handler、production CORS fail-fastを集約 |
+| `backend/src/app.test.ts` | 新規 | 実配線、health、404/500 JSON、401、preflight、CORS 共存を検証 |
 | `backend/src/index.ts` | 修正 | `createApp()` を呼び Node server 起動だけを担当 |
+| `backend/src/lib/config.ts` | 新規 | CORS・認証メールで共有するFRONTEND_URL解決、origin検証、production fail-fast |
+| `backend/src/lib/config.test.ts` | 新規 | production必須・development fallback・NODE_ENV判定・不正URL境界を検証 |
 | `backend/src/middleware/security/index.ts` | 修正 | 明示設定した security headers middlewareを実装 |
 | `backend/src/middleware/security/security.test.ts` | 新規 | header 値、環境差、200/500、上書き方針を検証 |
+| `backend/src/services/auth.service.ts` | 修正 | 認証メールURLを共通FRONTEND_URL設定へ統一 |
 | `backend/.env.example` | 修正 | `NODE_ENV` と HSTS production 判定を説明 |
 | `docker-compose.yml` | 修正 | ローカル backend の `NODE_ENV=development` を明示 |
 | `docs/02_security.md` | 修正 | API header 仕様、frontend CSP との責務境界、CORS 開発 origin を修正 |
@@ -249,11 +253,14 @@ response
 
 ## API 変更方針
 
-- endpoint、method、認証、request body、response body、status code、エラーメッセージは変更しない。
+- endpoint、method、認証、request body、既存route handlerのresponse body・status code・エラーメッセージは変更しない。
+- Hono既定の未知404と未捕捉500だけは、`docs/04_api.md`の共通契約に合わせて日本語JSONへ統一し、内部例外情報をclientへ返さない。server logにもraw例外を出さず固定イベント名だけを記録する。
 - 全 API 共通の response header 契約だけを追加する。
 - 200/201/400/401/403/404/409/429/500 と preflight に同じ非 HSTS header を付与する。
 - HSTS は production response のみに付与する。
 - CORS の `Access-Control-Allow-Origin` は `FRONTEND_URL`、credentials は true を維持する。
+- productionでは `FRONTEND_URL` を必須とし、未設定・空文字ならapp構築時にfail-fastする。development/testだけlocalhostへfallbackする。
+- `FRONTEND_URL` はHTTP(S)のorigin形式に限定し、path、query、hash、認証情報付きURLを拒否する。末尾slashだけは標準originへ正規化する。
 - セキュリティヘッダーを CORS allowlist の代替にしない。
 
 ## UI / A11Y 方針
@@ -288,11 +295,12 @@ response
 ## リリース・移行方針
 
 1. DB migration とデータ移行は不要。
-2. production 有効化前に API domain と `includeSubDomains` の対象になる全サブドメインが HTTPS 対応済みか確認する。
-3. Cloudflare 側に同名ヘッダーがある場合、app と edge のどちらを正本にするか決め、値の二重定義を解消する。
-4. backend を deploy し、health、404、401、preflight の response header を本番相当 URL で確認する。
-5. frontend から公開 API と Cookie/Authorization を使う認証 API の smoke test を行う。
-6. SvelteKit/Vercel の HTML CSP は別設定であることをリリース記録に残す。
+2. production 有効化前に、実際にHSTSを返すAPI hostと、そのhost配下で `includeSubDomains` の対象になる全hostがHTTPS対応済みか確認する。親domainや兄弟hostには遡及しない。
+3. 対象hostを確認できない場合は、`includeSubDomains` を有効にしたままproductionへ出さない。
+4. Cloudflare 側に同名ヘッダーがある場合、app と edge のどちらを正本にするか決め、値の二重定義を解消する。
+5. backend を deploy し、health、404、401、preflight の response header を本番相当 URL で確認する。
+6. frontend から公開 API と Cookie/Authorization を使う認証 API の smoke test を行う。
+7. SvelteKit/Vercel の HTML CSP は別設定であることをリリース記録に残す。
 
 ## ロールバック方針
 
@@ -300,6 +308,7 @@ response
 - app factory 分離に問題がある場合は Node entry を直前の app 構築へ戻せる。DB rollback は不要。
 - CSP、X-Frame-Options、nosniff、Referrer-Policy、Permissions-Policy、CORP はレスポンス変更を戻せば次回 request から解除される。
 - HSTS はブラウザにキャッシュされるため、コード rollback だけでは即時解除できない。`max-age=0` response を HTTPS で配信する手順を緊急 rollback に含めるが、到達済みブラウザやサブドメインへの影響が即時完全解消しないことを明記する。
+- HTTPS未対応になった配下hostには `max-age=0` を届けられないため、緊急解除手順は事前inventory確認の代替にならない。
 - preload は採用しないため、preload list からの削除手続きは不要。
 
 ## リスクと対策
@@ -337,48 +346,69 @@ response
 
 | ID | 内容 | 対象ファイル | 完了条件 | 優先度 |
 |---|---|---|---|---|
-| T1 | 既存仕様・Hono 実装・デプロイ前提を再確認 | docs、backend、Hono package | 事実と要確認事項が更新され、progress が `[-]` | High |
-| T2 | security unit test を Red で追加 | `security.test.ts` | exact header、production 差、200/500 の期待失敗を確認 | High |
-| T3 | app-level test を Red で追加 | `app.test.ts` | health/404/401/OPTIONS/CORS の期待失敗を確認 | High |
-| T4 | security middleware を実装 | `middleware/security/index.ts` | 明示 options と環境別 HSTS が unit test Green | High |
-| T5 | app factory と実配線を実装 | `app.ts`, `index.ts` | logger/security/CORS/routes 順で app test Green | High |
-| T6 | 環境設定例を更新 | `.env.example`, `docker-compose.yml` | development/production 判定が明記される | Medium |
-| T7 | Refactor と回帰 test | backend 関連 | 重複なし、既存 status/body/Cookie/CORS 不変 | High |
-| T8 | security/API docs を更新 | `docs/02_security.md`, `docs/04_api.md` | header 値と frontend CSP 非スコープが実装一致 | High |
-| T9 | backend 品質チェック | backend | format/lint/format:check/build/全 test が成功 | High |
-| T10 | Docker・ブラウザ手動確認 | backend/frontend | health/404/401/OPTIONS/API 疎通が成功 | High |
-| T11 | 実態・進捗・完了記録を更新 | plan、`docs/05_progress.md` | 対象表、`[x]`、実装完了が実態一致 | High |
-| T12 | commit・push・PR | git/GitHub | 種別別 commit、feature branch push、develop 向け PR | High |
+| T1 | 既存仕様・Hono 実装・環境差を再確認 | docs、backend、Hono package | 事実・要確認事項・実装方針が確定 | High |
+| T2 | 進捗を実装中へ更新 | `docs/05_progress.md` | 対象タスクが `[-]` | High |
+| T3 | security unit test を Red で追加 | `security.test.ts` | exact header、production 差、200/500 の期待失敗を確認 | High |
+| T4 | app-level test を Red で追加 | `app.test.ts` | health/404/401/OPTIONS/CORS の期待失敗を確認 | High |
+| T5 | security middleware を実装 | `middleware/security/index.ts` | 明示 options と環境別 HSTS が unit test Green | High |
+| T6 | app factory と実配線を実装 | `app.ts`, `index.ts` | logger/security/CORS/routes 順で app test Green | High |
+| T7 | 環境設定例を更新 | `.env.example`, `docker-compose.yml` | development/production 判定が明記される | Medium |
+| T8 | Refactor と回帰 test | backend 関連 | 重複なし、既存 status/body/Cookie/CORS 不変 | High |
+| T9 | security/API docs を更新 | `docs/02_security.md`, `docs/04_api.md` | header 値と frontend CSP 非スコープが実装一致 | High |
+| T10 | backend 品質チェック | backend | format/lint/format:check/build/全 test が成功 | High |
+| T11 | Docker・ブラウザ手動確認 | backend/frontend | health/404/401/OPTIONS/API 疎通が成功 | High |
+| T12 | 実態・進捗・完了記録を更新 | plan、`docs/05_progress.md` | 対象表、`[x]`、実装完了が実態一致 | High |
+| T13 | 変更種別ごとに commit | git | 機能・設定・docs を目的別に記録 | High |
+| T14 | PR 本文案をチャットで確認 | チャット | 調査・設計根拠・TDD・検証結果を日本語で提示 | High |
+| T15 | 承認後に push・PR 作成 | git/GitHub | feature branchをpushし、develop向けPRを作成 | High |
 
-- [ ] T1: 既存仕様・Hono 実装・デプロイ前提を再確認
-- [ ] T2: security unit test を Red で追加
-- [ ] T3: app-level test を Red で追加
-- [ ] T4: security middleware を実装
-- [ ] T5: app factory と実配線を実装
-- [ ] T6: 環境設定例を更新
-- [ ] T7: Refactor と回帰 test
-- [ ] T8: security/API docs を更新
-- [ ] T9: backend 品質チェック
-- [ ] T10: Docker・ブラウザ手動確認
-- [ ] T11: 実態・進捗・完了記録を更新
-- [ ] T12: commit・push・PR
+- [x] T1: 既存仕様・Hono 実装・環境差を再確認
+- [x] T2: 進捗を実装中へ更新
+- [x] T3: security unit test を Red で追加
+- [x] T4: app-level test を Red で追加
+- [x] T5: security middleware を実装
+- [x] T6: app factory と実配線を実装
+- [x] T7: 環境設定例を更新
+- [x] T8: Refactor と回帰 test
+- [x] T9: security/API docs を更新
+- [x] T10: backend 品質チェック
+- [x] T11: Docker・ブラウザ手動確認
+- [x] T12: 実態・進捗・完了記録を更新
+- [x] T13: 変更種別ごとに commit
+- [x] T14: 詳細なPR本文を作成
+- [x] T15: push・PR作成
+
+### 再レビュー改善タスク
+
+- [x] R1: 未知404・未捕捉500の共通JSON契約をtest先行で固定
+- [x] R2: app-level `notFound` / `onError` を日本語JSONで実装
+- [x] R2a: 未捕捉例外のraw objectをログへ出さず固定イベント名へ置換
+- [x] R3: HSTS `includeSubDomains` のhost scopeとrelease gateを明確化
+- [x] R4: security/API docs・対象ファイル・実装完了記録を実態へ整合
+- [x] R5: format・lint・format:check・build・全testで回帰確認
+- [x] R6: PR reviewのraw test error logを固定イベント名へ統一
+- [x] R7: FRONTEND_URLを共通設定へ集約しproduction未設定をfail-fast
+- [x] R8: deploymentのCORS例を自己完結させ、FRONTEND_URLのorigin形式を検証
 
 ### タブ区切り
 
 ```text
 タスクID	タスク内容	ファイル	優先度
-T1	既存仕様・Hono実装・デプロイ前提の再確認	docs・backend・Hono package	高
-T2	security unit test Red	backend/src/middleware/security/security.test.ts	高
-T3	app-level test Red	backend/src/app.test.ts	高
-T4	security middleware実装	backend/src/middleware/security/index.ts	高
-T5	app factory・実配線	backend/src/app.ts・backend/src/index.ts	高
-T6	環境設定例更新	backend/.env.example・docker-compose.yml	中
-T7	Refactor・回帰test	backend関連	高
-T8	security/API docs更新	docs/02_security.md・docs/04_api.md	高
-T9	backend品質チェック	backend	高
-T10	Docker・ブラウザ手動確認	backend・frontend	高
-T11	完了記録更新	plan.md・docs/05_progress.md	高
-T12	commit・push・PR	git・GitHub	高
+T1	既存仕様・Hono実装・環境差の再確認	docs・backend・Hono package	高
+T2	進捗を実装中へ更新	docs/05_progress.md	高
+T3	security unit test Red	backend/src/middleware/security/security.test.ts	高
+T4	app-level test Red	backend/src/app.test.ts	高
+T5	security middleware実装	backend/src/middleware/security/index.ts	高
+T6	app factory・実配線	backend/src/app.ts・backend/src/index.ts	高
+T7	環境設定例更新	backend/.env.example・docker-compose.yml	中
+T8	Refactor・回帰test	backend関連	高
+T9	security/API docs更新	docs/02_security.md・docs/04_api.md	高
+T10	backend品質チェック	backend	高
+T11	Docker・ブラウザ手動確認	backend・frontend	高
+T12	完了記録更新	plan.md・docs/05_progress.md	高
+T13	変更種別ごとにcommit	git	高
+T14	PR本文案をチャットで確認	チャット	高
+T15	承認後にpush・PR作成	git・GitHub	高
 ```
 
 ## テストケース一覧
@@ -406,7 +436,8 @@ T12	commit・push・PR	git・GitHub	高
 |---|---|
 | `GET /` | 200、既存 body、security header |
 | `GET /api/v1/health` | 200、既存 body shape、security header |
-| 存在しない path | 404 と security header |
+| 存在しない path | 404、日本語JSON `error`、security header |
+| app内の未捕捉例外 | 500、日本語JSON `error`、内部情報なし、security header |
 | 認証なし `GET /api/v1/users/me` | 401、日本語 error、security header |
 | 許可 origin の `OPTIONS` | CORS allow-origin/credentials と security header が共存 |
 | 未許可 origin の `OPTIONS` | 許可されない origin を反映せず security header は付く |
@@ -487,3 +518,73 @@ T12	commit・push・PR	git・GitHub	高
 |---|---|---|
 |  |  |  |
 ```
+
+## 実装完了
+
+- 完了日: 2026-07-12
+- 実装ブランチ: `feature/security-headers`
+- PR: #84
+
+### 計画からの変更点
+
+- app factory分離時のroute登録漏れを直接検知するため、app-level testへauth/admin/elements/game/ranking/users/weakの全prefix確認を追加した。
+- 再レビューで、未知404と未捕捉500がHono既定の英語plain textになり、共通API仕様と日本語エラー規約に反する不整合を検出した。app-level `notFound` / `onError` を追加し、内部例外情報を含まない日本語JSONへ統一した。
+- 追加レビューで `console.error(error)` がDB接続情報やtoken等をraw例外から漏らし得ることを検出した。固定イベント名だけを記録する実装へ変更し、secretを含むtest例外がログへ渡らないことをTDDで固定した。
+- PR reviewで、test helperにもraw `Error` 出力が残っている点と、productionの `FRONTEND_URL` 未設定がlocalhostへfallbackする点を検出した。test helperも固定イベント名へ統一し、CORSと認証メールURLの環境設定を `lib/config.ts` へ集約してproductionではfail-fastするよう変更した。
+- 追加reviewでdeploymentのCORS snippetが `app` / `isProduction` 未定義だったため、`createApp` 全体を含む自己完結例へ修正した。横断再監査で計画書の旧fallback記述とURL形式未検証も検出し、HTTP(S) originの検証・正規化を追加した。
+- HSTSの `includeSubDomains` は応答hostの配下にのみ適用され、親domain・兄弟hostには遡及しないことと、対象host未確認時はproductionへ出さないrelease gateを明記した。
+- ブラウザでは公開APIを使うトップ・元素一覧、ログイン画面、空欄validationを確認した。認証情報を使うlogin/refresh/logoutの手動操作は行わず、既存を含むbackend自動テストで回帰を確認した。
+- ユーザー指定の確認フローに合わせ、commit、PR本文のチャット確認、承認後のpush・PR作成を別タスクへ分割した。
+
+### 確定したセキュリティヘッダー
+
+| ヘッダー | 最終設定値 | 適用環境 | 備考 |
+|---|---|---|---|
+| `Content-Security-Policy` | `default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'` | 全環境 | JSON API用。SvelteKit HTMLは別責務 |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | productionのみ | preloadなし |
+| `X-Frame-Options` | `DENY` | 全環境 | CSP frame-ancestorsと併用 |
+| `X-Content-Type-Options` | `nosniff` | 全環境 | MIME sniffing防止 |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | 全環境 | cross-originへpath/queryを送らない |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` | 全環境 | 不要機能を拒否 |
+| `Cross-Origin-Resource-Policy` | `same-origin` | 全環境 | CORS mode fetchとの共存を確認 |
+| `X-XSS-Protection` | `0` | 全環境 | 旧auditorを無効化 |
+| `X-Permitted-Cross-Domain-Policies` | `none` | 全環境 | legacy policy拒否 |
+| `X-Powered-By` | 削除 | 全環境 | 実装情報を露出しない |
+
+### TDD 実施記録
+
+- Red: 初回実装では `security.test.ts` は未実装関数により7件失敗、`app.test.ts` は未作成moduleによりcollection失敗を確認した。再レビューでは既存14件を維持したまま、未知404・未捕捉500の新規2件がplain text responseのため失敗した。追加レビューではraw `Error` が `console.error` へ渡る1件の失敗を確認した。
+- Green: middlewareとapp factoryの初回実装後に対象testを通過させ、再レビューでは共通404/500 handler追加後に対象2ファイル・16件が全通過した。ログ非機密化後は `app.test.ts` 9件が全通過した。
+- PR review対応: Redでconfig module未実装、production未設定がthrowしない、空文字development fallback不成立を確認した。Greenでconfig/app/security/register/forgot-passwordの5 files・39 testsが全通過した。
+- 追加review対応: Redで末尾slash未正規化と不正URL5ケースの未拒否を確認し、Greenでconfig 10 testsが全通過した。
+- Refactor: 全route prefix回帰test、共通エラー契約、内部情報非開示testを追加した。期待済み500 errorのstderrはtest内spyで抑制した。
+
+### 品質・手動確認結果
+
+- backend format: 成功。全対象ファイルunchanged
+- backend lint: 成功
+- backend format:check: 成功
+- backend build: 成功
+- backend test: 53 files・500 tests全通過。監査ログintegration 1 file・1 testは専用DB環境変数なしの通常実行でskip
+- Docker設定: `docker compose config --quiet`成功。Hono containerだけを`NODE_ENV=development`で再作成
+- Docker/API: health 200、404、認証なし401、許可・未許可originのOPTIONSを確認。全対象responseへsecurity headerが付き、developmentではHSTSなし
+- browser/CORS/A11Y: トップとランキングプレビュー、元素一覧118件、ログイン画面を確認。空欄errorは`alert`。warning/error 0件
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+|---|---|---|
+| `backend/src/app.ts` | 新規 | Hono app factory、middleware順序、route登録、共通404/500 handler、production CORS fail-fast |
+| `backend/src/app.test.ts` | 新規 | 実配線、health、404/500 JSON、401、preflight、CORS、route prefix test |
+| `backend/src/index.ts` | 修正 | app factoryを呼ぶNode server起動entryへ縮小 |
+| `backend/src/lib/config.ts` | 新規 | CORS・認証メール共通のFRONTEND_URL解決・origin検証 |
+| `backend/src/lib/config.test.ts` | 新規 | production必須・development fallback・不正URL境界test |
+| `backend/src/middleware/security/index.ts` | 修正 | 明示設定したsecurity headers middlewareを実装 |
+| `backend/src/middleware/security/security.test.ts` | 新規 | exact header、環境差、200/500、上書きtest |
+| `backend/src/services/auth.service.ts` | 修正 | 認証メールURLを共通設定へ統一 |
+| `backend/.env.example` | 修正 | `NODE_ENV`とHSTS production判定を説明 |
+| `docker-compose.yml` | 修正 | ローカルHonoの`NODE_ENV=development`を明示 |
+| `docs/02_security.md` | 修正 | API header仕様、frontend CSPとの責務境界、CORS originを更新 |
+| `docs/04_api.md` | 修正 | 全API共通response header契約を追加 |
+| `docs/05_progress.md` | 修正 | 対象タスクを完了へ更新 |
+| `docs/plans/security-headers/plan.md` | 修正 | タスク、TDD、品質・手動確認、実装完了記録を更新 |

@@ -88,25 +88,35 @@
 
 別ドメイン間の通信を許可するため、Honoに CORS ミドルウェアを設定します。
 
-`backend/src/index.ts`:
+`backend/src/app.ts`:
 ```typescript
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { getFrontendUrl } from "./lib/config.js";
 
-const app = new Hono();
+type CreateAppOptions = {
+  isProduction: boolean;
+};
 
-app.use(
-  "*",
-  cors({
-    origin: process.env.FRONTEND_URL ?? "http://localhost:5174",
-    allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    credentials: true,
-  }),
-);
+export const createApp = ({ isProduction }: CreateAppOptions) => {
+  const app = new Hono();
+  const frontendUrl = getFrontendUrl({ isProduction });
 
-export default app;
+  app.use(
+    "*",
+    cors({
+      origin: frontendUrl,
+      allowHeaders: ["Content-Type", "Authorization"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      credentials: true,
+    }),
+  );
+
+  return app;
+};
 ```
+
+`NODE_ENV=production` では `FRONTEND_URL` を必須とし、未設定・空文字ならapp構築時にエラーで停止する。HTTP(S)のorigin形式だけを許可し、path、query、hash、認証情報付きURLは拒否する。localhostへのfallbackはdevelopment/testだけで使用する。
 
 ---
 
@@ -354,6 +364,7 @@ Actions の schedule は遅延・スキップされる可能性があるため�
 [ ] Vercelに VITE_API_BASE_URL 環境変数を設定
 [ ] Cloudflareアカウント作成・Wranglerインストール
 [ ] wrangler.toml 作成
+[ ] Cloudflare Workers に production の FRONTEND_URL を設定（未設定では起動不可）
 [ ] DATABASE_URL と JWT_SECRET を Wrangler Secrets に設定
 [ ] GitHub Actions の DATABASE_URL Secret を設定（migrate deploy 用）
 [ ] 本番DBバックアップ取得状況を確認
