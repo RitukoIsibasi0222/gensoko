@@ -494,7 +494,7 @@ export const RATE_LIMIT_POLICIES: Readonly<
 | -------------------------------- | ---------------- | ------------------------------ | -------------------------------- | ----------------------------------------------------------------- |
 | policy limit/window/failure mode | 本番と同じ定数   | test fixtureを明示注入         | 本番定数                         | `policies.ts`のみ。route/envへ数値を重複させない                  |
 | store                            | in-memory        | fake/in-memory/Workers runtime | SQLite-backed Durable Object必須 | store factoryとWorkers binding                                    |
-| `RATE_LIMIT_KEY_SECRET`          | `.env`の開発用値 | testから固定fixture注入        | Wrangler Secret必須              | `config.ts`で形式・長さ検証。値は記録しない                       |
+| `RATE_LIMIT_KEY_SECRET`          | `backend/.env`の開発用値 | testから固定fixture注入        | Wrangler Secret必須              | localはbackend直接起動とComposeで一元利用。値は記録しない          |
 | `RATE_LIMIT_STORE`               | `memory`         | 原則注入                       | `durable-object`以外を拒否       | `config.ts`。productionの暗黙memory fallback禁止                  |
 | DO binding名候補                 | なし             | Workers fixture                | `RATE_LIMIT_COUNTER`             | Wrangler設定。フェーズ12の命名規則確認後に確定                    |
 | `TRUST_PROXY`                    | 廃止予定         | 使用しない                     | 使用しない                       | rate limitのIP取得には使わず、関連文書・Composeから除去可否を確認 |
@@ -852,12 +852,14 @@ Workers test scriptと`wrangler dev`確認コマンドは、フェーズ12で採
 - Node entrypointはdevelopment用memory storeだけを構築し、`durable-object`指定時は起動を拒否する。Workers専用entrypointはフェーズ12へ引き継ぐ。
 - IP正規化には自作パーサーを増やさず、MIT・runtime依存なしの`ipaddr.js`を採用した。
 - Workers基盤が存在しないため、T13〜T15をこのブランチで推測実装せず、依存PR後の別PRへ分離する。
+- localの`RATE_LIMIT_KEY_SECRET`は`backend/.env`だけで管理する。`npm run dev`は`tsx --env-file`、Composeは`env_file`から同じ値を読み、ルート`.env`への重複設定は廃止した。
+- Compose側の固定`JWT_SECRET`は`env_file`の値を上書きして直接起動と分岐するため削除し、`backend/.env`を共通の取得元にした。
 
 ### 実際の変更ファイル
 
 | ファイル | 変更種別 | 内容 |
 | --- | --- | --- |
-| `backend/package.json`, `backend/package-lock.json` | 修正 | `ipaddr.js`依存を追加 |
+| `backend/package.json`, `backend/package-lock.json` | 修正 | `ipaddr.js`依存を追加し、直接起動時に`backend/.env`を明示読込 |
 | `backend/.env.example`, `docker-compose.yml` | 修正 | development用rate limit設定を追加し`TRUST_PROXY`を廃止 |
 | `backend/src/lib/config.ts`, `config.test.ts` | 修正 | store・HMAC secretの環境別検証 |
 | `backend/src/middleware/rateLimit/policies.ts`, `policies.test.ts` | 新規 | policyのsingle sourceと契約test |
