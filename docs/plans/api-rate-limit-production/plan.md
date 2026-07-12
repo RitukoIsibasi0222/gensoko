@@ -853,6 +853,7 @@ Workers test scriptと`wrangler dev`確認コマンドは、フェーズ12で採
 - IP正規化には自作パーサーを増やさず、MIT・runtime依存なしの`ipaddr.js`を採用した。
 - Workers基盤が存在しないため、T13〜T15をこのブランチで推測実装せず、依存PR後の別PRへ分離する。
 - localの`RATE_LIMIT_KEY_SECRET`は`backend/.env`だけで管理する。`npm run dev`は`tsx --env-file`、Composeは`env_file`から同じ値を読み、ルート`.env`への重複設定は廃止した。
+- Compose側の固定`JWT_SECRET`は`env_file`の値を上書きして直接起動と分岐するため削除し、`backend/.env`を共通の取得元にした。
 
 ### 実際の変更ファイル
 

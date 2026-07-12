@@ -154,7 +154,6 @@ services:
       - ./backend/.env
     environment:
       - DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko
-      - JWT_SECRET=your-super-secret-key-change-this
       - MAIL_HOST=mailpit
       - MAIL_PORT=1025
       - FRONTEND_URL=http://localhost:5174
@@ -249,7 +248,7 @@ docker compose exec hono sh -c "npx tsc --init"
 ```json
 {
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --env-file=.env src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js"
   }
