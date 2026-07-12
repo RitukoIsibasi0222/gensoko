@@ -70,6 +70,8 @@ Response 201:
 Error:
 400 バリデーションエラー
 409 メールアドレスまたはユーザー名が既に使用されている
+429 リクエストが多すぎます。しばらく待ってから再試行してください
+503 一時的に利用できません。しばらく待ってから再試行してください
 ```
 
 ### POST `/auth/login`
@@ -100,6 +102,8 @@ Error:
 403 アカウントが停止されています
 403 メールアドレスが確認されていません
 409 アカウント情報が変更されました。再試行してください
+429 リクエストが多すぎます。しばらく待ってから再試行してください
+503 一時的に利用できません。しばらく待ってから再試行してください
 ```
 
 監査ログ:
@@ -114,6 +118,7 @@ Error:
 
 - メールアドレスの存在有無を外部へ漏らさない既存responseを維持する。
 - 申請操作は監査DBの対象外。内部例外時もraw error objectを出力せず、固定event名だけを運用ログへ記録する。
+- rate limit超過時は429、rate limit store障害時は503を返し、この場合はメール送信処理を開始しない。
 
 ### POST `/auth/reset-password`
 
@@ -141,6 +146,7 @@ Error:
 - 404: 無効なトークンです
 - 429: リクエストが多すぎます。しばらく待ってから再試行してください
 - 500: サーバーエラーが発生しました
+- 503: 一時的に利用できません。しばらく待ってから再試行してください
 
 ---
 
@@ -355,6 +361,7 @@ Error:
 409 error: 問題セットの有効期限が切れています。もう一度ゲームを開始してください / 問題セットのゲームモードが一致しません / 問題セットはすでに送信済みです
 429 error: リクエストが多すぎます。しばらく待ってから再試行してください
 500 error: サーバーエラーが発生しました
+503 error: 一時的に利用できません。しばらく待ってから再試行してください
 ```
 
 ### GET `/game/sessions`
@@ -551,7 +558,58 @@ Error:
 | 429 | Too Many Requests | レート制限超過 |
 | 500 | Internal Server Error | サーバー内部エラー |
 | 502 | Bad Gateway | サーバーダウン（リバースプロキシ） |
+| 503 | Service Unavailable | sensitive APIのレート制限store障害 |
 | 504 | Gateway Timeout | サーバータイムアウト |
+
+#### レート制限の共通レスポンス
+
+Honoがレート制限超過を検出した場合は、次のレスポンスを返します。
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 42
+Content-Type: application/json
+```
+
+```json
+{
+  "error": "リクエストが多すぎます。しばらく待ってから再試行してください"
+}
+```
+
+- `Retry-After` は現在の固定windowがリセットされるまでの秒数を切り上げた0以上の整数です。
+- 複数バケットが超過した場合は、失敗したバケットのうち最大の待ち時間を返します。
+- 成功レスポンスへ `RateLimit` / `RateLimit-*` ヘッダーは付けません。一般・専用・edgeの残回数を単一の値で正確に表せないためです。
+
+sensitive policyでレート制限storeが利用できない場合は、処理を継続せず次を返します。
+
+```http
+HTTP/1.1 503 Service Unavailable
+Retry-After: 60
+Content-Type: application/json
+```
+
+```json
+{
+  "error": "一時的に利用できません。しばらく待ってから再試行してください"
+}
+```
+
+| 対象 | 一般制限 | 専用制限 |
+|---|---|---|
+| register/login/forgot-password | 60回/60秒・IP | 10回/600秒・共有IP + 操作別email |
+| reset-password | 60回/60秒・IP | 10回/600秒・共有IP |
+| password変更・account削除 | 60回/60秒・IP | 10回/600秒・IP + user |
+| `GET /game/questions` | 60回/60秒・IP | 30回/60秒・IP |
+| `POST /game/sessions` | 60回/60秒・IP | 20回/60秒・IP + 20回/60秒・user |
+| その他の `/api/v1/*` | 60回/60秒・IP | なし |
+| `/`、`/api/v1/health`、`OPTIONS` | 対象外 | なし |
+
+- email制限はZod検証成功後に適用します。不正JSON・不正emailはIPバケットだけを消費します。
+- `POST /game/sessions` は専用IP制限、認証、専用user制限、Zod検証の順です。未認証リクエストはIPバケットを消費しますがuserバケットを消費しません。
+- `GET /game/sessions` と `GET /game/sessions/:sessionId` はgame submit専用バケットを消費しません。
+- IP resolverまたはHMAC生成が失敗した場合は、raw errorを返さずキー取得不能としてpolicyのfail-open / fail-closedを適用します。
+- Cloudflare WAFがHono到達前に返すedge responseは、このJSON・CORS・`Retry-After`契約の保証対象外です。クライアントは非JSONレスポンスやnetwork errorでも既定メッセージを表示してください。
 
 **重要**: 502/504 を含むエラー時は **非 JSON**（HTML、プレーンテキスト等）が返る可能性があります。
 
@@ -622,7 +680,9 @@ function toJpMessage(status: number, fallback: string): string {
       // 例: "メールアドレスは既に使用されています"
       return fallback;
     case 429:
-      return 'しばらく待ってから再試行してください';
+      return fallback;
+    case 503:
+      return fallback;
     case 500:
       return 'サーバーエラーが発生しました';
     default:
@@ -801,6 +861,7 @@ Error:
 409 error: このユーザー名は既に使用されています / パスワードが既に変更されています。再ログインしてください
 429 error: リクエストが多すぎます。しばらく待ってから再試行してください（パスワード変更時）
 500 error: サーバーエラーが発生しました
+503 error: 一時的に利用できません。しばらく待ってから再試行してください（パスワード変更時）
 
 ### DELETE `/users/me`
 
@@ -836,6 +897,7 @@ Error:
 403 error: アカウントが停止されています / メールアドレスが確認されていません / アカウントがロックされています / ユーザーが見つかりません（サービス層で検出した場合）
 429 error: リクエストが多すぎます。しばらく待ってから再試行してください
 500 error: サーバーエラーが発生しました
+503 error: 一時的に利用できません。しばらく待ってから再試行してください
 
 ### GET /users/me/stats
 

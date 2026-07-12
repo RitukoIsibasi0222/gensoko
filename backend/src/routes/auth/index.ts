@@ -2,6 +2,12 @@ import { zValidator } from "@hono/zod-validator";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { Hono } from "hono";
 import { z } from "zod";
+import {
+  createEmailBucketResolver,
+  createIpBucketResolver,
+  getRateLimitStore,
+} from "../../middleware/rateLimit/buckets.js";
+import { rateLimit } from "../../middleware/rateLimit/index.js";
 import { emailSchema, strongPasswordSchema, usernameSchema } from "../../lib/validation/auth.js";
 import {
   getRefreshTokenCookieBasePath,
@@ -17,7 +23,7 @@ import {
   forgotPassword,
   resetPassword,
 } from "../../services/auth.service.js";
-import { rateLimit } from "../../middleware/rateLimit/index.js";
+import type { AppVariables } from "../../types/index.js";
 
 const registerSchema = z.object({
   username: usernameSchema,
@@ -25,24 +31,32 @@ const registerSchema = z.object({
   password: strongPasswordSchema,
 });
 
-// 認証系エンドポイント向けレート制限（10分間で10リクエストまで）
-// TRUST_PROXY=true の場合のみ x-forwarded-for / x-real-ip を信頼する（リバースプロキシ配下）
-const authRateLimit = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 10,
-  trustProxy: process.env.TRUST_PROXY === "true",
+const authIpRateLimit = rateLimit({
+  getStore: getRateLimitStore,
+  resolveBuckets: createIpBucketResolver("AUTH_IP"),
 });
 
-export const authRouter = new Hono();
+const createAuthEmailRateLimit = (operationScope: string) =>
+  rateLimit({
+    getStore: getRateLimitStore,
+    resolveBuckets: createEmailBucketResolver(operationScope),
+  });
+
+const registerEmailRateLimit = createAuthEmailRateLimit("register");
+const loginEmailRateLimit = createAuthEmailRateLimit("login");
+const forgotPasswordEmailRateLimit = createAuthEmailRateLimit("forgot-password");
+
+export const authRouter = new Hono<{ Variables: AppVariables }>();
 
 authRouter.post(
   "/register",
-  authRateLimit,
+  authIpRateLimit,
   zValidator("json", registerSchema, (result, c) => {
     if (!result.success) {
       return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
     }
   }),
+  registerEmailRateLimit,
   async (c) => {
     const { username, email, password } = c.req.valid("json");
 
@@ -92,12 +106,13 @@ const loginSchema = z.object({
 
 authRouter.post(
   "/login",
-  authRateLimit,
+  authIpRateLimit,
   zValidator("json", loginSchema, (result, c) => {
     if (!result.success) {
       return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
     }
   }),
+  loginEmailRateLimit,
   async (c) => {
     const { email, password } = c.req.valid("json");
 
@@ -200,12 +215,13 @@ const forgotPasswordSchema = z.object({
 
 authRouter.post(
   "/forgot-password",
-  authRateLimit,
+  authIpRateLimit,
   zValidator("json", forgotPasswordSchema, (result, c) => {
     if (!result.success) {
       return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
     }
   }),
+  forgotPasswordEmailRateLimit,
   async (c) => {
     const { email } = c.req.valid("json");
     try {
@@ -226,7 +242,7 @@ const resetPasswordSchema = z.object({
 
 authRouter.post(
   "/reset-password",
-  authRateLimit,
+  authIpRateLimit,
   zValidator("json", resetPasswordSchema, (result, c) => {
     if (!result.success) {
       return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);

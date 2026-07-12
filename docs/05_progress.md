@@ -1,6 +1,6 @@
 # Gensoko 実装タスク一覧
 
-> 更新日: 2026-07-05
+> 更新日: 2026-07-12
 > ステータス: `[ ]` 未実装 / `[-]` 実装中 / `[x]` 完了
 
 ---
@@ -161,7 +161,7 @@
 
 - [x] bcrypt 72バイト上限の入力検証統一（UTF-8バイト数、登録・変更・リセット・管理者CLI、既存ユーザー互換性、フロント表示、72/73バイト境界テスト） — 計画書: [`docs/plans/bcrypt-password-byte-limit/plan.md`](plans/bcrypt-password-byte-limit/plan.md) / PR: #82
 - [x] セキュリティヘッダーミドルウェア（CSP/HSTS/X-Frame-Options/nosniff等） — 計画書: [`docs/plans/security-headers/plan.md`](plans/security-headers/plan.md) / PR: #84
-- [ ] APIレート制限の本番設計・適用（認証系 / 一般API / `POST /game/sessions`） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md)
+- [-] APIレート制限の本番設計・適用（認証系 / 一般API / `POST /game/sessions`） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md) — Hono・フロントエンド先行実装済み。本番Durable Object・WAF・実機検証はフェーズ12基盤後に実施
 - [ ] 監査ログ本番運用設計（保持期間・容量監視・cleanup・退会後の内部ID保持方針） — 計画書: [docs/plans/audit-log/plan.md](plans/audit-log/plan.md)
 - [ ] エラートラッキング・構造化ログ導入（500通知・requestId・個人情報除外）
 - [ ] ダークモード対応（OS設定追従 + トグルボタン）
@@ -174,6 +174,7 @@
 - [ ] Supabase プロジェクト作成・接続 URL 取得
 - [ ] 本番DBバックアップ・Prismaマイグレーション運用（`migrate deploy` 実行タイミング・ロールバック方針）
 - [ ] Cloudflare Workers wrangler.toml + @prisma/adapter-cloudflare 設定・デプロイ
+- [ ] APIレート制限の本番適用継続（Workers専用entrypoint・SQLite-backed Durable Object・WAF・staging/production実機確認） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md)（フェーズ11先行実装の続き）
 - [ ] Vercel SvelteKit デプロイ・環境変数設定
 - [ ] GitHub Actions CI/CD 設定（本番マイグレーション → APIデプロイ → フロントデプロイ）
 - [ ] npm audit・本番環境動作確認（ログイン/ゲーム/メール）

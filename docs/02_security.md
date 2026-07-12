@@ -86,17 +86,36 @@
 - ロック中は「しばらく時間をおいてお試しください」と表示（残り時間は開示しない）
 
 ### レート制限
-| エンドポイント | 制限 |
-|--------------|------|
-| 認証系API（ログイン・登録・パスワードリセット） | **10分間で10リクエスト**まで（IP単位。ログイン・メール送信系は対象メールアドレス単位も併用） |
-| `POST /game/sessions` | **1分間で20リクエスト**まで（ユーザーID + IP単位） |
-| 一般API | **1分間で60リクエスト**まで（IP単位） |
+
+すべての非除外 `/api/v1/*` は一般API制限を消費し、次の対象では専用制限も追加で消費する。
+
+| Policy ID | 対象 | 制限 | キー | store障害時 |
+|---|---|---:|---|---|
+| `GENERAL_API_IP` | healthとOPTIONSを除く `/api/v1/*` | 60回/60秒 | IP | fail-open |
+| `AUTH_IP` | register/login/forgot-password/reset-passwordで共有 | 10回/600秒 | IP | fail-closed |
+| `AUTH_EMAIL` | register/login/forgot-passwordの操作ごと | 10回/600秒 | 操作 + 正規化メールアドレスのHMAC | fail-closed |
+| `ACCOUNT_IP` | パスワード変更・アカウント削除 | 10回/600秒 | IP | fail-closed |
+| `ACCOUNT_USER` | パスワード変更・アカウント削除 | 10回/600秒 | 認証済みユーザーIDのHMAC | fail-closed |
+| `GAME_QUESTIONS_IP` | `GET /game/questions` | 30回/60秒 | IP | fail-open |
+| `GAME_SUBMIT_IP` | `POST /game/sessions` | 20回/60秒 | IP | fail-closed |
+| `GAME_SUBMIT_USER` | `POST /game/sessions` | 20回/60秒 | 認証済みユーザーIDのHMAC | fail-closed |
+
+- `/`、`/api/v1/health`、すべての `OPTIONS` はHonoのレート制限から除外する。
+- `POST /game/sessions` のIPとユーザーID、パスワード変更・アカウント削除のIPとユーザーIDは、複合キー1個ではなく独立した2つのバケットとして評価する。
+- 同じmiddleware段階の複数バケットはすべて試行として消費する。いずれかが超過した場合は最大の待ち時間を返し、store障害と超過が混在した場合はfail-closedの503を優先する。
+- 認証系のメールアドレスはZod検証後にレート制限専用として `trim().toLowerCase()` を1回だけ行い、操作scope付きのHMACへ変換する。認証・DB保存時のメールアドレス仕様は変更しない。
+- 生のIP、メールアドレス、ユーザーID、HMAC digest、body、token、Cookie、Authorizationをrate limit storeやログへ保存しない。
+- productionではCloudflareが付与した単一の `CF-Connecting-IP` だけを検証して使用し、`X-Forwarded-For` と `X-Real-IP` は信頼しない。IPv6は同一 `/64` を同じactorとして扱う。
+- IP resolverまたはHMAC生成が失敗した場合はキー取得不能として扱い、raw errorを記録せずpolicyのfail-open / fail-closedを適用する。
 
 ### 本番環境での実装方針
-- Cloudflare 側のエッジ制限で大量アクセスを先に遮断する
-- Hono のレート制限ミドルウェアでも同じ対象を制御し、ユーザーID単位の制限とテストを担保する
-- Cloudflare Workers のインスタンス内メモリだけに依存しない
-- 制限超過時は `429` と日本語エラー（例: `リクエストが多すぎます。しばらく待ってから再試行してください`）を返す
+
+- Cloudflare WAF Rate Limiting Rulesは、Honoより高い閾値で大量アクセスを先に遮断する粗いエッジ防御とする。
+- Honoはroute、検証済みメールアドレス、認証済みユーザーIDを使う正確なアプリケーション制限を担当する。
+- Honoのproduction storeにはSQLite-backed Durable Objectを必須とし、プロセス内memory storeへ暗黙fallbackしない。memory storeはdevelopment/testだけで使用する。
+- 制限超過時は `429`、日本語JSON、`Retry-After` を返す。
+- sensitive policyのstore障害時は `503` と `Retry-After: 60` を返す。一般APIとquestionsはfail-openし、固定イベントだけを記録する。
+- WAFが返すedge responseはHonoのJSON/CORS契約に含めない。フロントエンドは非JSONやnetwork errorでも既定メッセージを表示する。
 
 ---
 

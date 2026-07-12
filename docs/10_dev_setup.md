@@ -150,13 +150,14 @@ services:
       - "3000:3000"
     volumes:
       - ./backend:/app
+    env_file:
+      - ./backend/.env
     environment:
       - DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko
-      - JWT_SECRET=your-super-secret-key-change-this
       - MAIL_HOST=mailpit
       - MAIL_PORT=1025
       - FRONTEND_URL=http://localhost:5174
-      - TRUST_PROXY=false
+      - RATE_LIMIT_STORE=memory
     command: sh -c "npm install && npm run dev"
     depends_on:
       - postgres
@@ -165,7 +166,7 @@ services:
     image: node:22-alpine
     working_dir: /app
     ports:
-      - "5174:5173"
+      - "5174:5174"
     volumes:
       - ./frontend:/app
     environment:
@@ -247,7 +248,7 @@ docker compose exec hono sh -c "npx tsc --init"
 ```json
 {
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --env-file=.env src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js"
   }
@@ -273,7 +274,27 @@ MAIL_HOST="mailpit"
 MAIL_PORT="1025"
 MAIL_FROM="noreply@gensoko.local"
 FRONTEND_URL="http://localhost:5174"
+RATE_LIMIT_STORE="memory"
+RATE_LIMIT_KEY_SECRET="<32バイト以上のランダム値をbase64化した文字列>"
 ```
+
+#### ローカルのレート制限設定
+
+developmentではプロセス内のmemory storeを使用する。これは本番用Durable Objectと同じstore契約を使うが、Docker再起動やbackend再起動でカウントはリセットされる。
+
+秘密鍵は次のコマンドで生成し、Git管理外の `backend/.env` にだけ保存する。
+
+```bash
+openssl rand -base64 32
+```
+
+- backendの直接起動とDocker Composeは、どちらも `backend/.env` の同じ値を使用する。
+- Docker Composeでは `env_file` で `backend/.env` を読み込み、コンテナ内だけ異なる値（`DATABASE_URL`など）は `environment` で上書きする。
+- リポジトリルートにCompose補間用の `.env` を重複作成しない。
+- `RATE_LIMIT_KEY_SECRET` はレート制限キー専用とし、`JWT_SECRET`を流用しない。
+- `RATE_LIMIT_STORE=memory` はdevelopment/test専用である。productionでは `durable-object` 以外を起動時に拒否し、memory storeへfallbackしない。
+- レート制限のIP取得に `TRUST_PROXY`、`X-Forwarded-For`、`X-Real-IP`は使用しない。Node developmentではsocket address、Workers productionでは検証済み `CF-Connecting-IP` を使う。
+- ローカルの小さい上限値を環境変数で上書きしない。テストではpolicy/storeをdependency injectionし、本番policy定数を変更せず境界を確認する。
 
 `backend/prisma/schema.prisma` に [docs/03_data_model.md](03_data_model.md) のスキーマをコピー後：
 ```bash

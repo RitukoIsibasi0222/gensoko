@@ -494,7 +494,7 @@ export const RATE_LIMIT_POLICIES: Readonly<
 | -------------------------------- | ---------------- | ------------------------------ | -------------------------------- | ----------------------------------------------------------------- |
 | policy limit/window/failure mode | 本番と同じ定数   | test fixtureを明示注入         | 本番定数                         | `policies.ts`のみ。route/envへ数値を重複させない                  |
 | store                            | in-memory        | fake/in-memory/Workers runtime | SQLite-backed Durable Object必須 | store factoryとWorkers binding                                    |
-| `RATE_LIMIT_KEY_SECRET`          | `.env`の開発用値 | testから固定fixture注入        | Wrangler Secret必須              | `config.ts`で形式・長さ検証。値は記録しない                       |
+| `RATE_LIMIT_KEY_SECRET`          | `backend/.env`の開発用値 | testから固定fixture注入        | Wrangler Secret必須              | localはbackend直接起動とComposeで一元利用。値は記録しない          |
 | `RATE_LIMIT_STORE`               | `memory`         | 原則注入                       | `durable-object`以外を拒否       | `config.ts`。productionの暗黙memory fallback禁止                  |
 | DO binding名候補                 | なし             | Workers fixture                | `RATE_LIMIT_COUNTER`             | Wrangler設定。フェーズ12の命名規則確認後に確定                    |
 | `TRUST_PROXY`                    | 廃止予定         | 使用しない                     | 使用しない                       | rate limitのIP取得には使わず、関連文書・Composeから除去可否を確認 |
@@ -782,25 +782,25 @@ DOはschemaを`new_sqlite_classes` migrationとして追加し、stagingとprodu
 | T21 | pushして詳細PRを作成                   | GitHub                                                                    | TDD記録、test表、Cloudflare手作業、フェーズ12依存を記載  | Medium |
 
 - [ ] T1: 仕様・全route・Cloudflare planを再確認する
-- [ ] T2: `docs/05_progress.md`を実装中へ更新する
-- [ ] T3: API/security/dev/deploy契約を先に更新する
-- [ ] T4: policy/config testをRed化する
-- [ ] T5: policy/configを実装する
-- [ ] T6: key/resolver testをRed化する
-- [ ] T7: key/resolverを実装する
-- [ ] T8: memory store/middleware testをRed化する
-- [ ] T9: store契約/memory/middlewareを実装する
-- [ ] T10: app/route integrationをRed化する
-- [ ] T11: app/auth/users/gameへ配線する
-- [ ] T12: frontend回帰testを追加する
+- [x] T2: `docs/05_progress.md`を実装中へ更新する
+- [x] T3: API/security/dev/deploy契約を先に更新する
+- [x] T4: policy/config testをRed化する
+- [x] T5: policy/configを実装する
+- [x] T6: key/resolver testをRed化する
+- [x] T7: key/resolverを実装する
+- [x] T8: memory store/middleware testをRed化する
+- [x] T9: store契約/memory/middlewareを実装する
+- [x] T10: app/route integrationをRed化する
+- [x] T11: app/auth/users/gameへ配線する
+- [x] T12: frontend回帰testを追加する
 - [ ] T13: Durable Object testをRed化する
 - [ ] T14: SQLite-backed Durable Object/store adapterを実装する
 - [ ] T15: staging WAF/DOを適用する
-- [ ] T16: format/lint/test/buildを通す
+- [x] T16: format/lint/test/buildを通す
 - [ ] T17: 手動A11Y・主要導線を確認する
 - [ ] T18: production deploy/監視/rollbackを確認する
 - [ ] T19: plan/progressを実装完了へ更新する
-- [ ] T20: 変更種別ごとにcommitを分割する
+- [x] T20: 変更種別ごとにcommitを分割する
 - [ ] T21: pushして詳細PRを作成する
 
 ## 品質チェックコマンド
@@ -821,6 +821,91 @@ npm run check
 ```
 
 Workers test scriptと`wrangler dev`確認コマンドは、フェーズ12で採用したconfig/script名を`docs/09_startup_commands.md`へ追記して実行する。
+
+## Hono・フロントエンド先行実装完了
+
+- 記録日: 2026-07-12
+- 実装ブランチ: `feature/api-rate-limit-production`
+- PR: 未作成（ユーザー指示によりチャット確認まで作成しない）
+- 全体ステータス: 実装中。本番Durable Object・WAF・実機確認前のため完了扱いにしない
+
+### 完了範囲
+
+- 8 policyの値・failure modeとproduction必須env validation
+- email/IP/userの正規化とHMAC-SHA-256 key生成
+- development/test用fixed-window in-memory store
+- 複数bucket評価、429、fail-open/fail-closed 503を扱うHono middleware
+- 一般API、認証、ゲーム、アカウント操作への順序付きroute配線
+- JSON・非JSON・network errorのフロントエンド回帰テスト
+- Node開発環境のmemory storeとsocket IP resolver
+
+### TDD記録
+
+- Red: policy/config、key/IP、memory store/middleware、app/route integrationの順に失敗を確認した。app integrationは10件すべてRedから開始した。
+- Green: backendのレート制限・影響route 192件を通し、最終的に全548件を通した（実DB専用1件は既存条件によりskip）。
+- Frontend regression: 429/503 JSON、非JSON 429、network errorを11件追加し、既存実装のままGreenだったため製品コードは変更しなかった。全459件を通した。
+- Refactor: policy、設定、key生成、validated JSON型境界、store factoryを共通化し、route内の数値・IP header処理・手動middleware実行を削除した。
+
+### 計画からの変更点
+
+- 既存テストがimportするrouter定数を維持するため、router factory化ではなくapp単位の依存をHono contextへ注入した。module-global counterは使用していない。
+- Node entrypointはdevelopment用memory storeだけを構築し、`durable-object`指定時は起動を拒否する。Workers専用entrypointはフェーズ12へ引き継ぐ。
+- IP正規化には自作パーサーを増やさず、MIT・runtime依存なしの`ipaddr.js`を採用した。
+- Workers基盤が存在しないため、T13〜T15をこのブランチで推測実装せず、依存PR後の別PRへ分離する。
+- localの`RATE_LIMIT_KEY_SECRET`は`backend/.env`だけで管理する。`npm run dev`は`tsx --env-file`、Composeは`env_file`から同じ値を読み、ルート`.env`への重複設定は廃止した。
+- Compose側の固定`JWT_SECRET`は`env_file`の値を上書きして直接起動と分岐するため削除し、`backend/.env`を共通の取得元にした。
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+| --- | --- | --- |
+| `backend/package.json`, `backend/package-lock.json` | 修正 | `ipaddr.js`依存を追加し、直接起動時に`backend/.env`を明示読込 |
+| `backend/.env.example`, `docker-compose.yml` | 修正 | development用rate limit設定を追加し`TRUST_PROXY`を廃止 |
+| `backend/src/lib/config.ts`, `config.test.ts` | 修正 | store・HMAC secretの環境別検証 |
+| `backend/src/middleware/rateLimit/policies.ts`, `policies.test.ts` | 新規 | policyのsingle sourceと契約test |
+| `backend/src/middleware/rateLimit/key.ts`, `key.test.ts` | 新規 | actor正規化、IP信頼境界、HMAC key |
+| `backend/src/middleware/rateLimit/store.ts` | 新規 | store・bucket・依存注入契約 |
+| `backend/src/middleware/rateLimit/in-memory-store.ts`, `in-memory-store.test.ts` | 新規 | development/test用fixed-window store |
+| `backend/src/middleware/rateLimit/buckets.ts`, `buckets.test.ts` | 新規・修正 | IP/email/user bucket resolverとキー解決障害時のfailure mode test |
+| `backend/src/middleware/rateLimit/index.ts`, `rateLimit.test.ts` | 修正 | 複数bucket・429/503・failure mode |
+| `backend/src/app.ts`, `app.test.ts`, `app.rate-limit.test.ts`, `app.rate-limit-route-matrix.test.ts` | 修正・新規 | app依存注入、general policy、実middleware統合・route分類test |
+| `backend/src/index.ts`, `backend/src/types/index.ts` | 修正 | Node store/IP resolverとHono context型 |
+| `backend/src/routes/auth/index.ts` | 修正 | IP・操作別email policyを配線 |
+| `backend/src/routes/game/index.ts` | 修正 | questionsとsubmit IP/user policyを配線 |
+| `backend/src/routes/users/index.ts` | 修正 | password変更・退会のIP/user policyを配線 |
+| `frontend/src/lib/api/errors.test.ts`, `game.test.ts` | 修正 | JSON・非JSON・network回帰test |
+| `frontend/src/routes/login/login-page.test.ts` | 修正 | 429/networkの`role=alert`表示test |
+| `frontend/src/routes/(app)/game/play/game-play-rate-limit.test.ts` | 新規 | 問題取得・結果送信429の`role=alert`と再試行導線test |
+| `docs/02_security.md`, `04_api.md`, `05_progress.md` | 修正 | security/API/進捗契約を更新 |
+| `docs/10_dev_setup.md`, `11_deployment.md` | 修正 | local設定、本番二層防御、フェーズ12引き継ぎ |
+| `docs/plans/api-rate-limit-production/plan.md` | 修正 | task実績と先行実装記録を更新 |
+
+### 検証結果
+
+- Backend: format、lint、format check、build成功。57 test files / 548 tests成功、実DB専用1 testは既存条件によりskip。
+- Frontend: format、lint、Svelte check成功。42 test files / 459 tests成功。
+- Workers runtime test: 未実施（Workers test基盤未実装）。
+- staging/production、WAF、A11Y、監視、rollback: 未実施。T13〜T15・T17〜T19としてフェーズ12基盤後に行う。
+
+### 追加レビュー・改善（2026-07-12）
+
+- 変更対象の`docs/02_security.md`、`04_api.md`、`05_progress.md`、`10_dev_setup.md`、`11_deployment.md`、本計画書を全文確認し、policy値・middleware順序・フェーズ12未完了境界を再照合した。
+- IP resolverまたはHMAC生成が例外を投げた場合に一律500となり、generalのfail-openとsensitiveのfail-closed 503を迂回する不具合をRed testで再現した。raw errorを露出せずキー取得不能へ変換し、policyのfailure modeを適用するよう修正した。
+- 一般APIのroute分類をelements / ranking / weak / users / admin / gameで、共有`AUTH_IP`をregister / login / forgot-password / reset-passwordでintegration test化した。
+- ゲーム画面で問題取得・結果送信の429が`role="alert"`へ通知され、再試行・新規開始ボタンが利用可能であることをcomponent testで固定した。
+- Prisma schema / migration / queryは変更していない。rate limit状態を業務PostgreSQLへ保存しないため、新規index・N+1・既存データ移行・expand/contract・rollback対象は発生しない。
+- `docs/04_api.md`の429クライアント例がbackend messageを固定文言で上書きしていたため、429/503とも既存messageを保持する例へ修正した。
+- Backend: format、lint、format check、build成功。59 test files / 561 tests成功、実DB専用1 testは既存条件によりskip。
+- Frontend: format、lint、Svelte check成功。43 test files / 461 tests成功。
+- Workers runtime、staging/production、WAF実機、監視、rollbackは未実施のままであり、本番適用完了とは扱わない。
+
+### フェーズ12引き継ぎ
+
+1. Workers専用entrypoint、Cloudflare Prisma adapter、Wrangler設定を先に実装する。
+2. SQLite-backed Durable ObjectとWorkers runtime testをT13・T14として実装する。
+3. staging/productionでnamespace、migration、binding、secretを分離する。
+4. 実公開hostnameとCloudflare planを確認し、WAF ruleをstagingの高閾値から段階適用する。
+5. 実HTTP、A11Y、監視、rollback確認後にT1・T13〜T19を完了し、`docs/05_progress.md`を`[x]`へ更新する。
 
 ## 手動確認項目
 

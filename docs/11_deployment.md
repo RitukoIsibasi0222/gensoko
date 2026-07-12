@@ -88,33 +88,18 @@
 
 別ドメイン間の通信を許可するため、Honoに CORS ミドルウェアを設定します。
 
-`backend/src/app.ts`:
+`backend/src/app.ts`では、CORS許可originとレート制限依存をapp factoryへ注入する。
+
 ```typescript
-import { Hono } from "hono";
-import { cors } from "hono/cors";
-import { getFrontendUrl } from "./lib/config.js";
+import type { RateLimitDependencies } from "./middleware/rateLimit/store.js";
 
 type CreateAppOptions = {
   isProduction: boolean;
-};
-
-export const createApp = ({ isProduction }: CreateAppOptions) => {
-  const app = new Hono();
-  const frontendUrl = getFrontendUrl({ isProduction });
-
-  app.use(
-    "*",
-    cors({
-      origin: frontendUrl,
-      allowHeaders: ["Content-Type", "Authorization"],
-      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      credentials: true,
-    }),
-  );
-
-  return app;
+  rateLimit: RateLimitDependencies;
 };
 ```
+
+実装の正本は `backend/src/app.ts` とし、この文書へmiddleware全体を複製しない。
 
 `NODE_ENV=production` では `FRONTEND_URL` を必須とし、未設定・空文字ならapp構築時にエラーで停止する。HTTP(S)のorigin形式だけを許可し、path、query、hash、認証情報付きURLは拒否する。localhostへのfallbackはdevelopment/testだけで使用する。
 
@@ -154,44 +139,22 @@ VITE_API_BASE_URL = https://gensoko-api.あなたのユーザー名.workers.dev/
 1. https://cloudflare.com にアクセス
 2. 「Sign Up」でアカウント作成
 
-### 2. Wranglerのインストール（Cloudflareのデプロイツール）
+### 2. Workers基盤の実装状況
 
-```bash
-# ローカルPC（Dockerの外）で実行
-npm install -g wrangler
+2026-07-12時点で、Wrangler設定、Workers専用entrypoint、Cloudflare Prisma adapter、SQLite-backed Durable Object、Workers runtime testは未実装である。フェーズ12でこれらを同じ設計として追加してからデプロイ手順を確定する。
 
-# Cloudflareにログイン
-wrangler login
-```
+`backend/src/index.ts`はNode.js開発用entrypointであり、`@hono/node-server`とmemory storeを使用する。`wrangler`の`main`へ指定してはいけない。またproductionの`RATE_LIMIT_STORE=durable-object`をNode entrypointへ渡すと、memory storeへの危険なfallbackを防ぐため起動を拒否する。
 
-### 3. `wrangler.toml` を作成（backendフォルダ）
+フェーズ12では最低限、次を先に実装・レビューする。
 
-```toml
-name = "gensoko-api"
-main = "src/index.ts"
-compatibility_date = "2024-01-01"
+1. Workers専用entrypointとCloudflare Prisma adapter
+2. `wrangler.toml`または`wrangler.jsonc`のstaging/production設定
+3. SQLite-backed Durable Object namespace、migration、binding
+4. Workers runtime用Vitest poolと並行性・永続化・alarm test
+5. `DATABASE_URL`、`JWT_SECRET`、`RATE_LIMIT_KEY_SECRET`のWrangler Secret登録
+6. stagingでの実HTTP確認後にproduction deploy
 
-[vars]
-FRONTEND_URL = "https://gensoko.vercel.app"
-```
-
-### 4. Supabaseの接続URLを Workers の Secret に設定
-
-```bash
-# 秘密情報はwrangler secretコマンドで設定（.envには書かない）
-wrangler secret put DATABASE_URL
-# → プロンプトでSupabaseの接続URLを貼り付ける
-
-wrangler secret put JWT_SECRET
-# → 本番用の強いランダム文字列を設定
-```
-
-### 5. デプロイ
-
-```bash
-cd backend
-wrangler deploy
-```
+実行可能な`wrangler dev`、test、deployコマンドは、採用した設定ファイルとpackage scriptがリポジトリへ追加されるまで本番手順として扱わない。
 
 ---
 
@@ -348,11 +311,67 @@ Actions の schedule は遅延・スキップされる可能性があるため�
 
 ## 本番レート制限設定
 
-- Cloudflare 側のエッジ制限で大量アクセスを遮断する
-- Hono のレート制限ミドルウェアでも認証系API・一般API・`POST /game/sessions` を制限する
-- `POST /auth/register` はメール爆撃対策として認証系APIの制限対象に含める
-- `POST /game/sessions` はチート・連打対策としてユーザーID + IP単位で制限する
-- 制限超過時の API レスポンスは `429` と日本語エラーメッセージに統一する
+> 2026-07-12時点: Honoのpolicy・HMAC key・middleware・route配線とフロントエンド回帰テストまでは実装済み。Durable Object、Workers binding、WAF、staging/production実機確認は未完了であり、本番適用済みとは扱わない。
+
+### リリースゲート
+
+次の値はリポジトリだけでは確定できない。staging設定前に担当者と確認し、確認結果をこの節へ記録する。
+
+- Cloudflare zone plan（Free / Pro / Business / Enterprise）とWorkers plan（Free / Paid）
+- 本番API hostname、対象zone、custom domainまたはWorkers route
+- `workers.dev`を含むWAF迂回経路がなく、公開trafficが必ず対象zoneを通ること
+- 使用可能なWAF Rate Limiting Rule数、field、period、custom response、Security Events閲覧権限
+- stagingとproductionのDurable Object namespace、migration、binding、secretを分離できること
+- 1リクエスト当たりのDurable Object RPC数、alarm数、想定日次利用量、Paid移行条件
+
+これらが未確認の場合、Honoの先行実装を完了しても `docs/05_progress.md` を完了 `[x]` にしない。
+
+### 二層の責務
+
+| 層 | 役割 | 制限の性質 |
+|---|---|---|
+| Cloudflare WAF | Hono到達前に大量のIP/burstアクセスを遮断 | Honoより高い閾値の粗いedge防御 |
+| Hono + SQLite-backed Durable Object | route、検証済みemail、認証済みuserを使って判定 | `docs/02_security.md` の正確なpolicy |
+
+- productionでは `RATE_LIMIT_STORE=durable-object` を必須とし、memory storeへ暗黙fallbackしない。
+- `RATE_LIMIT_KEY_SECRET` はJWTとは別の256-bit以上のランダム値をWrangler Secretとして設定する。値はログ、文書、PRへ記載しない。
+- Durable Object binding名はWorkers基盤の命名規則を確認後に確定する。候補は `RATE_LIMIT_COUNTER` とする。
+- productionのIP actorには検証済み `CF-Connecting-IP` だけを使い、`X-Forwarded-For` と `X-Real-IP` は無視する。
+- `POST /auth/register` はIPと操作別email、`POST /game/sessions` はIPとuserの独立バケットで制限する。正式値は `docs/02_security.md` をsingle sourceとして参照する。
+
+### WAFルール候補
+
+契約プラン確認後、app上限よりedgeを厳しくしない値を選ぶ。次は確定前の候補であり、実値は設定日・設定者とともに記録する。
+
+| zone plan | rule候補 | match | 閾値候補 |
+|---|---|---|---:|
+| Free | general | `/api/v1/*`、health除外 | 40回/10秒/IP |
+| Pro | general | `/api/v1/*`、health除外 | 240回/60秒/IP |
+| Pro | auth | register/login/forgot/resetのOR | 20回/60秒/IP |
+| Business以上 | general | `/api/v1/*`、health/OPTIONS除外 | 120回/60秒/IP |
+| Business以上 | auth | 4 auth path + POST | 20回/600秒/IP |
+| Business以上 | game submit | POST `/api/v1/game/sessions` | 40回/60秒/IP |
+
+- Free/Proではmethodをmatch条件に使えない場合があり、OPTIONSもedge countへ含まれ得る。HonoではOPTIONSを除外したまま、edge閾値に余裕を持たせる。
+- custom JSON responseを利用できないplanでは、edge responseは非JSONまたはCORS network errorになり得る。Honoの日本語JSON契約には含めない。
+- Dashboard上の設定だけで終わらせず、rule名、zone、expression、characteristics、period、requests、mitigation timeout、action、rule order、設定者、確認日をこの文書へ転記する。account ID、zone ID、tokenは記載しない。
+
+### 適用・確認手順
+
+1. Workers基盤を取り込み、staging用SQLite-backed Durable Object namespace、migration、binding、secretを設定する。
+2. stagingでHono limiterを有効化し、正常応答、429、store障害時503、alarm cleanupを確認する。
+3. WAF ruleを安全な高閾値でstaging hostnameへ適用し、Security Eventsとorigin到達を確認する。
+4. false positiveがないことを確認後、契約プランに合う計画値へ下げる。
+5. productionへDO migration/binding、Worker、WAFの順で適用する。
+6. Hono 429率、WAF block、DO error、503率、login成功率、game submit成功率を確認する。
+
+### 障害時・ロールバック
+
+- false positive時は最初にWAF ruleをdisableまたは以前の高い閾値へ戻し、Honoの制限は維持する。
+- Hono/DO実装に問題がある場合は以前のWorker versionへ戻す。productionでmemory storeを有効にしない。
+- Durable Object障害時は一般APIとquestionsをfail-open、auth/account/game submitをfail-closed 503とする。全policyを一括fail-openにしない。
+- 旧Workerへ戻した直後にDO namespaceを削除しない。traffic停止とrollback安定を確認後、別作業でcleanupする。
+- HMAC secretの変更は全バケットをリセットするため、緊急時以外はmaintenance承認を必須とする。
 
 ---
 
@@ -365,14 +384,19 @@ Actions の schedule は遅延・スキップされる可能性があるため�
 [ ] Cloudflareアカウント作成・Wranglerインストール
 [ ] wrangler.toml 作成
 [ ] Cloudflare Workers に production の FRONTEND_URL を設定（未設定では起動不可）
-[ ] DATABASE_URL と JWT_SECRET を Wrangler Secrets に設定
+[ ] DATABASE_URL、JWT_SECRET、RATE_LIMIT_KEY_SECRET をWrangler Secretsに設定
+[ ] staging/productionのSQLite-backed Durable Object namespace・migration・bindingを分離
+[ ] productionでRATE_LIMIT_STORE=durable-object以外を拒否することを確認
+[ ] 本番API hostnameが対象zoneのWAFを通り、直接到達・迂回経路がないことを確認
 [ ] GitHub Actions の DATABASE_URL Secret を設定（migrate deploy 用）
 [ ] 本番DBバックアップ取得状況を確認
 [ ] prisma migrate deploy の実行タイミングを確認
 [ ] wrangler deploy で初回デプロイ
 [ ] GitHub Actions の Secrets 設定（CI/CD）
 [ ] エラートラッキングまたは構造化ログの通知先を設定
-[ ] Cloudflare / Hono のレート制限設定を確認
+[ ] WAF ruleの全設定値・設定者・確認日・rollback手順を記録
+[ ] Honoの429/503/Retry-AfterとWAFのedge responseをstaging実HTTPで確認
+[ ] DO request/alarm/storage利用量とFree/Paid移行条件を確認
 [ ] 本番環境での動作確認（ログイン・ゲーム・メール）
 [ ] CORS設定の確認（フロントエンドのURLが正しく許可されているか）
 ```

@@ -1,15 +1,29 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
+import type { RateLimitDependencies } from "./middleware/rateLimit/store.js";
 
 const ALLOWED_ORIGIN = "http://localhost:5174";
 const DISALLOWED_ORIGIN = "https://evil.example";
 const EXPECTED_CSP =
   "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
 const EXPECTED_HSTS = "max-age=31536000; includeSubDomains";
+const TEST_RATE_LIMIT_DEPENDENCIES: RateLimitDependencies = {
+  getStore: () => ({
+    consume: async ({ policyId }) => ({
+      allowed: true,
+      limit: 1,
+      remaining: 0,
+      resetAtMs: 60_000,
+      retryAfterSec: policyId === "GENERAL_API_IP" ? 0 : 60,
+    }),
+  }),
+  keySecret: Buffer.from("0123456789abcdef0123456789abcdef").toString("base64"),
+  resolveIp: () => "127.0.0.1",
+};
 
 const createConfiguredApp = (isProduction: boolean) => {
   vi.stubEnv("FRONTEND_URL", ALLOWED_ORIGIN);
-  return createApp({ isProduction });
+  return createApp({ isProduction, rateLimit: TEST_RATE_LIMIT_DEPENDENCIES });
 };
 
 const createPreflightRequest = (origin: string) => ({
@@ -126,17 +140,17 @@ describe("createApp", () => {
   it("productionでFRONTEND_URLが未設定ならapp構築時にfail-fastする", () => {
     vi.stubEnv("FRONTEND_URL", "");
 
-    expect(() => createApp({ isProduction: true })).toThrow(
-      "production環境ではFRONTEND_URLの設定が必要です",
-    );
+    expect(() =>
+      createApp({ isProduction: true, rateLimit: TEST_RATE_LIMIT_DEPENDENCIES }),
+    ).toThrow("production環境ではFRONTEND_URLの設定が必要です");
   });
 
   it("developmentではFRONTEND_URL未設定時にlocalhostを許可する", async () => {
     vi.stubEnv("FRONTEND_URL", "");
-    const response = await createApp({ isProduction: false }).request(
-      "/api/v1/auth/login",
-      createPreflightRequest(ALLOWED_ORIGIN),
-    );
+    const response = await createApp({
+      isProduction: false,
+      rateLimit: TEST_RATE_LIMIT_DEPENDENCIES,
+    }).request("/api/v1/auth/login", createPreflightRequest(ALLOWED_ORIGIN));
 
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe(ALLOWED_ORIGIN);
   });

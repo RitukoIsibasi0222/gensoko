@@ -2,6 +2,11 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { z } from "zod";
 import { authMiddleware } from "../../middleware/auth/index.js";
+import {
+  createIpAndUserBucketResolver,
+  getValidatedRateLimitJson,
+  getRateLimitStore,
+} from "../../middleware/rateLimit/buckets.js";
 import { clearRefreshTokenCookies } from "../../lib/refresh-token-cookie.js";
 import { rateLimit } from "../../middleware/rateLimit/index.js";
 import { strongPasswordSchema, usernameSchema } from "../../lib/validation/auth.js";
@@ -15,10 +20,12 @@ import {
 } from "../../services/user.service.js";
 import type { AppVariables } from "../../types/index.js";
 
-const authRateLimit = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 10,
-  trustProxy: process.env.TRUST_PROXY === "true",
+const accountRateLimit = rateLimit({
+  getStore: getRateLimitStore,
+  resolveBuckets: createIpAndUserBucketResolver({
+    ipPolicyId: "ACCOUNT_IP",
+    userPolicyId: "ACCOUNT_USER",
+  }),
 });
 
 const updateUsernameSchema = z
@@ -87,6 +94,14 @@ usersRouter.patch(
       return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
     }
   }),
+  rateLimit({
+    getStore: getRateLimitStore,
+    resolveBuckets: createIpAndUserBucketResolver({
+      ipPolicyId: "ACCOUNT_IP",
+      userPolicyId: "ACCOUNT_USER",
+    }),
+    when: (c) => !("username" in getValidatedRateLimitJson<z.infer<typeof updateMeSchema>>(c)),
+  }),
   async (c) => {
     const authUser = c.get("user");
     if (!authUser) {
@@ -102,11 +117,6 @@ usersRouter.patch(
           username: payload.username,
         });
         return c.json({ message: "ユーザー名を変更しました", user: updated.user }, 200);
-      }
-
-      const rateLimitResult = await authRateLimit(c, async () => {});
-      if (rateLimitResult instanceof Response) {
-        return rateLimitResult;
       }
 
       await changeCurrentPassword({
@@ -126,7 +136,7 @@ usersRouter.patch(
 usersRouter.delete(
   "/me",
   authMiddleware,
-  authRateLimit,
+  accountRateLimit,
   zValidator("json", deleteMeSchema, (result, c) => {
     if (!result.success) {
       return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);

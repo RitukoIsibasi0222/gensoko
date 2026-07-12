@@ -1,4 +1,5 @@
 import type { Role } from "@prisma/client";
+import type { RateLimitDependencies } from "../middleware/rateLimit/store.js";
 
 // JWT ペイロード（最小限の情報のみ格納）
 export type JwtPayload = {
@@ -17,4 +18,5 @@ export type AuthUser = {
 // Hono Variables 型拡張
 export type AppVariables = {
   user?: AuthUser;
+  rateLimit: RateLimitDependencies;
 };
