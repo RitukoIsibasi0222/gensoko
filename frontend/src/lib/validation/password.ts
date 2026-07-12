@@ -1,3 +1,10 @@
+export const MAX_PASSWORD_UTF8_BYTES = 72;
+export const PASSWORD_TOO_LONG_MESSAGE = 'パスワードはUTF-8で72バイト以内にしてください';
+
+export function getUtf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
+
 /**
  * パスワードのバリデーション
  *
@@ -9,6 +16,7 @@
  * - 英小文字を1文字以上含む
  * - 数字を1文字以上含む
  * - 記号（!@#$%^&*()_+-=[]{}など）を1文字以上含む
+ * - UTF-8で72バイト以内
  *
  * フロント独自（バックエンドとの差分）:
  * - 空欄時: 「パスワードを入力してください」
@@ -38,6 +46,9 @@ export function validatePassword(value: string): string | null {
   }
   if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(value)) {
     return 'パスワードには記号を1文字以上含めてください';
+  }
+  if (getUtf8ByteLength(value) > MAX_PASSWORD_UTF8_BYTES) {
+    return PASSWORD_TOO_LONG_MESSAGE;
   }
   return null;
 }

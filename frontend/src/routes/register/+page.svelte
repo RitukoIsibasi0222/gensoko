@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { API_BASE_URL } from '$lib/api/config';
   import { ApiError, parseErrorResponse } from '$lib/api/errors';
   import { toastStore } from '$lib/stores/toast.svelte';
@@ -10,6 +11,9 @@
   let username = $state('');
   let email = $state('');
   let password = $state('');
+  let usernameInput = $state<HTMLInputElement>();
+  let emailInput = $state<HTMLInputElement>();
+  let passwordInput = $state<HTMLInputElement>();
 
   // フォーム送信中フラグ（送信中は true にしてボタンを無効化する）
   let isSubmitting = $state(false);
@@ -36,6 +40,18 @@
     }
   });
 
+  async function focusFirstInvalidField(): Promise<void> {
+    await tick();
+    const firstInvalidInput = usernameError
+      ? usernameInput
+      : emailError
+        ? emailInput
+        : passwordError
+          ? passwordInput
+          : null;
+    firstInvalidInput?.focus();
+  }
+
   /**
    * フォーム送信ハンドラー（ユーザー登録処理）
    */
@@ -61,6 +77,7 @@
     passwordError = validatePassword(normalizedPassword);
 
     if (usernameError || emailError || passwordError) {
+      await focusFirstInvalidField();
       return;
     }
 
@@ -125,6 +142,7 @@
           id="username"
           type="text"
           bind:value={username}
+          bind:this={usernameInput}
           autocomplete="username"
           required
           aria-invalid={usernameError ? 'true' : undefined}
@@ -143,6 +161,7 @@
           id="email"
           type="email"
           bind:value={email}
+          bind:this={emailInput}
           autocomplete="email"
           required
           aria-invalid={emailError ? 'true' : undefined}
@@ -162,10 +181,11 @@
             id="password"
             type={showPassword ? 'text' : 'password'}
             bind:value={password}
+            bind:this={passwordInput}
             autocomplete="new-password"
             required
             aria-invalid={passwordError ? 'true' : undefined}
-            aria-describedby={passwordError ? 'password-error' : undefined}
+            aria-describedby={passwordError ? 'password-hint password-error' : 'password-hint'}
             class="w-full rounded-md border border-gray-300 px-3 py-2 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
           />
           <button
@@ -211,6 +231,9 @@
             {/if}
           </button>
         </div>
+        <p id="password-hint" class="mt-1 text-sm text-gray-600">
+          UTF-8で72バイト以内（日本語や絵文字は1文字で複数バイトになります）
+        </p>
         {#if passwordError}
           <p id="password-error" class="mt-1 text-sm text-red-600">{passwordError}</p>
         {/if}

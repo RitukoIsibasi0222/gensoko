@@ -8,9 +8,14 @@
   import { toastStore } from '$lib/stores/toast.svelte';
   import { validatePassword } from '$lib/validation/password';
 
+  const PASSWORD_BYTE_LIMIT_HINT =
+    'UTF-8\u306772\u30d0\u30a4\u30c8\u4ee5\u5185\uff08\u65e5\u672c\u8a9e\u3084\u7d75\u6587\u5b57\u306f1\u6587\u5b57\u3067\u8907\u6570\u30d0\u30a4\u30c8\u306b\u306a\u308a\u307e\u3059\uff09';
+
   // フォーム入力値
   let password = $state('');
   let confirmPassword = $state('');
+  let passwordInput = $state<HTMLInputElement>();
+  let confirmPasswordInput = $state<HTMLInputElement>();
 
   // パスワード表示/非表示
   let showPassword = $state(false);
@@ -76,6 +81,16 @@
     return null;
   }
 
+  async function focusFirstInvalidField(): Promise<void> {
+    await tick();
+    const firstInvalidInput = passwordError
+      ? passwordInput
+      : confirmPasswordError
+        ? confirmPasswordInput
+        : null;
+    firstInvalidInput?.focus();
+  }
+
   async function handleSubmit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
 
@@ -99,6 +114,7 @@
     );
 
     if (passwordError || confirmPasswordError) {
+      await focusFirstInvalidField();
       return;
     }
 
@@ -159,10 +175,11 @@
             id="password"
             type={showPassword ? 'text' : 'password'}
             bind:value={password}
+            bind:this={passwordInput}
             autocomplete="new-password"
             required
             aria-invalid={passwordError ? 'true' : undefined}
-            aria-describedby={passwordError ? 'password-error' : undefined}
+            aria-describedby={passwordError ? 'password-hint password-error' : 'password-hint'}
             class="w-full rounded-md border border-gray-300 px-3 py-2 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
           />
           <button
@@ -206,6 +223,9 @@
             {/if}
           </button>
         </div>
+        <p id="password-hint" class="mt-1 text-sm text-gray-600">
+          {PASSWORD_BYTE_LIMIT_HINT}
+        </p>
         {#if passwordError}
           <p id="password-error" class="mt-1 text-sm text-red-600">{passwordError}</p>
         {/if}
@@ -219,6 +239,7 @@
           id="confirm-password"
           type={showPassword ? 'text' : 'password'}
           bind:value={confirmPassword}
+          bind:this={confirmPasswordInput}
           autocomplete="new-password"
           required
           aria-invalid={confirmPasswordError ? 'true' : undefined}

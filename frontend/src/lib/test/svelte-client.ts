@@ -2,7 +2,7 @@
 // Keep the client runtime escape hatch in one test utility instead of repeating internal paths.
 type SvelteClientRuntime = Pick<
   typeof import('svelte'),
-  'mount' | 'unmount' | 'onDestroy' | 'tick'
+  'mount' | 'unmount' | 'onMount' | 'onDestroy' | 'tick'
 >;
 
 const clientRuntime =
@@ -11,5 +11,6 @@ const clientRuntime =
 
 export const mount = clientRuntime.mount;
 export const unmount = clientRuntime.unmount;
+export const onMount = clientRuntime.onMount;
 export const onDestroy = clientRuntime.onDestroy;
 export const tick = clientRuntime.tick;
