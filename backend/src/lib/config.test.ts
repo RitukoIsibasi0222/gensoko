@@ -35,4 +35,24 @@ describe("getFrontendUrl", () => {
 
     expect(() => getFrontendUrl()).toThrow("production環境ではFRONTEND_URLの設定が必要です");
   });
+
+  it("末尾slashだけを含むURLはoriginへ正規化する", () => {
+    vi.stubEnv("FRONTEND_URL", `${PRODUCTION_FRONTEND_URL}/`);
+
+    expect(getFrontendUrl({ isProduction: true })).toBe(PRODUCTION_FRONTEND_URL);
+  });
+
+  it.each([
+    ["URLではない値", "gensoko.example"],
+    ["HTTP(S)以外のscheme", "javascript:alert(1)"],
+    ["path付きURL", `${PRODUCTION_FRONTEND_URL}/app`],
+    ["query付きURL", `${PRODUCTION_FRONTEND_URL}/?tenant=gensoko`],
+    ["認証情報付きURL", "https://user:password@gensoko.example"],
+  ])("%sを拒否する", (_caseName, frontendUrl) => {
+    vi.stubEnv("FRONTEND_URL", frontendUrl);
+
+    expect(() => getFrontendUrl({ isProduction: true })).toThrow(
+      "FRONTEND_URLはHTTP(S)のオリジン形式で設定してください",
+    );
+  });
 });
