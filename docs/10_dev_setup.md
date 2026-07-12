@@ -157,7 +157,7 @@ services:
       - MAIL_PORT=1025
       - FRONTEND_URL=http://localhost:5174
       - RATE_LIMIT_STORE=memory
-      - RATE_LIMIT_KEY_SECRET=${RATE_LIMIT_KEY_SECRET:?RATE_LIMIT_KEY_SECRET is required}
+      - RATE_LIMIT_KEY_SECRET=${RATE_LIMIT_KEY_SECRET:?RATE_LIMIT_KEY_SECRETを設定してください}
     command: sh -c "npm install && npm run dev"
     depends_on:
       - postgres

@@ -842,8 +842,8 @@ Workers test scriptと`wrangler dev`確認コマンドは、フェーズ12で採
 ### TDD記録
 
 - Red: policy/config、key/IP、memory store/middleware、app/route integrationの順に失敗を確認した。app integrationは10件すべてRedから開始した。
-- Green: backendのレート制限・影響route 190件を通し、最終的に全546件を通した（実DB専用1件は既存条件によりskip）。
-- Frontend regression: 429/503 JSON、非JSON 429、network errorを9件追加し、既存実装のままGreenだったため製品コードは変更しなかった。全457件を通した。
+- Green: backendのレート制限・影響route 192件を通し、最終的に全548件を通した（実DB専用1件は既存条件によりskip）。
+- Frontend regression: 429/503 JSON、非JSON 429、network errorを11件追加し、既存実装のままGreenだったため製品コードは変更しなかった。全459件を通した。
 - Refactor: policy、設定、key生成、validated JSON型境界、store factoryを共通化し、route内の数値・IP header処理・手動middleware実行を削除した。
 
 ### 計画からの変更点
@@ -879,8 +879,8 @@ Workers test scriptと`wrangler dev`確認コマンドは、フェーズ12で採
 
 ### 検証結果
 
-- Backend: format、lint、format check、build成功。57 test files / 546 tests成功、実DB専用1 testは既存条件によりskip。
-- Frontend: format、lint、Svelte check成功。42 test files / 457 tests成功。
+- Backend: format、lint、format check、build成功。57 test files / 548 tests成功、実DB専用1 testは既存条件によりskip。
+- Frontend: format、lint、Svelte check成功。42 test files / 459 tests成功。
 - Workers runtime test: 未実施（Workers test基盤未実装）。
 - staging/production、WAF、A11Y、監視、rollback: 未実施。T13〜T15・T17〜T19としてフェーズ12基盤後に行う。
 

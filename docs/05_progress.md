@@ -1,6 +1,6 @@
 # Gensoko 実装タスク一覧
 
-> 更新日: 2026-07-05
+> 更新日: 2026-07-12
 > ステータス: `[ ]` 未実装 / `[-]` 実装中 / `[x]` 完了
 
 ---
@@ -174,6 +174,7 @@
 - [ ] Supabase プロジェクト作成・接続 URL 取得
 - [ ] 本番DBバックアップ・Prismaマイグレーション運用（`migrate deploy` 実行タイミング・ロールバック方針）
 - [ ] Cloudflare Workers wrangler.toml + @prisma/adapter-cloudflare 設定・デプロイ
+- [ ] APIレート制限の本番適用継続（Workers専用entrypoint・SQLite-backed Durable Object・WAF・staging/production実機確認） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md)（フェーズ11先行実装の続き）
 - [ ] Vercel SvelteKit デプロイ・環境変数設定
 - [ ] GitHub Actions CI/CD 設定（本番マイグレーション → APIデプロイ → フロントデプロイ）
 - [ ] npm audit・本番環境動作確認（ログイン/ゲーム/メール）
