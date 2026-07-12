@@ -348,11 +348,65 @@ Actions の schedule は遅延・スキップされる可能性があるため�
 
 ## 本番レート制限設定
 
-- Cloudflare 側のエッジ制限で大量アクセスを遮断する
-- Hono のレート制限ミドルウェアでも認証系API・一般API・`POST /game/sessions` を制限する
-- `POST /auth/register` はメール爆撃対策として認証系APIの制限対象に含める
-- `POST /game/sessions` はチート・連打対策としてユーザーID + IP単位で制限する
-- 制限超過時の API レスポンスは `429` と日本語エラーメッセージに統一する
+### リリースゲート
+
+次の値はリポジトリだけでは確定できない。staging設定前に担当者と確認し、確認結果をこの節へ記録する。
+
+- Cloudflare zone plan（Free / Pro / Business / Enterprise）とWorkers plan（Free / Paid）
+- 本番API hostname、対象zone、custom domainまたはWorkers route
+- `workers.dev`を含むWAF迂回経路がなく、公開trafficが必ず対象zoneを通ること
+- 使用可能なWAF Rate Limiting Rule数、field、period、custom response、Security Events閲覧権限
+- stagingとproductionのDurable Object namespace、migration、binding、secretを分離できること
+- 1リクエスト当たりのDurable Object RPC数、alarm数、想定日次利用量、Paid移行条件
+
+これらが未確認の場合、Honoの先行実装を完了しても `docs/05_progress.md` を完了 `[x]` にしない。
+
+### 二層の責務
+
+| 層 | 役割 | 制限の性質 |
+|---|---|---|
+| Cloudflare WAF | Hono到達前に大量のIP/burstアクセスを遮断 | Honoより高い閾値の粗いedge防御 |
+| Hono + SQLite-backed Durable Object | route、検証済みemail、認証済みuserを使って判定 | `docs/02_security.md` の正確なpolicy |
+
+- productionでは `RATE_LIMIT_STORE=durable-object` を必須とし、memory storeへ暗黙fallbackしない。
+- `RATE_LIMIT_KEY_SECRET` はJWTとは別の256-bit以上のランダム値をWrangler Secretとして設定する。値はログ、文書、PRへ記載しない。
+- Durable Object binding名はWorkers基盤の命名規則を確認後に確定する。候補は `RATE_LIMIT_COUNTER` とする。
+- productionのIP actorには検証済み `CF-Connecting-IP` だけを使い、`X-Forwarded-For` と `X-Real-IP` は無視する。
+- `POST /auth/register` はIPと操作別email、`POST /game/sessions` はIPとuserの独立バケットで制限する。正式値は `docs/02_security.md` をsingle sourceとして参照する。
+
+### WAFルール候補
+
+契約プラン確認後、app上限よりedgeを厳しくしない値を選ぶ。次は確定前の候補であり、実値は設定日・設定者とともに記録する。
+
+| zone plan | rule候補 | match | 閾値候補 |
+|---|---|---|---:|
+| Free | general | `/api/v1/*`、health除外 | 40回/10秒/IP |
+| Pro | general | `/api/v1/*`、health除外 | 240回/60秒/IP |
+| Pro | auth | register/login/forgot/resetのOR | 20回/60秒/IP |
+| Business以上 | general | `/api/v1/*`、health/OPTIONS除外 | 120回/60秒/IP |
+| Business以上 | auth | 4 auth path + POST | 20回/600秒/IP |
+| Business以上 | game submit | POST `/api/v1/game/sessions` | 40回/60秒/IP |
+
+- Free/Proではmethodをmatch条件に使えない場合があり、OPTIONSもedge countへ含まれ得る。HonoではOPTIONSを除外したまま、edge閾値に余裕を持たせる。
+- custom JSON responseを利用できないplanでは、edge responseは非JSONまたはCORS network errorになり得る。Honoの日本語JSON契約には含めない。
+- Dashboard上の設定だけで終わらせず、rule名、zone、expression、characteristics、period、requests、mitigation timeout、action、rule order、設定者、確認日をこの文書へ転記する。account ID、zone ID、tokenは記載しない。
+
+### 適用・確認手順
+
+1. Workers基盤を取り込み、staging用SQLite-backed Durable Object namespace、migration、binding、secretを設定する。
+2. stagingでHono limiterを有効化し、正常応答、429、store障害時503、alarm cleanupを確認する。
+3. WAF ruleを安全な高閾値でstaging hostnameへ適用し、Security Eventsとorigin到達を確認する。
+4. false positiveがないことを確認後、契約プランに合う計画値へ下げる。
+5. productionへDO migration/binding、Worker、WAFの順で適用する。
+6. Hono 429率、WAF block、DO error、503率、login成功率、game submit成功率を確認する。
+
+### 障害時・ロールバック
+
+- false positive時は最初にWAF ruleをdisableまたは以前の高い閾値へ戻し、Honoの制限は維持する。
+- Hono/DO実装に問題がある場合は以前のWorker versionへ戻す。productionでmemory storeを有効にしない。
+- Durable Object障害時は一般APIとquestionsをfail-open、auth/account/game submitをfail-closed 503とする。全policyを一括fail-openにしない。
+- 旧Workerへ戻した直後にDO namespaceを削除しない。traffic停止とrollback安定を確認後、別作業でcleanupする。
+- HMAC secretの変更は全バケットをリセットするため、緊急時以外はmaintenance承認を必須とする。
 
 ---
 
@@ -365,14 +419,19 @@ Actions の schedule は遅延・スキップされる可能性があるため�
 [ ] Cloudflareアカウント作成・Wranglerインストール
 [ ] wrangler.toml 作成
 [ ] Cloudflare Workers に production の FRONTEND_URL を設定（未設定では起動不可）
-[ ] DATABASE_URL と JWT_SECRET を Wrangler Secrets に設定
+[ ] DATABASE_URL、JWT_SECRET、RATE_LIMIT_KEY_SECRET をWrangler Secretsに設定
+[ ] staging/productionのSQLite-backed Durable Object namespace・migration・bindingを分離
+[ ] productionでRATE_LIMIT_STORE=durable-object以外を拒否することを確認
+[ ] 本番API hostnameが対象zoneのWAFを通り、直接到達・迂回経路がないことを確認
 [ ] GitHub Actions の DATABASE_URL Secret を設定（migrate deploy 用）
 [ ] 本番DBバックアップ取得状況を確認
 [ ] prisma migrate deploy の実行タイミングを確認
 [ ] wrangler deploy で初回デプロイ
 [ ] GitHub Actions の Secrets 設定（CI/CD）
 [ ] エラートラッキングまたは構造化ログの通知先を設定
-[ ] Cloudflare / Hono のレート制限設定を確認
+[ ] WAF ruleの全設定値・設定者・確認日・rollback手順を記録
+[ ] Honoの429/503/Retry-AfterとWAFのedge responseをstaging実HTTPで確認
+[ ] DO request/alarm/storage利用量とFree/Paid移行条件を確認
 [ ] 本番環境での動作確認（ログイン・ゲーム・メール）
 [ ] CORS設定の確認（フロントエンドのURLが正しく許可されているか）
 ```

@@ -782,8 +782,8 @@ DOはschemaを`new_sqlite_classes` migrationとして追加し、stagingとprodu
 | T21 | pushして詳細PRを作成                   | GitHub                                                                    | TDD記録、test表、Cloudflare手作業、フェーズ12依存を記載  | Medium |
 
 - [ ] T1: 仕様・全route・Cloudflare planを再確認する
-- [ ] T2: `docs/05_progress.md`を実装中へ更新する
-- [ ] T3: API/security/dev/deploy契約を先に更新する
+- [x] T2: `docs/05_progress.md`を実装中へ更新する
+- [x] T3: API/security/dev/deploy契約を先に更新する
 - [ ] T4: policy/config testをRed化する
 - [ ] T5: policy/configを実装する
 - [ ] T6: key/resolver testをRed化する
