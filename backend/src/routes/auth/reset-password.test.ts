@@ -23,14 +23,23 @@ vi.mock("../../lib/prisma.js", () => ({
 }));
 
 // bcryptjs モック（hash は遅い処理なのでテストを高速化）
-vi.mock("bcryptjs", () => ({
-  default: {
-    hash: vi.fn().mockResolvedValue("$2b$12$mockedhashedpassword"),
-    compare: vi.fn(),
-  },
-}));
+vi.mock("bcryptjs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("bcryptjs")>();
+  return {
+    default: {
+      ...actual.default,
+      hash: vi.fn().mockResolvedValue("$2b$12$mockedhashedpassword"),
+      compare: vi.fn(),
+    },
+  };
+});
 
 import { prisma } from "../../lib/prisma.js";
+import { PASSWORD_TOO_LONG_MESSAGE } from "../../lib/password.js";
+import {
+  STRONG_PASSWORD_72_BYTES,
+  STRONG_PASSWORD_73_BYTES,
+} from "../../test/password-byte-boundary-fixtures.js";
 
 const app = new Hono().route("/auth", authRouter);
 
@@ -70,7 +79,7 @@ describe("POST /auth/reset-password", () => {
     const res = await app.request("/auth/reset-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: VALID_TOKEN, password: "NewPass1!" }),
+      body: JSON.stringify({ token: VALID_TOKEN, password: STRONG_PASSWORD_72_BYTES }),
     });
 
     expect(res.status).toBe(200);
@@ -196,6 +205,29 @@ describe("POST /auth/reset-password", () => {
     });
 
     expect(res.status).toBe(400);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("バリデーション: 73バイトのパスワードは400を返しDBを参照しない", async () => {
+    vi.mocked(prisma.passwordResetToken.findUnique).mockResolvedValue(null);
+
+    const res = await app.request("/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: VALID_TOKEN, password: STRONG_PASSWORD_73_BYTES }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: "バリデーションエラー",
+      details: [
+        expect.objectContaining({
+          message: PASSWORD_TOO_LONG_MESSAGE,
+          path: ["password"],
+        }),
+      ],
+    });
+    expect(prisma.passwordResetToken.findUnique).not.toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 

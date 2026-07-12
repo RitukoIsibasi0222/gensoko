@@ -47,6 +47,7 @@ vi.mock("../../services/user.service.js", () => {
 });
 
 import { deleteCurrentUser, UserError } from "../../services/user.service.js";
+import { STRONG_PASSWORD_73_BYTES } from "../../test/password-byte-boundary-fixtures.js";
 
 const app = new Hono();
 app.route("/users", usersRouter);
@@ -114,6 +115,25 @@ describe("DELETE /users/me", () => {
         (cookie) => cookie.includes("refreshToken=") && cookie.includes("Path=/auth/refresh"),
       ),
     ).toBe(true);
+  });
+
+  it("73バイトのcurrentPasswordは上限拒否せず完全な値をサービス層へ渡す", async () => {
+    vi.mocked(deleteCurrentUser).mockResolvedValue();
+
+    const res = await app.request("/users/me", {
+      method: "DELETE",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ currentPassword: STRONG_PASSWORD_73_BYTES }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(deleteCurrentUser).toHaveBeenCalledWith({
+      userId: "user-1",
+      currentPassword: STRONG_PASSWORD_73_BYTES,
+    });
   });
 
   it("currentPasswordが空の場合は400を返し、サービス層を呼び出さない", async () => {

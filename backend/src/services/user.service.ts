@@ -111,10 +111,6 @@ export async function changeCurrentPassword(input: {
   const normalizedCurrentPassword = normalizePassword(input.currentPassword);
   const normalizedNewPassword = normalizePassword(input.newPassword);
 
-  if (normalizedCurrentPassword === normalizedNewPassword) {
-    throw new UserError(400, "新しいパスワードは現在のパスワードと異なるものにしてください");
-  }
-
   const user = await prisma.user.findUnique({
     where: { id: input.userId },
     select: { id: true, passwordHash: true, role: true },
@@ -127,6 +123,11 @@ export async function changeCurrentPassword(input: {
   const isCurrentPasswordValid = await bcrypt.compare(normalizedCurrentPassword, user.passwordHash);
   if (!isCurrentPasswordValid) {
     throw new UserError(400, "現在のパスワードが正しくありません");
+  }
+
+  const isNewPasswordSame = await bcrypt.compare(normalizedNewPassword, user.passwordHash);
+  if (isNewPasswordSame) {
+    throw new UserError(400, "新しいパスワードは現在のパスワードと異なるものにしてください");
   }
 
   const newPasswordHash = await hashPassword(normalizedNewPassword);

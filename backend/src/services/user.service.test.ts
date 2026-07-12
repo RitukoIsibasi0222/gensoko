@@ -29,15 +29,23 @@ vi.mock("../lib/prisma.js", () => ({
   },
 }));
 
-vi.mock("bcryptjs", () => ({
-  default: {
-    compare: vi.fn(),
-    hash: vi.fn(),
-  },
-}));
+vi.mock("bcryptjs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("bcryptjs")>();
+  return {
+    default: {
+      ...actual.default,
+      compare: vi.fn(),
+      hash: vi.fn(),
+    },
+  };
+});
 
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma.js";
+import {
+  STRONG_PASSWORD_72_BYTES,
+  STRONG_PASSWORD_73_BYTES,
+} from "../test/password-byte-boundary-fixtures.js";
 import {
   changeCurrentPassword,
   deleteCurrentUser,
@@ -105,6 +113,22 @@ describe("deleteCurrentUser", () => {
       status: 400,
       message: "現在のパスワードが正しくありません",
     });
+  });
+
+  it("既存互換性: 73バイトのcurrentPasswordを完全な値で照合する", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      passwordHash: "$2b$12$hash",
+    } as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
+
+    await expect(
+      deleteCurrentUser({ userId: "user-1", currentPassword: STRONG_PASSWORD_73_BYTES }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: "現在のパスワードが正しくありません",
+    });
+    expect(bcrypt.compare).toHaveBeenCalledWith(STRONG_PASSWORD_73_BYTES, "$2b$12$hash");
   });
 });
 
@@ -196,6 +220,9 @@ describe("updateCurrentUsername", () => {
 describe("changeCurrentPassword", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(bcrypt.compare).mockReset();
+    vi.mocked(bcrypt.hash).mockReset();
+    vi.mocked(prisma.$transaction).mockReset();
   });
 
   it("正常系: 現在のパスワードが正しければ update と deleteMany が呼ばれる", async () => {
@@ -204,7 +231,9 @@ describe("changeCurrentPassword", () => {
       passwordHash: "$2b$12$hash",
       role: "USER",
     } as never);
-    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    vi.mocked(bcrypt.compare)
+      .mockResolvedValueOnce(true as never)
+      .mockResolvedValueOnce(false as never);
     vi.mocked(bcrypt.hash).mockResolvedValue("$2b$12$newhash" as never);
 
     const txUserUpdate = vi.fn().mockResolvedValue({});
@@ -252,7 +281,9 @@ describe("changeCurrentPassword", () => {
       passwordHash: "$2b$12$hash",
       role: "USER",
     } as never);
-    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    vi.mocked(bcrypt.compare)
+      .mockResolvedValueOnce(true as never)
+      .mockResolvedValueOnce(false as never);
     vi.mocked(bcrypt.hash).mockResolvedValue("$2b$12$newhash" as never);
 
     const txUserUpdate = vi.fn().mockResolvedValue({});
@@ -281,6 +312,15 @@ describe("changeCurrentPassword", () => {
   });
 
   it("異常系: 新旧パスワードが同一なら UserError(400) を投げる", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      passwordHash: "$2b$12$hash",
+      role: "USER",
+    } as never);
+    vi.mocked(bcrypt.compare)
+      .mockResolvedValueOnce(true as never)
+      .mockResolvedValueOnce(true as never);
+
     await expect(
       changeCurrentPassword({
         userId: "user-1",
@@ -291,6 +331,69 @@ describe("changeCurrentPassword", () => {
       status: 400,
       message: "新しいパスワードは現在のパスワードと異なるものにしてください",
     });
+    expect(bcrypt.compare).toHaveBeenNthCalledWith(1, "SamePass1!", "$2b$12$hash");
+    expect(bcrypt.compare).toHaveBeenNthCalledWith(2, "SamePass1!", "$2b$12$hash");
+    expect(bcrypt.hash).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("現在と新規の文字列が同じでも現在パスワード不一致を先に返す", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      passwordHash: "$2b$12$hash",
+      role: "USER",
+    } as never);
+    vi.mocked(bcrypt.compare).mockResolvedValueOnce(false as never);
+
+    await expect(
+      changeCurrentPassword({
+        userId: "user-1",
+        currentPassword: "WrongPass1!",
+        newPassword: "WrongPass1!",
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: "現在のパスワードが正しくありません",
+    });
+    expect(bcrypt.compare).toHaveBeenCalledOnce();
+    expect(bcrypt.hash).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("既存73バイト値の先頭72バイトへの変更はbcrypt上同一として拒否する", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      passwordHash: "$2b$12$legacy-hash",
+      role: "USER",
+    } as never);
+    vi.mocked(bcrypt.compare)
+      .mockResolvedValueOnce(true as never)
+      .mockResolvedValueOnce(true as never);
+    vi.mocked(bcrypt.hash).mockResolvedValue("$2b$12$newhash" as never);
+    vi.mocked(prisma.$transaction).mockResolvedValue(undefined as never);
+
+    await expect(
+      changeCurrentPassword({
+        userId: "user-1",
+        currentPassword: STRONG_PASSWORD_73_BYTES,
+        newPassword: STRONG_PASSWORD_72_BYTES,
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: "新しいパスワードは現在のパスワードと異なるものにしてください",
+    });
+    expect(bcrypt.compare).toHaveBeenNthCalledWith(
+      1,
+      STRONG_PASSWORD_73_BYTES,
+      "$2b$12$legacy-hash",
+    );
+    expect(bcrypt.compare).toHaveBeenNthCalledWith(
+      2,
+      STRONG_PASSWORD_72_BYTES,
+      "$2b$12$legacy-hash",
+    );
+    expect(bcrypt.hash).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it("異常系: 現在のパスワードが不一致なら UserError(400) を投げる", async () => {
@@ -310,7 +413,30 @@ describe("changeCurrentPassword", () => {
       status: 400,
       message: "現在のパスワードが正しくありません",
     });
+    expect(bcrypt.compare).toHaveBeenCalledOnce();
+    expect(bcrypt.hash).not.toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("既存互換性: 73バイトのcurrentPasswordを完全な値で照合する", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      passwordHash: "$2b$12$hash",
+      role: "USER",
+    } as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
+
+    await expect(
+      changeCurrentPassword({
+        userId: "user-1",
+        currentPassword: STRONG_PASSWORD_73_BYTES,
+        newPassword: "NewPass1!",
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: "現在のパスワードが正しくありません",
+    });
+    expect(bcrypt.compare).toHaveBeenCalledWith(STRONG_PASSWORD_73_BYTES, "$2b$12$hash");
   });
 });
 

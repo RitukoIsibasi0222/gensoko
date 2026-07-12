@@ -7,10 +7,15 @@ import {
   type ParsedCreateAdminArguments,
   type ResolvedCreateAdminInput,
 } from "./createAdmin.js";
+import { PASSWORD_TOO_LONG_MESSAGE } from "../lib/password.js";
+import {
+  STRONG_PASSWORD_72_BYTES,
+  STRONG_PASSWORD_73_BYTES,
+} from "../test/password-byte-boundary-fixtures.js";
 
 const DATABASE_URL = "postgresql://gensoko:test-password@postgres:5432/gensoko";
-const ARGUMENT_PASSWORD = "ArgumentPass1!";
-const ENVIRONMENT_PASSWORD = "EnvironmentPass1!";
+const ARGUMENT_PASSWORD = STRONG_PASSWORD_72_BYTES;
+const ENVIRONMENT_PASSWORD = STRONG_PASSWORD_72_BYTES;
 
 const VALID_ENV: NodeJS.ProcessEnv = {
   DATABASE_URL,
@@ -368,6 +373,31 @@ describe("runCreateAdminCommand", () => {
     expect(result.stderr.join("\n")).not.toContain(invalidUsername);
     expect(loadDependencies).not.toHaveBeenCalled();
   });
+
+  it.each([
+    {
+      source: "コマンド引数",
+      argv: ["--password", STRONG_PASSWORD_73_BYTES],
+      env: VALID_ENV,
+    },
+    {
+      source: "環境変数",
+      argv: [],
+      env: { ...VALID_ENV, ADMIN_PASSWORD: STRONG_PASSWORD_73_BYTES },
+    },
+  ])(
+    "$sourceの73バイトpasswordはcode 2で拒否しDB dependencyをloadしない",
+    async ({ argv, env }) => {
+      const { loadDependencies } = createRuntimeMocks();
+
+      const result = await runCreateAdminCommand({ argv, env, loadDependencies });
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain(PASSWORD_TOO_LONG_MESSAGE);
+      expect(result.stderr.join("\n")).not.toContain(STRONG_PASSWORD_73_BYTES);
+      expect(loadDependencies).not.toHaveBeenCalled();
+    },
+  );
 
   it("DATABASE_URL不足ではDB dependencyをloadせず安全に失敗する", async () => {
     const { loadDependencies } = createRuntimeMocks();

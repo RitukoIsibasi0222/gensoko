@@ -40,6 +40,7 @@ vi.mock("hono/jwt", () => ({
 
 import bcrypt from "bcryptjs";
 import { prisma } from "../../lib/prisma.js";
+import { STRONG_PASSWORD_73_BYTES } from "../../test/password-byte-boundary-fixtures.js";
 
 const app = new Hono();
 app.route("/auth", authRouter);
@@ -105,6 +106,27 @@ describe("POST /auth/login", () => {
     const body = await res.json();
     expect(body.accessToken).toBe("mock-access-token");
     expect(body.user).toEqual({ id: "user-1", username: "taro123", role: "USER" });
+  });
+
+  it("既存互換性: 73バイトのパスワードを上限拒否せず完全な値で照合する", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(ACTIVE_USER as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.userStats.upsert).mockResolvedValue({} as never);
+    vi.mocked(prisma.refreshToken.create).mockResolvedValue({} as never);
+
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "taro@example.com",
+        password: STRONG_PASSWORD_73_BYTES,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(bcrypt.compare).toHaveBeenCalledWith(STRONG_PASSWORD_73_BYTES, ACTIVE_USER.passwordHash);
   });
 
   it("正常系: レスポンスに HttpOnly Cookie の Set-Cookie ヘッダーが含まれる", async () => {

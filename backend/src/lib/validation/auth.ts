@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isPasswordWithinBcryptLimit, PASSWORD_TOO_LONG_MESSAGE } from "../password.js";
 
 export const usernameSchema = z
   .string()
@@ -16,4 +17,5 @@ export const strongPasswordSchema = z
   .regex(/[a-z]/, "パスワードには英小文字を1文字以上含めてください")
   .regex(/[0-9]/, "パスワードには数字を1文字以上含めてください")
   .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "パスワードには記号を1文字以上含めてください")
-  .refine((value) => !/ /.test(value), "パスワードにスペースは使用できません");
+  .refine((value) => !/ /.test(value), "パスワードにスペースは使用できません")
+  .refine(isPasswordWithinBcryptLimit, PASSWORD_TOO_LONG_MESSAGE);
