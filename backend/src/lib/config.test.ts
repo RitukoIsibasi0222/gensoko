@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getFrontendUrl } from "./config.js";
+import { getFrontendUrl, getRateLimitConfig } from "./config.js";
 
 const DEVELOPMENT_FRONTEND_URL = "http://localhost:5174";
 const PRODUCTION_FRONTEND_URL = "https://gensoko.example";
+const VALID_RATE_LIMIT_KEY_SECRET = Buffer.from("0123456789abcdef0123456789abcdef").toString(
+  "base64",
+);
+const SHORT_RATE_LIMIT_KEY_SECRET = Buffer.from("short-secret").toString("base64");
 
 describe("getFrontendUrl", () => {
   afterEach(() => {
@@ -53,6 +57,86 @@ describe("getFrontendUrl", () => {
 
     expect(() => getFrontendUrl({ isProduction: true })).toThrow(
       "FRONTEND_URLはHTTP(S)のオリジン形式で設定してください",
+    );
+  });
+});
+
+describe("getRateLimitConfig", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("developmentではmemory storeと専用secretを返す", () => {
+    vi.stubEnv("RATE_LIMIT_STORE", "memory");
+    vi.stubEnv("RATE_LIMIT_KEY_SECRET", VALID_RATE_LIMIT_KEY_SECRET);
+
+    expect(getRateLimitConfig({ runtime: "development" })).toEqual({
+      store: "memory",
+      keySecret: VALID_RATE_LIMIT_KEY_SECRET,
+    });
+  });
+
+  it("productionではdurable-object storeと専用secretを返す", () => {
+    vi.stubEnv("RATE_LIMIT_STORE", "durable-object");
+    vi.stubEnv("RATE_LIMIT_KEY_SECRET", VALID_RATE_LIMIT_KEY_SECRET);
+
+    expect(getRateLimitConfig({ runtime: "production" })).toEqual({
+      store: "durable-object",
+      keySecret: VALID_RATE_LIMIT_KEY_SECRET,
+    });
+  });
+
+  it("productionではRATE_LIMIT_STORE未設定を拒否する", () => {
+    vi.stubEnv("RATE_LIMIT_STORE", "");
+    vi.stubEnv("RATE_LIMIT_KEY_SECRET", VALID_RATE_LIMIT_KEY_SECRET);
+
+    expect(() => getRateLimitConfig({ runtime: "production" })).toThrow(
+      "production環境ではRATE_LIMIT_STORE=durable-objectの設定が必要です",
+    );
+  });
+
+  it("productionではmemory storeを拒否する", () => {
+    vi.stubEnv("RATE_LIMIT_STORE", "memory");
+    vi.stubEnv("RATE_LIMIT_KEY_SECRET", VALID_RATE_LIMIT_KEY_SECRET);
+
+    expect(() => getRateLimitConfig({ runtime: "production" })).toThrow(
+      "production環境ではRATE_LIMIT_STORE=durable-objectの設定が必要です",
+    );
+  });
+
+  it("未対応のRATE_LIMIT_STOREを拒否する", () => {
+    vi.stubEnv("RATE_LIMIT_STORE", "redis");
+    vi.stubEnv("RATE_LIMIT_KEY_SECRET", VALID_RATE_LIMIT_KEY_SECRET);
+
+    expect(() => getRateLimitConfig({ runtime: "development" })).toThrow(
+      "RATE_LIMIT_STOREはmemoryまたはdurable-objectを設定してください",
+    );
+  });
+
+  it("productionではRATE_LIMIT_KEY_SECRET未設定を拒否する", () => {
+    vi.stubEnv("RATE_LIMIT_STORE", "durable-object");
+    vi.stubEnv("RATE_LIMIT_KEY_SECRET", "");
+
+    expect(() => getRateLimitConfig({ runtime: "production" })).toThrow(
+      "RATE_LIMIT_KEY_SECRETの設定が必要です",
+    );
+  });
+
+  it("base64形式でないRATE_LIMIT_KEY_SECRETを拒否する", () => {
+    vi.stubEnv("RATE_LIMIT_STORE", "memory");
+    vi.stubEnv("RATE_LIMIT_KEY_SECRET", "base64ではない値!");
+
+    expect(() => getRateLimitConfig({ runtime: "development" })).toThrow(
+      "RATE_LIMIT_KEY_SECRETはbase64形式で設定してください",
+    );
+  });
+
+  it("復号後32バイト未満のRATE_LIMIT_KEY_SECRETを拒否する", () => {
+    vi.stubEnv("RATE_LIMIT_STORE", "memory");
+    vi.stubEnv("RATE_LIMIT_KEY_SECRET", SHORT_RATE_LIMIT_KEY_SECRET);
+
+    expect(() => getRateLimitConfig({ runtime: "development" })).toThrow(
+      "RATE_LIMIT_KEY_SECRETは復号後32バイト以上にしてください",
     );
   });
 });

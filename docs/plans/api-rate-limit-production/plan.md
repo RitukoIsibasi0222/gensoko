@@ -784,8 +784,8 @@ DOはschemaを`new_sqlite_classes` migrationとして追加し、stagingとprodu
 - [ ] T1: 仕様・全route・Cloudflare planを再確認する
 - [x] T2: `docs/05_progress.md`を実装中へ更新する
 - [x] T3: API/security/dev/deploy契約を先に更新する
-- [ ] T4: policy/config testをRed化する
-- [ ] T5: policy/configを実装する
+- [x] T4: policy/config testをRed化する
+- [x] T5: policy/configを実装する
 - [ ] T6: key/resolver testをRed化する
 - [ ] T7: key/resolverを実装する
 - [ ] T8: memory store/middleware testをRed化する
