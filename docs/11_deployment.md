@@ -88,33 +88,18 @@
 
 別ドメイン間の通信を許可するため、Honoに CORS ミドルウェアを設定します。
 
-`backend/src/app.ts`:
+`backend/src/app.ts`では、CORS許可originとレート制限依存をapp factoryへ注入する。
+
 ```typescript
-import { Hono } from "hono";
-import { cors } from "hono/cors";
-import { getFrontendUrl } from "./lib/config.js";
+import type { RateLimitDependencies } from "./middleware/rateLimit/store.js";
 
 type CreateAppOptions = {
   isProduction: boolean;
-};
-
-export const createApp = ({ isProduction }: CreateAppOptions) => {
-  const app = new Hono();
-  const frontendUrl = getFrontendUrl({ isProduction });
-
-  app.use(
-    "*",
-    cors({
-      origin: frontendUrl,
-      allowHeaders: ["Content-Type", "Authorization"],
-      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      credentials: true,
-    }),
-  );
-
-  return app;
+  rateLimit: RateLimitDependencies;
 };
 ```
+
+実装の正本は `backend/src/app.ts` とし、この文書へmiddleware全体を複製しない。
 
 `NODE_ENV=production` では `FRONTEND_URL` を必須とし、未設定・空文字ならapp構築時にエラーで停止する。HTTP(S)のorigin形式だけを許可し、path、query、hash、認証情報付きURLは拒否する。localhostへのfallbackはdevelopment/testだけで使用する。
 
@@ -154,44 +139,22 @@ VITE_API_BASE_URL = https://gensoko-api.あなたのユーザー名.workers.dev/
 1. https://cloudflare.com にアクセス
 2. 「Sign Up」でアカウント作成
 
-### 2. Wranglerのインストール（Cloudflareのデプロイツール）
+### 2. Workers基盤の実装状況
 
-```bash
-# ローカルPC（Dockerの外）で実行
-npm install -g wrangler
+2026-07-12時点で、Wrangler設定、Workers専用entrypoint、Cloudflare Prisma adapter、SQLite-backed Durable Object、Workers runtime testは未実装である。フェーズ12でこれらを同じ設計として追加してからデプロイ手順を確定する。
 
-# Cloudflareにログイン
-wrangler login
-```
+`backend/src/index.ts`はNode.js開発用entrypointであり、`@hono/node-server`とmemory storeを使用する。`wrangler`の`main`へ指定してはいけない。またproductionの`RATE_LIMIT_STORE=durable-object`をNode entrypointへ渡すと、memory storeへの危険なfallbackを防ぐため起動を拒否する。
 
-### 3. `wrangler.toml` を作成（backendフォルダ）
+フェーズ12では最低限、次を先に実装・レビューする。
 
-```toml
-name = "gensoko-api"
-main = "src/index.ts"
-compatibility_date = "2024-01-01"
+1. Workers専用entrypointとCloudflare Prisma adapter
+2. `wrangler.toml`または`wrangler.jsonc`のstaging/production設定
+3. SQLite-backed Durable Object namespace、migration、binding
+4. Workers runtime用Vitest poolと並行性・永続化・alarm test
+5. `DATABASE_URL`、`JWT_SECRET`、`RATE_LIMIT_KEY_SECRET`のWrangler Secret登録
+6. stagingでの実HTTP確認後にproduction deploy
 
-[vars]
-FRONTEND_URL = "https://gensoko.vercel.app"
-```
-
-### 4. Supabaseの接続URLを Workers の Secret に設定
-
-```bash
-# 秘密情報はwrangler secretコマンドで設定（.envには書かない）
-wrangler secret put DATABASE_URL
-# → プロンプトでSupabaseの接続URLを貼り付ける
-
-wrangler secret put JWT_SECRET
-# → 本番用の強いランダム文字列を設定
-```
-
-### 5. デプロイ
-
-```bash
-cd backend
-wrangler deploy
-```
+実行可能な`wrangler dev`、test、deployコマンドは、採用した設定ファイルとpackage scriptがリポジトリへ追加されるまで本番手順として扱わない。
 
 ---
 
@@ -347,6 +310,8 @@ Actions の schedule は遅延・スキップされる可能性があるため�
 ---
 
 ## 本番レート制限設定
+
+> 2026-07-12時点: Honoのpolicy・HMAC key・middleware・route配線とフロントエンド回帰テストまでは実装済み。Durable Object、Workers binding、WAF、staging/production実機確認は未完了であり、本番適用済みとは扱わない。
 
 ### リリースゲート
 
