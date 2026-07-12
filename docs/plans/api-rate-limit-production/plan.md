@@ -786,8 +786,8 @@ DOはschemaを`new_sqlite_classes` migrationとして追加し、stagingとprodu
 - [x] T3: API/security/dev/deploy契約を先に更新する
 - [x] T4: policy/config testをRed化する
 - [x] T5: policy/configを実装する
-- [ ] T6: key/resolver testをRed化する
-- [ ] T7: key/resolverを実装する
+- [x] T6: key/resolver testをRed化する
+- [x] T7: key/resolverを実装する
 - [ ] T8: memory store/middleware testをRed化する
 - [ ] T9: store契約/memory/middlewareを実装する
 - [ ] T10: app/route integrationをRed化する
