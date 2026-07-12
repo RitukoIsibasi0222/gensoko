@@ -41,15 +41,32 @@ async function createBucket(input: {
     return { policyId: input.policyId, keyDigest: null };
   }
 
-  const keyDigest = await createRateLimitKeyDigest({
-    secret: input.dependencies.keySecret,
-    policyId: input.policyId,
-    operationScope: input.operationScope,
-    actorType: input.actorType,
-    value: input.value,
-  });
+  try {
+    const keyDigest = await createRateLimitKeyDigest({
+      secret: input.dependencies.keySecret,
+      policyId: input.policyId,
+      operationScope: input.operationScope,
+      actorType: input.actorType,
+      value: input.value,
+    });
 
-  return { policyId: input.policyId, keyDigest };
+    return { policyId: input.policyId, keyDigest };
+  } catch {
+    // Treat runtime HMAC failures as unavailable keys without exposing raw errors.
+    return { policyId: input.policyId, keyDigest: null };
+  }
+}
+
+async function resolveIpSafely(
+  dependencies: RateLimitDependencies,
+  context: Context,
+): Promise<string | null> {
+  try {
+    return await dependencies.resolveIp(context);
+  } catch {
+    // Let the middleware apply the policy failure mode without exposing resolver errors.
+    return null;
+  }
 }
 
 export function getRateLimitStore(context: Context): RateLimitStore {
@@ -59,7 +76,7 @@ export function getRateLimitStore(context: Context): RateLimitStore {
 export function createIpBucketResolver(policyId: RateLimitPolicyId): RateLimitBucketResolver {
   return async (context) => {
     const dependencies = getDependencies(context);
-    const ip = await dependencies.resolveIp(context);
+    const ip = await resolveIpSafely(dependencies, context);
     return [
       await createBucket({
         dependencies,
@@ -112,7 +129,7 @@ export function createIpAndUserBucketResolver(input: {
   return async (context) => {
     const dependencies = getDependencies(context);
     const user = (context.var as unknown as RateLimitContextVariables).user;
-    const ip = await dependencies.resolveIp(context);
+    const ip = await resolveIpSafely(dependencies, context);
     return Promise.all([
       createBucket({
         dependencies,
