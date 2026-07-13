@@ -180,7 +180,7 @@ VITE_API_BASE_URL = https://gensoko-api.あなたのユーザー名.workers.dev/
 - 本番DBの変更は `prisma migrate deploy` でのみ適用する
 - `prisma migrate deploy` は GitHub Actions の本番デプロイ中、Cloudflare Workers への API デプロイ前に実行する
 - 実行前に Supabase のバックアップ取得状況または手動バックアップ時刻を確認する
-- `DATABASE_URL` は GitHub Actions の Environment Secret として管理し、リポジトリや `wrangler.toml` には書かない
+- `DATABASE_URL`はGitHub Actions Secretとして管理し、リポジトリや`wrangler.toml`には書かない
 
 ### ロールバック方針
 
@@ -255,11 +255,11 @@ jobs:
 
 ## 定期バッチ運用（GitHub Actions schedule）
 
-フェーズ9時点では Cloudflare Workers の wrangler.toml、Workers 用 Prisma 接続、デプロイ workflow が未整備のため、週間スコアリセットと GameQuestionSet cleanup は GitHub Actions schedule から既存 Node CLI を実行する。
+フェーズ9時点では Cloudflare Workers の wrangler.toml、Workers 用 Prisma 接続、デプロイ workflow が未整備のため、週間スコアリセット、GameQuestionSet cleanup、監査ログcleanupはGitHub Actions scheduleから既存Node CLIを実行する。
 
 ### 採用理由
 
-- 既存の resetWeeklyScores と cleanupExpiredGameQuestionSets は Node + Prisma adapter-pg 前提で動作確認済み
+- 既存のresetWeeklyScores、cleanupExpiredGameQuestionSets、cleanupExpiredAuditLogsはNode + Prisma adapter-pg前提で動作確認済み
 - Workers runtime 用の Prisma adapter / Hyperdrive 方針が未確定
 - Cron だけを Workers に置くと DB 接続や entrypoint 分離まで同時に必要になり、フェーズ12のデプロイ作業とスコープが衝突する
 - GitHub Actions schedule なら DATABASE_URL を Actions Secret として渡し、既存の npm run batch:scheduled から同じ wrapper を実行できる
@@ -270,14 +270,19 @@ jobs:
 |---|---|---|---|
 | 週間スコアリセット | 7 15 * * 0 | UTC 日曜 15:07 = JST 月曜 00:07 | wrapper は Cloudflare 形式の 0 15 * * SUN も受け付ける |
 | GameQuestionSet cleanup | 17,47 * * * * | 毎時17分/47分（30分ごと） | 問題セットの有効期限30分に合わせる |
+| 監査ログcleanup | 37 18 * * * | UTC毎日18:37 = JST毎日03:37 | cleanup無効時は状態確認後にskipする |
 
-### 必要な Secret
+### 必要なSecret・Variables
 
 GitHub の Settings > Secrets and variables > Actions に以下を登録する。
 
-    DATABASE_URL
+| 種別 | 名前 | 値・扱い |
+|---|---|---|
+| Actions Secret | `DATABASE_URL` | 本番DB接続文字列。workflow・リポジトリ・ログへ直接書かない |
+| Actions Variable | `AUDIT_LOG_RETENTION_DAYS` | 暫定`365`。正式承認後の値を設定する |
+| Actions Variable | `AUDIT_LOG_CLEANUP_ENABLED` | release gate完了までは`false` |
 
-DATABASE_URL は本番 DB の接続文字列であり、workflow やリポジトリには直接書かない。
+保持期間・cleanup flagは秘密情報ではないためVariablesで管理する。`AUDIT_LOG_RETENTION_DAYS`の未設定・空文字・不正値は削除前に失敗する。cleanup flagはruntime環境変数自体が省略された場合だけ`false`になるが、workflowでは未登録Variableが空文字として渡りvalidation失敗になるため、`AUDIT_LOG_CLEANUP_ENABLED=false`を明示登録する。
 
 ### 手動実行・retry
 
@@ -287,8 +292,77 @@ GitHub Actions の Batch Jobs workflow は workflow_dispatch に対応してい�
 |---|---|
 | weekly-reset | 週間スコアリセット |
 | game-question-set-cleanup | 期限切れ GameQuestionSet cleanup |
+| audit-log-cleanup-dry-run | 期限超過件数とcutoffをpreviewし、削除しない |
+| audit-log-cleanup-execute | cleanup有効時だけ実削除する |
 
-Actions の schedule は遅延・スキップされる可能性があるため、毎時00分付近を避けて 7分 / 17分 / 47分に寄せている。失敗時は workflow の失敗ログを確認し、必要に応じて workflow_dispatch で再実行する。
+Actionsのscheduleは遅延・スキップされる可能性があるため、毎時00分付近を避けて7分・17分・37分・47分に分散している。workflowのconcurrency groupは`gensoko-batch-jobs`で固定し、scheduleと手動実行を直列化する。失敗時は安全ログを確認し、原因解消後にworkflow_dispatchで再実行する。
+
+### 監査ログcleanupのrelease gate
+
+次の全項目を記録するまで、productionの`AUDIT_LOG_CLEANUP_ENABLED`を`true`にしない。
+
+| 項目 | 現在の記録 | 状態 |
+|---|---|---|
+| 正式保持期間 | 365日を暫定推奨 | 未承認 |
+| 保持目的 | セキュリティインシデント・管理者操作の相関調査 | 承認待ち |
+| 内部ID保持 | 監査rowと同期間だけ`actorId`・`targetId`を保持 | 承認待ち |
+| 承認者 | プロダクトオーナーまたはプライバシー責任者 | 担当者未確定 |
+| 一次対応者 | GitHub Actions・DB警告を確認する開発担当 | チーム未確定 |
+| 通知先 | GitHub Actions failureとDB provider容量警告 | 受信者未設定 |
+| backup/PITR | 初回実削除前に復元可能性と保持状態を確認 | 未確認 |
+
+正式決定時は値、目的、承認者、承認日、適用者、適用日時をこの表へ追記する。未確定欄を残したままcleanupを有効化しない。
+
+### 監査ログcleanupの監視
+
+定期jobの安全ログで次を確認する。
+
+- 直近24時間の生成件数
+- 最古・最新`occurredAt`
+- cutoffより古いrowの存在
+- 削除件数、実行時間、上限到達、削除後残件
+
+正確な期限超過総件数は手動dry-runだけで取得する。全row数、`audit_logs` table・index容量、DB接続数、CPU・I/O・storage latency、backup/PITRはDB providerのDashboard・Metricsをsource of truthとし、容量取得のためのraw SQLをアプリへ追加しない。
+
+| 項目 | 警告 | 重大 | 初動 |
+|---|---:|---:|---|
+| DB全体容量 | quota 70% | quota 85% | 増加原因、cleanup結果、契約planを確認 |
+| 期限超過残件 | 次回実行後も1件以上 | 最大件数到達または2回連続 | dry-run後に手動再実行し、DB負荷を確認 |
+| cleanup失敗 | 1回 | 2回連続 | cleanupを無効化し、担当者が原因確認 |
+| audit write失敗 | 1件 | 継続発生 | backendとDB状態を確認 |
+| 日次増加件数 | 初期7日間はbaseline収集 | baseline後に決定 | LOGIN FAILURE急増とrate limit状態を確認 |
+
+通知には内部ID、監査ログID、メール、username、秘密情報、生Errorを含めない。通知先が設定されるまで本番運用を完了扱いにしない。
+
+### 監査ログcleanup runbook
+
+1. 初回・保持期間変更前は`audit-log-cleanup-dry-run`を実行し、cutoff、期限超過件数、最古日時、最低実行回数を記録する。
+2. backup/PITR、承認者、通知先を確認する。
+3. Actions Variableの保持期間を承認値へ更新する。
+4. 日次schedule直前を避けてmanual実行の時間を確保し、`AUDIT_LOG_CLEANUP_ENABLED=true`へ変更する。
+5. `audit-log-cleanup-execute`を1回実行し、削除件数・実行時間・残件を確認する。
+6. 日次scheduleの次回成功を確認する。
+
+#### 失敗・上限到達
+
+- raw DB errorを外部通知へ転載せず、Actionsの固定event、cutoff、件数、時間、残件状態を確認する
+- 原因解消前に連続再実行しない。DB接続・負荷・設定値を確認してからdry-runする
+- 最大10,000件または8分到達後も残件がある場合はworkflowが失敗する。対象外rowを削除せず、必要回数だけ手動再実行する
+- 2回連続失敗または原因不明の場合は`AUDIT_LOG_CLEANUP_ENABLED=false`へ戻す
+
+#### 削除保留・停止
+
+- インシデント調査や保持判断中は最初に`AUDIT_LOG_CLEANUP_ENABLED=false`へ変更する
+- 保留理由、開始日時、承認者、見直し期限をこの文書へ記録する
+- 全体停止だけをサポートし、個別row・ユーザー単位のlegal holdは行わない
+- flagだけで不十分な場合は`.github/workflows/batch.yml`の監査cronを停止する。既存の週間・問題セットbatchは維持する
+
+#### 誤削除・rollback
+
+- cleanup flagを即時`false`へ戻し、監査ログへの新規書込みを継続できるか判断する
+- 対象期間、cutoff、削除件数、実行者、実行時刻を安全な情報だけで記録する
+- backup/PITRからの復元可否をDB担当者と判断し、無承認で本番DBを復元しない
+- backendを旧versionへ戻す場合も、先にcleanupを無効化して旧codeへ日次cronが想定外実行されないようにする
 
 ### Cloudflare Workers Cron へ移行する条件
 
@@ -389,7 +463,11 @@ Actions の schedule は遅延・スキップされる可能性があるため�
 [ ] productionでRATE_LIMIT_STORE=durable-object以外を拒否することを確認
 [ ] 本番API hostnameが対象zoneのWAFを通り、直接到達・迂回経路がないことを確認
 [ ] GitHub Actions の DATABASE_URL Secret を設定（migrate deploy 用）
+[ ] GitHub Actions Variables に AUDIT_LOG_RETENTION_DAYS と AUDIT_LOG_CLEANUP_ENABLED=false を設定
 [ ] 本番DBバックアップ取得状況を確認
+[ ] 監査ログの正式保持期間・内部ID保持・承認者・通知先を記録
+[ ] DB容量70%/85%警告とGitHub Actions failureの受信者を設定
+[ ] production dry-runと初回executeの結果を記録
 [ ] prisma migrate deploy の実行タイミングを確認
 [ ] wrangler deploy で初回デプロイ
 [ ] GitHub Actions の Secrets 設定（CI/CD）

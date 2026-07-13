@@ -97,6 +97,7 @@ docker compose exec -T \
 - DB名が`gensoko_audit_cleanup_test`でなければ削除処理を開始しない
 - 501件の期限切れrow、cutoff境界row、保持対象rowを作成する
 - 500件を超える分割削除、`occurredAt < cutoff`境界、2回目0件の冪等性を確認する
+- User row削除後も保持対象監査rowの`actorId`・`targetId`が維持されることを確認する
 - test終了時に専用DBの監査fixtureを削除する
 
 ---
