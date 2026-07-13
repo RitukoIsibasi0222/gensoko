@@ -18,6 +18,7 @@ describe.skipIf(!runIntegrationTest)("監査ログcleanupの実DB動作", () => 
   const fixturePrefix = `audit-cleanup-${randomUUID()}`;
   const boundaryId = `${fixturePrefix}-boundary`;
   const retainedId = `${fixturePrefix}-retained`;
+  const retiredUserId = `${fixturePrefix}-retired-user`;
   let prisma: InstanceType<typeof PrismaClient> | undefined;
   let cleanupPrisma: InstanceType<typeof PrismaClient> | undefined;
   let cleanupExpiredAuditLogs:
@@ -48,6 +49,16 @@ describe.skipIf(!runIntegrationTest)("監査ログcleanupの実DB動作", () => 
     cleanupPrisma = prismaModule.prisma;
 
     await prisma.auditLog.deleteMany();
+    await prisma.user.deleteMany({ where: { id: retiredUserId } });
+    await prisma.user.create({
+      data: {
+        id: retiredUserId,
+        username: `audit_cleanup_${randomUUID().replaceAll("-", "").slice(0, 16)}`,
+        email: `${retiredUserId}@example.com`,
+        passwordHash: "integration-test-only",
+        emailVerified: true,
+      },
+    });
     await prisma.auditLog.createMany({
       data: [
         ...Array.from({ length: FIXTURE_EXPIRED_COUNT }, (_, index) => ({
@@ -76,19 +87,21 @@ describe.skipIf(!runIntegrationTest)("監査ログcleanupの実DB動作", () => 
           id: retainedId,
           action: "INTEGRATION_TEST",
           result: AuditResult.SUCCESS,
-          actorId: "retained-user",
+          actorId: retiredUserId,
           actorRole: null,
           targetType: "USER",
-          targetId: "retained-user",
+          targetId: retiredUserId,
           failureReason: null,
           occurredAt: new Date(EXPECTED_CUTOFF.getTime() + 1),
         },
       ],
     });
+    await prisma.user.delete({ where: { id: retiredUserId } });
   });
 
   afterAll(async () => {
     await prisma?.auditLog.deleteMany();
+    await prisma?.user.deleteMany({ where: { id: retiredUserId } });
     await Promise.allSettled([prisma?.$disconnect(), cleanupPrisma?.$disconnect()]);
   });
 
@@ -96,6 +109,8 @@ describe.skipIf(!runIntegrationTest)("監査ログcleanupの実DB動作", () => 
     const cleanup = cleanupExpiredAuditLogs!;
     const config = { retentionDays: 365, cleanupEnabled: true } as const;
     const logger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+
+    await expect(prisma!.user.findUnique({ where: { id: retiredUserId } })).resolves.toBeNull();
 
     const firstResult = await cleanup({ now: NOW, config, logger });
 
@@ -108,11 +123,21 @@ describe.skipIf(!runIntegrationTest)("監査ログcleanupの実DB動作", () => 
     expect(
       await prisma!.auditLog.findMany({
         orderBy: { occurredAt: "asc" },
-        select: { id: true, occurredAt: true },
+        select: { id: true, actorId: true, targetId: true, occurredAt: true },
       }),
     ).toEqual([
-      { id: boundaryId, occurredAt: EXPECTED_CUTOFF },
-      { id: retainedId, occurredAt: new Date(EXPECTED_CUTOFF.getTime() + 1) },
+      {
+        id: boundaryId,
+        actorId: "boundary-user",
+        targetId: "boundary-user",
+        occurredAt: EXPECTED_CUTOFF,
+      },
+      {
+        id: retainedId,
+        actorId: retiredUserId,
+        targetId: retiredUserId,
+        occurredAt: new Date(EXPECTED_CUTOFF.getTime() + 1),
+      },
     ]);
 
     const secondResult = await cleanup({ now: NOW, config, logger });

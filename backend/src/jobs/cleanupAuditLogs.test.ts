@@ -421,4 +421,41 @@ describe("監査ログの分割cleanup", () => {
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("secret");
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("private-id");
   });
+
+  it("状態監視のDBエラー時は削除を開始せずPIIとraw errorを出さない", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const databaseError = new Error(
+      "DATABASE_URL=secret actorId=private-actor targetId=private-target email=private@example.com",
+    );
+    vi.mocked(prisma.auditLog.count).mockRejectedValueOnce(databaseError);
+
+    await expect(
+      cleanupExpiredAuditLogs({
+        now: NOW,
+        config: ENABLED_CONFIG,
+        logger,
+        getMonotonicTime: () => 1_000,
+      }),
+    ).rejects.toThrow("監査ログcleanupの実行に失敗しました");
+
+    expect(prisma.auditLog.findMany).not.toHaveBeenCalled();
+    expect(prisma.auditLog.deleteMany).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith({
+      event: "audit_logs.cleanup.failed",
+      cutoff: CUTOFF.toISOString(),
+      retentionDays: 365,
+      dryRun: false,
+      deletedCount: 0,
+      durationMs: 0,
+      limitReached: false,
+      message: "監査ログcleanupの実行に失敗しました",
+    });
+
+    const output = JSON.stringify(logger.error.mock.calls);
+    expect(output).not.toContain("DATABASE_URL");
+    expect(output).not.toContain("secret");
+    expect(output).not.toContain("private-actor");
+    expect(output).not.toContain("private-target");
+    expect(output).not.toContain("private@example.com");
+  });
 });
