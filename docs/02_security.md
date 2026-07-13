@@ -220,13 +220,34 @@ X-Permitted-Cross-Domain-Policies: none
 - ログに**パスワード・トークン・個人情報**は含めない
 - ログはサーバー外（ログ収集サービス）に保存
 
+### DB監査ログの保持・cleanup
+
+- セキュリティ上重要な操作はPostgreSQLの`audit_logs`へ保存し、通常のアプリケーションログと分離する
+- 暫定保持期間は365日とし、runtimeのsource of truthは`AUDIT_LOG_RETENTION_DAYS`とする
+- 正式な保持期間、承認者、通知先、backup/PITRを確認するまで`AUDIT_LOG_CLEANUP_ENABLED=false`を維持する
+- cleanup対象は`occurredAt < cutoff`だけとし、cutoffと同時刻のrowは保持する
+- 1batch 500件、1回最大10,000件、最大8分の固定上限を設け、上限到達後も残件があれば定期batchを失敗させる
+- cleanupの運用ログには件数、cutoff、実行時間、期限超過有無だけを記録し、監査ログID、`actorId`、`targetId`、メール、username、生DB error、`DATABASE_URL`を含めない
+- cleanup自身は新しい`AuditLog`を作成しない
+
+### 退会後の監査内部ID
+
+- `actorId`・`targetId`はUser relationを持たない内部IDであり、User row削除後も監査rowの保持期間中は維持する暫定方針とする
+- 内部IDはインシデント・管理者操作の相関調査だけに利用し、公開API・UIへ返さない
+- 監査rowのcleanup時に内部IDもrowごと削除し、無期限には保持しない
+- HMAC化、退会時null化、個別legal holdが必要な場合はschema・migration・鍵管理を含む別設計を行う
+- この例外保持はプライバシー責任者またはプロダクトオーナーの承認前に本番有効化しない
+
 ---
 
 ## SEC-009: 個人情報
 
 - 収集する個人情報: **メールアドレス** と **ユーザー名** のみ（最小限）
 - プライバシーポリシーページを設置（公開前に必須）
-- アカウント削除時は全個人情報・学習データを完全削除
+- アカウント削除時に個人情報・学習データを完全削除することを目標要件とする
+- 現在の本人退会・管理者強制退会はsoft deleteであり、Userのメール・username・学習データが残るため、この目標要件は未達である
+- physical deleteまたは匿名化、学習データ削除範囲、既存soft-deleted userの移行は、監査ログ内部IDの期間限定保持とは分離した本番公開前ブロッカーとして扱う
+- 監査内部IDを例外保持する正式期間・目的・問い合わせ先は、承認後にプライバシーポリシーへ記載する
 
 ---
 
