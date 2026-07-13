@@ -30,6 +30,10 @@ const LATEST_OCCURRED_AT = new Date("2026-07-13T08:30:00.000Z");
 const ENABLED_CONFIG = { retentionDays: 365, cleanupEnabled: true } as const;
 const DISABLED_CONFIG = { retentionDays: 365, cleanupEnabled: false } as const;
 
+function createLogger() {
+  return { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+}
+
 function mockHealthSnapshot({ hasExpiredRows = true }: { hasExpiredRows?: boolean } = {}): void {
   vi.mocked(prisma.auditLog.count).mockResolvedValueOnce(12);
   vi.mocked(prisma.auditLog.findFirst)
@@ -114,7 +118,7 @@ describe("監査ログcleanupの保持期限と安全上限", () => {
   });
 
   it("dry-runはpreview結果を安全ログへ出し、監査ログを削除しない", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     mockHealthSnapshot();
     vi.mocked(prisma.auditLog.count).mockResolvedValueOnce(10_001);
 
@@ -161,7 +165,7 @@ describe("監査ログcleanupの保持期限と安全上限", () => {
   });
 
   it("cleanup無効時は低負荷な状態確認だけを行い、削除をskipする", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     mockHealthSnapshot();
 
     const result = await cleanupExpiredAuditLogs({
@@ -213,7 +217,7 @@ describe("監査ログの分割cleanup", () => {
   });
 
   it("期限超過ログが0件の場合は削除せず成功する", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     mockHealthSnapshot({ hasExpiredRows: false });
     vi.mocked(prisma.auditLog.findMany).mockResolvedValueOnce([]);
 
@@ -240,7 +244,7 @@ describe("監査ログの分割cleanup", () => {
   });
 
   it("500件未満はIDとcutoffを再指定して1batchで削除する", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     const rows = [{ id: "audit-log-1" }, { id: "audit-log-2" }];
     mockHealthSnapshot();
     vi.mocked(prisma.auditLog.findMany).mockResolvedValueOnce(rows as never);
@@ -339,7 +343,7 @@ describe("監査ログの分割cleanup", () => {
   });
 
   it("10,000件削除後に残件がある場合は件数上限到達として返す", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     let batchNumber = 0;
     mockHealthSnapshot();
     vi.mocked(prisma.auditLog.findFirst).mockResolvedValueOnce({ id: "remaining-log" } as never);
@@ -374,7 +378,7 @@ describe("監査ログの分割cleanup", () => {
   });
 
   it("8分到達時は次batchを開始せず、残件を上限到達として返す", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     const getMonotonicTime = vi.fn().mockReturnValueOnce(0).mockReturnValue(480_000);
     mockHealthSnapshot();
     vi.mocked(prisma.auditLog.findFirst).mockResolvedValueOnce({
@@ -396,7 +400,7 @@ describe("監査ログの分割cleanup", () => {
   });
 
   it("DBエラー時はraw errorと監査ログIDを出さず固定メッセージで失敗する", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     const databaseError = new Error("DATABASE_URL=secret audit-log-id=private-id");
     mockHealthSnapshot();
     vi.mocked(prisma.auditLog.findMany).mockResolvedValueOnce([{ id: "private-id" }] as never);
@@ -423,7 +427,7 @@ describe("監査ログの分割cleanup", () => {
   });
 
   it("状態監視のDBエラー時は削除を開始せずPIIとraw errorを出さない", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     const databaseError = new Error(
       "DATABASE_URL=secret actorId=private-actor targetId=private-target email=private@example.com",
     );

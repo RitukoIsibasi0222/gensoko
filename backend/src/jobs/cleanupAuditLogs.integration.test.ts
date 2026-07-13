@@ -4,6 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { AuditResult } from "@prisma/client";
 import prismaClientModule from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { hashPassword } from "../lib/password.js";
 
 const { PrismaClient } = prismaClientModule;
 const connectionString = process.env.AUDIT_CLEANUP_INTEGRATION_DATABASE_URL;
@@ -50,12 +51,13 @@ describe.skipIf(!runIntegrationTest)("監査ログcleanupの実DB動作", () => 
 
     await prisma.auditLog.deleteMany();
     await prisma.user.deleteMany({ where: { id: retiredUserId } });
+    const passwordHash = await hashPassword("IntegrationPass1!");
     await prisma.user.create({
       data: {
         id: retiredUserId,
         username: `audit_cleanup_${randomUUID().replaceAll("-", "").slice(0, 16)}`,
         email: `${retiredUserId}@example.com`,
-        passwordHash: "integration-test-only",
+        passwordHash,
         emailVerified: true,
       },
     });

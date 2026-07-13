@@ -58,9 +58,7 @@ export type RunScheduledBatchOptions = {
   logger?: ScheduledBatchLogger;
 };
 
-function resolveScheduledBatchJobName(cron: string): ScheduledBatchJobName {
-  const normalizedCron = cron.trim();
-
+function resolveScheduledBatchJobName(normalizedCron: string): ScheduledBatchJobName {
   if (
     normalizedCron === WEEKLY_SCORE_RESET_CRON ||
     normalizedCron === GITHUB_WEEKLY_SCORE_RESET_CRON ||

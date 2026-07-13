@@ -54,6 +54,17 @@ type AuditLogMaintenanceContext = Readonly<{
   config: AuditLogRetentionConfig;
 }>;
 
+type CleanupLogFieldsInput = Pick<
+  CleanupAuditLogsResult,
+  | "cutoff"
+  | "retentionDays"
+  | "dryRun"
+  | "deletedCount"
+  | "durationMs"
+  | "limitReached"
+  | "healthBefore"
+>;
+
 export function calculateAuditLogCutoff(now: Date, retentionDays: number): Date {
   return new Date(now.getTime() - retentionDays * MILLISECONDS_PER_DAY);
 }
@@ -132,24 +143,22 @@ function toLogDate(value: Date | null): string | null {
   return value?.toISOString() ?? null;
 }
 
-function createCleanupLogFields(input: {
-  cutoff: Date;
-  retentionDays: number;
-  dryRun: boolean;
-  deletedCount: number;
-  durationMs: number;
-  limitReached: boolean;
-  healthBefore: AuditLogHealthSnapshot;
-}) {
+function createHealthLogFields(health: AuditLogHealthSnapshot) {
+  return {
+    createdLast24HoursCount: health.createdLast24HoursCount,
+    hasExpiredRows: health.hasExpiredRows,
+    oldestOccurredAt: toLogDate(health.oldestOccurredAt),
+    latestOccurredAt: toLogDate(health.latestOccurredAt),
+  };
+}
+
+function createCleanupLogFields(input: CleanupLogFieldsInput) {
   return {
     cutoff: input.cutoff.toISOString(),
     retentionDays: input.retentionDays,
     dryRun: input.dryRun,
     deletedCount: input.deletedCount,
-    createdLast24HoursCount: input.healthBefore.createdLast24HoursCount,
-    hasExpiredRows: input.healthBefore.hasExpiredRows,
-    oldestOccurredAt: toLogDate(input.healthBefore.oldestOccurredAt),
-    latestOccurredAt: toLogDate(input.healthBefore.latestOccurredAt),
+    ...createHealthLogFields(input.healthBefore),
     durationMs: input.durationMs,
     limitReached: input.limitReached,
   };
@@ -294,14 +303,7 @@ export async function cleanupExpiredAuditLogs({
     return result;
   } catch {
     const durationMs = getDurationMs();
-    const healthLogFields = healthBefore
-      ? {
-          createdLast24HoursCount: healthBefore.createdLast24HoursCount,
-          hasExpiredRows: healthBefore.hasExpiredRows,
-          oldestOccurredAt: toLogDate(healthBefore.oldestOccurredAt),
-          latestOccurredAt: toLogDate(healthBefore.latestOccurredAt),
-        }
-      : {};
+    const healthLogFields = healthBefore ? createHealthLogFields(healthBefore) : {};
 
     logger.error({
       event: CLEANUP_FAILED_EVENT,

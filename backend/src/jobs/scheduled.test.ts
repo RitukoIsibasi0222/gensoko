@@ -30,13 +30,17 @@ const SCHEDULED_DATE = new Date(SCHEDULED_TIME);
 const FAILURE_MESSAGE = "定期バッチの実行に失敗しました";
 const INVALID_SCHEDULED_TIME_MESSAGE = "定期バッチの実行時刻が不正です";
 
+function createLogger() {
+  return { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+}
+
 describe("runScheduledBatch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("runs weekly score reset for the Cloudflare-style weekly cron", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     vi.mocked(resetWeeklyScores).mockResolvedValue({ resetCount: 4, executedAt: SCHEDULED_DATE });
 
     const result = await runScheduledBatch({
@@ -63,7 +67,7 @@ describe("runScheduledBatch", () => {
   });
 
   it("accepts the delayed GitHub Actions Sunday cron for weekly reset", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     vi.mocked(resetWeeklyScores).mockResolvedValue({ resetCount: 0, executedAt: SCHEDULED_DATE });
 
     const result = await runScheduledBatch({
@@ -82,7 +86,7 @@ describe("runScheduledBatch", () => {
   });
 
   it("also accepts the previous numeric Sunday cron for weekly reset", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     vi.mocked(resetWeeklyScores).mockResolvedValue({ resetCount: 1, executedAt: SCHEDULED_DATE });
 
     const result = await runScheduledBatch({
@@ -101,7 +105,7 @@ describe("runScheduledBatch", () => {
   });
 
   it("runs GameQuestionSet cleanup for the Cloudflare-style cleanup cron", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     vi.mocked(cleanupExpiredGameQuestionSets).mockResolvedValue({
       deletedCount: 2,
       cutoff: SCHEDULED_DATE,
@@ -131,7 +135,7 @@ describe("runScheduledBatch", () => {
   });
 
   it("accepts the delayed GitHub Actions cleanup cron", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     vi.mocked(cleanupExpiredGameQuestionSets).mockResolvedValue({
       deletedCount: 0,
       cutoff: SCHEDULED_DATE,
@@ -153,7 +157,7 @@ describe("runScheduledBatch", () => {
   });
 
   it("runs audit log cleanup for the daily audit cron", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     vi.mocked(cleanupExpiredAuditLogs).mockResolvedValue({
       cutoff: SCHEDULED_DATE,
       retentionDays: 365,
@@ -203,7 +207,7 @@ describe("runScheduledBatch", () => {
   });
 
   it("treats disabled audit log cleanup as a successful scheduled skip", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     vi.mocked(cleanupExpiredAuditLogs).mockResolvedValue({
       cutoff: SCHEDULED_DATE,
       retentionDays: 365,
@@ -235,7 +239,7 @@ describe("runScheduledBatch", () => {
   });
 
   it("fails the scheduled batch when audit cleanup reaches a safety limit with rows remaining", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     vi.mocked(cleanupExpiredAuditLogs).mockResolvedValue({
       cutoff: SCHEDULED_DATE,
       retentionDays: 365,
@@ -270,7 +274,7 @@ describe("runScheduledBatch", () => {
   });
 
   it("skips unknown cron values without running database jobs", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     const cron = "5 * * * *";
 
     const result = await runScheduledBatch({ cron, scheduledTime: SCHEDULED_TIME, logger });
@@ -288,7 +292,7 @@ describe("runScheduledBatch", () => {
   });
 
   it("rejects invalid scheduledTime without leaking a RangeError", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
 
     await expect(
       runScheduledBatch({ cron: WEEKLY_SCORE_RESET_CRON, scheduledTime: Number.NaN, logger }),
@@ -306,7 +310,7 @@ describe("runScheduledBatch", () => {
   });
 
   it("logs a sanitized failure when a scheduled job fails", async () => {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = createLogger();
     vi.mocked(resetWeeklyScores).mockRejectedValue(new Error("database unavailable: user_stats"));
 
     await expect(
