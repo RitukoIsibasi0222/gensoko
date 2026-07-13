@@ -1,3 +1,4 @@
+import { cleanupExpiredAuditLogs } from "./cleanupAuditLogs.js";
 import { cleanupExpiredGameQuestionSets } from "./cleanupGameQuestionSets.js";
 import { resetWeeklyScores } from "./resetWeeklyScores.js";
 
@@ -6,6 +7,7 @@ export const GITHUB_WEEKLY_SCORE_RESET_CRON = "7 15 * * 0";
 export const LEGACY_GITHUB_WEEKLY_SCORE_RESET_CRON = "0 15 * * 0";
 export const GAME_QUESTION_SET_CLEANUP_CRON = "*/30 * * * *";
 export const GITHUB_GAME_QUESTION_SET_CLEANUP_CRON = "17,47 * * * *";
+export const AUDIT_LOG_CLEANUP_CRON = "37 18 * * *";
 
 const BATCH_COMPLETED_EVENT = "batch.cron.completed";
 const BATCH_SKIPPED_EVENT = "batch.cron.skipped";
@@ -17,6 +19,7 @@ const UNKNOWN_CRON_MESSAGE = "未対応の定期バッチCronです";
 export type ScheduledBatchJobName =
   | "resetWeeklyScores"
   | "cleanupExpiredGameQuestionSets"
+  | "cleanupExpiredAuditLogs"
   | "unknown";
 
 export type ScheduledBatchResult =
@@ -31,6 +34,14 @@ export type ScheduledBatchResult =
       cron: string;
       cutoff: Date;
       deletedCount: number;
+    }
+  | {
+      job: "cleanupExpiredAuditLogs";
+      cron: string;
+      cutoff: Date;
+      deletedCount: number;
+      skipped: boolean;
+      limitReached: boolean;
     }
   | {
       job: "unknown";
@@ -63,6 +74,10 @@ function resolveScheduledBatchJobName(cron: string): ScheduledBatchJobName {
     normalizedCron === GITHUB_GAME_QUESTION_SET_CLEANUP_CRON
   ) {
     return "cleanupExpiredGameQuestionSets";
+  }
+
+  if (normalizedCron === AUDIT_LOG_CLEANUP_CRON) {
+    return "cleanupExpiredAuditLogs";
   }
 
   return "unknown";
@@ -134,12 +149,43 @@ export async function runScheduledBatch({
       return result;
     }
 
-    const cleanupResult = await cleanupExpiredGameQuestionSets({ now: executedAt, logger });
+    if (job === "cleanupExpiredGameQuestionSets") {
+      const cleanupResult = await cleanupExpiredGameQuestionSets({ now: executedAt, logger });
+      const result = {
+        job,
+        cron: normalizedCron,
+        cutoff: cleanupResult.cutoff,
+        deletedCount: cleanupResult.deletedCount,
+      } as const;
+
+      logger.info({
+        event: BATCH_COMPLETED_EVENT,
+        cron: normalizedCron,
+        job,
+        cutoff: result.cutoff.toISOString(),
+        deletedCount: result.deletedCount,
+      });
+
+      return result;
+    }
+
+    const cleanupResult = await cleanupExpiredAuditLogs({
+      now: executedAt,
+      dryRun: false,
+      logger,
+    });
+
+    if (cleanupResult.limitReached) {
+      throw new Error(BATCH_FAILED_MESSAGE);
+    }
+
     const result = {
       job,
       cron: normalizedCron,
       cutoff: cleanupResult.cutoff,
       deletedCount: cleanupResult.deletedCount,
+      skipped: cleanupResult.skipped,
+      limitReached: cleanupResult.limitReached,
     } as const;
 
     logger.info({
@@ -148,6 +194,8 @@ export async function runScheduledBatch({
       job,
       cutoff: result.cutoff.toISOString(),
       deletedCount: result.deletedCount,
+      skipped: result.skipped,
+      limitReached: result.limitReached,
     });
 
     return result;

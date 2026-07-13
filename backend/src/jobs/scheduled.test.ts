@@ -8,9 +8,15 @@ vi.mock("./cleanupGameQuestionSets.js", () => ({
   cleanupExpiredGameQuestionSets: vi.fn(),
 }));
 
+vi.mock("./cleanupAuditLogs.js", () => ({
+  cleanupExpiredAuditLogs: vi.fn(),
+}));
+
+import { cleanupExpiredAuditLogs } from "./cleanupAuditLogs.js";
 import { cleanupExpiredGameQuestionSets } from "./cleanupGameQuestionSets.js";
 import { resetWeeklyScores } from "./resetWeeklyScores.js";
 import {
+  AUDIT_LOG_CLEANUP_CRON,
   GAME_QUESTION_SET_CLEANUP_CRON,
   GITHUB_GAME_QUESTION_SET_CLEANUP_CRON,
   GITHUB_WEEKLY_SCORE_RESET_CRON,
@@ -146,6 +152,123 @@ describe("runScheduledBatch", () => {
     });
   });
 
+  it("runs audit log cleanup for the daily audit cron", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    vi.mocked(cleanupExpiredAuditLogs).mockResolvedValue({
+      cutoff: SCHEDULED_DATE,
+      retentionDays: 365,
+      dryRun: false,
+      skipped: false,
+      deletedCount: 3,
+      durationMs: 25,
+      limitReached: false,
+      healthBefore: {
+        createdLast24HoursCount: 8,
+        hasExpiredRows: true,
+        oldestOccurredAt: SCHEDULED_DATE,
+        latestOccurredAt: SCHEDULED_DATE,
+      },
+    });
+
+    const result = await runScheduledBatch({
+      cron: AUDIT_LOG_CLEANUP_CRON,
+      scheduledTime: SCHEDULED_TIME,
+      logger,
+    });
+
+    expect(cleanupExpiredAuditLogs).toHaveBeenCalledWith({
+      now: SCHEDULED_DATE,
+      dryRun: false,
+      logger,
+    });
+    expect(resetWeeklyScores).not.toHaveBeenCalled();
+    expect(cleanupExpiredGameQuestionSets).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      job: "cleanupExpiredAuditLogs",
+      cron: AUDIT_LOG_CLEANUP_CRON,
+      cutoff: SCHEDULED_DATE,
+      deletedCount: 3,
+      skipped: false,
+      limitReached: false,
+    });
+    expect(logger.info).toHaveBeenCalledWith({
+      event: "batch.cron.completed",
+      cron: AUDIT_LOG_CLEANUP_CRON,
+      job: "cleanupExpiredAuditLogs",
+      cutoff: SCHEDULED_DATE.toISOString(),
+      deletedCount: 3,
+      skipped: false,
+      limitReached: false,
+    });
+  });
+
+  it("treats disabled audit log cleanup as a successful scheduled skip", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    vi.mocked(cleanupExpiredAuditLogs).mockResolvedValue({
+      cutoff: SCHEDULED_DATE,
+      retentionDays: 365,
+      dryRun: false,
+      skipped: true,
+      deletedCount: 0,
+      durationMs: 10,
+      limitReached: false,
+      healthBefore: {
+        createdLast24HoursCount: 8,
+        hasExpiredRows: true,
+        oldestOccurredAt: SCHEDULED_DATE,
+        latestOccurredAt: SCHEDULED_DATE,
+      },
+    });
+
+    const result = await runScheduledBatch({
+      cron: AUDIT_LOG_CLEANUP_CRON,
+      scheduledTime: SCHEDULED_TIME,
+      logger,
+    });
+
+    expect(result).toMatchObject({
+      job: "cleanupExpiredAuditLogs",
+      skipped: true,
+      deletedCount: 0,
+      limitReached: false,
+    });
+  });
+
+  it("fails the scheduled batch when audit cleanup reaches a safety limit with rows remaining", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    vi.mocked(cleanupExpiredAuditLogs).mockResolvedValue({
+      cutoff: SCHEDULED_DATE,
+      retentionDays: 365,
+      dryRun: false,
+      skipped: false,
+      deletedCount: 10_000,
+      durationMs: 480_000,
+      limitReached: true,
+      healthBefore: {
+        createdLast24HoursCount: 8,
+        hasExpiredRows: true,
+        oldestOccurredAt: SCHEDULED_DATE,
+        latestOccurredAt: SCHEDULED_DATE,
+      },
+    });
+
+    await expect(
+      runScheduledBatch({
+        cron: AUDIT_LOG_CLEANUP_CRON,
+        scheduledTime: SCHEDULED_TIME,
+        logger,
+      }),
+    ).rejects.toThrow(FAILURE_MESSAGE);
+
+    expect(logger.error).toHaveBeenCalledWith({
+      event: "batch.cron.failed",
+      cron: AUDIT_LOG_CLEANUP_CRON,
+      job: "cleanupExpiredAuditLogs",
+      message: FAILURE_MESSAGE,
+      executedAt: SCHEDULED_DATE.toISOString(),
+    });
+  });
+
   it("skips unknown cron values without running database jobs", async () => {
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const cron = "5 * * * *";
@@ -154,6 +277,7 @@ describe("runScheduledBatch", () => {
 
     expect(resetWeeklyScores).not.toHaveBeenCalled();
     expect(cleanupExpiredGameQuestionSets).not.toHaveBeenCalled();
+    expect(cleanupExpiredAuditLogs).not.toHaveBeenCalled();
     expect(result).toEqual({ job: "unknown", cron, executedAt: SCHEDULED_DATE, skipped: true });
     expect(logger.warn).toHaveBeenCalledWith({
       event: "batch.cron.skipped",
@@ -172,6 +296,7 @@ describe("runScheduledBatch", () => {
 
     expect(resetWeeklyScores).not.toHaveBeenCalled();
     expect(cleanupExpiredGameQuestionSets).not.toHaveBeenCalled();
+    expect(cleanupExpiredAuditLogs).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalledWith({
       event: "batch.cron.failed",
       cron: WEEKLY_SCORE_RESET_CRON,
