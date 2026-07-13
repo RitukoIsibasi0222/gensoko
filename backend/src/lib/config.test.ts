@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getFrontendUrl, getRateLimitConfig } from "./config.js";
+import { getAuditLogRetentionConfig, getFrontendUrl, getRateLimitConfig } from "./config.js";
 
 const DEVELOPMENT_FRONTEND_URL = "http://localhost:5174";
 const PRODUCTION_FRONTEND_URL = "https://gensoko.example";
@@ -139,4 +139,109 @@ describe("getRateLimitConfig", () => {
       "RATE_LIMIT_KEY_SECRETは復号後32バイト以上にしてください",
     );
   });
+});
+
+describe("getAuditLogRetentionConfig", () => {
+  it("保持期間とcleanup有効化設定を返す", () => {
+    expect(
+      getAuditLogRetentionConfig({
+        environment: {
+          AUDIT_LOG_RETENTION_DAYS: "365",
+          AUDIT_LOG_CLEANUP_ENABLED: "true",
+        },
+      }),
+    ).toEqual({
+      retentionDays: 365,
+      cleanupEnabled: true,
+    });
+  });
+
+  it.each([
+    ["未設定", undefined],
+    ["空文字", ""],
+  ])("AUDIT_LOG_RETENTION_DAYSが%sの場合は拒否する", (_caseName, retentionDays) => {
+    expect(() =>
+      getAuditLogRetentionConfig({
+        environment: {
+          AUDIT_LOG_RETENTION_DAYS: retentionDays,
+          AUDIT_LOG_CLEANUP_ENABLED: "false",
+        },
+      }),
+    ).toThrow("AUDIT_LOG_RETENTION_DAYSの設定が必要です");
+  });
+
+  it.each([
+    ["下限", "30", 30],
+    ["上限", "3650", 3650],
+  ])("AUDIT_LOG_RETENTION_DAYSの%sを受理する", (_caseName, retentionDays, expected) => {
+    expect(
+      getAuditLogRetentionConfig({
+        environment: {
+          AUDIT_LOG_RETENTION_DAYS: retentionDays,
+          AUDIT_LOG_CLEANUP_ENABLED: "false",
+        },
+      }),
+    ).toEqual({
+      retentionDays: expected,
+      cleanupEnabled: false,
+    });
+  });
+
+  it.each(["29", "3651", "0", "-1", "1.5", "NaN", "Infinity", "30日"])(
+    "不正なAUDIT_LOG_RETENTION_DAYS=%sを拒否する",
+    (retentionDays) => {
+      expect(() =>
+        getAuditLogRetentionConfig({
+          environment: {
+            AUDIT_LOG_RETENTION_DAYS: retentionDays,
+            AUDIT_LOG_CLEANUP_ENABLED: "false",
+          },
+        }),
+      ).toThrow("AUDIT_LOG_RETENTION_DAYSは30から3650までの10進整数で設定してください");
+    },
+  );
+
+  it("AUDIT_LOG_CLEANUP_ENABLEDが未設定の場合は安全側のfalseを返す", () => {
+    expect(
+      getAuditLogRetentionConfig({
+        environment: {
+          AUDIT_LOG_RETENTION_DAYS: "365",
+        },
+      }),
+    ).toEqual({
+      retentionDays: 365,
+      cleanupEnabled: false,
+    });
+  });
+
+  it.each([
+    ["true", true],
+    ["false", false],
+  ])("AUDIT_LOG_CLEANUP_ENABLED=%sをbooleanへ変換する", (cleanupEnabled, expected) => {
+    expect(
+      getAuditLogRetentionConfig({
+        environment: {
+          AUDIT_LOG_RETENTION_DAYS: "365",
+          AUDIT_LOG_CLEANUP_ENABLED: cleanupEnabled,
+        },
+      }),
+    ).toEqual({
+      retentionDays: 365,
+      cleanupEnabled: expected,
+    });
+  });
+
+  it.each(["", "TRUE", "1", "yes"])(
+    "不正なAUDIT_LOG_CLEANUP_ENABLED=%sを拒否する",
+    (cleanupEnabled) => {
+      expect(() =>
+        getAuditLogRetentionConfig({
+          environment: {
+            AUDIT_LOG_RETENTION_DAYS: "365",
+            AUDIT_LOG_CLEANUP_ENABLED: cleanupEnabled,
+          },
+        }),
+      ).toThrow("AUDIT_LOG_CLEANUP_ENABLEDはtrueまたはfalseで設定してください");
+    },
+  );
 });
