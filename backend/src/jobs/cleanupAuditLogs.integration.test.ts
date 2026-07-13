@@ -8,6 +8,7 @@ import { hashPassword } from "../lib/password.js";
 
 const { PrismaClient } = prismaClientModule;
 const connectionString = process.env.AUDIT_CLEANUP_INTEGRATION_DATABASE_URL;
+const originalDatabaseUrl = process.env.DATABASE_URL;
 const runIntegrationTest = typeof connectionString === "string" && connectionString.length > 0;
 const allowedDatabaseHosts = new Set(["localhost", "127.0.0.1", "postgres"]);
 const REQUIRED_DATABASE_NAME = "gensoko_audit_cleanup_test";
@@ -102,9 +103,18 @@ describe.skipIf(!runIntegrationTest)("監査ログcleanupの実DB動作", () => 
   });
 
   afterAll(async () => {
-    await prisma?.auditLog.deleteMany();
-    await prisma?.user.deleteMany({ where: { id: retiredUserId } });
-    await Promise.allSettled([prisma?.$disconnect(), cleanupPrisma?.$disconnect()]);
+    try {
+      await prisma?.auditLog.deleteMany();
+      await prisma?.user.deleteMany({ where: { id: retiredUserId } });
+    } finally {
+      await Promise.allSettled([prisma?.$disconnect(), cleanupPrisma?.$disconnect()]);
+
+      if (originalDatabaseUrl === undefined) {
+        delete process.env.DATABASE_URL;
+      } else {
+        process.env.DATABASE_URL = originalDatabaseUrl;
+      }
+    }
   });
 
   it("500件を超える期限切れ行だけを分割削除し、境界を保持して再実行可能", async () => {

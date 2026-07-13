@@ -9,6 +9,7 @@ const CLEANUP_LIMIT_REACHED_EVENT = "audit_logs.cleanup.limit_reached";
 const CLEANUP_FAILED_EVENT = "audit_logs.cleanup.failed";
 const CLEANUP_DISABLED_MESSAGE = "監査ログcleanupは無効です";
 const CLEANUP_FAILED_MESSAGE = "監査ログcleanupの実行に失敗しました";
+const INVALID_MAINTENANCE_TIME_MESSAGE = "監査ログ保守処理の基準時刻が不正です";
 
 export const AUDIT_LOG_CLEANUP_BATCH_SIZE = 500;
 export const AUDIT_LOG_CLEANUP_MAX_ROWS_PER_RUN = 10_000;
@@ -66,6 +67,10 @@ type CleanupLogFieldsInput = Pick<
 >;
 
 export function calculateAuditLogCutoff(now: Date, retentionDays: number): Date {
+  if (Number.isNaN(now.getTime())) {
+    throw new Error(INVALID_MAINTENANCE_TIME_MESSAGE);
+  }
+
   return new Date(now.getTime() - retentionDays * MILLISECONDS_PER_DAY);
 }
 
@@ -181,13 +186,14 @@ export async function cleanupExpiredAuditLogs({
   getMonotonicTime = () => performance.now(),
 }: CleanupAuditLogsOptions = {}): Promise<CleanupAuditLogsResult> {
   const startedAt = getMonotonicTime();
-  const cutoff = calculateAuditLogCutoff(now, config.retentionDays);
+  let cutoff: Date | undefined;
   let deletedCount = 0;
   let healthBefore: AuditLogHealthSnapshot | undefined;
 
   const getDurationMs = (): number => Math.max(0, getMonotonicTime() - startedAt);
 
   try {
+    cutoff = calculateAuditLogCutoff(now, config.retentionDays);
     healthBefore = await inspectAuditLogHealthAtCutoff(now, cutoff);
 
     if (dryRun) {
@@ -307,7 +313,7 @@ export async function cleanupExpiredAuditLogs({
 
     logger.error({
       event: CLEANUP_FAILED_EVENT,
-      cutoff: cutoff.toISOString(),
+      ...(cutoff ? { cutoff: cutoff.toISOString() } : {}),
       retentionDays: config.retentionDays,
       dryRun,
       deletedCount,

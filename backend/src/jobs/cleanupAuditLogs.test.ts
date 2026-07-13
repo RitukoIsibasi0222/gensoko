@@ -54,6 +54,40 @@ describe("監査ログcleanupの保持期限と安全上限", () => {
     expect(NOW).toEqual(originalNow);
   });
 
+  it.each([
+    ["月境界", "2026-03-01T00:00:00.000Z", 30, "2026-01-30T00:00:00.000Z"],
+    ["年境界", "2026-01-01T00:00:00.000Z", 30, "2025-12-02T00:00:00.000Z"],
+    ["うるう年", "2025-02-28T00:00:00.000Z", 365, "2024-02-29T00:00:00.000Z"],
+  ])("%sでも固定24時間単位でcutoffを計算する", (_caseName, now, retentionDays, expected) => {
+    expect(calculateAuditLogCutoff(new Date(now), retentionDays)).toEqual(new Date(expected));
+  });
+
+  it("サーバーtimezoneを変更しても同じcutoffを返す", () => {
+    const originalTimeZone = process.env.TZ;
+
+    try {
+      process.env.TZ = "Pacific/Kiritimati";
+      const utcPlus14Result = calculateAuditLogCutoff(NOW, 365);
+      process.env.TZ = "America/Los_Angeles";
+      const utcMinusResult = calculateAuditLogCutoff(NOW, 365);
+
+      expect(utcPlus14Result).toEqual(CUTOFF);
+      expect(utcMinusResult).toEqual(CUTOFF);
+    } finally {
+      if (originalTimeZone === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = originalTimeZone;
+      }
+    }
+  });
+
+  it("不正な基準時刻を日本語の固定メッセージで拒否する", () => {
+    expect(() => calculateAuditLogCutoff(new Date("invalid"), 365)).toThrow(
+      "監査ログ保守処理の基準時刻が不正です",
+    );
+  });
+
   it("分割削除と1回の実行に固定安全上限を設ける", () => {
     expect(AUDIT_LOG_CLEANUP_BATCH_SIZE).toBe(500);
     expect(AUDIT_LOG_CLEANUP_MAX_ROWS_PER_RUN).toBe(10_000);
@@ -461,5 +495,33 @@ describe("監査ログの分割cleanup", () => {
     expect(output).not.toContain("private-actor");
     expect(output).not.toContain("private-target");
     expect(output).not.toContain("private@example.com");
+  });
+
+  it("不正な基準時刻でもDBを呼ばずrawの日時例外を漏らさない", async () => {
+    const logger = createLogger();
+
+    await expect(
+      cleanupExpiredAuditLogs({
+        now: new Date("invalid"),
+        config: ENABLED_CONFIG,
+        logger,
+        getMonotonicTime: () => 1_000,
+      }),
+    ).rejects.toThrow("監査ログcleanupの実行に失敗しました");
+
+    expect(prisma.auditLog.count).not.toHaveBeenCalled();
+    expect(prisma.auditLog.findFirst).not.toHaveBeenCalled();
+    expect(prisma.auditLog.findMany).not.toHaveBeenCalled();
+    expect(prisma.auditLog.deleteMany).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith({
+      event: "audit_logs.cleanup.failed",
+      retentionDays: 365,
+      dryRun: false,
+      deletedCount: 0,
+      durationMs: 0,
+      limitReached: false,
+      message: "監査ログcleanupの実行に失敗しました",
+    });
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("Invalid time value");
   });
 });
