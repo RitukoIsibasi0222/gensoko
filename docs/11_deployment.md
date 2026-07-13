@@ -348,6 +348,7 @@ Actionsのscheduleは遅延・スキップされる可能性があるため、�
 - raw DB errorを外部通知へ転載せず、Actionsの固定event、cutoff、件数、時間、残件状態を確認する
 - 原因解消前に連続再実行しない。DB接続・負荷・設定値を確認してからdry-runする
 - 最大10,000件または8分到達後も残件がある場合はworkflowが失敗する。対象外rowを削除せず、必要回数だけ手動再実行する
+- cleanup本体は8分、batch実行stepは10分、依存関係install等を含むjob全体は20分で停止する。step timeoutやjob timeoutの場合はDB負荷と残件を確認し、直ちに再実行しない
 - 2回連続失敗または原因不明の場合は`AUDIT_LOG_CLEANUP_ENABLED=false`へ戻す
 
 #### 削除保留・停止

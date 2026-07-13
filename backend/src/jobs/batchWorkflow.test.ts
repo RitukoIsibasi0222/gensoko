@@ -66,4 +66,16 @@ describe("batch GitHub Actions workflow", () => {
     expect(workflow).toContain("cancel-in-progress: false");
     expect(workflow).not.toContain("group: batch-${{");
   });
+
+  it("allows the 8-minute service limit to finish before workflow timeout", () => {
+    expect(workflow).toContain("    timeout-minutes: 20");
+
+    for (const stepName of [
+      "Run scheduled batch",
+      "Preview audit log cleanup",
+      "Execute audit log cleanup",
+    ]) {
+      expect(getWorkflowStep(stepName)).toContain("        timeout-minutes: 10");
+    }
+  });
 });

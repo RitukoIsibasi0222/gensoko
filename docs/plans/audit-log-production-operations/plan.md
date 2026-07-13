@@ -322,9 +322,11 @@ table・index容量のためにアプリケーションコードからraw SQLを
 | 1batch件数 | 500件 | code定数 |
 | 1回最大削除件数 | 10,000件 | code定数 |
 | 最大実行時間 | 8分 | code定数 |
-| GitHub Actions timeout | 10分 | workflow |
+| batch実行step timeout | 10分 | workflow |
+| GitHub Actions job timeout | 20分 | workflow |
 
 安全上限は環境変数へ分散せず、変更にはcode・test・docsの同時更新を必要とする。
+job timeoutにはcheckout・依存関係install・Prisma Client生成も含まれるため、実行stepへ10分の個別上限を設け、job全体は準備時間を含めて20分とする。これによりcleanup本体の8分上限後に残件通知とDB切断を行う余裕を確保する。
 
 ### 削除手順
 

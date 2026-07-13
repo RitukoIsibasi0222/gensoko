@@ -21,7 +21,7 @@ jobs:
   scheduled-batch:
     name: Run scheduled batch
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     concurrency:
       group: gensoko-batch-jobs
       cancel-in-progress: false
@@ -81,6 +81,7 @@ jobs:
           inputs.batch_job == 'weekly-reset' ||
           inputs.batch_job == 'game-question-set-cleanup'
         working-directory: backend
+        timeout-minutes: 10
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npm run batch:scheduled
@@ -88,6 +89,7 @@ jobs:
       - name: Preview audit log cleanup
         if: inputs.batch_job == 'audit-log-cleanup-dry-run'
         working-directory: backend
+        timeout-minutes: 10
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npm run cleanup:audit-logs -- --dry-run
@@ -95,6 +97,7 @@ jobs:
       - name: Execute audit log cleanup
         if: inputs.batch_job == 'audit-log-cleanup-execute'
         working-directory: backend
+        timeout-minutes: 10
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npm run cleanup:audit-logs -- --execute
