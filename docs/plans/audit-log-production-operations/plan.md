@@ -921,7 +921,7 @@ schema変更・backfillは想定しない。
 - [x] T10: scheduled接続testをRed化する
 - [x] T11: scheduled wrapperとGitHub Actionsへ接続する
 - [x] T12: Docker PostgreSQL cleanup integration testを追加する
-- [ ] T13: security・既存監査回帰testを追加・更新する
+- [x] T13: security・既存監査回帰testを追加・更新する
 - [ ] T14: security・data model・testing・startup・deployment docsを更新する
 - [ ] T15: Refactorとformatを実施する
 - [ ] T16: lint・format check・build・全testを通す
