@@ -924,7 +924,7 @@ schema変更・backfillは想定しない。
 - [x] T13: security・既存監査回帰testを追加・更新する
 - [x] T14: security・data model・testing・startup・deployment docsを更新する
 - [x] T15: Refactorとformatを実施する
-- [ ] T16: lint・format check・build・全testを通す
+- [x] T16: lint・format check・build・全testを通す
 - [ ] T17: Docker PostgreSQLで境界・分割・冪等性を確認する
 - [ ] T18: 変更種別ごとにcommitし、実装PRをreview後developへmergeする
 - [ ] T19: stagingでdry-run・cleanup・再実行・停止を確認する
