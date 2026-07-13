@@ -909,18 +909,18 @@ schema変更・backfillは想定しない。
 | T21 | 初回production実行とbaseline確認 | production | 初回成功、残件なし、7日baselineを記録 | T20 | High |
 | T22 | plan・progress完了更新とdocs PR | plan、docs/05_progress.md、git/GitHub | 実変更・決定値・検証・PR・完了状態を整合しdevelopへmerge | T21 | High |
 
-- [ ] T1: 既存監査・batch・本番基盤を再確認する
-- [ ] T2: 保持期間・退会後ID保持・担当者・通知先を承認する
-- [ ] T3: `docs/05_progress.md`を実装中へ更新する
-- [ ] T4: retention config testをRed化する
-- [ ] T5: retention configと環境変数例を実装する
-- [ ] T6: cleanup service testをRed化する
-- [ ] T7: 分割cleanup・低負荷状態監視・安全logを実装する
-- [ ] T8: CLI testをRed化する
-- [ ] T9: dry-run既定のCLIとnpm scriptを実装する
-- [ ] T10: scheduled接続testをRed化する
-- [ ] T11: scheduled wrapperとGitHub Actionsへ接続する
-- [ ] T12: Docker PostgreSQL cleanup integration testを追加する
+- [x] T1: 既存監査・batch・本番基盤を再確認する
+- [-] T2: 保持期間・退会後ID保持・担当者・通知先を承認する（実装用暫定値は合意済み。本番承認者・通知先は未確定）
+- [x] T3: `docs/05_progress.md`を実装中へ更新する
+- [x] T4: retention config testをRed化する
+- [x] T5: retention configと環境変数例を実装する
+- [x] T6: cleanup service testをRed化する
+- [x] T7: 分割cleanup・低負荷状態監視・安全logを実装する
+- [x] T8: CLI testをRed化する
+- [x] T9: dry-run既定のCLIとnpm scriptを実装する
+- [x] T10: scheduled接続testをRed化する
+- [x] T11: scheduled wrapperとGitHub Actionsへ接続する
+- [x] T12: Docker PostgreSQL cleanup integration testを追加する
 - [ ] T13: security・既存監査回帰testを追加・更新する
 - [ ] T14: security・data model・testing・startup・deployment docsを更新する
 - [ ] T15: Refactorとformatを実施する

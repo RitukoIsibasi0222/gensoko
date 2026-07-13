@@ -71,6 +71,34 @@ docker compose exec -T hono sh -lc 'AUDIT_INTEGRATION_DATABASE_URL="$DATABASE_UR
 - 一意なユーザーと監査rowを作成し、監査insertの主キー競合後に前段更新がrollbackすることを確認する
 - test終了時に作成データを削除する
 
+#### 監査ログcleanup test
+
+cleanup testは期限切れ監査ログを広く削除するため、通常の開発DBとは分離した専用DB
+`gensoko_audit_cleanup_test`だけで実行する。通常の`npm run test -- --run`ではDB接続を要求せずskipする。
+
+初回だけ専用DBを作成し、migrationを適用する。
+
+```bash
+docker compose exec -T postgres createdb -U gensoko gensoko_audit_cleanup_test
+docker compose exec -T \
+  -e DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_audit_cleanup_test \
+  hono npx prisma migrate deploy
+```
+
+integration testを実行する。
+
+```bash
+docker compose exec -T \
+  -e AUDIT_CLEANUP_INTEGRATION_DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_audit_cleanup_test \
+  hono npm run test:integration:audit-cleanup
+```
+
+- 接続先hostは`localhost`、`127.0.0.1`、`postgres`だけを許可する
+- DB名が`gensoko_audit_cleanup_test`でなければ削除処理を開始しない
+- 501件の期限切れrow、cutoff境界row、保持対象rowを作成する
+- 500件を超える分割削除、`occurredAt < cutoff`境界、2回目0件の冪等性を確認する
+- test終了時に専用DBの監査fixtureを削除する
+
 ---
 
 ## Hono のテスト方法
