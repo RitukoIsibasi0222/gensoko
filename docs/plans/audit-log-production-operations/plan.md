@@ -929,11 +929,20 @@ schema変更・backfillは想定しない。
 - [x] T15: Refactorとformatを実施する
 - [x] T16: lint・format check・build・全testを通す
 - [x] T17: Docker PostgreSQLで境界・分割・冪等性を確認する
-- [-] T18: 変更種別ごとにcommitし、実装PRをreview後developへmergeする
-- [ ] T19: stagingでdry-run・cleanup・再実行・停止を確認する
+- [x] T18: 変更種別ごとにcommitし、実装PRをreview後developへmergeする（PR #90、2026-07-14 merge）
+- [-] T19: stagingでdry-run・cleanup・再実行・停止を確認する
 - [ ] T20: production容量監視・通知・backup確認を完了する
 - [ ] T21: production初回実行と7日baselineを確認する
 - [ ] T22: planとprogressを実装完了へ更新し、docs PRをdevelopへmergeする
+
+### T19 再開記録（2026-07-14）
+
+- PR #90が`develop`へmerge済みであることを確認した（merge commit: `c3f8b332f382a02e49a7b251c5ae294ccbe38d7c`）。
+- GitHub Environmentsには`copilot`だけが存在し、staging environmentは未作成だった。
+- Actionsのrepository SecretとVariableは未登録で、`DATABASE_URL`、`AUDIT_LOG_RETENTION_DAYS`、`AUDIT_LOG_CLEANUP_ENABLED`をstaging向けに利用できない状態だった。
+- GitHub Deploymentsにstaging deploymentの記録はなかった。
+- 既存のBatch Jobs scheduleは`DATABASE_URL`が空のため失敗していることを確認した。
+- staging専用DB、backup・復元手段、接続Secret、retention/cleanup Variablesが揃うまでdry-runとexecuteは実行しない。
 
 ### タブ区切りタスクリスト
 
