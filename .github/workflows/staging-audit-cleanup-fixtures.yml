@@ -1,0 +1,75 @@
+name: Staging Audit Cleanup Fixtures
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 実行するfixture操作
+        required: true
+        type: choice
+        options:
+          - prepare
+          - verify-cleaned
+          - remove
+
+jobs:
+  staging-fixtures:
+    name: Manage staging audit cleanup fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    concurrency:
+      group: gensoko-batch-jobs
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
+      AUDIT_LOG_RETENTION_DAYS: ${{ vars.AUDIT_LOG_RETENTION_DAYS }}
+      AUDIT_LOG_CLEANUP_ENABLED: ${{ vars.AUDIT_LOG_CLEANUP_ENABLED }}
+      AUDIT_LOG_STAGING_FIXTURES_ENABLED: ${{ vars.AUDIT_LOG_STAGING_FIXTURES_ENABLED }}
+      STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+
+    steps:
+      - name: Validate staging fixture environment
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ "$BATCH_ENVIRONMENT" != "staging" ]; then
+            echo "staging環境識別子が不正です"
+            exit 1
+          fi
+          if [ "$AUDIT_LOG_STAGING_FIXTURES_ENABLED" != "true" ]; then
+            echo "staging監査ログfixtureは無効です"
+            exit 1
+          fi
+          if [ -z "$STAGING_SUPABASE_PROJECT_REF" ] || [ -z "$DATABASE_URL" ]; then
+            echo "staging監査ログfixture設定が不足しています"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma generate
+
+      - name: Manage staging fixtures
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run staging:audit-cleanup-fixtures -- --operation "${{ inputs.operation }}"

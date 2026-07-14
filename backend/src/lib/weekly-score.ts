@@ -1,6 +1,7 @@
+import { MILLISECONDS_PER_DAY } from "./time.js";
+
 const WEEKLY_SCORE_TIME_ZONE_OFFSET_MINUTES = 9 * 60;
 const MILLISECONDS_PER_MINUTE = 60 * 1000;
-const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export function getWeeklyScoreWeekStart(date: Date): Date {
   const shiftedTime =

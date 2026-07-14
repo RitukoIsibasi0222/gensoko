@@ -152,6 +152,8 @@ GitHub Actions schedule と同じ入口を Docker 内で確認する場合は、
 
 GitHub Actionsではworkflow_dispatchで最初に`target_environment`を選び、次に`weekly-reset`、`game-question-set-cleanup`、`audit-log-cleanup-dry-run`、`audit-log-cleanup-execute`を選択する。手動実行の既定は`staging`、scheduleは`production`である。監査ログの本実行は、選択したEnvironmentの`AUDIT_LOG_CLEANUP_ENABLED=true`が設定された場合だけ削除する。T19の確認では必ず`staging`を選び、`production`はrelease gate完了前に選択しない。
 
+T19の期限境界確認はActionsの`Staging Audit Cleanup Fixtures`から`prepare`、`verify-cleaned`、`remove`を使用する。このworkflowは`staging`固定であり、`AUDIT_LOG_STAGING_FIXTURES_ENABLED=true`を検証中だけ設定する。実行順序と停止・後片付けは`docs/11_deployment.md`の「T19 staging fixtureによる境界・再実行・停止確認」に従い、ローカルshellやSupabase SQL Editorへ`DATABASE_URL`やfixture SQLを貼り付けない。
+
 ---
 
 ## 6. 管理者作成 CLI

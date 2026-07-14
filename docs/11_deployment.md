@@ -282,6 +282,8 @@ GitHub の Settings > Environments で`staging`と`production`を分離し、そ
 | staging | Variable | `BATCH_ENVIRONMENT` | `staging` |
 | staging | Variable | `AUDIT_LOG_RETENTION_DAYS` | 検証用`365` |
 | staging | Variable | `AUDIT_LOG_CLEANUP_ENABLED` | 初期値`false`。実削除確認中だけ明示的に`true`へ変更する |
+| staging | Variable | `AUDIT_LOG_STAGING_FIXTURES_ENABLED` | 初期値`false`。T19のfixture操作中だけ`true`へ変更する |
+| staging | Variable | `STAGING_SUPABASE_PROJECT_REF` | staging Supabase project ref。接続先取り違え防止用で、URLやpasswordは含めない |
 | production | Secret | `DATABASE_URL` | production専用DB接続文字列。stagingと共用しない |
 | production | Variable | `BATCH_ENVIRONMENT` | `production` |
 | production | Variable | `AUDIT_LOG_RETENTION_DAYS` | 正式承認後の保持日数 |
@@ -315,6 +317,33 @@ GitHub Actions の Batch Jobs workflow は workflow_dispatch に対応してい�
 | `batch_job` | `audit-log-cleanup-execute` | cleanup有効時だけ実削除する |
 
 Actionsのscheduleは遅延・スキップされる可能性があるため、毎時00分付近を避けて7分・17分・37分・47分に分散している。workflowのconcurrency groupは`gensoko-batch-jobs`で固定し、scheduleと手動実行を直列化する。失敗時は安全ログを確認し、原因解消後にworkflow_dispatchで再実行する。
+
+### T19 staging fixtureによる境界・再実行・停止確認
+
+`.github/workflows/staging-audit-cleanup-fixtures.yml`は手動実行専用で、GitHub Environmentを`staging`へ固定する。次の多重guardをすべて満たさない限りPrismaへ接続しない。
+
+Batch Jobsと同じ`gensoko-batch-jobs` concurrency groupを使用し、fixture操作と監査ログcleanupを相互に直列化する。実行中のjobはcancelせず、先に開始した操作の完了を待つ。
+
+- `BATCH_ENVIRONMENT=staging`
+- `AUDIT_LOG_STAGING_FIXTURES_ENABLED=true`
+- `STAGING_SUPABASE_PROJECT_REF`と`DATABASE_URL`のusername内project refが一致
+- 接続先hostがSupabase poolerで、Session poolerのport 5432
+
+fixtureは専用actionを持つ期限切れ1件と期限内1件だけである。公開API、raw SQL、実ユーザーID、メールアドレスなどのPIIは使用しない。`prepare`は既存fixtureだけを置換し、`verify-cleaned`は期限切れ0件・期限内1件を確認し、`remove`は専用fixtureだけを削除する。
+
+T19では次の順序を変更しない。
+
+1. `AUDIT_LOG_CLEANUP_ENABLED=false`のまま、`AUDIT_LOG_STAGING_FIXTURES_ENABLED=true`へ変更する。
+2. Staging Audit Cleanup Fixturesで`prepare`を実行する。
+3. Batch Jobsで`staging` / `audit-log-cleanup-dry-run`を実行し、期限超過1件・削除0件を確認する。
+4. `AUDIT_LOG_CLEANUP_ENABLED=true`へ変更し、Batch Jobsで`staging` / `audit-log-cleanup-execute`を実行する。
+5. Staging Audit Cleanup Fixturesで`verify-cleaned`を実行し、期限切れ0件・期限内1件を確認する。
+6. Batch Jobsの同じexecuteを再実行し、削除0件を確認する。
+7. `AUDIT_LOG_CLEANUP_ENABLED=false`へ戻し、executeでskipされることを確認する。
+8. Staging Audit Cleanup Fixturesで`remove`を実行する。
+9. `AUDIT_LOG_STAGING_FIXTURES_ENABLED=false`へ戻す。
+
+各runのURL、cutoff、件数、終了code、秘密情報・内部ID・PII・raw errorがlogにないことを計画書へ記録する。途中失敗時は先にcleanupを`false`へ戻し、fixture workflowの`remove`を実行する。production Environmentではこのworkflowを実行できない。
 
 ### 監査ログcleanupのrelease gate
 

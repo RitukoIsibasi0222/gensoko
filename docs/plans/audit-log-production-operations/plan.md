@@ -517,12 +517,21 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 | `backend/src/jobs/scheduled.test.ts` | 修正 | audit cleanup Cron、skip、上限到達test |
 | `backend/src/lib/config.ts` | 修正 | retention・cleanup有効化設定を一元管理 |
 | `backend/src/lib/config.test.ts` | 修正 | 未設定・境界・不正値・安全停止test |
+| `backend/src/lib/time.ts` | 新規 | 日数計算用の共通ミリ秒定数 |
+| `backend/src/lib/time.test.ts` | 新規 | 共通time定数の契約test |
+| `backend/src/lib/weekly-score.ts` | 修正 | 日数ミリ秒定数を共通time moduleから参照 |
 | `backend/package.json` | 修正 | cleanup CLI・integration test script追加 |
 | `backend/.env.example` | 修正 | retention・cleanup有効化設定例 |
 | `.github/workflows/batch.yml` | 修正 | schedule、workflow_dispatch、Variables、安定concurrency |
 | `backend/src/jobs/batchWorkflow.test.ts` | 新規 | workflowのCron、手動分岐、Variables、Secret、concurrency契約test |
 | `.github/workflows/staging-database.yml` | 新規 | staging固定・手動専用の既存Prisma migration適用workflow |
 | `backend/src/jobs/stagingDatabaseWorkflow.test.ts` | 新規 | staging固定、Secret安全停止、migration commandの契約test |
+| `backend/src/jobs/stagingAuditCleanupFixtures.ts` | 新規 | T19専用fixtureの作成・検証・削除とstaging接続先guard |
+| `backend/src/jobs/stagingAuditCleanupFixtures.test.ts` | 新規 | fixture境界、対象限定、接続先guardのunit test |
+| `backend/src/jobs/stagingAuditCleanupFixtures.cli.ts` | 新規 | T19専用fixture操作CLI |
+| `backend/src/jobs/stagingAuditCleanupFixtures.cli.test.ts` | 新規 | CLI引数、終了code、秘密情報非出力のtest |
+| `.github/workflows/staging-audit-cleanup-fixtures.yml` | 新規 | staging固定・手動専用のfixture操作workflow |
+| `backend/src/jobs/stagingAuditCleanupFixturesWorkflow.test.ts` | 新規 | staging固定、操作制限、Secret安全利用の契約test |
 | `docs/02_security.md` | 修正 | 監査保持・内部ID・完全削除との差を承認内容へ整合 |
 | `docs/03_data_model.md` | 修正 | AuditLog model・index・保持方針を現行schemaへ整合 |
 | `docs/05_progress.md` | 修正 | 新計画書link、実装中・完了状態、別privacy blocker |
@@ -622,6 +631,10 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 19. **staging DBへのmigration適用方法**
     - 選択: `staging` Environmentへ固定した手動workflowから`prisma migrate deploy`を実行する。
     - 根拠: database passwordをローカルshellやチャットへ渡さず、productionの選択肢を持たない監査可能な入口で新規staging DBを初期化するため。
+
+20. **T19の境界・実削除確認用データ**
+    - 選択: staging接続先を多重確認する専用CLI・手動workflowで、fixture識別用actionを持つ期限切れ1件と期限内1件だけを作成する。
+    - 根拠: raw SQLやDashboardでの手入力を避け、production・transaction pooler・別Supabase projectではDB接続前に失敗させ、検証後はfixtureだけを確実に削除するため。
 
 ## 公開インターフェース案
 
@@ -959,7 +972,18 @@ schema変更・backfillは想定しない。
 - 変更前のBatch Jobs scheduleは`DATABASE_URL`が空のため失敗していることを確認した。
 - RedではBatch Environment契約2件とstaging migration workflow未存在を確認し、Greenではworkflow契約11件が通過した。
 - backend lint、format check、build、全test（628件成功・2件skip）が通過し、workflow YAML 2件もPrettier解析を通過した。
-- staging専用DB、backup・復元手段、Environment Secret `DATABASE_URL`が揃うまでdry-runとexecuteは実行しない。
+- Supabaseのstaging専用project`gensoko-staging`を東京regionへ作成し、Healthyであることを確認した。
+- staging Environment SecretへSession pooler（port 5432）の`DATABASE_URL`を登録した。値はActions・文書・PR・チャットへ記録しない。
+- PR #91を`develop`へmerge後、Staging Database Setup run #29313690007で既存migrationを正常適用した。
+- Batch Jobs run #29313753395でstaging dry-runを実行し、保持365日、削除0件、期限超過0件、直近24時間0件、最古・最新なし、終了code 0を確認した。
+- dry-run logは許可済みの件数・時刻・状態だけで、接続文字列、内部ID、PII、raw errorを含まないことを確認した。
+- T19の境界・実削除・再実行をraw SQLなしで確認するため、期限切れ1件と期限内1件だけを扱うstaging固定fixture workflowを追加する。
+- staging Environment Variablesへ`STAGING_SUPABASE_PROJECT_REF`と、安全側で無効な`AUDIT_LOG_STAGING_FIXTURES_ENABLED=false`を登録した。
+- fixture workflowは`BATCH_ENVIRONMENT=staging`、明示的なfixture有効化、project ref一致、Supabase Session pooler host・port 5432をすべて確認してからPrismaへ接続する。
+- Redではfixture moduleとworkflowが未存在で失敗することを確認し、Green・Refactor後はfixture・CLI・workflow test 28件が通過した。
+- reviewで指摘された日数ミリ秒定数の重複を`backend/src/lib/time.ts`へ集約し、cleanup・fixture・weekly scoreが同じ定義を参照するよう修正した。Redでは共通module未存在を確認し、production codeの定義が1件だけであることを確認した。
+- backend lint、format check、build、全test（658件成功・2件skip）と新規workflow YAMLのPrettier checkが通過し、実staging URL・project refがrepositoryへ混入していないことを確認した。
+- 実削除・再実行・停止・fixture除去の確認はfixture workflowのPRをmerge後に実施するため、T19は実装中のままとする。
 
 ### タブ区切りタスクリスト
 
