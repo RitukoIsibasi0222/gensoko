@@ -17,6 +17,7 @@
     "format:check": "prettier --check src",
     "admin:create": "tsx src/scripts/createAdmin.cli.ts",
     "cleanup:audit-logs": "tsx src/jobs/cleanupAuditLogs.cli.ts",
+    "staging:audit-cleanup-fixtures": "tsx src/jobs/stagingAuditCleanupFixtures.cli.ts",
     "cleanup:game-question-sets": "tsx src/jobs/cleanupGameQuestionSets.cli.ts",
     "reset:weekly-scores": "tsx src/jobs/resetWeeklyScores.cli.ts",
     "batch:scheduled": "tsx src/jobs/scheduled.cli.ts"
