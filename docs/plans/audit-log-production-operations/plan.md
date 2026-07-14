@@ -953,7 +953,7 @@ schema変更・backfillは想定しない。
 - [x] T16: lint・format check・build・全testを通す
 - [x] T17: Docker PostgreSQLで境界・分割・冪等性を確認する
 - [x] T18: 変更種別ごとにcommitし、実装PRをreview後developへmergeする（PR #90、2026-07-14 merge）
-- [-] T19: stagingでdry-run・cleanup・再実行・停止を確認する
+- [x] T19: stagingでdry-run・cleanup・再実行・停止を確認する（2026-07-14完了）
 - [ ] T20: production容量監視・通知・backup確認を完了する
 - [ ] T21: production初回実行と7日baselineを確認する
 - [ ] T22: planとprogressを実装完了へ更新し、docs PRをdevelopへmergeする
@@ -983,7 +983,27 @@ schema変更・backfillは想定しない。
 - Redではfixture moduleとworkflowが未存在で失敗することを確認し、Green・Refactor後はfixture・CLI・workflow test 28件が通過した。
 - reviewで指摘された日数ミリ秒定数の重複を`backend/src/lib/time.ts`へ集約し、cleanup・fixture・weekly scoreが同じ定義を参照するよう修正した。Redでは共通module未存在を確認し、production codeの定義が1件だけであることを確認した。
 - backend lint、format check、build、全test（658件成功・2件skip）と新規workflow YAMLのPrettier checkが通過し、実staging URL・project refがrepositoryへ混入していないことを確認した。
-- 実削除・再実行・停止・fixture除去の確認はfixture workflowのPRをmerge後に実施するため、T19は実装中のままとする。
+- PR #92を`develop`へmergeした（merge commit: `f25ea0255958f5b7f9372171d94a2879c51b32a7`）。
+
+### T19 staging検証結果（2026-07-14）
+
+| 確認 | Actions run | 結果 |
+|---|---|---|
+| fixture作成 | [#29316346075](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316346075) | 期限切れ1件・期限内1件を作成 |
+| dry-run | [#29316403409](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316403409) | `expiredCount=1`、`deletedCount=0`、`minimumRunsRequired=1` |
+| 初回execute | [#29316473888](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316473888) | `deletedCount=1`、`limitReached=false` |
+| 削除境界検証 | [#29316528164](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316528164) | 期限切れ0件・期限内1件 |
+| 再実行 | [#29316579011](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316579011) | `deletedCount=0`、`hasExpiredRows=false` |
+| cleanup停止 | [#29316652314](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316652314) | `audit_logs.cleanup.skipped`、`deletedCount=0` |
+| fixture除去 | [#29316702438](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316702438) | 残った期限内fixture 1件を削除 |
+
+- 全runが終了code 0で完了した。
+- 削除境界`occurredAt < cutoff`どおり、期限切れfixtureだけが削除され、期限内fixtureはcleanup後も残った。
+- execute再実行は削除0件で正常終了し、冪等性を確認した。
+- `AUDIT_LOG_CLEANUP_ENABLED=false`時は状態確認後にskipし、安全停止を確認した。
+- Actions logには許可済みの時刻・件数・状態だけが出力され、`DATABASE_URL`は`***`にmaskされていた。内部ID、PII、raw error、stack traceは出力されなかった。
+- 後片付けとして期限内fixtureを削除し、staging Variablesを`AUDIT_LOG_CLEANUP_ENABLED=false`、`AUDIT_LOG_STAGING_FIXTURES_ENABLED=false`へ戻した。
+- `actions/checkout@v4`と`actions/setup-node@v4`のNode.js 20 deprecation警告は全Batch Jobs runで確認したが、job結果には影響しなかった。Actions major version更新はcleanup検証とは分離して対応する。
 
 ### タブ区切りタスクリスト
 
