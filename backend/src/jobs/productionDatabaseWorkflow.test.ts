@@ -33,7 +33,7 @@ describe("production database GitHub Actions workflow", () => {
   });
 
   it("checks the Free Plan quota at the documented warning and critical thresholds", () => {
-    expect(workflow).toContain('DATABASE_QUOTA_BYTES: "524288000"');
+    expect(workflow).toContain('DATABASE_QUOTA_BYTES: "500000000"');
     expect(workflow).toContain('DATABASE_WARNING_PERCENT: "70"');
     expect(workflow).toContain('DATABASE_CRITICAL_PERCENT: "85"');
     expect(workflow).toContain("SELECT pg_database_size(current_database());");
