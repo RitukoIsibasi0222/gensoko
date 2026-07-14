@@ -274,26 +274,45 @@ jobs:
 
 ### 必要なSecret・Variables
 
-GitHub の Settings > Secrets and variables > Actions に以下を登録する。
+GitHub の Settings > Environments で`staging`と`production`を分離し、それぞれに以下を登録する。repository共通の`DATABASE_URL`、`BATCH_ENVIRONMENT`、`AUDIT_LOG_RETENTION_DAYS`、`AUDIT_LOG_CLEANUP_ENABLED`は登録しない。
 
-| 種別 | 名前 | 値・扱い |
-|---|---|---|
-| Actions Secret | `DATABASE_URL` | 本番DB接続文字列。workflow・リポジトリ・ログへ直接書かない |
-| Actions Variable | `AUDIT_LOG_RETENTION_DAYS` | 暫定`365`。正式承認後の値を設定する |
-| Actions Variable | `AUDIT_LOG_CLEANUP_ENABLED` | release gate完了までは`false` |
+| Environment | 種別 | 名前 | 値・扱い |
+|---|---|---|---|
+| staging | Secret | `DATABASE_URL` | staging専用DB接続文字列。workflow・リポジトリ・ログへ直接書かない |
+| staging | Variable | `BATCH_ENVIRONMENT` | `staging` |
+| staging | Variable | `AUDIT_LOG_RETENTION_DAYS` | 検証用`365` |
+| staging | Variable | `AUDIT_LOG_CLEANUP_ENABLED` | 初期値`false`。実削除確認中だけ明示的に`true`へ変更する |
+| production | Secret | `DATABASE_URL` | production専用DB接続文字列。stagingと共用しない |
+| production | Variable | `BATCH_ENVIRONMENT` | `production` |
+| production | Variable | `AUDIT_LOG_RETENTION_DAYS` | 正式承認後の保持日数 |
+| production | Variable | `AUDIT_LOG_CLEANUP_ENABLED` | 全release gate完了までは`false` |
 
-保持期間・cleanup flagは秘密情報ではないためVariablesで管理する。`AUDIT_LOG_RETENTION_DAYS`の未設定・空文字・不正値は削除前に失敗する。cleanup flagはruntime環境変数自体が省略された場合だけ`false`になるが、workflowでは未登録Variableが空文字として渡りvalidation失敗になるため、`AUDIT_LOG_CLEANUP_ENABLED=false`を明示登録する。
+workflow jobは選択されたEnvironmentを参照する。手動実行は`staging`が既定で、scheduleは`production`を参照する。`BATCH_ENVIRONMENT`が選択環境と一致しない場合、または`DATABASE_URL`が未登録の場合は、DB処理や依存関係installの前に失敗する。
+
+保持期間・cleanup flagは秘密情報ではないためEnvironment Variablesで管理する。`AUDIT_LOG_RETENTION_DAYS`の未設定・空文字・不正値は削除前に失敗する。cleanup flagはruntime環境変数自体が省略された場合だけ`false`になるが、workflowでは未登録Variableが空文字として渡りvalidation失敗になるため、`AUDIT_LOG_CLEANUP_ENABLED=false`を明示登録する。
+
+### staging DBの初期構築
+
+1. Supabase Dashboardでstaging専用projectを作成する。project名は`gensoko-staging`とし、productionと共用しない。
+2. database passwordはpassword managerで生成・保存し、repository、文書、Issue、PR、チャットへ記載しない。
+3. projectの`Connect`からSession pooler（port 5432）のURIを取得する。GitHub-hosted runnerから接続するため、IPv4対応のSession poolerを使用する。
+4. GitHub repositoryのSettings > Environments > staging > Environment secretsで、URIを`DATABASE_URL`として登録する。
+5. `.github/workflows/staging-database.yml`が`develop`へmergeされた後、Actions > Staging Database Setup > Run workflowで`develop`を選んで1回だけ実行する。
+6. `npx prisma migrate deploy`の成功と、適用済みmigration一覧をActions logで確認する。接続URLやpasswordをlogへ出さない。
+
+Staging Database Setup workflowは手動実行専用で、GitHub Environmentを`staging`へ固定する。productionの選択肢、schedule、schema生成、seed処理は持たない。Environment識別子または`DATABASE_URL`が未設定ならmigration前に失敗する。
 
 ### 手動実行・retry
 
-GitHub Actions の Batch Jobs workflow は workflow_dispatch に対応している。失敗時や手動確認時は以下を選択して再実行する。
+GitHub Actions の Batch Jobs workflow は workflow_dispatch に対応している。最初に`target_environment`を選び、次に`batch_job`を選ぶ。T19では必ず`staging`を選択する。`production`はT20のrelease gate完了前に選択しない。
 
-| 入力 | 実行内容 |
-|---|---|
-| weekly-reset | 週間スコアリセット |
-| game-question-set-cleanup | 期限切れ GameQuestionSet cleanup |
-| audit-log-cleanup-dry-run | 期限超過件数とcutoffをpreviewし、削除しない |
-| audit-log-cleanup-execute | cleanup有効時だけ実削除する |
+| 入力 | 選択肢 | 実行内容 |
+|---|---|---|
+| `target_environment` | `staging` / `production` | 手動実行の接続先。既定は`staging` |
+| `batch_job` | `weekly-reset` | 週間スコアリセット |
+| `batch_job` | `game-question-set-cleanup` | 期限切れ GameQuestionSet cleanup |
+| `batch_job` | `audit-log-cleanup-dry-run` | 期限超過件数とcutoffをpreviewし、削除しない |
+| `batch_job` | `audit-log-cleanup-execute` | cleanup有効時だけ実削除する |
 
 Actionsのscheduleは遅延・スキップされる可能性があるため、毎時00分付近を避けて7分・17分・37分・47分に分散している。workflowのconcurrency groupは`gensoko-batch-jobs`で固定し、scheduleと手動実行を直列化する。失敗時は安全ログを確認し、原因解消後にworkflow_dispatchで再実行する。
 
