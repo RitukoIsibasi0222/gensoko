@@ -10,11 +10,13 @@
     "start": "node dist/index.js",
     "test": "vitest",
     "test:integration:audit": "vitest --run src/services/audit-rollback.integration.test.ts",
+    "test:integration:audit-cleanup": "vitest --run src/jobs/cleanupAuditLogs.integration.test.ts",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write src",
     "format:check": "prettier --check src",
     "admin:create": "tsx src/scripts/createAdmin.cli.ts",
+    "cleanup:audit-logs": "tsx src/jobs/cleanupAuditLogs.cli.ts",
     "cleanup:game-question-sets": "tsx src/jobs/cleanupGameQuestionSets.cli.ts",
     "reset:weekly-scores": "tsx src/jobs/resetWeeklyScores.cli.ts",
     "batch:scheduled": "tsx src/jobs/scheduled.cli.ts"

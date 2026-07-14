@@ -9,8 +9,16 @@ const RATE_LIMIT_KEY_SECRET_REQUIRED_MESSAGE = "RATE_LIMIT_KEY_SECRETの設定�
 const RATE_LIMIT_KEY_SECRET_BASE64_MESSAGE = "RATE_LIMIT_KEY_SECRETはbase64形式で設定してください";
 const RATE_LIMIT_KEY_SECRET_LENGTH_MESSAGE =
   "RATE_LIMIT_KEY_SECRETは復号後32バイト以上にしてください";
+const AUDIT_LOG_RETENTION_DAYS_REQUIRED_MESSAGE = "AUDIT_LOG_RETENTION_DAYSの設定が必要です";
+const AUDIT_LOG_RETENTION_DAYS_INVALID_MESSAGE =
+  "AUDIT_LOG_RETENTION_DAYSは30から3650までの10進整数で設定してください";
+const AUDIT_LOG_CLEANUP_ENABLED_INVALID_MESSAGE =
+  "AUDIT_LOG_CLEANUP_ENABLEDはtrueまたはfalseで設定してください";
 const MIN_RATE_LIMIT_KEY_BYTES = 32;
+const MIN_AUDIT_LOG_RETENTION_DAYS = 30;
+const MAX_AUDIT_LOG_RETENTION_DAYS = 3650;
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const DECIMAL_INTEGER_PATTERN = /^\d+$/;
 
 export type FrontendUrlOptions = {
   isProduction?: boolean;
@@ -32,6 +40,20 @@ export type RateLimitConfigOptions = Readonly<{
 export type RateLimitConfig = Readonly<{
   store: RateLimitStoreName;
   keySecret: string;
+}>;
+
+export type AuditLogRetentionEnvironment = Readonly<{
+  AUDIT_LOG_RETENTION_DAYS?: string;
+  AUDIT_LOG_CLEANUP_ENABLED?: string;
+}>;
+
+export type AuditLogRetentionConfigOptions = Readonly<{
+  environment?: AuditLogRetentionEnvironment;
+}>;
+
+export type AuditLogRetentionConfig = Readonly<{
+  retentionDays: number;
+  cleanupEnabled: boolean;
 }>;
 
 function parseFrontendOrigin(value: string): string {
@@ -145,4 +167,59 @@ export function getRateLimitConfig({
   const keySecret = parseRateLimitKeySecret(environment.RATE_LIMIT_KEY_SECRET);
 
   return { store, keySecret };
+}
+
+function parseAuditLogRetentionDays(value: string | undefined): number {
+  const normalizedValue = value?.trim();
+
+  if (!normalizedValue) {
+    throw new Error(AUDIT_LOG_RETENTION_DAYS_REQUIRED_MESSAGE);
+  }
+
+  if (!DECIMAL_INTEGER_PATTERN.test(normalizedValue)) {
+    throw new Error(AUDIT_LOG_RETENTION_DAYS_INVALID_MESSAGE);
+  }
+
+  const retentionDays = Number(normalizedValue);
+
+  if (
+    !Number.isSafeInteger(retentionDays) ||
+    retentionDays < MIN_AUDIT_LOG_RETENTION_DAYS ||
+    retentionDays > MAX_AUDIT_LOG_RETENTION_DAYS
+  ) {
+    throw new Error(AUDIT_LOG_RETENTION_DAYS_INVALID_MESSAGE);
+  }
+
+  return retentionDays;
+}
+
+function parseAuditLogCleanupEnabled(value: string | undefined): boolean {
+  if (value === undefined) {
+    return false;
+  }
+
+  const normalizedValue = value.trim();
+
+  if (normalizedValue === "true") {
+    return true;
+  }
+
+  if (normalizedValue === "false") {
+    return false;
+  }
+
+  throw new Error(AUDIT_LOG_CLEANUP_ENABLED_INVALID_MESSAGE);
+}
+
+/**
+ * 監査ログの保持期間とcleanup有効化設定を検証して返す。
+ * 保持期間が不明な状態で削除を始めず、cleanup未設定時は安全側で無効化する。
+ */
+export function getAuditLogRetentionConfig({
+  environment = process.env,
+}: AuditLogRetentionConfigOptions = {}): AuditLogRetentionConfig {
+  return {
+    retentionDays: parseAuditLogRetentionDays(environment.AUDIT_LOG_RETENTION_DAYS),
+    cleanupEnabled: parseAuditLogCleanupEnabled(environment.AUDIT_LOG_CLEANUP_ENABLED),
+  };
 }

@@ -322,9 +322,11 @@ table・index容量のためにアプリケーションコードからraw SQLを
 | 1batch件数 | 500件 | code定数 |
 | 1回最大削除件数 | 10,000件 | code定数 |
 | 最大実行時間 | 8分 | code定数 |
-| GitHub Actions timeout | 10分 | workflow |
+| batch実行step timeout | 10分 | workflow |
+| GitHub Actions job timeout | 20分 | workflow |
 
 安全上限は環境変数へ分散せず、変更にはcode・test・docsの同時更新を必要とする。
+job timeoutにはcheckout・依存関係install・Prisma Client生成も含まれるため、実行stepへ10分の個別上限を設け、job全体は準備時間を含めて20分とする。これによりcleanup本体の8分上限後に残件通知とDB切断を行う余裕を確保する。
 
 ### 削除手順
 
@@ -505,7 +507,7 @@ table・index容量のためにアプリケーションコードからraw SQLを
 
 | ファイル | 変更種別 | 内容 |
 |---|---|---|
-| `docs/plans/audit-log-production-operations/plan.md` | 新規 | 本計画、判断、タスク、完了記録 |
+| `docs/plans/audit-log-production-operations/plan.md` | 修正 | 実装判断、タスク進捗、実変更・検証記録を更新 |
 | `backend/src/jobs/cleanupAuditLogs.ts` | 新規 | retention状態取得、preview、分割cleanup |
 | `backend/src/jobs/cleanupAuditLogs.test.ts` | 新規 | cutoff、batch、上限、ログ、並行安全性test |
 | `backend/src/jobs/cleanupAuditLogs.cli.ts` | 新規 | dry-run既定の手動実行CLI |
@@ -518,6 +520,7 @@ table・index容量のためにアプリケーションコードからraw SQLを
 | `backend/package.json` | 修正 | cleanup CLI・integration test script追加 |
 | `backend/.env.example` | 修正 | retention・cleanup有効化設定例 |
 | `.github/workflows/batch.yml` | 修正 | schedule、workflow_dispatch、Variables、安定concurrency |
+| `backend/src/jobs/batchWorkflow.test.ts` | 新規 | workflowのCron、手動分岐、Variables、Secret、concurrency契約test |
 | `docs/02_security.md` | 修正 | 監査保持・内部ID・完全削除との差を承認内容へ整合 |
 | `docs/03_data_model.md` | 修正 | AuditLog model・index・保持方針を現行schemaへ整合 |
 | `docs/05_progress.md` | 修正 | 新計画書link、実装中・完了状態、別privacy blocker |
@@ -909,24 +912,24 @@ schema変更・backfillは想定しない。
 | T21 | 初回production実行とbaseline確認 | production | 初回成功、残件なし、7日baselineを記録 | T20 | High |
 | T22 | plan・progress完了更新とdocs PR | plan、docs/05_progress.md、git/GitHub | 実変更・決定値・検証・PR・完了状態を整合しdevelopへmerge | T21 | High |
 
-- [ ] T1: 既存監査・batch・本番基盤を再確認する
-- [ ] T2: 保持期間・退会後ID保持・担当者・通知先を承認する
-- [ ] T3: `docs/05_progress.md`を実装中へ更新する
-- [ ] T4: retention config testをRed化する
-- [ ] T5: retention configと環境変数例を実装する
-- [ ] T6: cleanup service testをRed化する
-- [ ] T7: 分割cleanup・低負荷状態監視・安全logを実装する
-- [ ] T8: CLI testをRed化する
-- [ ] T9: dry-run既定のCLIとnpm scriptを実装する
-- [ ] T10: scheduled接続testをRed化する
-- [ ] T11: scheduled wrapperとGitHub Actionsへ接続する
-- [ ] T12: Docker PostgreSQL cleanup integration testを追加する
-- [ ] T13: security・既存監査回帰testを追加・更新する
-- [ ] T14: security・data model・testing・startup・deployment docsを更新する
-- [ ] T15: Refactorとformatを実施する
-- [ ] T16: lint・format check・build・全testを通す
-- [ ] T17: Docker PostgreSQLで境界・分割・冪等性を確認する
-- [ ] T18: 変更種別ごとにcommitし、実装PRをreview後developへmergeする
+- [x] T1: 既存監査・batch・本番基盤を再確認する
+- [-] T2: 保持期間・退会後ID保持・担当者・通知先を承認する（実装用暫定値は合意済み。本番承認者・通知先は未確定）
+- [x] T3: `docs/05_progress.md`を実装中へ更新する
+- [x] T4: retention config testをRed化する
+- [x] T5: retention configと環境変数例を実装する
+- [x] T6: cleanup service testをRed化する
+- [x] T7: 分割cleanup・低負荷状態監視・安全logを実装する
+- [x] T8: CLI testをRed化する
+- [x] T9: dry-run既定のCLIとnpm scriptを実装する
+- [x] T10: scheduled接続testをRed化する
+- [x] T11: scheduled wrapperとGitHub Actionsへ接続する
+- [x] T12: Docker PostgreSQL cleanup integration testを追加する
+- [x] T13: security・既存監査回帰testを追加・更新する
+- [x] T14: security・data model・testing・startup・deployment docsを更新する
+- [x] T15: Refactorとformatを実施する
+- [x] T16: lint・format check・build・全testを通す
+- [x] T17: Docker PostgreSQLで境界・分割・冪等性を確認する
+- [-] T18: 変更種別ごとにcommitし、実装PRをreview後developへmergeする
 - [ ] T19: stagingでdry-run・cleanup・再実行・停止を確認する
 - [ ] T20: production容量監視・通知・backup確認を完了する
 - [ ] T21: production初回実行と7日baselineを確認する
@@ -964,38 +967,38 @@ T22	plan・progress完了更新・docs PR	plan・docs/05_progress.md・git/GitHu
 
 - [ ] 保持期間と利用目的が承認されている。
 - [ ] 退会後内部ID保持が承認されている。
-- [ ] cleanup無効が安全側の既定値である。
-- [ ] retention未設定・不正時に削除しない。
-- [ ] dry-runが既定である。
-- [ ] 実削除に`--execute`と有効設定の両方が必要である。
-- [ ] cutoffと同時刻の監査ログを削除しない。
-- [ ] 1batch・1回・実行時間に上限がある。
-- [ ] cleanupが`AuditLog.create`を呼ばない。
-- [ ] ID、PII、秘密情報、raw errorをlogへ出さない。
-- [ ] workflowへDATABASE_URLをハードコードしない。
-- [ ] cleanup失敗が非0終了になる。
-- [ ] concurrencyが安定したgroupで直列化されている。
-- [ ] 削除保留手順がある。
-- [ ] 誤削除時のbackup・PITR判断手順がある。
-- [ ] soft deleteと完全削除の不整合が別タスクで追跡されている。
-- [ ] プライバシーポリシーへ必要な記載要件が引き継がれている。
-- [ ] 公開cleanup APIがない。
-- [ ] 監査ログ閲覧権限を今回追加していない。
+- [x] cleanup無効が安全側の既定値である。
+- [x] retention未設定・不正時に削除しない。
+- [x] dry-runが既定である。
+- [x] 実削除に`--execute`と有効設定の両方が必要である。
+- [x] cutoffと同時刻の監査ログを削除しない。
+- [x] 1batch・1回・実行時間に上限がある。
+- [x] cleanupが`AuditLog.create`を呼ばない。
+- [x] ID、PII、秘密情報、raw errorをlogへ出さない。
+- [x] workflowへDATABASE_URLをハードコードしない。
+- [x] cleanup失敗が非0終了になる。
+- [x] concurrencyが安定したgroupで直列化されている。
+- [x] 削除保留手順がある。
+- [x] 誤削除時のbackup・PITR判断手順がある。
+- [x] soft deleteと完全削除の不整合が別タスクで追跡されている。
+- [x] プライバシーポリシーへ必要な記載要件が引き継がれている。
+- [x] 公開cleanup APIがない。
+- [x] 監査ログ閲覧権限を今回追加していない。
 - [ ] 本番通知先と一次対応者が設定されている。
 - [ ] 本番容量閾値がDB planと整合している。
 
 ## 手動確認項目
 
-- [ ] Docker内CLIを引数なしで実行し、dry-runになる。
-- [ ] `--dry-run`でDBが変更されない。
-- [ ] cleanup無効状態の`--execute`でDBが変更されない。
+- [x] Docker内CLIを引数なしで実行し、dry-runになる。
+- [x] `--dry-run`でDBが変更されない。
+- [x] cleanup無効状態の`--execute`でDBが変更されない。
 - [ ] cleanup有効状態の`--execute`で期限超過rowだけが削除される。
-- [ ] cutoffと同時刻のrowが残る。
-- [ ] cutoffより新しいrowが残る。
-- [ ] 500件超を複数batchで処理する。
+- [x] cutoffと同時刻のrowが残る。
+- [x] cutoffより新しいrowが残る。
+- [x] 500件超を複数batchで処理する。
 - [ ] 10,000件上限を超えて削除しない。
 - [ ] 上限到達後の残件が通知対象になる。
-- [ ] 二重実行しても結果が壊れない。
+- [x] 二重実行しても結果が壊れない。
 - [ ] scheduleとmanual dispatchが同時実行されない。
 - [ ] cleanup失敗時にActionsが失敗する。
 - [ ] workflow_dispatchで再実行できる。
@@ -1011,7 +1014,7 @@ T22	plan・progress完了更新・docs PR	plan・docs/05_progress.md・git/GitHu
 - [ ] password change/reset監査が継続する。
 - [ ] admin操作監査が継続する。
 - [ ] 本人退会・管理者強制退会後も承認した期間中の内部ID相関が維持される。
-- [ ] 保持期限経過後は監査rowと内部IDが削除される。
+- [x] 保持期限経過後は監査rowと内部IDが削除される。
 - [ ] API status・body・Cookieに回帰がない。
 - [ ] 7日間の増加量baselineを記録する。
 - [ ] soft delete不整合の別タスクが本番公開前に完了または明示的にblockされている。

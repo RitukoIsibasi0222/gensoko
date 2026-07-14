@@ -2,7 +2,7 @@
 
 > ORM: **Prisma** / DB: PostgreSQL
 > 実装時は `npx prisma migrate dev` でマイグレーションを実行します
-> 下記のスキーマを `backend/prisma/schema.prisma` にそのまま使用します
+> 実装のsource of truthは`backend/prisma/schema.prisma`です。下記は主要モデルの説明用抜粋であり、実装時は必ずsource of truthを確認します
 
 ---
 
@@ -17,6 +17,7 @@
 | `GameSession` | ゲーム1回分の記録 |
 | `GameAnswer` | ゲーム内の各問の回答記録 |
 | `UserStats` | ユーザー集計統計（キャッシュ用） |
+| `AuditLog` | セキュリティ上重要な操作の監査証跡 |
 
 ---
 
@@ -31,7 +32,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ─────────────────────────────────────────
@@ -84,6 +84,31 @@ model User {
 enum Role {
   USER
   ADMIN
+}
+
+// ─────────────────────────────────────────
+// 監査ログ
+// ─────────────────────────────────────────
+enum AuditResult {
+  SUCCESS
+  FAILURE
+}
+
+model AuditLog {
+  id            String      @id @default(cuid())
+  action        String
+  result        AuditResult
+  actorId       String?
+  actorRole     Role?
+  targetType    String?
+  targetId      String?
+  failureReason String?
+  occurredAt    DateTime    @default(now())
+
+  @@index([occurredAt(sort: Desc), id(sort: Desc)])
+  @@index([action, occurredAt(sort: Desc)])
+  @@index([targetType, targetId, occurredAt(sort: Desc)])
+  @@map("audit_logs")
 }
 
 // ─────────────────────────────────────────
@@ -185,6 +210,26 @@ model UserStats {
   @@map("user_stats")
 }
 ```
+
+---
+
+## 監査ログのrelation・保持方針
+
+- `actorId`・`targetId`には意図的にUser relationと外部キーを追加しない。User row削除後も保持期間中の操作相関を維持するためである
+- 内部IDを使ってUserを自動joinせず、公開API・UIへ返さない
+- 暫定保持期間は365日で、`AUDIT_LOG_RETENTION_DAYS`からUTC cutoffを計算する
+- cleanupは既存の`occurredAt DESC, id DESC`複合indexを使い、`occurredAt < cutoff`のIDを古い順に最大500件ずつ取得する
+- 削除時は取得済みIDとcutoff条件を再指定し、1回最大10,000件・最大8分で停止する
+- 保持期限列、User relation、個別legal hold列、cleanup用の追加migrationは初期実装では追加しない
+- 正式な保持期間と内部ID保持は承認前の暫定方針であり、`AUDIT_LOG_CLEANUP_ENABLED=false`を本番release gateとする
+
+### 監査ログindex
+
+| Prisma定義 | 用途 |
+|---|---|
+| `@@index([occurredAt(sort: Desc), id(sort: Desc)])` | cleanupの期限検索・安定順序、時系列参照 |
+| `@@index([action, occurredAt(sort: Desc)])` | 操作種別ごとの調査 |
+| `@@index([targetType, targetId, occurredAt(sort: Desc)])` | 対象内部IDごとの相関調査 |
 
 ---
 

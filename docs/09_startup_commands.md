@@ -75,6 +75,11 @@ npm run test -- --run src/middleware/auth.test.ts
 # 監査ログの実DB rollback test（Docker PostgreSQL限定）
 docker compose exec -T hono sh -lc 'AUDIT_INTEGRATION_DATABASE_URL="$DATABASE_URL" npm run test:integration:audit'
 
+# 監査ログcleanupの実DB test（専用DBの作成・migration手順はdocs/07_testing_flow.mdを参照）
+docker compose exec -T \
+  -e AUDIT_CLEANUP_INTEGRATION_DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_audit_cleanup_test \
+  hono npm run test:integration:audit-cleanup
+
 # Lint チェック
 npm run lint
 
@@ -101,6 +106,29 @@ npm run format
     # 期限切れ GameQuestionSet を削除する（Docker 内で実行すること）
     docker compose exec hono npm run cleanup:game-question-sets
 
+### 監査ログcleanupの手動確認
+
+監査ログcleanup専用CLIは引数なしまたは`--dry-run`でpreviewだけを行う。保持日数は必須で、cleanup無効時もdry-runは実行できる。
+
+    cd ~/labs/Gensoko
+
+    # 推奨: dry-run（期限超過件数・cutoff・最低実行回数を確認し、削除しない）
+    docker compose exec \
+      -e AUDIT_LOG_RETENTION_DAYS=365 \
+      -e AUDIT_LOG_CLEANUP_ENABLED=false \
+      hono npm run cleanup:audit-logs -- --dry-run
+
+    # 実削除: 保持期間・承認者・通知先・backup確認後だけ実行する
+    docker compose exec \
+      -e AUDIT_LOG_RETENTION_DAYS=365 \
+      -e AUDIT_LOG_CLEANUP_ENABLED=true \
+      hono npm run cleanup:audit-logs -- --execute
+
+- 365日は暫定値であり、本番の正式承認前に`AUDIT_LOG_CLEANUP_ENABLED=true`へ変更しない
+- `--execute`を指定してもcleanup有効設定が`false`なら削除せずskipする
+- dry-runと本実行のログに監査ログID・内部ID・メール・username・生DB errorは出ない
+- 最大10,000件または8分到達後も期限超過rowが残る場合は終了code 1になる。原因確認後に再実行する
+
 backend/.env の DATABASE_URL は Docker Compose 内ホスト名 postgres を使うため、ホスト側の cd backend && npm run reset:weekly-scores は標準手順にしない。
 
 ### 定期バッチ wrapper の手動確認
@@ -115,7 +143,14 @@ GitHub Actions schedule と同じ入口を Docker 内で確認する場合は、
     # 期限切れ GameQuestionSet cleanup 相当（毎時17分/47分（30分ごと））
     docker compose exec -e BATCH_CRON='17,47 * * * *' hono npm run batch:scheduled
 
-GitHub Actions では workflow_dispatch から weekly-reset または game-question-set-cleanup を選んで手動再実行できる。
+    # 監査ログcleanup相当（UTC毎日18:37 = JST毎日03:37）
+    docker compose exec \
+      -e BATCH_CRON='37 18 * * *' \
+      -e AUDIT_LOG_RETENTION_DAYS=365 \
+      -e AUDIT_LOG_CLEANUP_ENABLED=false \
+      hono npm run batch:scheduled
+
+GitHub Actionsではworkflow_dispatchから`weekly-reset`、`game-question-set-cleanup`、`audit-log-cleanup-dry-run`、`audit-log-cleanup-execute`を選択できる。監査ログの本実行はActions Variableの`AUDIT_LOG_CLEANUP_ENABLED=true`が設定された場合だけ削除する。
 
 ---
 

@@ -10,20 +10,26 @@ on:
         options:
           - weekly-reset
           - game-question-set-cleanup
+          - audit-log-cleanup-dry-run
+          - audit-log-cleanup-execute
   schedule:
     - cron: "7 15 * * 0"
     - cron: "17,47 * * * *"
+    - cron: "37 18 * * *"
 
 jobs:
   scheduled-batch:
     name: Run scheduled batch
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     concurrency:
-      group: batch-${{ github.event.schedule || github.event.inputs.batch_job || github.run_id }}
+      group: gensoko-batch-jobs
       cancel-in-progress: false
     permissions:
       contents: read
+    env:
+      AUDIT_LOG_RETENTION_DAYS: ${{ vars.AUDIT_LOG_RETENTION_DAYS }}
+      AUDIT_LOG_CLEANUP_ENABLED: ${{ vars.AUDIT_LOG_CLEANUP_ENABLED }}
 
     steps:
       - name: Checkout
@@ -47,6 +53,10 @@ jobs:
         run: npx prisma generate
 
       - name: Resolve scheduled cron
+        if: >-
+          github.event_name == 'schedule' ||
+          inputs.batch_job == 'weekly-reset' ||
+          inputs.batch_job == 'game-question-set-cleanup'
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             case "${{ inputs.batch_job }}" in
@@ -66,7 +76,28 @@ jobs:
           fi
 
       - name: Run scheduled batch
+        if: >-
+          github.event_name == 'schedule' ||
+          inputs.batch_job == 'weekly-reset' ||
+          inputs.batch_job == 'game-question-set-cleanup'
         working-directory: backend
+        timeout-minutes: 10
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npm run batch:scheduled
+
+      - name: Preview audit log cleanup
+        if: inputs.batch_job == 'audit-log-cleanup-dry-run'
+        working-directory: backend
+        timeout-minutes: 10
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run cleanup:audit-logs -- --dry-run
+
+      - name: Execute audit log cleanup
+        if: inputs.batch_job == 'audit-log-cleanup-execute'
+        working-directory: backend
+        timeout-minutes: 10
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run cleanup:audit-logs -- --execute
