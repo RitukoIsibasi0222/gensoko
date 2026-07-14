@@ -150,7 +150,7 @@ GitHub Actions schedule と同じ入口を Docker 内で確認する場合は、
       -e AUDIT_LOG_CLEANUP_ENABLED=false \
       hono npm run batch:scheduled
 
-GitHub Actionsではworkflow_dispatchから`weekly-reset`、`game-question-set-cleanup`、`audit-log-cleanup-dry-run`、`audit-log-cleanup-execute`を選択できる。監査ログの本実行はActions Variableの`AUDIT_LOG_CLEANUP_ENABLED=true`が設定された場合だけ削除する。
+GitHub Actionsではworkflow_dispatchで最初に`target_environment`を選び、次に`weekly-reset`、`game-question-set-cleanup`、`audit-log-cleanup-dry-run`、`audit-log-cleanup-execute`を選択する。手動実行の既定は`staging`、scheduleは`production`である。監査ログの本実行は、選択したEnvironmentの`AUDIT_LOG_CLEANUP_ENABLED=true`が設定された場合だけ削除する。T19の確認では必ず`staging`を選び、`production`はrelease gate完了前に選択しない。
 
 ---
 

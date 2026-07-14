@@ -521,6 +521,8 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 | `backend/.env.example` | 修正 | retention・cleanup有効化設定例 |
 | `.github/workflows/batch.yml` | 修正 | schedule、workflow_dispatch、Variables、安定concurrency |
 | `backend/src/jobs/batchWorkflow.test.ts` | 新規 | workflowのCron、手動分岐、Variables、Secret、concurrency契約test |
+| `.github/workflows/staging-database.yml` | 新規 | staging固定・手動専用の既存Prisma migration適用workflow |
+| `backend/src/jobs/stagingDatabaseWorkflow.test.ts` | 新規 | staging固定、Secret安全停止、migration commandの契約test |
 | `docs/02_security.md` | 修正 | 監査保持・内部ID・完全削除との差を承認内容へ整合 |
 | `docs/03_data_model.md` | 修正 | AuditLog model・index・保持方針を現行schemaへ整合 |
 | `docs/05_progress.md` | 修正 | 新計画書link、実装中・完了状態、別privacy blocker |
@@ -612,6 +614,14 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 17. **cleanup自身の監査**
     - 選択: `AuditLog`へ保存しない。
     - 根拠: cleanupが新しい監査ログを生成すると保持処理が自己増殖し、責務も循環するため。
+
+18. **staging・productionの接続設定分離**
+    - 選択: GitHub Environmentsごとに同名のSecret・Variablesを持たせ、手動実行は`staging`を既定、scheduleは`production`とする。
+    - 根拠: repository共通の`DATABASE_URL`による接続先取り違えを避け、T19の検証がproduction DBへ到達しないことをworkflow契約で固定するため。
+
+19. **staging DBへのmigration適用方法**
+    - 選択: `staging` Environmentへ固定した手動workflowから`prisma migrate deploy`を実行する。
+    - 根拠: database passwordをローカルshellやチャットへ渡さず、productionの選択肢を持たない監査可能な入口で新規staging DBを初期化するため。
 
 ## 公開インターフェース案
 
@@ -929,11 +939,27 @@ schema変更・backfillは想定しない。
 - [x] T15: Refactorとformatを実施する
 - [x] T16: lint・format check・build・全testを通す
 - [x] T17: Docker PostgreSQLで境界・分割・冪等性を確認する
-- [-] T18: 変更種別ごとにcommitし、実装PRをreview後developへmergeする
-- [ ] T19: stagingでdry-run・cleanup・再実行・停止を確認する
+- [x] T18: 変更種別ごとにcommitし、実装PRをreview後developへmergeする（PR #90、2026-07-14 merge）
+- [-] T19: stagingでdry-run・cleanup・再実行・停止を確認する
 - [ ] T20: production容量監視・通知・backup確認を完了する
 - [ ] T21: production初回実行と7日baselineを確認する
 - [ ] T22: planとprogressを実装完了へ更新し、docs PRをdevelopへmergeする
+
+### T19 再開記録（2026-07-14）
+
+- PR #90が`develop`へmerge済みであることを確認した（merge commit: `c3f8b332f382a02e49a7b251c5ae294ccbe38d7c`）。
+- 再開時点ではGitHub Environmentsに`copilot`だけが存在し、staging environmentは未作成だった。
+- `staging` Environmentを作成し、利用可能なbranchを`develop`だけに制限した。
+- `staging` Environment Variablesへ`BATCH_ENVIRONMENT=staging`、`AUDIT_LOG_RETENTION_DAYS=365`、`AUDIT_LOG_CLEANUP_ENABLED=false`を登録した。
+- scheduleによる未保護Environmentの自動作成を避けるため、`production`も`develop`限定の安全枠として作成し、cleanup無効のVariablesだけを登録した。production DB Secretは未登録である。
+- 手動実行は`staging`を既定、scheduleは`production`とし、Environment識別子または`DATABASE_URL`が未設定ならDB処理前に失敗するworkflow契約を追加した。
+- staging専用・手動実行のみのmigration workflowと契約testを追加し、既存migrationを`prisma migrate deploy`で適用する入口を用意した。
+- Actionsのrepository SecretとVariableは未登録のままとし、Environment単位の設定だけを使用する方針へ変更した。
+- GitHub Deploymentsにstaging deploymentの記録はなかった。
+- 変更前のBatch Jobs scheduleは`DATABASE_URL`が空のため失敗していることを確認した。
+- RedではBatch Environment契約2件とstaging migration workflow未存在を確認し、Greenではworkflow契約11件が通過した。
+- backend lint、format check、build、全test（628件成功・2件skip）が通過し、workflow YAML 2件もPrettier解析を通過した。
+- staging専用DB、backup・復元手段、Environment Secret `DATABASE_URL`が揃うまでdry-runとexecuteは実行しない。
 
 ### タブ区切りタスクリスト
 

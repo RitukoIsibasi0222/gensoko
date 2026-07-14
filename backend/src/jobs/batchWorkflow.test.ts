@@ -19,6 +19,29 @@ function getWorkflowStep(stepName: string): string {
 }
 
 describe("batch GitHub Actions workflow", () => {
+  it("uses staging by default for manual runs and production for schedules", () => {
+    expect(workflow).toContain("target_environment:");
+    expect(workflow).toContain("default: staging");
+    expect(workflow).toContain("- staging");
+    expect(workflow).toContain("- production");
+    expect(workflow).toContain("name: ${{ inputs.target_environment || 'production' }}");
+  });
+
+  it("fails before database work when the selected environment is not configured", () => {
+    expect(workflow).toContain("BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}");
+
+    const validationStep = getWorkflowStep("Validate batch environment");
+    expect(validationStep).toContain(
+      "EXPECTED_ENVIRONMENT: ${{ inputs.target_environment || 'production' }}",
+    );
+    expect(validationStep).toContain("DATABASE_URL: ${{ secrets.DATABASE_URL }}");
+    expect(validationStep).toContain(
+      'if [ "$BATCH_ENVIRONMENT" != "$EXPECTED_ENVIRONMENT" ]; then',
+    );
+    expect(validationStep).toContain('if [ -z "$DATABASE_URL" ]; then');
+    expect(validationStep).not.toContain('echo "$DATABASE_URL"');
+  });
+
   it("schedules audit log cleanup daily at UTC 18:37", () => {
     expect(workflow).toContain('- cron: "37 18 * * *"');
   });

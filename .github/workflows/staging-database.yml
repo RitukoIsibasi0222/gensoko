@@ -1,0 +1,52 @@
+name: Staging Database Setup
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate-staging:
+    name: Apply migrations to staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    concurrency:
+      group: gensoko-staging-database
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
+
+    steps:
+      - name: Validate staging environment
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ "$BATCH_ENVIRONMENT" != "staging" ]; then
+            echo "staging DB設定が不正です"
+            exit 1
+          fi
+          if [ -z "$DATABASE_URL" ]; then
+            echo "stagingのDATABASE_URL Secretが設定されていません"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Apply Prisma migrations
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma migrate deploy
