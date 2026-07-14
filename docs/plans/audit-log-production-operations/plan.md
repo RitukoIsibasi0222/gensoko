@@ -517,6 +517,9 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 | `backend/src/jobs/scheduled.test.ts` | 修正 | audit cleanup Cron、skip、上限到達test |
 | `backend/src/lib/config.ts` | 修正 | retention・cleanup有効化設定を一元管理 |
 | `backend/src/lib/config.test.ts` | 修正 | 未設定・境界・不正値・安全停止test |
+| `backend/src/lib/time.ts` | 新規 | 日数計算用の共通ミリ秒定数 |
+| `backend/src/lib/time.test.ts` | 新規 | 共通time定数の契約test |
+| `backend/src/lib/weekly-score.ts` | 修正 | 日数ミリ秒定数を共通time moduleから参照 |
 | `backend/package.json` | 修正 | cleanup CLI・integration test script追加 |
 | `backend/.env.example` | 修正 | retention・cleanup有効化設定例 |
 | `.github/workflows/batch.yml` | 修正 | schedule、workflow_dispatch、Variables、安定concurrency |
@@ -978,7 +981,8 @@ schema変更・backfillは想定しない。
 - staging Environment Variablesへ`STAGING_SUPABASE_PROJECT_REF`と、安全側で無効な`AUDIT_LOG_STAGING_FIXTURES_ENABLED=false`を登録した。
 - fixture workflowは`BATCH_ENVIRONMENT=staging`、明示的なfixture有効化、project ref一致、Supabase Session pooler host・port 5432をすべて確認してからPrismaへ接続する。
 - Redではfixture moduleとworkflowが未存在で失敗することを確認し、Green・Refactor後はfixture・CLI・workflow test 28件が通過した。
-- backend lint、format check、build、全test（657件成功・2件skip）と新規workflow YAMLのPrettier checkが通過し、実staging URL・project refがrepositoryへ混入していないことを確認した。
+- reviewで指摘された日数ミリ秒定数の重複を`backend/src/lib/time.ts`へ集約し、cleanup・fixture・weekly scoreが同じ定義を参照するよう修正した。Redでは共通module未存在を確認し、production codeの定義が1件だけであることを確認した。
+- backend lint、format check、build、全test（658件成功・2件skip）と新規workflow YAMLのPrettier checkが通過し、実staging URL・project refがrepositoryへ混入していないことを確認した。
 - 実削除・再実行・停止・fixture除去の確認はfixture workflowのPRをmerge後に実施するため、T19は実装中のままとする。
 
 ### タブ区切りタスクリスト

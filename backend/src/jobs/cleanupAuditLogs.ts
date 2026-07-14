@@ -1,7 +1,7 @@
 import { getAuditLogRetentionConfig, type AuditLogRetentionConfig } from "../lib/config.js";
 import { prisma } from "../lib/prisma.js";
+import { MILLISECONDS_PER_DAY } from "../lib/time.js";
 
-const MILLISECONDS_PER_DAY = 86_400_000;
 const CLEANUP_PREVIEWED_EVENT = "audit_logs.cleanup.previewed";
 const CLEANUP_COMPLETED_EVENT = "audit_logs.cleanup.completed";
 const CLEANUP_SKIPPED_EVENT = "audit_logs.cleanup.skipped";

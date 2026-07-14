@@ -1,4 +1,5 @@
-const MILLISECONDS_PER_DAY = 86_400_000;
+import { MILLISECONDS_PER_DAY } from "../lib/time.js";
+
 const INVALID_ENVIRONMENT_MESSAGE = "staging監査ログfixture設定が不正です";
 const INVALID_TIME_MESSAGE = "staging監査ログfixtureの基準時刻が不正です";
 const INVALID_RETENTION_MESSAGE = "staging監査ログfixtureの保持日数が不正です";

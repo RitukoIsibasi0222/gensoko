@@ -11,7 +11,6 @@ import {
 
 const NOW = new Date("2026-07-14T08:00:00.000Z");
 const RETENTION_DAYS = 365;
-const MILLISECONDS_PER_DAY = 86_400_000;
 const PROJECT_REF = "exampleprojectref";
 const INVALID_ENVIRONMENT_MESSAGE = "staging監査ログfixture設定が不正です";
 const VERIFICATION_FAILED_MESSAGE = "staging監査ログcleanup結果が正しくありません";
@@ -88,12 +87,12 @@ describe("staging audit cleanup fixtures", () => {
         expect.objectContaining({
           action: STAGING_EXPIRED_AUDIT_ACTION,
           result: "SUCCESS",
-          occurredAt: new Date(NOW.getTime() - 366 * MILLISECONDS_PER_DAY),
+          occurredAt: new Date("2025-07-13T08:00:00.000Z"),
         }),
         expect.objectContaining({
           action: STAGING_RETAINED_AUDIT_ACTION,
           result: "SUCCESS",
-          occurredAt: new Date(NOW.getTime() - 364 * MILLISECONDS_PER_DAY),
+          occurredAt: new Date("2025-07-15T08:00:00.000Z"),
         }),
       ],
     });
