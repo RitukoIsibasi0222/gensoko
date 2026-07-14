@@ -8,16 +8,16 @@
 
 ## テーブル一覧
 
-| テーブル名 | 役割 |
-|-----------|------|
-| `Element` | 元素マスターデータ（固定データ） |
-| `User` | ユーザーアカウント |
-| `RefreshToken` | リフレッシュトークン管理 |
-| `WeakElement` | 苦手リスト |
-| `GameSession` | ゲーム1回分の記録 |
-| `GameAnswer` | ゲーム内の各問の回答記録 |
-| `UserStats` | ユーザー集計統計（キャッシュ用） |
-| `AuditLog` | セキュリティ上重要な操作の監査証跡 |
+| テーブル名     | 役割                               |
+| -------------- | ---------------------------------- |
+| `Element`      | 元素マスターデータ（固定データ）   |
+| `User`         | ユーザーアカウント                 |
+| `RefreshToken` | リフレッシュトークン管理           |
+| `WeakElement`  | 苦手リスト                         |
+| `GameSession`  | ゲーム1回分の記録                  |
+| `GameAnswer`   | ゲーム内の各問の回答記録           |
+| `UserStats`    | ユーザー集計統計（キャッシュ用）   |
+| `AuditLog`     | セキュリティ上重要な操作の監査証跡 |
 
 ---
 
@@ -217,36 +217,36 @@ model UserStats {
 
 - `actorId`・`targetId`には意図的にUser relationと外部キーを追加しない。User row削除後も保持期間中の操作相関を維持するためである
 - 内部IDを使ってUserを自動joinせず、公開API・UIへ返さない
-- 暫定保持期間は365日で、`AUDIT_LOG_RETENTION_DAYS`からUTC cutoffを計算する
+- 正式保持期間は365日で、`AUDIT_LOG_RETENTION_DAYS`からUTC cutoffを計算する
 - cleanupは既存の`occurredAt DESC, id DESC`複合indexを使い、`occurredAt < cutoff`のIDを古い順に最大500件ずつ取得する
 - 削除時は取得済みIDとcutoff条件を再指定し、1回最大10,000件・最大8分で停止する
 - 保持期限列、User relation、個別legal hold列、cleanup用の追加migrationは初期実装では追加しない
-- 正式な保持期間と内部ID保持は承認前の暫定方針であり、`AUDIT_LOG_CLEANUP_ENABLED=false`を本番release gateとする
+- 保持期間と内部ID保持は2026-07-14にプロダクトオーナー`RitukoIsibasi0222`が承認した。その他のrelease gate完了までは`AUDIT_LOG_CLEANUP_ENABLED=false`を維持する
 
 ### 監査ログindex
 
-| Prisma定義 | 用途 |
-|---|---|
-| `@@index([occurredAt(sort: Desc), id(sort: Desc)])` | cleanupの期限検索・安定順序、時系列参照 |
-| `@@index([action, occurredAt(sort: Desc)])` | 操作種別ごとの調査 |
-| `@@index([targetType, targetId, occurredAt(sort: Desc)])` | 対象内部IDごとの相関調査 |
+| Prisma定義                                                | 用途                                    |
+| --------------------------------------------------------- | --------------------------------------- |
+| `@@index([occurredAt(sort: Desc), id(sort: Desc)])`       | cleanupの期限検索・安定順序、時系列参照 |
+| `@@index([action, occurredAt(sort: Desc)])`               | 操作種別ごとの調査                      |
+| `@@index([targetType, targetId, occurredAt(sort: Desc)])` | 対象内部IDごとの相関調査                |
 
 ---
 
 ## 元素分類の定義
 
-| 日本語名 | 英語名 |
-|---------|--------|
-| 非金属 | Nonmetal |
-| アルカリ金属 | Alkali Metal |
-| アルカリ土類金属 | Alkaline Earth Metal |
-| 遷移金属 | Transition Metal |
-| 後遷移金属 | Post-transition Metal |
-| 半金属 | Metalloid |
-| ハロゲン | Halogen |
-| 希ガス | Noble Gas |
-| ランタノイド | Lanthanide |
-| アクチノイド | Actinide |
+| 日本語名         | 英語名                |
+| ---------------- | --------------------- |
+| 非金属           | Nonmetal              |
+| アルカリ金属     | Alkali Metal          |
+| アルカリ土類金属 | Alkaline Earth Metal  |
+| 遷移金属         | Transition Metal      |
+| 後遷移金属       | Post-transition Metal |
+| 半金属           | Metalloid             |
+| ハロゲン         | Halogen               |
+| 希ガス           | Noble Gas             |
+| ランタノイド     | Lanthanide            |
+| アクチノイド     | Actinide              |
 
 ---
 

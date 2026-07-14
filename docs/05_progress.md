@@ -172,7 +172,12 @@
 - [x] bcrypt 72バイト上限の入力検証統一（UTF-8バイト数、登録・変更・リセット・管理者CLI、既存ユーザー互換性、フロント表示、72/73バイト境界テスト） — 計画書: [`docs/plans/bcrypt-password-byte-limit/plan.md`](plans/bcrypt-password-byte-limit/plan.md) / PR: #82
 - [x] セキュリティヘッダーミドルウェア（CSP/HSTS/X-Frame-Options/nosniff等） — 計画書: [`docs/plans/security-headers/plan.md`](plans/security-headers/plan.md) / PR: #84
 - [-] APIレート制限の本番設計・適用（認証系 / 一般API / `POST /game/sessions`） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md) — Hono・フロントエンド先行実装済み。本番Durable Object・WAF・実機検証はフェーズ12基盤後に実施
-- [-] 監査ログ本番運用設計（保持期間・容量監視・cleanup・退会後の内部ID保持方針） — 計画書: [docs/plans/audit-log-production-operations/plan.md](plans/audit-log-production-operations/plan.md)
+- [-] 監査ログ本番運用設計（保持期間365日・退会後内部IDの同期間保持は2026-07-14承認済み。T20完了、T21の7日baseline観測中） — 計画書: [docs/plans/audit-log-production-operations/plan.md](plans/audit-log-production-operations/plan.md)
+  - [x] T20: production容量監視・通知先・暗号化backup・migration gateを実環境で確認
+  - [-] T21: production初回dry-run成功。2026-07-21 22:55 JSTまで7日間の増加量baselineを観測
+  - [ ] 手動運用確認: 10,000件上限、上限後の残件通知、schedule/manual直列化、Actions失敗、retention変更前dry-run
+  - [ ] 本番アプリ公開後の監査回帰: LOGIN success/failure、password change/reset、admin操作、本人・管理者退会、API status/body/Cookie
+  - [ ] T22: 7日baselineと残課題を記録し、完了記録用docs PRをreview後developへmerge
 - [ ] 退会時の個人情報・学習データ完全削除方針（本人退会・管理者強制退会・既存soft-deleted userの移行） — 監査ログ保持とは分離した本番公開前ブロッカー
 - [ ] エラートラッキング・構造化ログ導入（500通知・requestId・個人情報除外）
 - [ ] ダークモード対応（OS設定追従 + トグルボタン）
@@ -183,7 +188,7 @@
 ## フェーズ12: デプロイ
 
 - [x] Supabase staging・production project作成、東京region・Session pooler接続設定
-- [-] 本番DBバックアップ・Prismaマイグレーション運用（Free plan暗号化backup・容量監視workflow実装中） — 計画書: [`docs/plans/audit-log-production-operations/plan.md`](plans/audit-log-production-operations/plan.md)
+- [x] 本番DBバックアップ・Prismaマイグレーション運用（Free plan容量確認・暗号化backup・migration gateをproductionで確認済み） — 計画書: [`docs/plans/audit-log-production-operations/plan.md`](plans/audit-log-production-operations/plan.md)
 - [ ] Cloudflare Workers wrangler.toml + @prisma/adapter-cloudflare 設定・デプロイ
 - [ ] APIレート制限の本番適用継続（Workers専用entrypoint・SQLite-backed Durable Object・WAF・staging/production実機確認） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md)（フェーズ11先行実装の続き）
 - [ ] Vercel SvelteKit デプロイ・環境変数設定

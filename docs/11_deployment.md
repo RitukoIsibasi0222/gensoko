@@ -406,18 +406,18 @@ T19では次の順序を変更しない。
 
 次の全項目を記録するまで、productionの`AUDIT_LOG_CLEANUP_ENABLED`を`true`にしない。
 
-| 項目         | 現在の記録                                                      | 状態               |
-| ------------ | --------------------------------------------------------------- | ------------------ |
-| 正式保持期間 | 365日を暫定推奨                                                 | 未承認             |
-| 保持目的     | セキュリティインシデント・管理者操作の相関調査                  | 承認待ち           |
-| 内部ID保持   | 監査rowと同期間だけ`actorId`・`targetId`を保持                  | 承認待ち           |
-| 承認者       | プロダクトオーナーまたはプライバシー責任者                      | 担当者未確定       |
-| 一次対応者   | `RitukoIsibasi0222`                                             | 2026-07-14設定     |
-| 通知先       | GitHub Actions failureの登録メール（failed workflowのみ）       | 2026-07-14設定     |
-| 容量         | Supabase Free 500MB、警告350MB、重大425MB                       | workflow実行待ち   |
-| backup/PITR  | Freeの自動backup・PITRなし。暗号化論理backupをArtifactへ7日保持 | 初回backup成功待ち |
+| 項目         | 現在の記録                                                      | 状態                  |
+| ------------ | --------------------------------------------------------------- | --------------------- |
+| 正式保持期間 | 365日                                                           | 2026-07-14承認        |
+| 保持目的     | セキュリティインシデント・管理者操作の相関調査                  | 2026-07-14承認        |
+| 内部ID保持   | 監査rowと同じ365日だけ`actorId`・`targetId`を保持               | 2026-07-14承認        |
+| 承認者       | プロダクトオーナー`RitukoIsibasi0222`                           | 2026-07-14記録        |
+| 一次対応者   | `RitukoIsibasi0222`                                             | 2026-07-14設定        |
+| 通知先       | GitHub Actions failureの登録メール（failed workflowのみ）       | 2026-07-14設定        |
+| 容量         | Supabase Free 500MB、警告350MB、重大425MB                       | 初回run成功・Disk 13% |
+| backup/PITR  | Freeの自動backup・PITRなし。暗号化論理backupをArtifactへ7日保持 | 2026-07-14初回成功    |
 
-正式決定時は値、目的、承認者、承認日、適用者、適用日時をこの表へ追記する。未確定欄を残したままcleanupを有効化しない。
+保持期間・目的・承認者は上表をsource of truthとし、変更時は変更前dry-runと再承認を記録する。7日baseline、soft delete不整合、その他release gateが完了するまでcleanupを有効化しない。
 
 ### 監査ログcleanupの監視
 
@@ -571,11 +571,11 @@ T19では次の順序を変更しない。
 [ ] 本番API hostnameが対象zoneのWAFを通り、直接到達・迂回経路がないことを確認
 [x] GitHub Actions production Environmentの DATABASE_URL Secret を設定（migrate deploy 用）
 [x] GitHub Actions Variables に AUDIT_LOG_RETENTION_DAYS と AUDIT_LOG_CLEANUP_ENABLED=false を設定
-[-] 本番DB暗号化backup workflowを実装し、初回Artifactを確認
-[ ] 監査ログの正式保持期間・内部ID保持・承認者・通知先を記録
-[-] DB容量70%/85% workflowを実装し、GitHub Actions failureの受信者を設定（初回run待ち）
-[ ] production dry-runと初回executeの結果を記録
-[ ] prisma migrate deploy の実行タイミングを確認
+[x] 本番DB暗号化backup workflowを実装し、初回Artifactを確認
+[x] 監査ログの正式保持期間・内部ID保持・承認者・通知先を記録
+[x] DB容量70%/85% workflowを実装し、GitHub Actions failureの受信者を設定
+[-] production dry-runは成功。初回executeは全release gate完了後に実施
+[x] prisma migrate deploy の実行タイミングを確認
 [ ] wrangler deploy で初回デプロイ
 [ ] GitHub Actions の Secrets 設定（CI/CD）
 [ ] エラートラッキングまたは構造化ログの通知先を設定

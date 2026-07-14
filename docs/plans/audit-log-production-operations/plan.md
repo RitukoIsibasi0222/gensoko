@@ -175,30 +175,32 @@
 
 実装開始前に以下を記録する。
 
-| 確認事項                      | 推奨案                                         | 承認者・確定値     |
-| ----------------------------- | ---------------------------------------------- | ------------------ |
-| 保持期間                      | 365日                                          | 未確定             |
-| cleanup Cron                  | 毎日UTC 18:37（JST 03:37）                     | 未確定             |
-| 退会後内部ID                  | 監査rowと同じ期間保持し、監査row cleanupで削除 | 未確定             |
-| cleanup実行主体               | GitHub Actions schedule                        | 未確定             |
-| cleanup失敗通知先             | GitHub Actions失敗通知を開発担当へ送る         | 未確定             |
-| DB容量警告                    | 契約quotaの70%                                 | 本番DB作成後に確定 |
-| DB容量重大                    | 契約quotaの85%                                 | 本番DB作成後に確定 |
-| cleanup一次対応者             | 開発・運用担当者                               | 未確定             |
-| 保持期間変更承認者            | プロダクトオーナーまたはプライバシー責任者     | 未確定             |
-| 削除保留承認者                | インシデント責任者                             | 未確定             |
-| soft delete不整合の解消タスク | 本番公開前の別タスクとして追加                 | 未確定             |
+| 確認事項                      | 推奨案                                      | 承認者・確定値                      |
+| ----------------------------- | ------------------------------------------- | ----------------------------------- |
+| 保持期間                      | 365日                                       | `RitukoIsibasi0222`が2026-07-14承認 |
+| cleanup Cron                  | 毎日UTC 18:37（JST 03:37）                  | 2026-07-14確定                      |
+| 退会後内部ID                  | 監査rowと同じ365日保持し、row cleanupで削除 | `RitukoIsibasi0222`が2026-07-14承認 |
+| cleanup実行主体               | GitHub Actions schedule                     | 2026-07-14確定                      |
+| cleanup失敗通知先             | GitHub Actions失敗通知を登録メールへ送る    | 2026-07-14設定                      |
+| DB容量警告                    | Supabase Free 500MBの70%=350MB              | 2026-07-14確定                      |
+| DB容量重大                    | Supabase Free 500MBの85%=425MB              | 2026-07-14確定                      |
+| cleanup一次対応者             | `RitukoIsibasi0222`                         | 2026-07-14設定                      |
+| 保持期間変更承認者            | プロダクトオーナー`RitukoIsibasi0222`       | 2026-07-14設定                      |
+| 削除保留承認者                | インシデント責任者                          | 未確定                              |
+| soft delete不整合の解消タスク | 本番公開前の別タスクとして追加              | 未確定                              |
 
-これらが未確定の状態では`AUDIT_LOG_CLEANUP_ENABLED=true`を本番へ設定しない。
+削除保留承認者、soft delete不整合、7日baselineなど残るrelease gateが完了するまで`AUDIT_LOG_CLEANUP_ENABLED=true`を本番へ設定しない。
 
 ## 保持期間・削除保留方針
 
-### 推奨値
+### 正式値
 
-- 暫定推奨保持期間: 365日。
-- 法的義務を断定する値ではなく、インシデント調査能力と容量制御の初期バランスとして提案する。
-- プロダクトオーナーまたはプライバシー責任者の承認後に正式値とする。
-- 承認されない場合はcleanupを有効化せず、本計画を更新する。
+- 正式保持期間: 365日。
+- 利用目的: セキュリティインシデントおよび管理者操作の相関調査。
+- 承認者: プロダクトオーナー`RitukoIsibasi0222`。
+- 承認日: 2026-07-14。
+- 法的義務を断定する値ではなく、期間・目的をプライバシーポリシーへ記載して運用する。
+- 将来変更する場合は、変更前dry-runとプロダクトオーナーまたはプライバシー責任者の再承認を必須とする。
 
 ### source of truth
 
@@ -419,7 +421,7 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 
 ## 退会後の内部ID保持方針
 
-### 推奨案
+### 正式方針
 
 - `actorId`・`targetId`は監査ログの保持期間中だけ保持する。
 - 退会時に監査ログの内部IDを即時変更・削除しない。
@@ -428,7 +430,7 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 - User relationを追加しない。
 - 監査ログからUserを自動joinしない。
 - 利用目的をセキュリティインシデントと管理者操作の調査に限定する。
-- 保持期間は監査ログ本体と同じ365日を暫定推奨とする。
+- 保持期間は監査ログ本体と同じ365日とし、2026-07-14にプロダクトオーナー`RitukoIsibasi0222`が承認した。
 
 ### 選択肢比較
 
@@ -940,7 +942,7 @@ schema変更・backfillは想定しない。
 | T22 | plan・progress完了更新とdocs PR     | plan、docs/05_progress.md、git/GitHub                | 実変更・決定値・検証・PR・完了状態を整合しdevelopへmerge  | T21             | High   |
 
 - [x] T1: 既存監査・batch・本番基盤を再確認する
-- [-] T2: 保持期間・退会後ID保持・担当者・通知先を承認する（実装用暫定値は合意済み。本番承認者・通知先は未確定）
+- [x] T2: 保持期間365日・利用目的・退会後IDの同期間保持・担当者・通知先を承認する（`RitukoIsibasi0222`、2026-07-14承認）
 - [x] T3: `docs/05_progress.md`を実装中へ更新する
 - [x] T4: retention config testをRed化する
 - [x] T5: retention configと環境変数例を実装する
@@ -958,8 +960,8 @@ schema変更・backfillは想定しない。
 - [x] T17: Docker PostgreSQLで境界・分割・冪等性を確認する
 - [x] T18: 変更種別ごとにcommitし、実装PRをreview後developへmergeする（PR #90、2026-07-14 merge）
 - [x] T19: stagingでdry-run・cleanup・再実行・停止を確認する（2026-07-14完了）
-- [-] T20: production容量監視・通知・backup確認を完了する
-- [ ] T21: production初回実行と7日baselineを確認する
+- [x] T20: production容量監視・通知・backup確認を完了する（2026-07-14完了）
+- [-] T21: production初回実行と7日baselineを確認する（初回dry-run成功、2026-07-21 22:55 JSTまで観測中）
 - [ ] T22: planとprogressを実装完了へ更新し、docs PRをdevelopへmergeする
 
 ### T19 再開記録（2026-07-14）
@@ -1009,7 +1011,7 @@ schema変更・backfillは想定しない。
 - 後片付けとして期限内fixtureを削除し、staging Variablesを`AUDIT_LOG_CLEANUP_ENABLED=false`、`AUDIT_LOG_STAGING_FIXTURES_ENABLED=false`へ戻した。
 - `actions/checkout@v4`と`actions/setup-node@v4`のNode.js 20 deprecation警告は全Batch Jobs runで確認したが、job結果には影響しなかった。Actions major version更新はcleanup検証とは分離して対応する。
 
-### T20 production Free plan運用設定（2026-07-14、実装中）
+### T20 production Free plan運用設定（2026-07-14、完了）
 
 - production専用のFree organization`Gensoko Production`とSupabase project`gensoko-production`を東京regionへ作成し、Healthyであることを確認した。
 - Data APIとautomatic RLSは無効とし、PrismaからPostgreSQLへだけ接続する構成にした。
@@ -1023,7 +1025,20 @@ schema変更・backfillは想定しない。
 - Redでは`production-database.yml`未存在を確認し、Greenではproduction固定・Secret・容量閾値・暗号化backup・migration gateの契約test 5件が通過した。
 - backend lint、format check、build、全test（663件成功・2件skip）、workflow・関連docsのPrettier check、YAML parseが通過した。実project ref、接続文字列、publishable keyのrepository混入がないことも確認した。
 - Prisma schema・migration、公開API、frontendは変更していないため、`docs/04_api.md`更新とPlaywright回帰は不要と判断した。
-- T20完了には`BACKUP_ENCRYPTION_PASSPHRASE`登録、workflowのdevelopへのmerge、初回capacity check・backup・migration成功、Dashboard容量確認が残っている。
+- PR #94をreview後にdevelopへmergeした（merge commit: `b1f1e00cc7bc63bc92f952aac4edef413872326b`）。
+- production Environment Secretへ`BACKUP_ENCRYPTION_PASSPHRASE`の値を公開せず登録した。復元用passphraseはpassword managerでの保管を必須とする。
+- capacity check [#29322946812](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29322946812)が成功し、Supabase DashboardでもHealthy・Disk 13%を確認した。
+- 暗号化backup [#29322979476](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29322979476)が暗号化・復号検証・Artifact uploadまで成功した。
+- backup run IDと期限内Artifactを確認後、migration [#29323085012](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29323085012)で`prisma migrate deploy`が成功した。
+
+### T21 production初回実行（2026-07-14、baseline観測中）
+
+- productionの手動dry-run [#29338470913](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29338470913)が終了code 0で成功した。
+- cutoff `2025-07-14T13:54:42.591Z`、保持365日、期限超過0件、削除0件、`hasExpiredRows=false`、`minimumRunsRequired=0`を確認した。
+- execute stepは実行されず、`AUDIT_LOG_CLEANUP_ENABLED=false`を維持している。
+- logに接続文字列、project ref、publishable key、内部ID、監査ログID、PII、raw errorがないことを確認した。
+- 7日baseline観測期間は2026-07-14 22:54 JSTから2026-07-21 22:55 JSTまでとする。
+- baseline観測後も、productionアプリ公開後の監査回帰とsoft delete不整合は別の未完了gateとして残す。
 
 ### タブ区切りタスクリスト
 
@@ -1055,8 +1070,8 @@ T22	plan・progress完了更新・docs PR	plan・docs/05_progress.md・git/GitHu
 
 ## セキュリティ・プライバシー確認項目
 
-- [ ] 保持期間と利用目的が承認されている。
-- [ ] 退会後内部ID保持が承認されている。
+- [x] 保持期間と利用目的が承認されている。
+- [x] 退会後内部ID保持が承認されている。
 - [x] cleanup無効が安全側の既定値である。
 - [x] retention未設定・不正時に削除しない。
 - [x] dry-runが既定である。
@@ -1074,15 +1089,15 @@ T22	plan・progress完了更新・docs PR	plan・docs/05_progress.md・git/GitHu
 - [x] プライバシーポリシーへ必要な記載要件が引き継がれている。
 - [x] 公開cleanup APIがない。
 - [x] 監査ログ閲覧権限を今回追加していない。
-- [ ] 本番通知先と一次対応者が設定されている。
-- [ ] 本番容量閾値がDB planと整合している。
+- [x] 本番通知先と一次対応者が設定されている。
+- [x] 本番容量閾値がDB planと整合している。
 
 ## 手動確認項目
 
 - [x] Docker内CLIを引数なしで実行し、dry-runになる。
 - [x] `--dry-run`でDBが変更されない。
 - [x] cleanup無効状態の`--execute`でDBが変更されない。
-- [ ] cleanup有効状態の`--execute`で期限超過rowだけが削除される。
+- [x] cleanup有効状態の`--execute`で期限超過rowだけが削除される。
 - [x] cutoffと同時刻のrowが残る。
 - [x] cutoffより新しいrowが残る。
 - [x] 500件超を複数batchで処理する。
@@ -1091,15 +1106,15 @@ T22	plan・progress完了更新・docs PR	plan・docs/05_progress.md・git/GitHu
 - [x] 二重実行しても結果が壊れない。
 - [ ] scheduleとmanual dispatchが同時実行されない。
 - [ ] cleanup失敗時にActionsが失敗する。
-- [ ] workflow_dispatchで再実行できる。
-- [ ] cleanup停止手順が機能する。
+- [x] workflow_dispatchで再実行できる。
+- [x] cleanup停止手順が機能する。
 - [ ] retention変更前にdry-runできる。
 - [ ] 定期health checkが正確な全件countを実行しない。
-- [ ] 状態logから24時間増加、期限超過有無、最古・最新日時を確認できる。
-- [ ] logに内部ID・監査ログID・PII・秘密情報がない。
-- [ ] 本番DBの使用量をprovider metricsで確認できる。
-- [ ] 70%・85%閾値の通知先が設定されている。
-- [ ] backupまたはPITR状態を確認できる。
+- [x] 状態logから24時間増加、期限超過有無、最古・最新日時を確認できる。
+- [x] logに内部ID・監査ログID・PII・秘密情報がない。
+- [x] 本番DBの使用量をprovider metricsで確認できる。
+- [x] 70%・85%閾値の通知先が設定されている。
+- [x] backupまたはPITR状態を確認できる。
 - [ ] LOGIN success/failure監査が継続する。
 - [ ] password change/reset監査が継続する。
 - [ ] admin操作監査が継続する。
