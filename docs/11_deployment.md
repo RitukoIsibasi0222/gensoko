@@ -322,6 +322,8 @@ Actionsのscheduleは遅延・スキップされる可能性があるため、�
 
 `.github/workflows/staging-audit-cleanup-fixtures.yml`は手動実行専用で、GitHub Environmentを`staging`へ固定する。次の多重guardをすべて満たさない限りPrismaへ接続しない。
 
+Batch Jobsと同じ`gensoko-batch-jobs` concurrency groupを使用し、fixture操作と監査ログcleanupを相互に直列化する。実行中のjobはcancelせず、先に開始した操作の完了を待つ。
+
 - `BATCH_ENVIRONMENT=staging`
 - `AUDIT_LOG_STAGING_FIXTURES_ENABLED=true`
 - `STAGING_SUPABASE_PROJECT_REF`と`DATABASE_URL`のusername内project refが一致

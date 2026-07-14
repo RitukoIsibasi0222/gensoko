@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 20
     environment: staging
     concurrency:
-      group: gensoko-staging-audit-cleanup-fixtures
+      group: gensoko-batch-jobs
       cancel-in-progress: false
     permissions:
       contents: read

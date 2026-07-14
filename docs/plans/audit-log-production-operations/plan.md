@@ -978,7 +978,7 @@ schema変更・backfillは想定しない。
 - staging Environment Variablesへ`STAGING_SUPABASE_PROJECT_REF`と、安全側で無効な`AUDIT_LOG_STAGING_FIXTURES_ENABLED=false`を登録した。
 - fixture workflowは`BATCH_ENVIRONMENT=staging`、明示的なfixture有効化、project ref一致、Supabase Session pooler host・port 5432をすべて確認してからPrismaへ接続する。
 - Redではfixture moduleとworkflowが未存在で失敗することを確認し、Green・Refactor後はfixture・CLI・workflow test 28件が通過した。
-- backend lint、format check、build、全test（656件成功・2件skip）と新規workflow YAMLのPrettier checkが通過し、実staging URL・project refがrepositoryへ混入していないことを確認した。
+- backend lint、format check、build、全test（657件成功・2件skip）と新規workflow YAMLのPrettier checkが通過し、実staging URL・project refがrepositoryへ混入していないことを確認した。
 - 実削除・再実行・停止・fixture除去の確認はfixture workflowのPRをmerge後に実施するため、T19は実装中のままとする。
 
 ### タブ区切りタスクリスト

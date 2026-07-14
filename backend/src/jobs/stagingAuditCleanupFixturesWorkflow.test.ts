@@ -16,6 +16,12 @@ describe("staging audit cleanup fixture workflow", () => {
     expect(workflow).not.toContain("production");
   });
 
+  it("serializes fixture operations with Batch Jobs", () => {
+    expect(workflow).toContain("group: gensoko-batch-jobs");
+    expect(workflow).not.toContain("group: gensoko-staging-audit-cleanup-fixtures");
+    expect(workflow).toContain("cancel-in-progress: false");
+  });
+
   it("offers only prepare, verify-cleaned, and remove operations", () => {
     expect(workflow).toContain("operation:");
     expect(workflow).toContain("- prepare");
