@@ -23,11 +23,11 @@
                          └──────────────────────┘
 ```
 
-| サービス | 役割 | 費用 |
-|---------|------|------|
-| **Vercel** | SvelteKitの画面を配信 | **完全無料**（個人利用） |
-| **Cloudflare Workers** | Hono APIサーバー | **完全無料**（日10万リクエストまで） |
-| **Supabase** | PostgreSQLデータベース | **無料枠あり**（500MB・2プロジェクト） |
+| サービス               | 役割                   | 費用                                   |
+| ---------------------- | ---------------------- | -------------------------------------- |
+| **Vercel**             | SvelteKitの画面を配信  | **完全無料**（個人利用）               |
+| **Cloudflare Workers** | Hono APIサーバー       | **完全無料**（日10万リクエストまで）   |
+| **Supabase**           | PostgreSQLデータベース | **無料枠あり**（500MB・2プロジェクト） |
 
 > ✅ スリープなし。全サービスGitHubと連携して自動デプロイ。
 
@@ -63,24 +63,25 @@
 
 ### 開発環境（ローカル）
 
-| サービス | URL |
-|---------|-----|
-| SvelteKit | `http://localhost:5174` |
-| Hono API | `http://localhost:3000` |
+| サービス            | URL                     |
+| ------------------- | ----------------------- |
+| SvelteKit           | `http://localhost:5174` |
+| Hono API            | `http://localhost:3000` |
 | DB（Prisma Studio） | `http://localhost:5555` |
-| メール確認 | `http://localhost:8025` |
+| メール確認          | `http://localhost:8025` |
 
 ### 本番環境
 
-| サービス | URL例 |
-|---------|-------|
-| SvelteKit | `https://gensoko.vercel.app`（または独自ドメイン） |
-| Hono API | `https://gensoko-api.あなたのユーザー名.workers.dev` |
+| サービス  | URL例                                                |
+| --------- | ---------------------------------------------------- |
+| SvelteKit | `https://gensoko.vercel.app`（または独自ドメイン）   |
+| Hono API  | `https://gensoko-api.あなたのユーザー名.workers.dev` |
 
 > 💡 独自ドメイン（例: `gensoko.com`）を取得した場合：
+>
 > - `gensoko.com` → Vercel（フロントエンド）
 > - `api.gensoko.com` → Cloudflare Workers（API）
-> 独自ドメインはどちらのサービスも無料で設定できます。
+>   独自ドメインはどちらのサービスも無料で設定できます。
 
 ---
 
@@ -162,14 +163,16 @@ VITE_API_BASE_URL = https://gensoko-api.あなたのユーザー名.workers.dev/
 
 1. https://supabase.com にアクセス
 2. 「Start your project」→ GitHubアカウントで登録
-3. 「New Project」をクリック
-4. 設定:
-   - Project name: `gensoko`
-   - Database Password: **強いパスワードを設定してメモしておく**
+3. stagingは`gensoko-staging`、productionは別Free organizationの`gensoko-production`として作成する
+4. 両projectを次の設定にする:
+   - Database Password: password managerで生成・保存し、環境間で共用しない
    - Region: Northeast Asia (Tokyo)
-5. 作成完了後、「Settings」→「Database」→「Connection string」→「URI」をコピー
+   - Data API: 無効（GensokoはSupabase client libraryではなくPrismaからPostgreSQLへ接続する）
+   - Automatic RLS: 無効
+5. 作成完了後、`Connect`のPrisma設定からSession pooler（port 5432）のURIを取得する
+6. GitHub Environmentごとの`DATABASE_URL`へ登録し、repository共通Secretには登録しない
 
-このURLを Cloudflare Workers の `DATABASE_URL` に設定します。
+Cloudflare Workers実行時の接続URLは、Actionsとは分離して`wrangler secret put DATABASE_URL`で設定する。
 
 ---
 
@@ -179,8 +182,61 @@ VITE_API_BASE_URL = https://gensoko-api.あなたのユーザー名.workers.dev/
 
 - 本番DBの変更は `prisma migrate deploy` でのみ適用する
 - `prisma migrate deploy` は GitHub Actions の本番デプロイ中、Cloudflare Workers への API デプロイ前に実行する
-- 実行前に Supabase のバックアップ取得状況または手動バックアップ時刻を確認する
+- 実行前に24時間以内の暗号化backup workflowが成功し、Artifactが期限内であることを確認する
 - `DATABASE_URL`はGitHub Actions Secretとして管理し、リポジトリや`wrangler.toml`には書かない
+
+### Free planのbackup・容量監視
+
+productionはSupabase Free planで運用する。[Supabase pricing](https://supabase.com/pricing)上、Free planはDB容量500MBで、自動backup・PITR・Metrics endpointを利用できない。[Database Backups](https://supabase.com/docs/guides/platform/backups)でもFree projectは`supabase db dump`による外部backupが推奨されている。
+
+`.github/workflows/production-database.yml`はproduction Environmentへ固定し、既存batchと同じ`gensoko-batch-jobs`concurrency groupでDB操作を直列化する。
+
+| operation        | schedule                     | 内容                                                                                     |
+| ---------------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
+| `capacity-check` | UTC毎日19:23（JST毎日04:23） | `pg_database_size(current_database())`でDB容量を取得し、500MBに対する使用率を確認        |
+| `backup`         | UTC土曜19:41（JST日曜04:41） | roles・schema・dataをdumpし、AES-256で暗号化・復号検証してArtifactへ7日保存              |
+| `migrate-deploy` | 手動のみ                     | 24時間以内に成功したbackup run IDと期限内Artifactを確認後、`prisma migrate deploy`を実行 |
+
+容量閾値はFree quotaの70%=350MBを警告、85%=425MBを重大とする。どちらもworkflowを失敗させ、GitHub Actionsのfailed workflowメール通知へ接続する。workflowの値はDB本体の論理容量であり、最終確認はSupabase Dashboardのdatabase usageをsource of truthとする。
+
+### 暗号化backup
+
+production Environment Secretへ`BACKUP_ENCRYPTION_PASSPHRASE`を登録する。20文字以上の本番専用値をpassword managerで生成し、DB passwordと共用しない。復元時に必要なため、GitHubだけでなくpassword managerにも保存する。
+
+backup workflowはSupabase公式手順に従い、次を作成する。
+
+- `roles.sql`: custom role
+- `schema.sql`: Supabase管理schemaを除外したschema
+- `data.sql`: `--data-only --use-copy`で取得したdata
+
+平文3ファイルを一時archiveへまとめ、GnuPGのAES-256 symmetric encryptionで暗号化する。同じpassphraseで復号し、3ファイルを再確認してから、暗号化ファイルとSHA-256だけをArtifactへuploadする。平文dumpと復号確認用archiveはrunner終了前に削除する。repositoryはpublicのため、平文dumpをcommit・Artifact・logへ出してはいけない。
+
+### backupの手動実行と復元
+
+初回migration前と、破壊的変更を含むmigration前は次の順序を守る。
+
+1. Actions > Production Database Operations > Run workflowを開く。
+2. branchは`develop`、operationは`backup`を選択する。
+3. 成功後、run IDと`production-db-backup-{run ID}`Artifactの存在を確認する。
+4. 24時間以内にoperation `migrate-deploy`を選び、`confirmed_backup_run_id`へrun IDだけを入力する。
+5. backup確認stepと`prisma migrate deploy`の両方が成功したことを確認する。
+
+復元はDB担当者の承認後だけ行う。対象Artifactをdownloadし、password managerからpassphraseを読み出して次の順に確認する。
+
+```bash
+sha256sum --check production-db-backup-<run-id>.tar.gz.gpg.sha256
+
+printf '%s' "$BACKUP_ENCRYPTION_PASSPHRASE" | gpg --decrypt \
+  --batch \
+  --pinentry-mode loopback \
+  --passphrase-fd 0 \
+  --output production-db-backup.tar.gz \
+  production-db-backup-<run-id>.tar.gz.gpg
+
+tar -xzf production-db-backup.tar.gz
+```
+
+復元先には新しいSupabase projectを用意し、現在のproductionへ直接上書きしない。`roles.sql`、`schema.sql`、`data.sql`の順で`psql --single-transaction --set ON_ERROR_STOP=1`を使って復元し、検証後に切替可否を判断する。復元作業中も接続URL、password、passphraseをterminal log・Issue・PR・チャットへ残さない。
 
 ### ロールバック方針
 
@@ -214,7 +270,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v25
         with:
@@ -222,7 +278,7 @@ jobs:
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           working-directory: frontend
-          vercel-args: '--prod'
+          vercel-args: "--prod"
 
   deploy-backend:
     name: Deploy Hono to Cloudflare Workers
@@ -231,7 +287,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
       - name: Install dependencies
         working-directory: backend
         run: npm install
@@ -266,28 +322,29 @@ jobs:
 
 ### 実行スケジュール
 
-| job | GitHub Actions cron | 意味 | 備考 |
-|---|---|---|---|
-| 週間スコアリセット | 7 15 * * 0 | UTC 日曜 15:07 = JST 月曜 00:07 | wrapper は Cloudflare 形式の 0 15 * * SUN も受け付ける |
-| GameQuestionSet cleanup | 17,47 * * * * | 毎時17分/47分（30分ごと） | 問題セットの有効期限30分に合わせる |
-| 監査ログcleanup | 37 18 * * * | UTC毎日18:37 = JST毎日03:37 | cleanup無効時は状態確認後にskipする |
+| job                     | GitHub Actions cron | 意味                            | 備考                                                     |
+| ----------------------- | ------------------- | ------------------------------- | -------------------------------------------------------- |
+| 週間スコアリセット      | 7 15 \* \* 0        | UTC 日曜 15:07 = JST 月曜 00:07 | wrapper は Cloudflare 形式の 0 15 \* \* SUN も受け付ける |
+| GameQuestionSet cleanup | 17,47 \* \* \* \*   | 毎時17分/47分（30分ごと）       | 問題セットの有効期限30分に合わせる                       |
+| 監査ログcleanup         | 37 18 \* \* \*      | UTC毎日18:37 = JST毎日03:37     | cleanup無効時は状態確認後にskipする                      |
 
 ### 必要なSecret・Variables
 
 GitHub の Settings > Environments で`staging`と`production`を分離し、それぞれに以下を登録する。repository共通の`DATABASE_URL`、`BATCH_ENVIRONMENT`、`AUDIT_LOG_RETENTION_DAYS`、`AUDIT_LOG_CLEANUP_ENABLED`は登録しない。
 
-| Environment | 種別 | 名前 | 値・扱い |
-|---|---|---|---|
-| staging | Secret | `DATABASE_URL` | staging専用DB接続文字列。workflow・リポジトリ・ログへ直接書かない |
-| staging | Variable | `BATCH_ENVIRONMENT` | `staging` |
-| staging | Variable | `AUDIT_LOG_RETENTION_DAYS` | 検証用`365` |
-| staging | Variable | `AUDIT_LOG_CLEANUP_ENABLED` | 初期値`false`。実削除確認中だけ明示的に`true`へ変更する |
-| staging | Variable | `AUDIT_LOG_STAGING_FIXTURES_ENABLED` | 初期値`false`。T19のfixture操作中だけ`true`へ変更する |
-| staging | Variable | `STAGING_SUPABASE_PROJECT_REF` | staging Supabase project ref。接続先取り違え防止用で、URLやpasswordは含めない |
-| production | Secret | `DATABASE_URL` | production専用DB接続文字列。stagingと共用しない |
-| production | Variable | `BATCH_ENVIRONMENT` | `production` |
-| production | Variable | `AUDIT_LOG_RETENTION_DAYS` | 正式承認後の保持日数 |
-| production | Variable | `AUDIT_LOG_CLEANUP_ENABLED` | 全release gate完了までは`false` |
+| Environment | 種別     | 名前                                 | 値・扱い                                                                            |
+| ----------- | -------- | ------------------------------------ | ----------------------------------------------------------------------------------- |
+| staging     | Secret   | `DATABASE_URL`                       | staging専用DB接続文字列。workflow・リポジトリ・ログへ直接書かない                   |
+| staging     | Variable | `BATCH_ENVIRONMENT`                  | `staging`                                                                           |
+| staging     | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 検証用`365`                                                                         |
+| staging     | Variable | `AUDIT_LOG_CLEANUP_ENABLED`          | 初期値`false`。実削除確認中だけ明示的に`true`へ変更する                             |
+| staging     | Variable | `AUDIT_LOG_STAGING_FIXTURES_ENABLED` | 初期値`false`。T19のfixture操作中だけ`true`へ変更する                               |
+| staging     | Variable | `STAGING_SUPABASE_PROJECT_REF`       | staging Supabase project ref。接続先取り違え防止用で、URLやpasswordは含めない       |
+| production  | Secret   | `DATABASE_URL`                       | production専用DB接続文字列。stagingと共用しない                                     |
+| production  | Secret   | `BACKUP_ENCRYPTION_PASSPHRASE`       | 20文字以上のbackup暗号化専用値。password managerにも保存し、DB passwordと共用しない |
+| production  | Variable | `BATCH_ENVIRONMENT`                  | `production`                                                                        |
+| production  | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 正式承認後の保持日数                                                                |
+| production  | Variable | `AUDIT_LOG_CLEANUP_ENABLED`          | 全release gate完了までは`false`                                                     |
 
 workflow jobは選択されたEnvironmentを参照する。手動実行は`staging`が既定で、scheduleは`production`を参照する。`BATCH_ENVIRONMENT`が選択環境と一致しない場合、または`DATABASE_URL`が未登録の場合は、DB処理や依存関係installの前に失敗する。
 
@@ -308,13 +365,13 @@ Staging Database Setup workflowは手動実行専用で、GitHub Environmentを`
 
 GitHub Actions の Batch Jobs workflow は workflow_dispatch に対応している。最初に`target_environment`を選び、次に`batch_job`を選ぶ。T19では必ず`staging`を選択する。`production`はT20のrelease gate完了前に選択しない。
 
-| 入力 | 選択肢 | 実行内容 |
-|---|---|---|
-| `target_environment` | `staging` / `production` | 手動実行の接続先。既定は`staging` |
-| `batch_job` | `weekly-reset` | 週間スコアリセット |
-| `batch_job` | `game-question-set-cleanup` | 期限切れ GameQuestionSet cleanup |
-| `batch_job` | `audit-log-cleanup-dry-run` | 期限超過件数とcutoffをpreviewし、削除しない |
-| `batch_job` | `audit-log-cleanup-execute` | cleanup有効時だけ実削除する |
+| 入力                 | 選択肢                      | 実行内容                                    |
+| -------------------- | --------------------------- | ------------------------------------------- |
+| `target_environment` | `staging` / `production`    | 手動実行の接続先。既定は`staging`           |
+| `batch_job`          | `weekly-reset`              | 週間スコアリセット                          |
+| `batch_job`          | `game-question-set-cleanup` | 期限切れ GameQuestionSet cleanup            |
+| `batch_job`          | `audit-log-cleanup-dry-run` | 期限超過件数とcutoffをpreviewし、削除しない |
+| `batch_job`          | `audit-log-cleanup-execute` | cleanup有効時だけ実削除する                 |
 
 Actionsのscheduleは遅延・スキップされる可能性があるため、毎時00分付近を避けて7分・17分・37分・47分に分散している。workflowのconcurrency groupは`gensoko-batch-jobs`で固定し、scheduleと手動実行を直列化する。失敗時は安全ログを確認し、原因解消後にworkflow_dispatchで再実行する。
 
@@ -349,15 +406,16 @@ T19では次の順序を変更しない。
 
 次の全項目を記録するまで、productionの`AUDIT_LOG_CLEANUP_ENABLED`を`true`にしない。
 
-| 項目 | 現在の記録 | 状態 |
-|---|---|---|
-| 正式保持期間 | 365日を暫定推奨 | 未承認 |
-| 保持目的 | セキュリティインシデント・管理者操作の相関調査 | 承認待ち |
-| 内部ID保持 | 監査rowと同期間だけ`actorId`・`targetId`を保持 | 承認待ち |
-| 承認者 | プロダクトオーナーまたはプライバシー責任者 | 担当者未確定 |
-| 一次対応者 | GitHub Actions・DB警告を確認する開発担当 | チーム未確定 |
-| 通知先 | GitHub Actions failureとDB provider容量警告 | 受信者未設定 |
-| backup/PITR | 初回実削除前に復元可能性と保持状態を確認 | 未確認 |
+| 項目         | 現在の記録                                                      | 状態               |
+| ------------ | --------------------------------------------------------------- | ------------------ |
+| 正式保持期間 | 365日を暫定推奨                                                 | 未承認             |
+| 保持目的     | セキュリティインシデント・管理者操作の相関調査                  | 承認待ち           |
+| 内部ID保持   | 監査rowと同期間だけ`actorId`・`targetId`を保持                  | 承認待ち           |
+| 承認者       | プロダクトオーナーまたはプライバシー責任者                      | 担当者未確定       |
+| 一次対応者   | `RitukoIsibasi0222`                                             | 2026-07-14設定     |
+| 通知先       | GitHub Actions failureの登録メール（failed workflowのみ）       | 2026-07-14設定     |
+| 容量         | Supabase Free 500MB、警告350MB、重大425MB                       | workflow実行待ち   |
+| backup/PITR  | Freeの自動backup・PITRなし。暗号化論理backupをArtifactへ7日保持 | 初回backup成功待ち |
 
 正式決定時は値、目的、承認者、承認日、適用者、適用日時をこの表へ追記する。未確定欄を残したままcleanupを有効化しない。
 
@@ -372,13 +430,13 @@ T19では次の順序を変更しない。
 
 正確な期限超過総件数は手動dry-runだけで取得する。全row数、`audit_logs` table・index容量、DB接続数、CPU・I/O・storage latency、backup/PITRはDB providerのDashboard・Metricsをsource of truthとし、容量取得のためのraw SQLをアプリへ追加しない。
 
-| 項目 | 警告 | 重大 | 初動 |
-|---|---:|---:|---|
-| DB全体容量 | quota 70% | quota 85% | 増加原因、cleanup結果、契約planを確認 |
-| 期限超過残件 | 次回実行後も1件以上 | 最大件数到達または2回連続 | dry-run後に手動再実行し、DB負荷を確認 |
-| cleanup失敗 | 1回 | 2回連続 | cleanupを無効化し、担当者が原因確認 |
-| audit write失敗 | 1件 | 継続発生 | backendとDB状態を確認 |
-| 日次増加件数 | 初期7日間はbaseline収集 | baseline後に決定 | LOGIN FAILURE急増とrate limit状態を確認 |
+| 項目            |                    警告 |                      重大 | 初動                                    |
+| --------------- | ----------------------: | ------------------------: | --------------------------------------- |
+| DB全体容量      |               quota 70% |                 quota 85% | 増加原因、cleanup結果、契約planを確認   |
+| 期限超過残件    |     次回実行後も1件以上 | 最大件数到達または2回連続 | dry-run後に手動再実行し、DB負荷を確認   |
+| cleanup失敗     |                     1回 |                   2回連続 | cleanupを無効化し、担当者が原因確認     |
+| audit write失敗 |                     1件 |                  継続発生 | backendとDB状態を確認                   |
+| 日次増加件数    | 初期7日間はbaseline収集 |          baseline後に決定 | LOGIN FAILURE急増とrate limit状態を確認 |
 
 通知には内部ID、監査ログID、メール、username、秘密情報、生Errorを含めない。通知先が設定されるまで本番運用を完了扱いにしない。
 
@@ -451,9 +509,9 @@ T19では次の順序を変更しない。
 
 ### 二層の責務
 
-| 層 | 役割 | 制限の性質 |
-|---|---|---|
-| Cloudflare WAF | Hono到達前に大量のIP/burstアクセスを遮断 | Honoより高い閾値の粗いedge防御 |
+| 層                                  | 役割                                           | 制限の性質                           |
+| ----------------------------------- | ---------------------------------------------- | ------------------------------------ |
+| Cloudflare WAF                      | Hono到達前に大量のIP/burstアクセスを遮断       | Honoより高い閾値の粗いedge防御       |
 | Hono + SQLite-backed Durable Object | route、検証済みemail、認証済みuserを使って判定 | `docs/02_security.md` の正確なpolicy |
 
 - productionでは `RATE_LIMIT_STORE=durable-object` を必須とし、memory storeへ暗黙fallbackしない。
@@ -466,14 +524,14 @@ T19では次の順序を変更しない。
 
 契約プラン確認後、app上限よりedgeを厳しくしない値を選ぶ。次は確定前の候補であり、実値は設定日・設定者とともに記録する。
 
-| zone plan | rule候補 | match | 閾値候補 |
-|---|---|---|---:|
-| Free | general | `/api/v1/*`、health除外 | 40回/10秒/IP |
-| Pro | general | `/api/v1/*`、health除外 | 240回/60秒/IP |
-| Pro | auth | register/login/forgot/resetのOR | 20回/60秒/IP |
-| Business以上 | general | `/api/v1/*`、health/OPTIONS除外 | 120回/60秒/IP |
-| Business以上 | auth | 4 auth path + POST | 20回/600秒/IP |
-| Business以上 | game submit | POST `/api/v1/game/sessions` | 40回/60秒/IP |
+| zone plan    | rule候補    | match                           |      閾値候補 |
+| ------------ | ----------- | ------------------------------- | ------------: |
+| Free         | general     | `/api/v1/*`、health除外         |  40回/10秒/IP |
+| Pro          | general     | `/api/v1/*`、health除外         | 240回/60秒/IP |
+| Pro          | auth        | register/login/forgot/resetのOR |  20回/60秒/IP |
+| Business以上 | general     | `/api/v1/*`、health/OPTIONS除外 | 120回/60秒/IP |
+| Business以上 | auth        | 4 auth path + POST              | 20回/600秒/IP |
+| Business以上 | game submit | POST `/api/v1/game/sessions`    |  40回/60秒/IP |
 
 - Free/Proではmethodをmatch条件に使えない場合があり、OPTIONSもedge countへ含まれ得る。HonoではOPTIONSを除外したまま、edge閾値に余裕を持たせる。
 - custom JSON responseを利用できないplanでは、edge responseは非JSONまたはCORS network errorになり得る。Honoの日本語JSON契約には含めない。
@@ -501,7 +559,7 @@ T19では次の順序を変更しない。
 ## 本番デプロイのチェックリスト
 
 ```
-[ ] Supabaseプロジェクト作成・接続URLの取得
+[x] Supabase staging・production project作成、Session pooler接続設定
 [ ] Vercelアカウント作成・プロジェクトインポート
 [ ] Vercelに VITE_API_BASE_URL 環境変数を設定
 [ ] Cloudflareアカウント作成・Wranglerインストール
@@ -511,11 +569,11 @@ T19では次の順序を変更しない。
 [ ] staging/productionのSQLite-backed Durable Object namespace・migration・bindingを分離
 [ ] productionでRATE_LIMIT_STORE=durable-object以外を拒否することを確認
 [ ] 本番API hostnameが対象zoneのWAFを通り、直接到達・迂回経路がないことを確認
-[ ] GitHub Actions の DATABASE_URL Secret を設定（migrate deploy 用）
-[ ] GitHub Actions Variables に AUDIT_LOG_RETENTION_DAYS と AUDIT_LOG_CLEANUP_ENABLED=false を設定
-[ ] 本番DBバックアップ取得状況を確認
+[x] GitHub Actions production Environmentの DATABASE_URL Secret を設定（migrate deploy 用）
+[x] GitHub Actions Variables に AUDIT_LOG_RETENTION_DAYS と AUDIT_LOG_CLEANUP_ENABLED=false を設定
+[-] 本番DB暗号化backup workflowを実装し、初回Artifactを確認
 [ ] 監査ログの正式保持期間・内部ID保持・承認者・通知先を記録
-[ ] DB容量70%/85%警告とGitHub Actions failureの受信者を設定
+[-] DB容量70%/85% workflowを実装し、GitHub Actions failureの受信者を設定（初回run待ち）
 [ ] production dry-runと初回executeの結果を記録
 [ ] prisma migrate deploy の実行タイミングを確認
 [ ] wrangler deploy で初回デプロイ
@@ -528,11 +586,11 @@ T19では次の順序を変更しない。
 [ ] CORS設定の確認（フロントエンドのURLが正しく許可されているか）
 ```
 
-| サービス | 役割 | 費用目安 |
-|---------|------|---------|
-| **Firebase Hosting** | SvelteKitの画面を配信 | 無料枠あり（月10GBまで） |
-| **Railway** | LaravelのAPIサーバー | 月5〜10ドル程度 |
-| **Railway** | PostgreSQLデータベース | 上記に含む |
+| サービス             | 役割                   | 費用目安                 |
+| -------------------- | ---------------------- | ------------------------ |
+| **Firebase Hosting** | SvelteKitの画面を配信  | 無料枠あり（月10GBまで） |
+| **Railway**          | LaravelのAPIサーバー   | 月5〜10ドル程度          |
+| **Railway**          | PostgreSQLデータベース | 上記に含む               |
 
 ---
 
@@ -540,27 +598,28 @@ T19では次の順序を変更しない。
 
 ### できること・できないこと
 
-| できること | できないこと |
-|----------|------------|
+| できること                     | できないこと                           |
+| ------------------------------ | -------------------------------------- |
 | HTML / CSS / JS ファイルの配信 | PHP / Python / Ruby などのサーバー処理 |
-| SvelteKit のビルド成果物を公開 | データベースの直接操作 |
-| 独自ドメインの設定（無料） | Laravel を動かすこと |
-| 世界中のCDNで高速配信 | |
+| SvelteKit のビルド成果物を公開 | データベースの直接操作                 |
+| 独自ドメインの設定（無料）     | Laravel を動かすこと                   |
+| 世界中のCDNで高速配信          |                                        |
 
 ### SvelteKit のビルド設定
 
 Firebase Hosting に乗せるには SvelteKit を「静的サイト」としてビルドする必要があります。
 
 `frontend/svelte.config.js` に以下を設定：
+
 ```javascript
-import adapter from '@sveltejs/adapter-static';
+import adapter from "@sveltejs/adapter-static";
 
 export default {
   kit: {
     adapter: adapter({
-      fallback: 'index.html'  // SPAとして動作させる設定
-    })
-  }
+      fallback: "index.html", // SPAとして動作させる設定
+    }),
+  },
 };
 ```
 
@@ -595,22 +654,23 @@ export default {
 
 ### 開発環境（ローカル）
 
-| サービス | URL |
-|---------|-----|
-| SvelteKit | `http://localhost:5173` |
-| Laravel API | `http://localhost:80` |
+| サービス    | URL                     |
+| ----------- | ----------------------- |
+| SvelteKit   | `http://localhost:5173` |
+| Laravel API | `http://localhost:80`   |
 
 ### 本番環境
 
-| サービス | URL | サービス |
-|---------|-----|---------|
-| SvelteKit | `https://gensoko.web.app`（または独自ドメイン） | Firebase Hosting |
-| Laravel API | `https://gensoko-api.railway.app` | Railway |
+| サービス    | URL                                             | サービス         |
+| ----------- | ----------------------------------------------- | ---------------- |
+| SvelteKit   | `https://gensoko.web.app`（または独自ドメイン） | Firebase Hosting |
+| Laravel API | `https://gensoko-api.railway.app`               | Railway          |
 
 > 💡 **独自ドメイン**（例: `gensoko.com`）を取得した場合：
+>
 > - `gensoko.com` → Firebase Hosting（フロントエンド）
 > - `api.gensoko.com` → Railway（API）
-> これにより URL が分かりやすくなります。独自ドメインは Firebase Hosting に無料で設定できます。
+>   これにより URL が分かりやすくなります。独自ドメインは Firebase Hosting に無料で設定できます。
 
 ---
 
@@ -651,6 +711,7 @@ SvelteKit → POST /api/v1/auth/logout
 別ドメイン間の通信を許可するために Laravel の CORS 設定が必要です。
 
 `backend/config/cors.php`:
+
 ```php
 return [
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
@@ -696,6 +757,7 @@ firebase init hosting
 ```
 
 対話形式で質問されます：
+
 ```
 ? What do you want to use as your public directory? build
 ? Configure as a single-page app? Yes
@@ -703,6 +765,7 @@ firebase init hosting
 ```
 
 `firebase.json` が生成されます：
+
 ```json
 {
   "hosting": {
@@ -735,6 +798,7 @@ firebase deploy --only hosting
 コードを `main` ブランチに push したら自動でデプロイする設定です。
 
 `.github/workflows/deploy.yml`:
+
 ```yaml
 name: Deploy
 
@@ -750,7 +814,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
       - name: Install & Build
         working-directory: frontend
         run: |
