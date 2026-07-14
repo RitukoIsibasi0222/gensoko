@@ -175,7 +175,8 @@
 - [-] 監査ログ本番運用設計（保持期間365日・退会後内部IDの同期間保持は2026-07-14承認済み。T20完了、T21の7日baseline観測中） — 計画書: [docs/plans/audit-log-production-operations/plan.md](plans/audit-log-production-operations/plan.md)
   - [x] T20: production容量監視・通知先・暗号化backup・migration gateを実環境で確認
   - [-] T21: production初回dry-run成功。2026-07-21 22:55 JSTまで7日間の増加量baselineを観測
-  - [ ] 手動運用確認: 10,000件上限、上限後の残件通知、schedule/manual直列化、Actions失敗、retention変更前dry-run
+  - [x] 自動test: 10,000件上限、上限後の残件通知、stable concurrency group、cleanup失敗時の非0終了
+  - [ ] 実環境運用確認: schedule/manualのqueue動作、Actions失敗通知の受信、retention変更前dry-run
   - [ ] 本番アプリ公開後の監査回帰: LOGIN success/failure、password change/reset、admin操作、本人・管理者退会、API status/body/Cookie
   - [ ] T22: 7日baselineと残課題を記録し、完了記録用docs PRをreview後developへmerge
 - [ ] 退会時の個人情報・学習データ完全削除方針（本人退会・管理者強制退会・既存soft-deleted userの移行） — 監査ログ保持とは分離した本番公開前ブロッカー
