@@ -1013,7 +1013,7 @@ schema変更・backfillは想定しない。
 
 - production専用のFree organization`Gensoko Production`とSupabase project`gensoko-production`を東京regionへ作成し、Healthyであることを確認した。
 - Data APIとautomatic RLSは無効とし、PrismaからPostgreSQLへだけ接続する構成にした。
-- Supabase Free planはDB容量500MB、自動backup・PITR・Metrics endpointなしであることを公式資料とDashboardで確認した。
+- Supabase Free planはDB容量500MB（500,000,000 bytes）、自動backup・PITR・Metrics endpointなしであることを公式資料とDashboardで確認した。
 - production Environmentは`develop`だけを許可し、`BATCH_ENVIRONMENT=production`、`AUDIT_LOG_RETENTION_DAYS=365`、`AUDIT_LOG_CLEANUP_ENABLED=false`を維持した。
 - production Environment SecretへSession pooler（port 5432）の`DATABASE_URL`を登録した。値はworkflow、repository、文書、PR、チャットへ記録しない。
 - GitHub account`RitukoIsibasi0222`のActions通知を登録メール宛て・failed workflowのみへ設定し、一次対応者とした。

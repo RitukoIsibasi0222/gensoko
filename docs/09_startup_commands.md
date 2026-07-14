@@ -159,7 +159,7 @@ T19の期限境界確認はActionsの`Staging Audit Cleanup Fixtures`から`prep
 
 | operation        | 入力                      | 実行条件                                                         |
 | ---------------- | ------------------------- | ---------------------------------------------------------------- |
-| `capacity-check` | なし                      | 500MB quotaに対する70%・85%閾値を確認                            |
+| `capacity-check` | なし                      | 500MB（500,000,000 bytes）quotaに対する70%・85%閾値を確認        |
 | `backup`         | なし                      | production Environmentに`BACKUP_ENCRYPTION_PASSPHRASE`が設定済み |
 | `migrate-deploy` | `confirmed_backup_run_id` | 24時間以内に成功した`backup` run IDを指定                        |
 

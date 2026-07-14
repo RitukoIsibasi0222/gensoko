@@ -187,7 +187,7 @@ Cloudflare Workers実行時の接続URLは、Actionsとは分離して`wrangler 
 
 ### Free planのbackup・容量監視
 
-productionはSupabase Free planで運用する。[Supabase pricing](https://supabase.com/pricing)上、Free planはDB容量500MBで、自動backup・PITR・Metrics endpointを利用できない。[Database Backups](https://supabase.com/docs/guides/platform/backups)でもFree projectは`supabase db dump`による外部backupが推奨されている。
+productionはSupabase Free planで運用する。[Supabase pricing](https://supabase.com/pricing)上、Free planはDB容量500MB（500,000,000 bytes）で、自動backup・PITR・Metrics endpointを利用できない。[Database Backups](https://supabase.com/docs/guides/platform/backups)でもFree projectは`supabase db dump`による外部backupが推奨されている。
 
 `.github/workflows/production-database.yml`はproduction Environmentへ固定し、既存batchと同じ`gensoko-batch-jobs`concurrency groupでDB操作を直列化する。
 
@@ -206,7 +206,7 @@ production Environment Secretへ`BACKUP_ENCRYPTION_PASSPHRASE`を登録する。
 backup workflowはSupabase公式手順に従い、次を作成する。
 
 - `roles.sql`: custom role
-- `schema.sql`: Supabase管理schemaを除外したschema
+- `schema.sql`: `supabase db dump`の標準動作でSupabase管理schemaを除外したschema（[CLI Reference](https://supabase.com/docs/reference/cli/supabase-db-dump)）
 - `data.sql`: `--data-only --use-copy`で取得したdata
 
 平文3ファイルを一時archiveへまとめ、GnuPGのAES-256 symmetric encryptionで暗号化する。同じpassphraseで復号し、3ファイルを再確認してから、暗号化ファイルとSHA-256だけをArtifactへuploadする。平文dumpと復号確認用archiveはrunner終了前に削除する。repositoryはpublicのため、平文dumpをcommit・Artifact・logへ出してはいけない。
