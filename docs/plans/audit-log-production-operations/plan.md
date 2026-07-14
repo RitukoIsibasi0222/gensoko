@@ -35,21 +35,21 @@
 
 ### 観点別レビュー
 
-| 観点 | 確認できた事実 | 未確定・推測 | 影響 | 改善方針 | 優先度 |
-|---|---|---|---|---|---|
-| 保持期間 | `AuditLog`に削除期限列はなく、現在は無期限に蓄積する | 必要な調査期間、プライバシー上の保持期間は未決定 | DB容量が増え続ける | 暫定推奨365日を提示し、承認後に環境変数をruntime source of truthとして有効化する | High |
-| cleanup | 監査ログ用job・CLI・Cronは存在しない | 1日当たりの期限超過件数は未計測 | 大量一括削除によるlock・負荷、削除漏れ | indexを使ったID限定取得と分割`deleteMany`を採用し、1回の上限を固定する | High |
-| 容量監視 | 本番Supabaseは未構築。構造化ログ基盤も未実装 | DB plan、quota、table容量取得手段、通知先は未確定 | 閾値や通知方法をコードだけでは確定できない | 日次増加監視はリポジトリで実装し、容量アラートはフェーズ12のrelease gateとする | High |
-| 集計負荷 | `occurredAt, id` indexは存在する | 正確な全件countはtable増加に比例して重くなる | 監視job自体がDB負荷になる | 定期実行では範囲countと存在確認だけにし、正確な総数はprovider metricsまたは手動確認へ分離する | High |
-| 定期実行 | GitHub Actions scheduleと共通`runScheduledBatch()`が実装済み | 将来Cloudflare Workers Cronへ移行する可能性がある | 別系統のbatch基盤を作ると運用が分裂する | 既存scheduled batchと`.github/workflows/batch.yml`へ追加する | High |
-| 同時実行 | 現在のworkflow concurrency groupはschedule値またはinput値に依存する | scheduleと手動実行が重なる可能性がある | 同じrowを複数実行が選択する | workflow全体を安定したgroupで直列化し、service自体も重複削除に安全な構造にする | High |
-| ID保持 | `actorId`・`targetId`はUser relationなしのsnapshot | 内部ID保持がプライバシーポリシー上許容されるか未承認 | 退会後もユーザーとの相関が残る | 監査rowと同じ期間だけ保持する案を推奨し、承認を有効化条件にする | High |
-| 退会処理 | `deleteCurrentUser()`と管理者強制退会はsoft deleteで、User行のemail・username・学習データが残る | 将来のphysical deleteまたは匿名化方針は未決定 | `docs/02_security.md`の完全削除記載と不整合 | 本タスクで矛盾を隠さず、本番公開前の別ブロッカーとして進捗管理する | High |
-| DB index | `@@index([occurredAt(sort: Desc), id(sort: Desc)])`が存在する | 本番件数での実行計画は未確認 | cleanupが遅くなる可能性 | 既存indexを使用し、stagingで実行時間・query timeout・削除件数を確認する | Medium |
-| schema | raw内部IDを保持したまま監査rowごと削除する場合、追加列は不要 | 匿名化・個別legal holdを採用する場合はschemaが必要 | 不要なmigrationでリスクが増える | 初期案はschema変更なし。方針変更時は計画を再レビューする | Medium |
-| API | cleanupは公開APIではなく内部運用処理 | 管理画面から実行したい要望は未確認 | 認可漏れ・攻撃面増加 | HTTP endpointを作らず、CLIとCronだけに限定する | High |
-| A11Y | UI・公開API・frontend変更はない | なし | 新規A11Y欠陥は発生しない | A11Y実装は対象外。UI変更が発生した場合のみ計画を再レビューする | Low |
-| エラー監視 | job失敗はGitHub Actions failureで検出可能 | 通知先と当番は未設定 | 失敗に気づかず期限超過ログが蓄積する | workflow失敗通知の受信者をrelease gateとして設定する | High |
+| 観点       | 確認できた事実                                                                                  | 未確定・推測                                         | 影響                                        | 改善方針                                                                                      | 優先度 |
+| ---------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------- | ------ |
+| 保持期間   | `AuditLog`に削除期限列はなく、現在は無期限に蓄積する                                            | 必要な調査期間、プライバシー上の保持期間は未決定     | DB容量が増え続ける                          | 暫定推奨365日を提示し、承認後に環境変数をruntime source of truthとして有効化する              | High   |
+| cleanup    | 監査ログ用job・CLI・Cronは存在しない                                                            | 1日当たりの期限超過件数は未計測                      | 大量一括削除によるlock・負荷、削除漏れ      | indexを使ったID限定取得と分割`deleteMany`を採用し、1回の上限を固定する                        | High   |
+| 容量監視   | 本番Supabaseは未構築。構造化ログ基盤も未実装                                                    | DB plan、quota、table容量取得手段、通知先は未確定    | 閾値や通知方法をコードだけでは確定できない  | 日次増加監視はリポジトリで実装し、容量アラートはフェーズ12のrelease gateとする                | High   |
+| 集計負荷   | `occurredAt, id` indexは存在する                                                                | 正確な全件countはtable増加に比例して重くなる         | 監視job自体がDB負荷になる                   | 定期実行では範囲countと存在確認だけにし、正確な総数はprovider metricsまたは手動確認へ分離する | High   |
+| 定期実行   | GitHub Actions scheduleと共通`runScheduledBatch()`が実装済み                                    | 将来Cloudflare Workers Cronへ移行する可能性がある    | 別系統のbatch基盤を作ると運用が分裂する     | 既存scheduled batchと`.github/workflows/batch.yml`へ追加する                                  | High   |
+| 同時実行   | 現在のworkflow concurrency groupはschedule値またはinput値に依存する                             | scheduleと手動実行が重なる可能性がある               | 同じrowを複数実行が選択する                 | workflow全体を安定したgroupで直列化し、service自体も重複削除に安全な構造にする                | High   |
+| ID保持     | `actorId`・`targetId`はUser relationなしのsnapshot                                              | 内部ID保持がプライバシーポリシー上許容されるか未承認 | 退会後もユーザーとの相関が残る              | 監査rowと同じ期間だけ保持する案を推奨し、承認を有効化条件にする                               | High   |
+| 退会処理   | `deleteCurrentUser()`と管理者強制退会はsoft deleteで、User行のemail・username・学習データが残る | 将来のphysical deleteまたは匿名化方針は未決定        | `docs/02_security.md`の完全削除記載と不整合 | 本タスクで矛盾を隠さず、本番公開前の別ブロッカーとして進捗管理する                            | High   |
+| DB index   | `@@index([occurredAt(sort: Desc), id(sort: Desc)])`が存在する                                   | 本番件数での実行計画は未確認                         | cleanupが遅くなる可能性                     | 既存indexを使用し、stagingで実行時間・query timeout・削除件数を確認する                       | Medium |
+| schema     | raw内部IDを保持したまま監査rowごと削除する場合、追加列は不要                                    | 匿名化・個別legal holdを採用する場合はschemaが必要   | 不要なmigrationでリスクが増える             | 初期案はschema変更なし。方針変更時は計画を再レビューする                                      | Medium |
+| API        | cleanupは公開APIではなく内部運用処理                                                            | 管理画面から実行したい要望は未確認                   | 認可漏れ・攻撃面増加                        | HTTP endpointを作らず、CLIとCronだけに限定する                                                | High   |
+| A11Y       | UI・公開API・frontend変更はない                                                                 | なし                                                 | 新規A11Y欠陥は発生しない                    | A11Y実装は対象外。UI変更が発生した場合のみ計画を再レビューする                                | Low    |
+| エラー監視 | job失敗はGitHub Actions failureで検出可能                                                       | 通知先と当番は未設定                                 | 失敗に気づかず期限超過ログが蓄積する        | workflow失敗通知の受信者をrelease gateとして設定する                                          | High   |
 
 ## スコープ
 
@@ -175,19 +175,19 @@
 
 実装開始前に以下を記録する。
 
-| 確認事項 | 推奨案 | 承認者・確定値 |
-|---|---|---|
-| 保持期間 | 365日 | 未確定 |
-| cleanup Cron | 毎日UTC 18:37（JST 03:37） | 未確定 |
-| 退会後内部ID | 監査rowと同じ期間保持し、監査row cleanupで削除 | 未確定 |
-| cleanup実行主体 | GitHub Actions schedule | 未確定 |
-| cleanup失敗通知先 | GitHub Actions失敗通知を開発担当へ送る | 未確定 |
-| DB容量警告 | 契約quotaの70% | 本番DB作成後に確定 |
-| DB容量重大 | 契約quotaの85% | 本番DB作成後に確定 |
-| cleanup一次対応者 | 開発・運用担当者 | 未確定 |
-| 保持期間変更承認者 | プロダクトオーナーまたはプライバシー責任者 | 未確定 |
-| 削除保留承認者 | インシデント責任者 | 未確定 |
-| soft delete不整合の解消タスク | 本番公開前の別タスクとして追加 | 未確定 |
+| 確認事項                      | 推奨案                                         | 承認者・確定値     |
+| ----------------------------- | ---------------------------------------------- | ------------------ |
+| 保持期間                      | 365日                                          | 未確定             |
+| cleanup Cron                  | 毎日UTC 18:37（JST 03:37）                     | 未確定             |
+| 退会後内部ID                  | 監査rowと同じ期間保持し、監査row cleanupで削除 | 未確定             |
+| cleanup実行主体               | GitHub Actions schedule                        | 未確定             |
+| cleanup失敗通知先             | GitHub Actions失敗通知を開発担当へ送る         | 未確定             |
+| DB容量警告                    | 契約quotaの70%                                 | 本番DB作成後に確定 |
+| DB容量重大                    | 契約quotaの85%                                 | 本番DB作成後に確定 |
+| cleanup一次対応者             | 開発・運用担当者                               | 未確定             |
+| 保持期間変更承認者            | プロダクトオーナーまたはプライバシー責任者     | 未確定             |
+| 削除保留承認者                | インシデント責任者                             | 未確定             |
+| soft delete不整合の解消タスク | 本番公開前の別タスクとして追加                 | 未確定             |
 
 これらが未確定の状態では`AUDIT_LOG_CLEANUP_ENABLED=true`を本番へ設定しない。
 
@@ -211,17 +211,17 @@
 
 ### validation
 
-| 項目 | 方針 |
-|---|---|
-| `AUDIT_LOG_RETENTION_DAYS` | 10進整数、30〜3650日 |
-| 未設定 | maintenance jobを失敗させ、削除しない |
-| 空文字 | 不正値として削除しない |
-| 0・負数 | 拒否 |
-| 小数・NaN・Infinity | 拒否 |
-| 上限超過 | 拒否 |
-| `AUDIT_LOG_CLEANUP_ENABLED` | `true`または`false`のみ |
-| 未設定 | 安全側で`false` |
-| 不正値 | jobを失敗させ、削除しない |
+| 項目                        | 方針                                  |
+| --------------------------- | ------------------------------------- |
+| `AUDIT_LOG_RETENTION_DAYS`  | 10進整数、30〜3650日                  |
+| 未設定                      | maintenance jobを失敗させ、削除しない |
+| 空文字                      | 不正値として削除しない                |
+| 0・負数                     | 拒否                                  |
+| 小数・NaN・Infinity         | 拒否                                  |
+| 上限超過                    | 拒否                                  |
+| `AUDIT_LOG_CLEANUP_ENABLED` | `true`または`false`のみ               |
+| 未設定                      | 安全側で`false`                       |
+| 不正値                      | jobを失敗させ、削除しない             |
 
 ### cutoff
 
@@ -285,15 +285,17 @@ previewは高頻度監視や公開APIから呼ばない。件数取得がtimeout
 
 table・index容量のためにアプリケーションコードからraw SQLを発行しない。本番Supabase構築後、利用可能なDashboard・Metrics・Integrationを確認して設定する。
 
+productionはFree planを採用し、Metrics endpointが利用できないことを2026-07-14に確認した。DB全体容量はSupabase Dashboardをsource of truthとしたうえで、日次Actionsから`pg_database_size(current_database())`だけを取得して70%・85%閾値を検知する。これは公開API・backend runtime・定期監査log処理へraw SQLを追加するものではなく、production固定の運用workflowに限定する。table・index別容量はSQLで自動収集せず、必要時にDashboardで確認する。
+
 ### 暫定閾値
 
-| 項目 | 警告 | 重大 | 対応 |
-|---|---:|---:|---|
-| DB全体容量 | 契約quotaの70% | 85% | 増加原因確認、cleanup結果確認、plan変更検討 |
-| 期限超過残件 | 1件以上が次回実行後も残る | 最大削除件数到達または2回連続残存 | 手動再実行、設定・DB負荷確認 |
-| cleanup失敗 | 1回 | 2回連続 | 自動削除停止、担当者確認 |
-| audit write failure | 1件 | 継続発生 | backend・DB状態確認 |
-| 日次増加件数 | 初期7日間はbaseline収集 | baseline確定後に決定 | LOGIN FAILURE急増、攻撃、rate limit状態を確認 |
+| 項目                |                      警告 |                              重大 | 対応                                          |
+| ------------------- | ------------------------: | --------------------------------: | --------------------------------------------- |
+| DB全体容量          |            契約quotaの70% |                               85% | 増加原因確認、cleanup結果確認、plan変更検討   |
+| 期限超過残件        | 1件以上が次回実行後も残る | 最大削除件数到達または2回連続残存 | 手動再実行、設定・DB負荷確認                  |
+| cleanup失敗         |                       1回 |                           2回連続 | 自動削除停止、担当者確認                      |
+| audit write failure |                       1件 |                          継続発生 | backend・DB状態確認                           |
+| 日次増加件数        |   初期7日間はbaseline収集 |              baseline確定後に決定 | LOGIN FAILURE急増、攻撃、rate limit状態を確認 |
 
 固定row件数だけで容量警告を決めない。平均row・index sizeとDB planが確定した後、日次増加量からquota到達までの推定日数を算出してrunbookを更新する。
 
@@ -317,13 +319,13 @@ table・index容量のためにアプリケーションコードからraw SQLを
 
 ### 固定安全上限
 
-| 項目 | 初期値 | 管理方法 |
-|---|---:|---|
-| 1batch件数 | 500件 | code定数 |
-| 1回最大削除件数 | 10,000件 | code定数 |
-| 最大実行時間 | 8分 | code定数 |
-| batch実行step timeout | 10分 | workflow |
-| GitHub Actions job timeout | 20分 | workflow |
+| 項目                       |   初期値 | 管理方法 |
+| -------------------------- | -------: | -------- |
+| 1batch件数                 |    500件 | code定数 |
+| 1回最大削除件数            | 10,000件 | code定数 |
+| 最大実行時間               |      8分 | code定数 |
+| batch実行step timeout      |     10分 | workflow |
+| GitHub Actions job timeout |     20分 | workflow |
 
 安全上限は環境変数へ分散せず、変更にはcode・test・docsの同時更新を必要とする。
 job timeoutにはcheckout・依存関係install・Prisma Client生成も含まれるため、実行stepへ10分の個別上限を設け、job全体は準備時間を含めて20分とする。これによりcleanup本体の8分上限後に残件通知とDB切断を行う余裕を確保する。
@@ -406,14 +408,14 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 
 ### CLI終了code
 
-| 状態 | exit code |
-|---|---:|
-| dry-run成功 | 0 |
-| cleanup無効によるskip | 0 |
-| cleanup成功 | 0 |
-| DB・実行時エラー | 1 |
-| 最大件数・時間到達後も残件あり | 1 |
-| 引数・設定validationエラー | 2 |
+| 状態                           | exit code |
+| ------------------------------ | --------: |
+| dry-run成功                    |         0 |
+| cleanup無効によるskip          |         0 |
+| cleanup成功                    |         0 |
+| DB・実行時エラー               |         1 |
+| 最大件数・時間到達後も残件あり |         1 |
+| 引数・設定validationエラー     |         2 |
 
 ## 退会後の内部ID保持方針
 
@@ -430,12 +432,12 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 
 ### 選択肢比較
 
-| 案 | 調査能力 | プライバシー | migration・実装負荷 | 評価 |
-|---|---|---|---|---|
-| 監査rowと同期間raw内部ID保持 | 同一主体・対象の相関が可能 | 保持中は再識別可能性がある | 追加schema不要 | 初期推奨。承認必須 |
-| 退会時にnull化 | 退会前後の相関を失う | リスクは低下 | 全監査row更新が必要 | 調査要件と衝突しやすい |
-| keyed HMACへ変換 | 相関は維持可能 | 元IDの直接保持を避けられる | 鍵管理、rotation、migrationが必要 | 別計画が必要 |
-| 監査ログを即時削除 | 調査不能 | 最も少ない保持 | cleanupは簡単 | 監査要件を満たさない可能性 |
+| 案                           | 調査能力                   | プライバシー               | migration・実装負荷               | 評価                       |
+| ---------------------------- | -------------------------- | -------------------------- | --------------------------------- | -------------------------- |
+| 監査rowと同期間raw内部ID保持 | 同一主体・対象の相関が可能 | 保持中は再識別可能性がある | 追加schema不要                    | 初期推奨。承認必須         |
+| 退会時にnull化               | 退会前後の相関を失う       | リスクは低下               | 全監査row更新が必要               | 調査要件と衝突しやすい     |
+| keyed HMACへ変換             | 相関は維持可能             | 元IDの直接保持を避けられる | 鍵管理、rotation、migrationが必要 | 別計画が必要               |
+| 監査ログを即時削除           | 調査不能                   | 最も少ない保持             | cleanupは簡単                     | 監査要件を満たさない可能性 |
 
 ### soft deleteとの不整合
 
@@ -456,20 +458,20 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 
 詳細な運用手順は`docs/11_deployment.md`へ追加する。
 
-| 項目 | 手順 |
-|---|---|
-| 通常実行 | GitHub Actions scheduleで日次実行 |
-| dry-run | workflow_dispatchまたはDocker CLIで実行 |
-| 手動実削除 | 承認後に`--execute`とcleanup有効設定で実行 |
-| 失敗確認 | Actions summaryと安全ログを確認 |
-| 再実行 | 原因解消後、workflow_dispatchで同じjobを実行 |
-| cleanup停止 | `AUDIT_LOG_CLEANUP_ENABLED=false`へ変更 |
-| Cron停止 | workflow scheduleをdisableまたは対象cronを削除 |
-| 保持期間変更 | 承認、dry-run、件数確認、文書更新後に反映 |
-| 削除保留 | cleanupを無効化し、理由・期限・承認者を記録 |
-| 容量警告 | 増加量、期限超過残件、cleanup失敗、DB quotaを確認 |
-| 誤削除 | cleanup停止、書込み継続可否判断、backup/PITRからの復旧を検討 |
-| backend rollback | 監査tableと収集済みログは残し、cleanupだけ停止可能にする |
+| 項目             | 手順                                                         |
+| ---------------- | ------------------------------------------------------------ |
+| 通常実行         | GitHub Actions scheduleで日次実行                            |
+| dry-run          | workflow_dispatchまたはDocker CLIで実行                      |
+| 手動実削除       | 承認後に`--execute`とcleanup有効設定で実行                   |
+| 失敗確認         | Actions summaryと安全ログを確認                              |
+| 再実行           | 原因解消後、workflow_dispatchで同じjobを実行                 |
+| cleanup停止      | `AUDIT_LOG_CLEANUP_ENABLED=false`へ変更                      |
+| Cron停止         | workflow scheduleをdisableまたは対象cronを削除               |
+| 保持期間変更     | 承認、dry-run、件数確認、文書更新後に反映                    |
+| 削除保留         | cleanupを無効化し、理由・期限・承認者を記録                  |
+| 容量警告         | 増加量、期限超過残件、cleanup失敗、DB quotaを確認            |
+| 誤削除           | cleanup停止、書込み継続可否判断、backup/PITRからの復旧を検討 |
+| backend rollback | 監査tableと収集済みログは残し、cleanupだけ停止可能にする     |
 
 本番有効化前に、一次対応者、通知先、承認者を実名またはチーム名で記録する。
 
@@ -505,39 +507,41 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 
 ### 変更対象
 
-| ファイル | 変更種別 | 内容 |
-|---|---|---|
-| `docs/plans/audit-log-production-operations/plan.md` | 修正 | 実装判断、タスク進捗、実変更・検証記録を更新 |
-| `backend/src/jobs/cleanupAuditLogs.ts` | 新規 | retention状態取得、preview、分割cleanup |
-| `backend/src/jobs/cleanupAuditLogs.test.ts` | 新規 | cutoff、batch、上限、ログ、並行安全性test |
-| `backend/src/jobs/cleanupAuditLogs.cli.ts` | 新規 | dry-run既定の手動実行CLI |
-| `backend/src/jobs/cleanupAuditLogs.cli.test.ts` | 新規 | 引数、exit code、disconnect、秘密情報除外test |
-| `backend/src/jobs/cleanupAuditLogs.integration.test.ts` | 新規 | Docker PostgreSQLで境界・分割削除・冪等性を確認 |
-| `backend/src/jobs/scheduled.ts` | 修正 | 監査ログcleanup Cronとresultを追加 |
-| `backend/src/jobs/scheduled.test.ts` | 修正 | audit cleanup Cron、skip、上限到達test |
-| `backend/src/lib/config.ts` | 修正 | retention・cleanup有効化設定を一元管理 |
-| `backend/src/lib/config.test.ts` | 修正 | 未設定・境界・不正値・安全停止test |
-| `backend/src/lib/time.ts` | 新規 | 日数計算用の共通ミリ秒定数 |
-| `backend/src/lib/time.test.ts` | 新規 | 共通time定数の契約test |
-| `backend/src/lib/weekly-score.ts` | 修正 | 日数ミリ秒定数を共通time moduleから参照 |
-| `backend/package.json` | 修正 | cleanup CLI・integration test script追加 |
-| `backend/.env.example` | 修正 | retention・cleanup有効化設定例 |
-| `.github/workflows/batch.yml` | 修正 | schedule、workflow_dispatch、Variables、安定concurrency |
-| `backend/src/jobs/batchWorkflow.test.ts` | 新規 | workflowのCron、手動分岐、Variables、Secret、concurrency契約test |
-| `.github/workflows/staging-database.yml` | 新規 | staging固定・手動専用の既存Prisma migration適用workflow |
-| `backend/src/jobs/stagingDatabaseWorkflow.test.ts` | 新規 | staging固定、Secret安全停止、migration commandの契約test |
-| `backend/src/jobs/stagingAuditCleanupFixtures.ts` | 新規 | T19専用fixtureの作成・検証・削除とstaging接続先guard |
-| `backend/src/jobs/stagingAuditCleanupFixtures.test.ts` | 新規 | fixture境界、対象限定、接続先guardのunit test |
-| `backend/src/jobs/stagingAuditCleanupFixtures.cli.ts` | 新規 | T19専用fixture操作CLI |
-| `backend/src/jobs/stagingAuditCleanupFixtures.cli.test.ts` | 新規 | CLI引数、終了code、秘密情報非出力のtest |
-| `.github/workflows/staging-audit-cleanup-fixtures.yml` | 新規 | staging固定・手動専用のfixture操作workflow |
-| `backend/src/jobs/stagingAuditCleanupFixturesWorkflow.test.ts` | 新規 | staging固定、操作制限、Secret安全利用の契約test |
-| `docs/02_security.md` | 修正 | 監査保持・内部ID・完全削除との差を承認内容へ整合 |
-| `docs/03_data_model.md` | 修正 | AuditLog model・index・保持方針を現行schemaへ整合 |
-| `docs/05_progress.md` | 修正 | 新計画書link、実装中・完了状態、別privacy blocker |
-| `docs/07_testing_flow.md` | 修正 | cleanup実DBintegration test手順 |
-| `docs/09_startup_commands.md` | 修正 | dry-run、手動実行、integration test手順 |
-| `docs/11_deployment.md` | 修正 | retention、Cron、監視、通知、停止、再実行runbook |
+| ファイル                                                       | 変更種別 | 内容                                                                    |
+| -------------------------------------------------------------- | -------- | ----------------------------------------------------------------------- |
+| `docs/plans/audit-log-production-operations/plan.md`           | 修正     | 実装判断、タスク進捗、実変更・検証記録を更新                            |
+| `backend/src/jobs/cleanupAuditLogs.ts`                         | 新規     | retention状態取得、preview、分割cleanup                                 |
+| `backend/src/jobs/cleanupAuditLogs.test.ts`                    | 新規     | cutoff、batch、上限、ログ、並行安全性test                               |
+| `backend/src/jobs/cleanupAuditLogs.cli.ts`                     | 新規     | dry-run既定の手動実行CLI                                                |
+| `backend/src/jobs/cleanupAuditLogs.cli.test.ts`                | 新規     | 引数、exit code、disconnect、秘密情報除外test                           |
+| `backend/src/jobs/cleanupAuditLogs.integration.test.ts`        | 新規     | Docker PostgreSQLで境界・分割削除・冪等性を確認                         |
+| `backend/src/jobs/scheduled.ts`                                | 修正     | 監査ログcleanup Cronとresultを追加                                      |
+| `backend/src/jobs/scheduled.test.ts`                           | 修正     | audit cleanup Cron、skip、上限到達test                                  |
+| `backend/src/lib/config.ts`                                    | 修正     | retention・cleanup有効化設定を一元管理                                  |
+| `backend/src/lib/config.test.ts`                               | 修正     | 未設定・境界・不正値・安全停止test                                      |
+| `backend/src/lib/time.ts`                                      | 新規     | 日数計算用の共通ミリ秒定数                                              |
+| `backend/src/lib/time.test.ts`                                 | 新規     | 共通time定数の契約test                                                  |
+| `backend/src/lib/weekly-score.ts`                              | 修正     | 日数ミリ秒定数を共通time moduleから参照                                 |
+| `backend/package.json`                                         | 修正     | cleanup CLI・integration test script追加                                |
+| `backend/.env.example`                                         | 修正     | retention・cleanup有効化設定例                                          |
+| `.github/workflows/batch.yml`                                  | 修正     | schedule、workflow_dispatch、Variables、安定concurrency                 |
+| `backend/src/jobs/batchWorkflow.test.ts`                       | 新規     | workflowのCron、手動分岐、Variables、Secret、concurrency契約test        |
+| `.github/workflows/staging-database.yml`                       | 新規     | staging固定・手動専用の既存Prisma migration適用workflow                 |
+| `backend/src/jobs/stagingDatabaseWorkflow.test.ts`             | 新規     | staging固定、Secret安全停止、migration commandの契約test                |
+| `backend/src/jobs/stagingAuditCleanupFixtures.ts`              | 新規     | T19専用fixtureの作成・検証・削除とstaging接続先guard                    |
+| `backend/src/jobs/stagingAuditCleanupFixtures.test.ts`         | 新規     | fixture境界、対象限定、接続先guardのunit test                           |
+| `backend/src/jobs/stagingAuditCleanupFixtures.cli.ts`          | 新規     | T19専用fixture操作CLI                                                   |
+| `backend/src/jobs/stagingAuditCleanupFixtures.cli.test.ts`     | 新規     | CLI引数、終了code、秘密情報非出力のtest                                 |
+| `.github/workflows/staging-audit-cleanup-fixtures.yml`         | 新規     | staging固定・手動専用のfixture操作workflow                              |
+| `backend/src/jobs/stagingAuditCleanupFixturesWorkflow.test.ts` | 新規     | staging固定、操作制限、Secret安全利用の契約test                         |
+| `.github/workflows/production-database.yml`                    | 新規     | Free planの容量監視、暗号化論理backup、backup確認付きmigration workflow |
+| `backend/src/jobs/productionDatabaseWorkflow.test.ts`          | 新規     | production固定、閾値、暗号化、Secret、migration gateの契約test          |
+| `docs/02_security.md`                                          | 修正     | 監査保持・内部ID・完全削除との差を承認内容へ整合                        |
+| `docs/03_data_model.md`                                        | 修正     | AuditLog model・index・保持方針を現行schemaへ整合                       |
+| `docs/05_progress.md`                                          | 修正     | 新計画書link、実装中・完了状態、別privacy blocker                       |
+| `docs/07_testing_flow.md`                                      | 修正     | cleanup実DBintegration test手順                                         |
+| `docs/09_startup_commands.md`                                  | 修正     | dry-run、手動実行、integration test手順                                 |
+| `docs/11_deployment.md`                                        | 修正     | retention、Cron、監視、通知、停止、再実行runbook                        |
 
 ### 確認のみ
 
@@ -729,117 +733,117 @@ export function cleanupExpiredAuditLogs(
 
 ### retention・cutoff・config
 
-| ケース | 期待結果 |
-|---|---|
-| 365日 | `now`から正確に365×24時間を引く |
-| 月・年境界 | UTC時刻で正しいcutoffになる |
-| うるう年 | 経過時間として一貫する |
-| timezone変更 | 結果がサーバーtimezoneに依存しない |
-| cutoff再利用 | DB条件・戻り値・ログで同じDateを使う |
-| retention未設定 | validation error、DB未呼出し |
-| 空文字 | validation error |
-| 29日 | 下限未満として拒否 |
-| 30日 | 受理 |
-| 3650日 | 受理 |
-| 3651日 | 上限超過として拒否 |
-| 0・負数 | 拒否 |
-| 小数・NaN・Infinity | 拒否 |
-| cleanup enabled未設定 | `false` |
-| `true`・`false` | 正しくboolean化 |
-| その他文字列 | validation error |
+| ケース                | 期待結果                             |
+| --------------------- | ------------------------------------ |
+| 365日                 | `now`から正確に365×24時間を引く      |
+| 月・年境界            | UTC時刻で正しいcutoffになる          |
+| うるう年              | 経過時間として一貫する               |
+| timezone変更          | 結果がサーバーtimezoneに依存しない   |
+| cutoff再利用          | DB条件・戻り値・ログで同じDateを使う |
+| retention未設定       | validation error、DB未呼出し         |
+| 空文字                | validation error                     |
+| 29日                  | 下限未満として拒否                   |
+| 30日                  | 受理                                 |
+| 3650日                | 受理                                 |
+| 3651日                | 上限超過として拒否                   |
+| 0・負数               | 拒否                                 |
+| 小数・NaN・Infinity   | 拒否                                 |
+| cleanup enabled未設定 | `false`                              |
+| `true`・`false`       | 正しくboolean化                      |
+| その他文字列          | validation error                     |
 
 ### cleanup
 
-| ケース | 期待結果 |
-|---|---|
-| dry-run | previewだけ実行し、deleteしない |
-| cleanup無効 | skipし、deleteしない |
-| 対象0件 | 成功、`deletedCount=0` |
-| 対象1件 | 1件だけ削除 |
-| cutoffと同時刻 | 削除しない |
-| cutoffより1ms古い | 削除する |
-| cutoffより新しい | 削除しない |
-| 500件未満 | 1batchで終了 |
-| 500件 | 1batch後に残件確認 |
-| 501件 | 2batchで削除 |
-| 10,000件 | 最大件数まで処理 |
-| 10,001件以上 | 10,000件で停止し`limitReached=true` |
-| 最大時間到達 | 次batchを開始せず残件を通知 |
-| wall clock変更 | 単調増加clockでduration上限を判断する |
-| 対象取得後に別実行が削除 | count差を許容し再実行可能 |
-| 対象取得後に新規ログ追加 | cutoffより新しいrowを削除しない |
-| 途中のPrisma error | 以降のbatchを停止し、固定errorだけを出す |
-| 再実行 | 残件だけを処理する |
-| 同時実行 | 対象期間外削除や例外的なID露出がない |
-| cleanup自身 | `auditLog.create`を呼ばない |
-| 成功ログ | 許可fieldだけを含む |
-| 失敗ログ | raw DB error・ID・PIIを含まない |
+| ケース                   | 期待結果                                 |
+| ------------------------ | ---------------------------------------- |
+| dry-run                  | previewだけ実行し、deleteしない          |
+| cleanup無効              | skipし、deleteしない                     |
+| 対象0件                  | 成功、`deletedCount=0`                   |
+| 対象1件                  | 1件だけ削除                              |
+| cutoffと同時刻           | 削除しない                               |
+| cutoffより1ms古い        | 削除する                                 |
+| cutoffより新しい         | 削除しない                               |
+| 500件未満                | 1batchで終了                             |
+| 500件                    | 1batch後に残件確認                       |
+| 501件                    | 2batchで削除                             |
+| 10,000件                 | 最大件数まで処理                         |
+| 10,001件以上             | 10,000件で停止し`limitReached=true`      |
+| 最大時間到達             | 次batchを開始せず残件を通知              |
+| wall clock変更           | 単調増加clockでduration上限を判断する    |
+| 対象取得後に別実行が削除 | count差を許容し再実行可能                |
+| 対象取得後に新規ログ追加 | cutoffより新しいrowを削除しない          |
+| 途中のPrisma error       | 以降のbatchを停止し、固定errorだけを出す |
+| 再実行                   | 残件だけを処理する                       |
+| 同時実行                 | 対象期間外削除や例外的なID露出がない     |
+| cleanup自身              | `auditLog.create`を呼ばない              |
+| 成功ログ                 | 許可fieldだけを含む                      |
+| 失敗ログ                 | raw DB error・ID・PIIを含まない          |
 
 ### 容量・状態監視
 
-| ケース | 期待結果 |
-|---|---|
-| 空table | 増加件数0、期限超過なし、日時null |
-| 直近24時間 | 境界内の件数だけ数える |
-| 24時間境界 | 定義した`gte`条件どおり |
-| 最古・最新 | `occurredAt, id`順で正しいrowの日時を返す |
+| ケース           | 期待結果                                     |
+| ---------------- | -------------------------------------------- |
+| 空table          | 増加件数0、期限超過なし、日時null            |
+| 直近24時間       | 境界内の件数だけ数える                       |
+| 24時間境界       | 定義した`gte`条件どおり                      |
+| 最古・最新       | `occurredAt, id`順で正しいrowの日時を返す    |
 | 期限超過存在確認 | `occurredAt < cutoff`を`findFirst`で確認する |
-| 定期health | 全件count・期限超過countを呼ばない |
-| 手動preview | 期限超過countを1回だけ実行する |
-| preview timeout | cleanupを有効化せず安全に失敗する |
-| 状態取得失敗 | cleanupを開始せず安全に失敗する |
-| limit残件 | scheduled jobが非0終了になる |
-| 通知内容 | 内部ID・監査ログID・秘密情報を含まない |
+| 定期health       | 全件count・期限超過countを呼ばない           |
+| 手動preview      | 期限超過countを1回だけ実行する               |
+| preview timeout  | cleanupを有効化せず安全に失敗する            |
+| 状態取得失敗     | cleanupを開始せず安全に失敗する              |
+| limit残件        | scheduled jobが非0終了になる                 |
+| 通知内容         | 内部ID・監査ログID・秘密情報を含まない       |
 
 ### CLI・scheduled・workflow
 
-| ケース | 期待結果 |
-|---|---|
-| 引数なし | dry-run |
-| `--dry-run` | dry-run |
-| `--execute` | config有効時だけ実削除 |
-| 引数競合 | exit code 2 |
-| 未知引数 | exit code 2 |
-| DB失敗 | exit code 1 |
-| Prisma disconnect失敗 | cleanup結果確定後なら結果を上書きしない |
-| audit cleanup Cron | audit cleanupを1回呼ぶ |
-| 未知Cron | DB jobを呼ばずskip |
-| scheduledTime | 同じDateをjobとログへ渡す |
-| job失敗 | raw errorを出さず共通batch failure |
-| workflow_dispatch dry-run | 実削除なし |
-| workflow_dispatch execute | 明示有効時だけ削除 |
-| schedule | 日次Cronで実行 |
-| concurrency | manualとscheduleを同時実行しない |
-| Variables | retentionとenableをSecret扱いせず環境別に渡す |
-| Secret | DATABASE_URLをworkflow・ログへ表示しない |
+| ケース                    | 期待結果                                      |
+| ------------------------- | --------------------------------------------- |
+| 引数なし                  | dry-run                                       |
+| `--dry-run`               | dry-run                                       |
+| `--execute`               | config有効時だけ実削除                        |
+| 引数競合                  | exit code 2                                   |
+| 未知引数                  | exit code 2                                   |
+| DB失敗                    | exit code 1                                   |
+| Prisma disconnect失敗     | cleanup結果確定後なら結果を上書きしない       |
+| audit cleanup Cron        | audit cleanupを1回呼ぶ                        |
+| 未知Cron                  | DB jobを呼ばずskip                            |
+| scheduledTime             | 同じDateをjobとログへ渡す                     |
+| job失敗                   | raw errorを出さず共通batch failure            |
+| workflow_dispatch dry-run | 実削除なし                                    |
+| workflow_dispatch execute | 明示有効時だけ削除                            |
+| schedule                  | 日次Cronで実行                                |
+| concurrency               | manualとscheduleを同時実行しない              |
+| Variables                 | retentionとenableをSecret扱いせず環境別に渡す |
+| Secret                    | DATABASE_URLをworkflow・ログへ表示しない      |
 
 ### 退会後ID・回帰
 
-| ケース | 期待結果 |
-|---|---|
-| 退会前の監査row | 保持期間中はactorId・targetIdが維持される |
-| 本人退会後 | 監査rowは即時削除・変更されない |
-| 管理者強制退会後 | actor・targetの相関を保持する |
-| 退会した管理者 | actorIdを監査rowの保持期間中維持する |
-| 保持期限経過 | 監査rowと内部IDが削除される |
-| 既存LOGIN監査 | success/failure記録が継続する |
-| password監査 | change/reset成功監査が継続する |
-| admin監査 | success/failure/retry境界が継続する |
-| audit rollback | 必須監査失敗時のrollbackが継続する |
-| API契約 | status・body・Cookieが変わらない |
+| ケース           | 期待結果                                  |
+| ---------------- | ----------------------------------------- |
+| 退会前の監査row  | 保持期間中はactorId・targetIdが維持される |
+| 本人退会後       | 監査rowは即時削除・変更されない           |
+| 管理者強制退会後 | actor・targetの相関を保持する             |
+| 退会した管理者   | actorIdを監査rowの保持期間中維持する      |
+| 保持期限経過     | 監査rowと内部IDが削除される               |
+| 既存LOGIN監査    | success/failure記録が継続する             |
+| password監査     | change/reset成功監査が継続する            |
+| admin監査        | success/failure/retry境界が継続する       |
+| audit rollback   | 必須監査失敗時のrollbackが継続する        |
+| API契約          | status・body・Cookieが変わらない          |
 
 ### 実DB
 
-| ケース | 期待結果 |
-|---|---|
-| 古いfixture | 削除される |
-| cutoff同時刻fixture | 残る |
-| 新しいfixture | 残る |
-| 複数batch | 全対象を上限内で削除する |
-| 二重実行 | 2回目は0件成功 |
-| limit到達 | 対象外rowを削除せず残件を検出 |
-| cleanup後 | fixture以外の監査rowを変更しない |
-| test終了 | 作成fixtureを削除する |
+| ケース              | 期待結果                         |
+| ------------------- | -------------------------------- |
+| 古いfixture         | 削除される                       |
+| cutoff同時刻fixture | 残る                             |
+| 新しいfixture       | 残る                             |
+| 複数batch           | 全対象を上限内で削除する         |
+| 二重実行            | 2回目は0件成功                   |
+| limit到達           | 対象外rowを削除せず残件を検出    |
+| cleanup後           | fixture以外の監査rowを変更しない |
+| test終了            | 作成fixtureを削除する            |
 
 ## リリース・移行方針
 
@@ -883,57 +887,57 @@ schema変更・backfillは想定しない。
 
 ## 実装リスクと回避策
 
-| リスク | 影響 | 回避策 |
-|---|---|---|
-| retention誤設定 | 必要な証跡を早期削除 | 下限・上限validation、cleanup明示有効化、dry-run |
-| cutoff境界ミス | 期限内ログ削除 | `< cutoff`をtestと実DBで固定 |
-| 大量単発delete | lock・I/O増加 | 500件batch、10,000件上限、8分上限 |
-| 長時間transaction | lock保持・rollback増加 | 1batch単位でcommitし、全体transactionを作らない |
-| 同時実行 | 重複処理・負荷増 | 安定concurrency group、冪等なID削除 |
-| 部分失敗 | 一部だけ削除 | batch単位で再実行可能にする |
-| 失敗未検知 | 無制限増加 | workflow failure、残件時非0終了 |
-| 正確な全件countの定常実行 | table増加に比例したDB負荷 | provider metricsへ分離し、手動previewだけでcount |
-| LOGIN FAILURE急増 | 容量・書込み負荷 | 日次増加監視、rate limit、baseline後alert |
-| raw error漏えい | 接続情報・内部情報漏えい | 固定日本語error、security test |
-| cleanupログのID漏えい | 内部ID露出 | 許可field方式、完全なログ引数test |
-| cleanup自己監査 | 無限増加 | `AuditLog.create`を呼ばない |
-| soft deleteとの不整合 | プライバシー仕様違反 | 別pre-production blockerとして追跡 |
-| raw内部ID保持 | 再識別可能性 | 目的限定、アクセス非公開、期間限定、承認 |
-| HMACへ途中変更 | migration・鍵運用事故 | 計画再レビューなしに変更しない |
-| 本番基盤未構築 | 容量alert未設定 | フェーズ12release gate、完了扱い禁止 |
-| Actions schedule遅延 | cleanup遅延 | 365日保持、手動dispatch、残件監視 |
-| Actions設定drift | docsと実値の不一致 | Cron・Variables・担当者・変更日をdocsへ記録 |
-| 誤削除 | 証跡喪失 | backup確認、dry-run、停止flag、上限 |
-| backend rollback後のworkflow残存 | 旧codeへ想定外引数 | cleanup停止をrollbackの最初に実施 |
+| リスク                           | 影響                      | 回避策                                           |
+| -------------------------------- | ------------------------- | ------------------------------------------------ |
+| retention誤設定                  | 必要な証跡を早期削除      | 下限・上限validation、cleanup明示有効化、dry-run |
+| cutoff境界ミス                   | 期限内ログ削除            | `< cutoff`をtestと実DBで固定                     |
+| 大量単発delete                   | lock・I/O増加             | 500件batch、10,000件上限、8分上限                |
+| 長時間transaction                | lock保持・rollback増加    | 1batch単位でcommitし、全体transactionを作らない  |
+| 同時実行                         | 重複処理・負荷増          | 安定concurrency group、冪等なID削除              |
+| 部分失敗                         | 一部だけ削除              | batch単位で再実行可能にする                      |
+| 失敗未検知                       | 無制限増加                | workflow failure、残件時非0終了                  |
+| 正確な全件countの定常実行        | table増加に比例したDB負荷 | provider metricsへ分離し、手動previewだけでcount |
+| LOGIN FAILURE急増                | 容量・書込み負荷          | 日次増加監視、rate limit、baseline後alert        |
+| raw error漏えい                  | 接続情報・内部情報漏えい  | 固定日本語error、security test                   |
+| cleanupログのID漏えい            | 内部ID露出                | 許可field方式、完全なログ引数test                |
+| cleanup自己監査                  | 無限増加                  | `AuditLog.create`を呼ばない                      |
+| soft deleteとの不整合            | プライバシー仕様違反      | 別pre-production blockerとして追跡               |
+| raw内部ID保持                    | 再識別可能性              | 目的限定、アクセス非公開、期間限定、承認         |
+| HMACへ途中変更                   | migration・鍵運用事故     | 計画再レビューなしに変更しない                   |
+| 本番基盤未構築                   | 容量alert未設定           | フェーズ12release gate、完了扱い禁止             |
+| Actions schedule遅延             | cleanup遅延               | 365日保持、手動dispatch、残件監視                |
+| Actions設定drift                 | docsと実値の不一致        | Cron・Variables・担当者・変更日をdocsへ記録      |
+| 誤削除                           | 証跡喪失                  | backup確認、dry-run、停止flag、上限              |
+| backend rollback後のworkflow残存 | 旧codeへ想定外引数        | cleanup停止をrollbackの最初に実施                |
 
 ## タスクリスト
 
 実装開始時にAGENTS.mdの3回レビューを行い、v1→v2→v3→v4の差分をPR本文へ記録する。
 
-| ID | 内容 | 対象ファイル | 完了条件 | 依存 | 優先度 |
-|---|---|---|---|---|---|
-| T1 | 既存監査・batch・本番基盤を再確認 | 指定docs・backend・workflow | 事実と未確定事項が最新developと一致 | なし | High |
-| T2 | 保持期間・ID保持・担当者を承認 | plan、`docs/02_security.md`、`docs/11_deployment.md` | 値・目的・承認者・通知先が確定 | T1 | High |
-| T3 | 進捗を実装中へ更新 | `docs/05_progress.md` | `[-]`と新plan link、別privacy blockerを記録 | T2 | High |
-| T4 | Red: retention config test | `backend/src/lib/config.test.ts` | 未設定・境界・不正値が失敗 | T2 | High |
-| T5 | Green: retention config実装 | `backend/src/lib/config.ts`, `.env.example` | 一元validation、既定false、T4通過 | T4 | High |
-| T6 | Red: cleanup service test | `cleanupAuditLogs.test.ts` | cutoff、preview、batch、limit、log testが失敗 | T5 | High |
-| T7 | Green: cleanup service実装 | `cleanupAuditLogs.ts` | Prisma限定削除、冪等、上限、安全log、T6通過 | T6 | High |
-| T8 | Red: CLI test | `cleanupAuditLogs.cli.test.ts` | dry-run既定、execute、exit codeが失敗 | T7 | High |
-| T9 | Green: CLI・script実装 | CLI、`backend/package.json` | Docker内手動dry-run・executeが可能 | T8 | High |
-| T10 | Red: scheduled接続test | `scheduled.test.ts` | audit Cron、result、上限到達が失敗 | T7 | High |
-| T11 | Green: scheduled・workflow接続 | `scheduled.ts`, `batch.yml` | 日次実行、manual、Variables、安定concurrency、T10通過 | T10 | High |
-| T12 | 実DBcleanup integration test追加 | integration test、package、testing docs | 境界・分割・冪等性をDocker DBで検証可能 | T7 | High |
-| T13 | 横断security・回帰test | cleanup/audit/auth/user/admin tests | PII・raw errorなし、既存監査を維持 | T7,T11 | High |
-| T14 | 運用・security・data model docs更新 | `docs/02`, `03`, `07`, `09`, `11` | retention、ID、手順、停止、通知が整合 | T2,T11,T12 | High |
-| T15 | Refactor・format適用 | backend | 重複削除、Prettier適用、対象test維持 | T13 | High |
-| T16 | backend品質チェック | backend | lint、format check、build、全test成功 | T15 | High |
-| T17 | Docker PostgreSQL確認 | backend/Docker | integration test成功、fixture残存なし | T12,T16 | High |
-| T18 | 実装commit・push・PR・merge | git/GitHub | 変更種別を分割し、cleanup無効・進捗実装中でdevelopへmerge | T14,T16,T17 | High |
-| T19 | staging dry-run・cleanup確認 | Actions・staging DB | 件数、境界、再実行、停止、logを確認 | T18 | High |
-| T20 | production容量監視・通知設定 | Supabase・Actions・runbook | quota閾値、通知先、担当者、backup確認 | T19、フェーズ12 | High |
-| T21 | 初回production実行とbaseline確認 | production | 初回成功、残件なし、7日baselineを記録 | T20 | High |
-| T22 | plan・progress完了更新とdocs PR | plan、docs/05_progress.md、git/GitHub | 実変更・決定値・検証・PR・完了状態を整合しdevelopへmerge | T21 | High |
+| ID  | 内容                                | 対象ファイル                                         | 完了条件                                                  | 依存            | 優先度 |
+| --- | ----------------------------------- | ---------------------------------------------------- | --------------------------------------------------------- | --------------- | ------ |
+| T1  | 既存監査・batch・本番基盤を再確認   | 指定docs・backend・workflow                          | 事実と未確定事項が最新developと一致                       | なし            | High   |
+| T2  | 保持期間・ID保持・担当者を承認      | plan、`docs/02_security.md`、`docs/11_deployment.md` | 値・目的・承認者・通知先が確定                            | T1              | High   |
+| T3  | 進捗を実装中へ更新                  | `docs/05_progress.md`                                | `[-]`と新plan link、別privacy blockerを記録               | T2              | High   |
+| T4  | Red: retention config test          | `backend/src/lib/config.test.ts`                     | 未設定・境界・不正値が失敗                                | T2              | High   |
+| T5  | Green: retention config実装         | `backend/src/lib/config.ts`, `.env.example`          | 一元validation、既定false、T4通過                         | T4              | High   |
+| T6  | Red: cleanup service test           | `cleanupAuditLogs.test.ts`                           | cutoff、preview、batch、limit、log testが失敗             | T5              | High   |
+| T7  | Green: cleanup service実装          | `cleanupAuditLogs.ts`                                | Prisma限定削除、冪等、上限、安全log、T6通過               | T6              | High   |
+| T8  | Red: CLI test                       | `cleanupAuditLogs.cli.test.ts`                       | dry-run既定、execute、exit codeが失敗                     | T7              | High   |
+| T9  | Green: CLI・script実装              | CLI、`backend/package.json`                          | Docker内手動dry-run・executeが可能                        | T8              | High   |
+| T10 | Red: scheduled接続test              | `scheduled.test.ts`                                  | audit Cron、result、上限到達が失敗                        | T7              | High   |
+| T11 | Green: scheduled・workflow接続      | `scheduled.ts`, `batch.yml`                          | 日次実行、manual、Variables、安定concurrency、T10通過     | T10             | High   |
+| T12 | 実DBcleanup integration test追加    | integration test、package、testing docs              | 境界・分割・冪等性をDocker DBで検証可能                   | T7              | High   |
+| T13 | 横断security・回帰test              | cleanup/audit/auth/user/admin tests                  | PII・raw errorなし、既存監査を維持                        | T7,T11          | High   |
+| T14 | 運用・security・data model docs更新 | `docs/02`, `03`, `07`, `09`, `11`                    | retention、ID、手順、停止、通知が整合                     | T2,T11,T12      | High   |
+| T15 | Refactor・format適用                | backend                                              | 重複削除、Prettier適用、対象test維持                      | T13             | High   |
+| T16 | backend品質チェック                 | backend                                              | lint、format check、build、全test成功                     | T15             | High   |
+| T17 | Docker PostgreSQL確認               | backend/Docker                                       | integration test成功、fixture残存なし                     | T12,T16         | High   |
+| T18 | 実装commit・push・PR・merge         | git/GitHub                                           | 変更種別を分割し、cleanup無効・進捗実装中でdevelopへmerge | T14,T16,T17     | High   |
+| T19 | staging dry-run・cleanup確認        | Actions・staging DB                                  | 件数、境界、再実行、停止、logを確認                       | T18             | High   |
+| T20 | production容量監視・通知設定        | Supabase・Actions・runbook                           | quota閾値、通知先、担当者、backup確認                     | T19、フェーズ12 | High   |
+| T21 | 初回production実行とbaseline確認    | production                                           | 初回成功、残件なし、7日baselineを記録                     | T20             | High   |
+| T22 | plan・progress完了更新とdocs PR     | plan、docs/05_progress.md、git/GitHub                | 実変更・決定値・検証・PR・完了状態を整合しdevelopへmerge  | T21             | High   |
 
 - [x] T1: 既存監査・batch・本番基盤を再確認する
 - [-] T2: 保持期間・退会後ID保持・担当者・通知先を承認する（実装用暫定値は合意済み。本番承認者・通知先は未確定）
@@ -954,7 +958,7 @@ schema変更・backfillは想定しない。
 - [x] T17: Docker PostgreSQLで境界・分割・冪等性を確認する
 - [x] T18: 変更種別ごとにcommitし、実装PRをreview後developへmergeする（PR #90、2026-07-14 merge）
 - [x] T19: stagingでdry-run・cleanup・再実行・停止を確認する（2026-07-14完了）
-- [ ] T20: production容量監視・通知・backup確認を完了する
+- [-] T20: production容量監視・通知・backup確認を完了する
 - [ ] T21: production初回実行と7日baselineを確認する
 - [ ] T22: planとprogressを実装完了へ更新し、docs PRをdevelopへmergeする
 
@@ -987,15 +991,15 @@ schema変更・backfillは想定しない。
 
 ### T19 staging検証結果（2026-07-14）
 
-| 確認 | Actions run | 結果 |
-|---|---|---|
-| fixture作成 | [#29316346075](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316346075) | 期限切れ1件・期限内1件を作成 |
-| dry-run | [#29316403409](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316403409) | `expiredCount=1`、`deletedCount=0`、`minimumRunsRequired=1` |
-| 初回execute | [#29316473888](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316473888) | `deletedCount=1`、`limitReached=false` |
-| 削除境界検証 | [#29316528164](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316528164) | 期限切れ0件・期限内1件 |
-| 再実行 | [#29316579011](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316579011) | `deletedCount=0`、`hasExpiredRows=false` |
-| cleanup停止 | [#29316652314](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316652314) | `audit_logs.cleanup.skipped`、`deletedCount=0` |
-| fixture除去 | [#29316702438](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316702438) | 残った期限内fixture 1件を削除 |
+| 確認         | Actions run                                                                           | 結果                                                        |
+| ------------ | ------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| fixture作成  | [#29316346075](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316346075) | 期限切れ1件・期限内1件を作成                                |
+| dry-run      | [#29316403409](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316403409) | `expiredCount=1`、`deletedCount=0`、`minimumRunsRequired=1` |
+| 初回execute  | [#29316473888](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316473888) | `deletedCount=1`、`limitReached=false`                      |
+| 削除境界検証 | [#29316528164](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316528164) | 期限切れ0件・期限内1件                                      |
+| 再実行       | [#29316579011](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316579011) | `deletedCount=0`、`hasExpiredRows=false`                    |
+| cleanup停止  | [#29316652314](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316652314) | `audit_logs.cleanup.skipped`、`deletedCount=0`              |
+| fixture除去  | [#29316702438](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29316702438) | 残った期限内fixture 1件を削除                               |
 
 - 全runが終了code 0で完了した。
 - 削除境界`occurredAt < cutoff`どおり、期限切れfixtureだけが削除され、期限内fixtureはcleanup後も残った。
@@ -1004,6 +1008,22 @@ schema変更・backfillは想定しない。
 - Actions logには許可済みの時刻・件数・状態だけが出力され、`DATABASE_URL`は`***`にmaskされていた。内部ID、PII、raw error、stack traceは出力されなかった。
 - 後片付けとして期限内fixtureを削除し、staging Variablesを`AUDIT_LOG_CLEANUP_ENABLED=false`、`AUDIT_LOG_STAGING_FIXTURES_ENABLED=false`へ戻した。
 - `actions/checkout@v4`と`actions/setup-node@v4`のNode.js 20 deprecation警告は全Batch Jobs runで確認したが、job結果には影響しなかった。Actions major version更新はcleanup検証とは分離して対応する。
+
+### T20 production Free plan運用設定（2026-07-14、実装中）
+
+- production専用のFree organization`Gensoko Production`とSupabase project`gensoko-production`を東京regionへ作成し、Healthyであることを確認した。
+- Data APIとautomatic RLSは無効とし、PrismaからPostgreSQLへだけ接続する構成にした。
+- Supabase Free planはDB容量500MB（500,000,000 bytes）、自動backup・PITR・Metrics endpointなしであることを公式資料とDashboardで確認した。
+- production Environmentは`develop`だけを許可し、`BATCH_ENVIRONMENT=production`、`AUDIT_LOG_RETENTION_DAYS=365`、`AUDIT_LOG_CLEANUP_ENABLED=false`を維持した。
+- production Environment SecretへSession pooler（port 5432）の`DATABASE_URL`を登録した。値はworkflow、repository、文書、PR、チャットへ記録しない。
+- GitHub account`RitukoIsibasi0222`のActions通知を登録メール宛て・failed workflowのみへ設定し、一次対応者とした。
+- Free planの70%=350MBを警告、85%=425MBを重大とし、日次capacity workflow failureからメール通知する方針を確定した。
+- public repositoryへ平文backupを置かないため、Supabase CLIでroles・schema・dataをdumpし、AES-256暗号化・復号検証後のArtifactだけを7日保持するworkflowをTDDで追加する。
+- migrationは24時間以内に成功した暗号化backup run IDと期限内Artifactを確認できた場合だけ`prisma migrate deploy`へ進む。
+- Redでは`production-database.yml`未存在を確認し、Greenではproduction固定・Secret・容量閾値・暗号化backup・migration gateの契約test 5件が通過した。
+- backend lint、format check、build、全test（663件成功・2件skip）、workflow・関連docsのPrettier check、YAML parseが通過した。実project ref、接続文字列、publishable keyのrepository混入がないことも確認した。
+- Prisma schema・migration、公開API、frontendは変更していないため、`docs/04_api.md`更新とPlaywright回帰は不要と判断した。
+- T20完了には`BACKUP_ENCRYPTION_PASSPHRASE`登録、workflowのdevelopへのmerge、初回capacity check・backup・migration成功、Dashboard容量確認が残っている。
 
 ### タブ区切りタスクリスト
 
@@ -1134,41 +1154,41 @@ T22	plan・progress完了更新・docs PR	plan・docs/05_progress.md・git/GitHu
 
 ### 実際の変更ファイル
 
-| ファイル | 変更種別 | 内容 |
-|---|---|---|
-| `backend/src/jobs/cleanupAuditLogs.ts` | 新規 | 監査ログmaintenance job |
+| ファイル                               | 変更種別 | 内容                    |
+| -------------------------------------- | -------- | ----------------------- |
+| `backend/src/jobs/cleanupAuditLogs.ts` | 新規     | 監査ログmaintenance job |
 
 ### TDD実施記録
 
-| フェーズ | 対象 | 結果 |
-|---|---|---|
-| Red | retention config | |
-| Green | retention config | |
-| Red | cleanup service | |
-| Green | cleanup service | |
-| Red | CLI・scheduled | |
-| Green | CLI・scheduled | |
-| Refactor | 重複削除・format | |
+| フェーズ | 対象             | 結果 |
+| -------- | ---------------- | ---- |
+| Red      | retention config |      |
+| Green    | retention config |      |
+| Red      | cleanup service  |      |
+| Green    | cleanup service  |      |
+| Red      | CLI・scheduled   |      |
+| Green    | CLI・scheduled   |      |
+| Refactor | 重複削除・format |      |
 
 ### 検証結果
 
-| 確認 | 結果 |
-|---|---|
-| backend lint | |
-| backend format check | |
-| backend build | |
-| backend全test | |
-| 既存audit rollback integration | |
-| cleanup integration | |
-| Docker dry-run | |
-| Docker execute | |
-| staging workflow_dispatch | |
-| staging schedule | |
-| cleanup停止・再実行 | |
-| production初回実行 | |
-| DB容量alert | |
-| 通知受信 | |
-| 7日baseline | |
+| 確認                           | 結果 |
+| ------------------------------ | ---- |
+| backend lint                   |      |
+| backend format check           |      |
+| backend build                  |      |
+| backend全test                  |      |
+| 既存audit rollback integration |      |
+| cleanup integration            |      |
+| Docker dry-run                 |      |
+| Docker execute                 |      |
+| staging workflow_dispatch      |      |
+| staging schedule               |      |
+| cleanup停止・再実行            |      |
+| production初回実行             |      |
+| DB容量alert                    |      |
+| 通知受信                       |      |
+| 7日baseline                    |      |
 
 ### セキュリティ・プライバシー決定
 

@@ -23,23 +23,23 @@ docker compose up -d
 docker compose ps
 ```
 
-| サービス | 説明 | ポート |
-|---|---|---|
-| `hono` | バックエンド API (Hono) | http://localhost:3000 |
-| `sveltekit` | フロントエンド (SvelteKit) | http://localhost:5174 |
-| `postgres` | データベース (PostgreSQL) | localhost:5432（HTTP ではない） |
-| `mailpit` | メール確認 UI | http://localhost:8025 |
+| サービス    | 説明                       | ポート                          |
+| ----------- | -------------------------- | ------------------------------- |
+| `hono`      | バックエンド API (Hono)    | http://localhost:3000           |
+| `sveltekit` | フロントエンド (SvelteKit) | http://localhost:5174           |
+| `postgres`  | データベース (PostgreSQL)  | localhost:5432（HTTP ではない） |
+| `mailpit`   | メール確認 UI              | http://localhost:8025           |
 
 ---
 
 ## 2. 動作確認 URL
 
-| 確認内容 | URL |
-|---|---|
+| 確認内容           | URL                                 |
+| ------------------ | ----------------------------------- |
 | API ヘルスチェック | http://localhost:3000/api/v1/health |
-| API ルート | http://localhost:3000/ |
-| フロントエンド | http://localhost:5174 |
-| メール受信確認 | http://localhost:8025 |
+| API ルート         | http://localhost:3000/              |
+| フロントエンド     | http://localhost:5174               |
+| メール受信確認     | http://localhost:8025               |
 
 `postgres` の `5432` は DB 接続用ポートなので、ブラウザで開いても表示確認はできない。
 
@@ -92,7 +92,6 @@ npm run format:check
 # フォーマット適用
 npm run format
 ```
-
 
 ---
 
@@ -153,6 +152,18 @@ GitHub Actions schedule と同じ入口を Docker 内で確認する場合は、
 GitHub Actionsではworkflow_dispatchで最初に`target_environment`を選び、次に`weekly-reset`、`game-question-set-cleanup`、`audit-log-cleanup-dry-run`、`audit-log-cleanup-execute`を選択する。手動実行の既定は`staging`、scheduleは`production`である。監査ログの本実行は、選択したEnvironmentの`AUDIT_LOG_CLEANUP_ENABLED=true`が設定された場合だけ削除する。T19の確認では必ず`staging`を選び、`production`はrelease gate完了前に選択しない。
 
 T19の期限境界確認はActionsの`Staging Audit Cleanup Fixtures`から`prepare`、`verify-cleaned`、`remove`を使用する。このworkflowは`staging`固定であり、`AUDIT_LOG_STAGING_FIXTURES_ENABLED=true`を検証中だけ設定する。実行順序と停止・後片付けは`docs/11_deployment.md`の「T19 staging fixtureによる境界・再実行・停止確認」に従い、ローカルshellやSupabase SQL Editorへ`DATABASE_URL`やfixture SQLを貼り付けない。
+
+### production DB operation
+
+本番DBの容量確認・backup・migrationはローカルshellから接続せず、Actionsの`Production Database Operations`を`develop` branchで実行する。
+
+| operation        | 入力                      | 実行条件                                                         |
+| ---------------- | ------------------------- | ---------------------------------------------------------------- |
+| `capacity-check` | なし                      | 500MB（500,000,000 bytes）quotaに対する70%・85%閾値を確認        |
+| `backup`         | なし                      | production Environmentに`BACKUP_ENCRYPTION_PASSPHRASE`が設定済み |
+| `migrate-deploy` | `confirmed_backup_run_id` | 24時間以内に成功した`backup` run IDを指定                        |
+
+backup ArtifactにはAES-256暗号化済みarchiveとSHA-256だけが含まれる。平文dump、`DATABASE_URL`、DB password、暗号化passphraseをActions log・Issue・PR・チャットへ貼らない。download・復号・復元手順は`docs/11_deployment.md`の「backupの手動実行と復元」に従う。
 
 ---
 

@@ -1,19 +1,19 @@
 # Gensoko 実装タスク一覧
 
-> 更新日: 2026-07-13
+> 更新日: 2026-07-14
 > ステータス: `[ ]` 未実装 / `[-]` 実装中 / `[x]` 完了
 
 ---
 
 ## 設計決定（実装前に確定した事項）
 
-| # | 内容 | 決定 |
-|---|------|------|
-| 設計決定1 | 習得バッジ用「どの元素が習得済みか」の追跡方法 | **GameAnswer集計方式**（新テーブルなし）。`GET /elements` は認証時に `masteryStatus: "unlearned" \| "learning" \| "mastered"` を付与。`POST /game/sessions` 時の `UserStats.masteredCount` 更新はフェーズ7で実装 |
-| 設計決定2 | `GET /game/questions` → `POST /game/sessions` 間の正解一時保持 | **GameQuestionSetテーブル方式**。`GET /game/questions` でDBに正解情報と有効期限（30分）を保存し `questionSetId` を返す。`POST /game/sessions` で受け取り正誤判定後削除 |
-| 設計決定3 | 本番DBマイグレーション運用 | GitHub Actions で本番デプロイ前に `prisma migrate deploy` を実行する。実行前に Supabase のバックアップ取得時刻を確認し、破壊的変更は expand/contract 方式で複数リリースに分ける |
-| 設計決定4 | 本番レート制限の責務分担 | Cloudflare 側のエッジ制限と Hono ミドルウェアを併用する。認証系・一般APIに加え、`POST /game/sessions` はユーザーID/IP単位でより厳しく制限する |
-| 設計決定5 | スキーマ確定時のインデックス設計 | `docs/03_data_model.md` のインデックス案を Prisma schema / migration に反映する。`GameQuestionSet` 期限切れ cleanup、ランキング、履歴、苦手リスト、token 期限検索を主要対象にする |
+| #         | 内容                                                           | 決定                                                                                                                                                                                                             |
+| --------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 設計決定1 | 習得バッジ用「どの元素が習得済みか」の追跡方法                 | **GameAnswer集計方式**（新テーブルなし）。`GET /elements` は認証時に `masteryStatus: "unlearned" \| "learning" \| "mastered"` を付与。`POST /game/sessions` 時の `UserStats.masteredCount` 更新はフェーズ7で実装 |
+| 設計決定2 | `GET /game/questions` → `POST /game/sessions` 間の正解一時保持 | **GameQuestionSetテーブル方式**。`GET /game/questions` でDBに正解情報と有効期限（30分）を保存し `questionSetId` を返す。`POST /game/sessions` で受け取り正誤判定後削除                                           |
+| 設計決定3 | 本番DBマイグレーション運用                                     | GitHub Actions で本番デプロイ前に `prisma migrate deploy` を実行する。実行前に24時間以内の暗号化backup workflow成功と期限内Artifactを確認し、破壊的変更はexpand/contract方式で複数リリースに分ける               |
+| 設計決定4 | 本番レート制限の責務分担                                       | Cloudflare 側のエッジ制限と Hono ミドルウェアを併用する。認証系・一般APIに加え、`POST /game/sessions` はユーザーID/IP単位でより厳しく制限する                                                                    |
+| 設計決定5 | スキーマ確定時のインデックス設計                               | `docs/03_data_model.md` のインデックス案を Prisma schema / migration に反映する。`GameQuestionSet` 期限切れ cleanup、ランキング、履歴、苦手リスト、token 期限検索を主要対象にする                                |
 
 ---
 
@@ -57,12 +57,14 @@
 > 目的: 既存の認証 API と接続して UI の使い勝手を確認し、仕様の微調整に活かす。
 
 ### フロントエンド共通基盤
+
 - [x] SvelteKit ルーティング・共通レイアウト（ヘッダー/フッター/ナビ）
 - [x] 認証 Store（Svelte ストア・Bearer トークン管理・リフレッシュ自動実行）
 - [-] API クライアント基盤（`lib/api/client.ts`・共通エラーハンドリング・Hono RPC 導入可否検討） — 計画書: [`docs/plans/frontend-api-client/plan.md`](plans/frontend-api-client/plan.md)
 - [x] トースト通知コンポーネント（成功/エラー表示）
 
 ### アカウント系画面
+
 - [x] ログイン画面 `/login`（フォーム・エラー表示・「パスワードを忘れた」リンク）
 - [x] ユーザー登録画面 `/register`（入力・確認メール送信完了メッセージ）
 - [x] メール認証完了ページ `/verify-email`（トークン自動送信・成功/失敗メッセージ）
@@ -71,10 +73,12 @@
 - [x] プロフィール設定画面 `/settings`（ユーザー名変更・パスワード変更・アカウント削除）
 
 ### 既存 API との疎通確認
+
 - [x] ログイン → JWT 取得 → リフレッシュ の流れを実動作確認
 - [x] 登録 → メール認証 → ログイン の流れを実動作確認（Mailpit で確認）
 
 ### 仕様微調整タスク（UI を触って気づいた点を記録）
+
 - [ ] 認証 API インターフェースの微調整（あれば）
 
 ## フェーズ4: UI モック（トップ・元素一覧）
@@ -82,6 +86,7 @@
 > 目的: 元素一覧の UI 設計を固め、`GET /elements` の API インターフェースを決定する。
 
 ### 画面
+
 - [x] トップページ `/`（アプリ概要・ゲーム開始CTA・ランキングプレビュー）
 - [x] トップページ ランキングプレビュー実データ対応（週間ランキング上位3件・loading/error/empty表示） — Issue #72 / 計画書: [`docs/plans/home-ranking-preview/plan.md`](plans/home-ranking-preview/plan.md)
 - [x] 元素一覧ページ `/elements`（118枚カードグリッド・分類色分け）
@@ -90,6 +95,7 @@
 - [x] 習得状態バッジ表示（ログイン時のみ・未学習/学習中/習得） — 計画書: [`docs/plans/elements-mastery-badges/plan.md`](plans/elements-mastery-badges/plan.md)
 
 ### API インターフェース確定
+
 - [x] `GET /elements` のクエリパラメーター・レスポンス形式を決定・ドキュメント更新
 
 ## フェーズ5: GET /elements API 本実装
@@ -105,11 +111,13 @@
 > 目的: ゲームの UX をモックで確認し、ゲーム系 API のインターフェースを決定する。
 
 ### 画面
+
 - [x] ゲームモード選択画面 `/game`（モード一覧・苦手5問未満ガード表示） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 - [x] ゲームプレイ画面 `/game/play`（インジケーター・15秒タイマー・4択・正誤フィードバック・1〜4キー操作・A11Y 読み上げ順考慮） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 - [x] ゲーム結果画面 `/game/result`（スコア・連続正解・間違え一覧・「もう一度」「ホームへ」。`POST /game/sessions` の仕様確定・実装後に着手） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 
 ### API インターフェース確定
+
 - [x] `GET /game/questions` のレスポンス形式（問題・選択肢・questionSetId）を決定 — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 - [x] `POST /game/sessions` のリクエスト/レスポンス形式を決定（`/game/result` の表示元レスポンスを含む） — 計画書: [`docs/plans/game-screens/plan.md`](plans/game-screens/plan.md)
 
@@ -130,12 +138,14 @@
 > 目的: 残りページの UI を確認し、各 API のインターフェースを決定する。
 
 ### 画面
+
 - [x] 共通ナビ導線・モバイルメニュー整備（/weak 仮ページ、ログイン後 /weak・/mypage 導線、スマホハンバーガーメニュー） — 計画書: docs/plans/header-navigation/plan.md
 - [x] 苦手リスト画面 `/weak`（ソート・手動削除ボタン） — 計画書: [`docs/plans/weak-list-page/plan.md`](plans/weak-list-page/plan.md)
 - [x] マイページ・統計画面 `/mypage`（正答率グラフ・サマリーカード） — 計画書: [docs/plans/mypage-stats/plan.md](plans/mypage-stats/plan.md)
 - [x] ランキングページ `/ranking`（週間・全期間・自分の順位） — 計画書: [`docs/plans/ranking-page/plan.md`](plans/ranking-page/plan.md)
 
 ### API インターフェース確定
+
 - [x] 苦手 / ユーザー / ランキング / 統計 各 API のインターフェースを確定 — 計画書: [docs/plans/api-interface-contracts/plan.md](plans/api-interface-contracts/plan.md)
 
 ## フェーズ9: 残 API 本実装
@@ -172,8 +182,8 @@
 
 ## フェーズ12: デプロイ
 
-- [ ] Supabase プロジェクト作成・接続 URL 取得
-- [ ] 本番DBバックアップ・Prismaマイグレーション運用（`migrate deploy` 実行タイミング・ロールバック方針）
+- [x] Supabase staging・production project作成、東京region・Session pooler接続設定
+- [-] 本番DBバックアップ・Prismaマイグレーション運用（Free plan暗号化backup・容量監視workflow実装中） — 計画書: [`docs/plans/audit-log-production-operations/plan.md`](plans/audit-log-production-operations/plan.md)
 - [ ] Cloudflare Workers wrangler.toml + @prisma/adapter-cloudflare 設定・デプロイ
 - [ ] APIレート制限の本番適用継続（Workers専用entrypoint・SQLite-backed Durable Object・WAF・staging/production実機確認） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md)（フェーズ11先行実装の続き）
 - [ ] Vercel SvelteKit デプロイ・環境変数設定
