@@ -1,0 +1,1402 @@
+# 退会時の個人情報・学習データ完全削除 実装計画
+
+> 設計者ロール: シニアフルスタック／バックエンド／データベース／プライバシー設計エンジニア
+>
+> 計画日: 2026-07-15
+>
+> 対象進捗: フェーズ11「退会時の個人情報・学習データ完全削除方針」
+
+## 背景・目的
+
+現在の本人退会と管理者強制退会は `User` を soft delete するだけで、メールアドレス、ユーザー名、password hash、学習履歴が稼働DBに残る。これは `docs/02_security.md` の「アカウント削除時に個人情報・学習データを完全削除する」という目標要件を満たしていない。
+
+本人退会と管理者強制退会を `User` の物理削除へ変更し、DB cascade により全ユーザー所有データを同一transactionで削除する。既存の soft-deleted user も安全な一回限りの移行で削除し、認証、管理API、管理UI、監査ログ、バックアップ復元手順を物理削除後の契約へ整合させる。
+
+本計画でいう「完全削除」は、稼働DB上の個人情報・認証データ・学習データを物理削除することを指す。暗号化backup、期間限定の監査内部ID、メール配送事業者、ブラウザ等の別媒体は同一transactionでは消去できないため、保持期間、アクセス制限、復元時の再削除、利用者への開示を別途明記する。「全媒体から即時かつ無条件に消える」とは表現しない。
+
+## スコープ
+
+- `DELETE /api/v1/users/me` を本人確認付きの物理削除へ変更する。
+- `DELETE /api/v1/admin/users/:id` を管理者による物理削除へ変更する。
+- `User` 配下の認証データ・学習データが DB cascade で削除されることを保証する。
+- 本人退会成功の監査 action を追加し、削除本体と同じtransactionへ保存する。
+- 本人退会にも最後の利用可能な管理者保護と Serializable retry を適用する。
+- 管理者強制退会時に、不可逆操作の直前で actor の管理者権限を再確認する。
+- cascade 負荷に必要な外部キー index を追加する。
+- 既存 soft-deleted user を dry-run、明示的execute、batch、冪等再実行で物理削除する。
+- 管理画面から「退会済みユーザーをDBに保持する」前提の表示を除去する。
+- 設定画面の削除説明、エラー関連付け、focus、loading/live region を改善する。
+- 削除成功後、現在タブと対応ブラウザの他タブに残る認証状態を無効化する。
+- backup復元時の再削除手順、段階リリース、rollback条件、release gate を整備する。
+- API・セキュリティ・テスト・運用・進捗ドキュメントを実装と同期する。
+
+## 非スコープ
+
+- `AuditLog` 自体の閲覧・更新・個別削除API。
+- 監査内部IDのHMAC化、退会時null化、legal hold。採用する場合は別schema・鍵管理設計を行う。
+- 匿名化済みの永続KPI・退会者累計テーブルの新設。
+- メール配送事業者や利用者のメールボックスからのメール削除。
+- ブラウザ履歴、OSバックアップ、利用者が取得した画面キャプチャの遠隔削除。
+- `/privacy` ページ自体の新規実装。ただし本機能の本番公開前依存関係とし、削除・backup・監査保持の説明が公開済みであることをrelease gateに含める。
+- 非同期削除queueの新設。同期cascadeがプラットフォームのrequest上限を満たさない場合は本計画を再レビューし、非同期方式を別設計する。
+- API v2の新設。既存v1の互換fieldはdeprecation期間中に互換値を返す。
+
+## レビュー結果と改善内容
+
+### この計画のまま実装すべきではない理由
+
+初版の物理削除方針自体は妥当だが、cascade用index、最後の管理者となる本人の退会、transaction内の再確認、管理APIの互換期間、`deletedAt` contract migrationの順序、実DBcascade検証、backup復元後の再削除元が不足していた。このままでは削除遅延、最後の管理者喪失、旧frontendの破損、migration直後のAPI障害、backupからの個人情報復活を起こし得る。
+
+### DBの整合性と負荷
+
+1. **cascade外部キーの一部に `userId` index がない**
+   - 指摘内容: `RefreshToken`、`EmailVerification`、`GameQuestionSet` は `User` への `onDelete: Cascade` を持つが、`userId` 単独indexがない。
+   - 根拠: **確認できた事実**。`backend/prisma/schema.prisma` と適用済みmigrationを確認した。
+   - 影響・リスク: `User` 削除時の外部キー確認が子table全体のscanになり、データ増加後に削除APIとlegacy cleanupが遅延・lock競合し得る。
+   - 改善案: expand migrationで3tableへ `userId` indexを追加する。`PasswordResetToken.userId` はunique index、`WeakElement` は複合unique先頭、`GameSession` は複合index先頭、`UserStats` はPK、`GameAnswer` は `sessionId` 複合index先頭を利用する。
+   - 優先度: **High**
+
+2. **legacy selectorの規模と実行時間が未確認**
+   - 指摘内容: `deletedAt IS NOT NULL` の対象件数、子row数、最大ユーザー学習量、productionのlock時間が未計測。
+   - 根拠: 対象件数未確認は **確認できた事実**。将来の遅延は **推測**。
+   - 影響・リスク: 一括transactionでtimeoutし、再試行やproduction運用が不安定になる。
+   - 改善案: `User(deletedAt, id)` の移行用indexをexpandで追加し、dry-runでtable別総件数だけを取得する。executeは小さいbatch単位でcommitし、production前にstagingの代表最大fixtureで処理時間を計測する。
+   - 優先度: **High**
+
+3. **cascade対象の将来追加を検知できない**
+   - 指摘内容: 現在のrelationは削除できるが、将来ユーザー所有modelが追加された際の計画・test guardがない。
+   - 根拠: **確認できた事実**。現在は全所有relationにcascadeがあるが、schema inventoryを固定するtestはない。
+   - 影響・リスク: 新しい個人データtableだけが残る、またはRESTRICTで削除APIが500になる。
+   - 改善案: schema contract testと専用PostgreSQL integration fixtureを追加し、全所有model・共有model・監査例外を明示する。
+   - 優先度: **High**
+
+4. **N+1の重大な問題は現行一覧にはない**
+   - 指摘内容: 管理一覧は Prisma relation `select` を1queryで取得しており、現行コードにN+1は確認されなかった。
+   - 根拠: **確認できた事実**。
+   - 影響・リスク: cleanupをユーザーごとのcount loopで実装すると新たなN+1を作る。
+   - 改善案: dry-run/countはtableごとの固定本数query、executeはbatch IDに対する集合queryとDB cascadeを使い、ユーザーごとの子table count loopを禁止する。
+   - 優先度: **Medium**
+
+### API・コードの整合性
+
+1. **本人退会に最後の管理者保護がない**
+   - 指摘内容: 管理者強制退会は最後の利用可能な管理者を保護するが、`deleteCurrentUser()` は同じ保護を通らない。
+   - 根拠: **確認できた事実**。
+   - 影響・リスク: 最後のADMINが設定画面から退会し、管理機能へアクセスできる利用者が0人になる。
+   - 改善案: 本人退会もSerializable transaction内で最新role/stateと利用可能な管理者数を確認し、最後の管理者なら409で拒否する。
+   - 優先度: **High**
+
+2. **パスワード照合後のTOCTOUがある**
+   - 指摘内容: bcrypt照合後、transaction内で `passwordHash` や対象rowを再確認せず更新している。
+   - 根拠: **確認できた事実**。
+   - 影響・リスク: 並行するパスワード変更・role変更・二重削除と競合し、古い本人確認結果で不可逆削除する可能性がある。
+   - 改善案: bcryptはtransaction外で行い、transaction内で `passwordHash` と最新role/stateを再読込する。hash変更、対象消失、P2034枯渇は409に正規化する。
+   - 優先度: **High**
+
+3. **Serializable retryロジックがadmin service専用で再利用できない**
+   - 指摘内容: P2034判定と最大2回retryが `admin.service.ts` のprivate helperに閉じている。
+   - 根拠: **確認できた事実**。
+   - 影響・リスク: 本人退会側へ複製すると定数・判定・testがずれる。
+   - 改善案: Prisma transaction retryを共通helperへ切り出し、admin/user側でdomain errorへ変換する。
+   - 優先度: **Medium**
+
+4. **管理者actorの権限再確認が不可逆操作直前にない**
+   - 指摘内容: `authMiddleware` はDBの最新roleを読むが、その後にactorが降格・停止されても既存transactionは強制退会を続行できる。
+   - 根拠: middlewareとservice間の再確認がないことは **確認できた事実**。実競合の発生頻度は **推測**。
+   - 影響・リスク: 権限喪失後の管理者が物理削除をcommitするTOCTOUとなる。
+   - 改善案: 強制退会transaction内でactorが利用可能なADMINか再確認し、変化時は409で中止する。全admin mutationへの横展開は別タスク候補とし、本タスクでは不可逆な強制退会を必須対象とする。
+   - 優先度: **High**
+
+5. **再登録・認証エラーの意味が物理削除後に変わる**
+   - 指摘内容: 現在は削除済みrowが残るため再登録403・login 403だが、物理削除後は新規登録可能、旧loginは存在しないユーザーとして401になる。
+   - 根拠: **確認できた事実**。
+   - 影響・リスク: frontend、API文書、testが現状文言のままだと契約不一致になる。username再利用による表示上のなりすましリスクもある。
+   - 改善案: 同一email/usernameの再登録を許可し、新しいUser IDを発行する方針を明記する。旧IDとの自動再関連付けは禁止し、username再利用リスクをリリース承認事項にする。
+   - 優先度: **High**
+
+### 監査・プライバシー
+
+1. **本人退会の成功監査がない**
+   - 指摘内容: 管理者強制退会には成功監査があるが、本人退会にはactionも監査insertもない。
+   - 根拠: **確認できた事実**。
+   - 影響・リスク: 誰がいつ不可逆削除を完了したかを内部IDで追跡できず、復元後の再削除候補抽出にも使えない。
+   - 改善案: `USER_ACCOUNT_DELETE / SUCCESS` を追加し、`actorId = targetId`、削除前role、PIIなしで削除transactionへ含める。監査insert失敗時は削除全体をrollbackする。
+   - 優先度: **High**
+
+2. **監査内部ID保持は正式承認済みではない**
+   - 指摘内容: 365日と退会後raw内部ID保持は文書上の暫定案で、本番承認者・通知先が未確定。
+   - 根拠: **確認できた事実**。`docs/02_security.md` と監査運用計画に未承認gateが残る。
+   - 影響・リスク: 再識別可能な内部IDを承認なしで本番保持し、利用者説明とも不一致になる。
+   - 改善案: プライバシー責任者またはプロダクトオーナーの承認者・日付・期間・目的・問い合わせ先を記録するまで本番公開をblockする。
+   - 優先度: **High**
+
+3. **backupからの復元で削除済み個人情報が復活し得る**
+   - 指摘内容: backup後に削除されたUserは、そのbackupを復元すると復活する。現行DBも失った災害では、backup後の削除IDを取得する独立sourceがない。
+   - 根拠: backupが7日保持・PITRなしであること、独立削除ledgerがないことは **確認できた事実**。災害発生は **推測**。
+   - 影響・リスク: 「復元時に必ず再削除する」という約束を完全には保証できない。
+   - 改善案: 現行DBが読める復元では監査actionから再削除する。現行DB全損時の外部replay sourceを導入するか、残余リスクと最長7日のbackup保持を正式承認・開示する。どちらも未確定のまま完全削除を対外表明しない。
+   - 優先度: **High**
+
+### migration・本番運用
+
+1. **`deletedAt` 削除を同一releaseに入れるとmigration順序が壊れる**
+   - 指摘内容: productionは `prisma migrate deploy` をAPI deploy前に実行する。稼働中コードが `deletedAt` を参照したまま列をdropすると、新API切替前に障害になる。
+   - 根拠: **確認できた事実**。
+   - 影響・リスク: login、ranking、admin、admin-createがcolumn不存在で失敗する。
+   - 改善案: index追加、物理削除、legacy cleanup、`deletedAt`非参照コードの先行deploy、backup世代待ち、列dropの順に分離する。drop後のrollback先は非参照版だけに限定する。
+   - 優先度: **High**
+
+2. **古いbackupとcontract migrationの組合せが未定義**
+   - 指摘内容: soft-deleted rowを含むbackupへcolumn dropだけを適用すると、PIIが残ったinactive userとして残存する。
+   - 根拠: **確認できた事実**に基づく migration結果の **推測**。
+   - 影響・リスク: 復元時にlegacy PIIを削除せず列だけ失う。
+   - 改善案: legacy cleanup後に暗号化backupを作成し、7日間の旧Artifact失効を待ってからdropする。drop migrationは `deletedAt IS NOT NULL` が1件でもあればIDを出さず失敗するguardを持つ。
+   - 優先度: **High**
+
+3. **production cleanupの二重確認が不足**
+   - 指摘内容: 既存workflowはcapacity、backup、migrationだけで、legacy user削除用operationとbackup gateがない。
+   - 根拠: **確認できた事実**。
+   - 影響・リスク: 開発端末からの誤接続、dry-runなし実行、古いbackupでの実行が起こり得る。
+   - 改善案: production固定workflowへdry-run/executeを追加し、execute flag、確認文字列、24時間以内のbackup run ID、既存concurrencyを必須化する。
+   - 優先度: **High**
+
+### UI / A11Y
+
+1. **削除同意エラーがパスワード欄へ誤関連付けされる**
+   - 指摘内容: 設定画面は password未入力、同意未チェック、API失敗を単一 `deleteError` で扱い、すべて password inputへ `aria-invalid` / `aria-describedby` を付ける。
+   - 根拠: **確認できた事実**。
+   - 影響・リスク: スクリーンリーダーが、正しいpassword欄を誤って無効と読み上げる。どのcontrolを修正すべきか分からない。
+   - 改善案: password error、acknowledgement error、form/API errorを分離し、各controlへ正しく関連付ける。client validation後は最初の無効controlへfocusする。
+   - 優先度: **High**
+
+2. **管理者が詳細dialogから削除すると不存在detailを再取得する**
+   - 指摘内容: 現行 `synchronizeAfterMutation()` は削除後も `shouldRestoreDetail=true` ならdetailを再取得する。
+   - 根拠: **確認できた事実**。
+   - 影響・リスク: 物理削除後は404となり、成功直後にエラーdialogを見せる。元のtriggerも一覧から消えるためfocus復帰が不安定になる。
+   - 改善案: delete成功はdetail再取得を禁止し、dialogを閉じ、一覧・統計を同期し、次の行の操作buttonまたは一覧headingへfocusし、live regionで成功を通知する。
+   - 優先度: **High**
+
+3. **他タブのsessionStorageが残る**
+   - 指摘内容: 現在タブは `logout()` でclearされるが、`sessionStorage` はtab単位で、他タブへ削除完了を通知する実装がない。
+   - 根拠: **確認できた事実**。
+   - 影響・リスク: server accessは401になるが、他タブにusername等の古い表示が一時的に残る。
+   - 改善案: PII/tokenを含めない `BroadcastChannel` eventで他タブのrefreshをabortし、local auth stateをclearする。未対応browserではserver側401を最終防御とし、制約を記録する。
+   - 優先度: **Medium**
+
+4. **既存dialogの基本A11Yには重大な問題なし**
+   - 指摘内容: `AdminDialog` はdialog semantics、focus trap、Escape、busy中close禁止、trigger消失時fallback focusを実装済み。
+   - 根拠: **確認できた事実**。
+   - 影響・リスク: 削除後に正しいfallbackを渡さない場合だけ既存機構を活用できない。
+   - 改善案: 共通dialog自体の再実装はせず、削除成功分岐とtestを追加する。
+   - 優先度: **Low**
+
+### テスト
+
+1. **mock testだけではDB cascadeを証明できない**
+   - 指摘内容: 現行本人・管理者削除testはPrisma mockでsoft delete呼出しだけを確認している。
+   - 根拠: **確認できた事実**。
+   - 影響・リスク: migration上のFK不足、RESTRICT、GameAnswerの間接cascade、監査rollbackを見逃す。
+   - 改善案: 専用Docker PostgreSQL DBで全所有modelを作成し、User削除後の0件、共有Element残存、AuditLog残存、audit失敗時rollback、2回目挙動を検証する。
+   - 優先度: **High**
+
+2. **競合・旧データ・復元のtest matrixが不足**
+   - 指摘内容: self deleteのP2034、password変更競合、最後の管理者、admin actor降格、legacy batch再実行、途中失敗、restore replayが未test。
+   - 根拠: **確認できた事実**。
+   - 影響・リスク: 稀だが不可逆な誤削除・削除漏れを回帰で検知できない。
+   - 改善案: unit、route、integration、workflow contract、staging manualを分担し、後述test一覧をrelease gateへ含める。
+   - 優先度: **High**
+
+3. **設定画面の削除A11Y testが不足**
+   - 指摘内容: 現行page testは主に73byte password送信を確認し、control別error関連付け、focus、多重送信、success後の他tab clearを検証していない。
+   - 根拠: **確認できた事実**。
+   - 影響・リスク: 見た目では気付きにくいA11Y回帰が残る。
+   - 改善案: DOM testにkeyboard submit、focus、`aria-invalid`、`aria-describedby`、`role=alert/status`、二重送信、error保持、cross-tabを追加する。
+   - 優先度: **High**
+
+## 現状調査結果
+
+### 確認できた事実
+
+| 領域        | 事実                                                                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| 本人退会    | `deleteCurrentUser()` は `isActive=false`, `deletedAt=now`, `lockedUntil=null` とtoken削除を行い、学習データとUser rowを残す。監査はない。 |
+| 管理者退会  | `forceDeleteAdminUser()` はSerializable・最大2回retry・最後の管理者保護・成功/失敗監査を持つが、対象をsoft deleteする。                    |
+| DB relation | User所有データは全て直接または `GameSession` 経由で `onDelete: Cascade`。`Element` は共有masterで残す。                                    |
+| 監査        | `AuditLog` はUser relationを持たず、User削除後も `actorId` / `targetId` を保持できる。                                                     |
+| 認証        | access token requestは毎回UserをDB参照するため、User物理削除後は401。refresh tokenはUser削除cascade後に見つからず401。                     |
+| 再登録      | 現在はsoft-deleted rowを検出して403。物理削除後はunique値が解放され、新規Userとして登録できる。                                            |
+| 管理API     | `deletedAt`、`status=deleted`、`users.deleted`、退会済みUIを公開契約として持つ。                                                           |
+| 管理UI      | 削除を含むmutation後に一覧を再取得し、detail起点では対象detailも再取得する。                                                               |
+| 設定UI      | passwordをtrim後1回計算し、多重送信guardを持つ。成功時はtoast、logout、`/` 遷移。                                                          |
+| backup      | production Free planはPITRなし。暗号化logical backup Artifactを7日保持するworkflowがある。                                                 |
+| production  | migrationは24時間以内の成功backupを確認し、API deploy前に `prisma migrate deploy` する。                                                   |
+| 進捗        | 完全削除は監査保持とは別の本番公開前ブロッカーとして未完了。                                                                               |
+
+### 未確認・承認待ち
+
+| 項目                                                          | 状態                 | releaseへの影響                                 |
+| ------------------------------------------------------------- | -------------------- | ----------------------------------------------- |
+| production/stagingのlegacy soft-deleted user件数と子row数     | 未計測               | execute前dry-run必須                            |
+| 最大ユーザーのGameSession / GameAnswer件数とcascade所要時間   | 未計測               | 同期削除可否のperformance gate                  |
+| 監査保持365日・退会後raw内部ID・承認者・問い合わせ先          | 正式承認未完了       | 本番公開block                                   |
+| `BACKUP_ENCRYPTION_PASSPHRASE` 登録、初回backup/migration実績 | 監査運用計画上未完了 | production migration/cleanup block              |
+| 現行DB全損時のbackup後削除ID replay source                    | 未導入               | 完全削除の対外表明blockまたは残余リスク承認必須 |
+| メール配送事業者・アプリログ・ブラウザcacheの保持期間         | 未確認               | privacy policy文言確定block                     |
+| frontend asset/cacheの互換期間                                | 未確認               | v1互換fieldは本タスクでは削除せずdeprecated維持 |
+| username再利用のプロダクト承認                                | 未確認               | 公開前承認必須                                  |
+
+## 削除対象データ
+
+| データ/model            | 個人との関係                                  | 稼働DBでの方針                               | 削除経路                                  | 検証                        |
+| ----------------------- | --------------------------------------------- | -------------------------------------------- | ----------------------------------------- | --------------------------- |
+| `User`                  | email、username、passwordHash、role、認証状態 | 物理削除                                     | `tx.user.delete`                          | PK検索0件                   |
+| `RefreshToken`          | 認証session                                   | 削除                                         | User FK cascade                           | `userId` 0件                |
+| `EmailVerification`     | メール確認token                               | 削除                                         | User FK cascade                           | `userId` 0件                |
+| `PasswordResetToken`    | password reset token                          | 削除                                         | User FK cascade                           | `userId` 0件                |
+| `WeakElement`           | 苦手学習データ                                | 削除                                         | User FK cascade                           | `userId` 0件                |
+| `GameSession`           | 得点・正答・時間・履歴                        | 削除                                         | User FK cascade                           | `userId` 0件                |
+| `GameAnswer`            | 問題・回答・正誤                              | 削除                                         | GameSession FK cascade                    | deleted session由来0件      |
+| `GameQuestionSet`       | 一時問題・正解JSON                            | 削除                                         | User FK cascade                           | `userId` 0件                |
+| `UserStats`             | 集計学習データ                                | 削除                                         | User FK cascade                           | `userId` 0件                |
+| `AuditLog`              | 内部IDによる相関可能性                        | 承認期間だけ例外保持                         | User FKなし。保持期限cleanupでrowごと削除 | User削除後も必要rowのみ存在 |
+| `Element`               | 共有元素master                                | 保持                                         | User relationなし                         | fixture Elementが残る       |
+| 暗号化backup            | 削除前PIIを含み得る                           | 最大7日、アクセス制限、復元時再削除          | Artifact expiry / restore runbook         | Artifact期限・再削除結果    |
+| browser認証状態         | access token、username等                      | 現在tabを即時clear、対応browserの他tabへ通知 | auth store / BroadcastChannel             | DOM/store test              |
+| 配送済みメール・外部log | DB外copy                                      | provider保持規約に従い開示                   | 本transaction外                           | provider設定の確認記録      |
+
+## 前提条件・依存関係
+
+### 既存の実装（公開インターフェース）
+
+**`backend/src/services/user.service.ts`**
+
+- `deleteCurrentUser(input: { userId: string; currentPassword: string }): Promise<void>` — 本人passwordを確認し、現在はUserをsoft deleteする。
+- `UserError(status: 400 | 403 | 409, message: string)` — user serviceの公開エラー。
+
+**`backend/src/services/admin.service.ts`**
+
+- `forceDeleteAdminUser(input: { adminUserId: string; targetUserId: string }): Promise<{ message: string }>` — 現在は対象Userをsoft deleteし、監査付きtransactionを実行する。
+- `getAdminUsers(input?: AdminUserListQuery): Promise<{ users: AdminUserListItem[]; nextCursor: string | null }>` — cursor pagination付き一覧。
+- `getAdminUserDetail(input: { userId: string }): Promise<{ user: AdminUserDetail }>` — 管理者用詳細。
+- `getAdminStats(): Promise<AdminStats>` — user/game/learning集計。
+
+**`backend/src/services/audit.service.ts` / `audit-events.ts`**
+
+- `recordAuditEvent(client, event): Promise<void>` — strict schema検証後にtransaction clientで監査rowを作る。
+- `recordAuditEventBestEffort(event): Promise<void>` — 許可済み失敗監査を本処理へ影響させず記録する。
+- `AUDIT_ACTIONS` — login、password、admin操作の許可action集合。
+
+**`backend/src/lib/refresh-token-cookie.ts`**
+
+- `clearRefreshTokenCookies(c, requestPath): void` — `/api/v1/auth` と `/api/v1/auth/refresh` のCookieを削除する。
+
+**`frontend/src/lib/api/users.ts`**
+
+- `deleteCurrentUser(options: DeleteCurrentUserOptions): Promise<UserMessageResponse>` — backend error本文を保持し、success responseをruntime検証する。
+
+**`frontend/src/lib/stores/auth.svelte.ts`**
+
+- `logout(): Promise<void>` — refreshをabortし、現在tabのstate/sessionStorageを先にclearしてからlogout APIを呼ぶ。
+- `refresh(): Promise<boolean>` — HttpOnly refresh Cookieでaccess tokenを更新する。
+
+**`frontend/src/lib/api/admin.ts`**
+
+- `deleteAdminUser(options: DeleteAdminUserOptions): Promise<AdminMessageResponse>` — 管理者強制退会API。
+- `getAdminUsers` / `getAdminUserDetail` / `getAdminStats` — runtime validator付き管理API client。
+
+### 重要な制約
+
+- Prisma v7のclientは `PrismaPg` adapter経由とし、`schema.prisma` のdatasourceへ `url` を追加しない。
+- DBアクセスはPrisma ORMを使う。migration DDL以外のraw queryを追加しない。
+- API入力はroute入口のZodで検証し、既存のstrict payloadと日本語error形式を維持する。
+- passwordは既存の `normalizePassword()` とbcrypt完全比較を使い、平文を保存・logしない。
+- User削除と成功監査は同一transaction。監査作成失敗時はUserと全cascadeをrollbackする。
+- AuditLogへemail、username、password、token、Cookie、request/response、raw errorを保存しない。
+- 一般API/account rate limitを迂回しない。
+- `Element` を削除しない。
+- 既存migrationを編集しない。index追加とcontract削除は新しいmigrationで行う。
+- production DB操作は既存Environment、Secret、backup gate、concurrencyを使い、端末から直接実行しない。
+- drop migration後は `deletedAt` 参照版へrollbackしない。
+
+### 実装開始前に確定する事項
+
+- [ ] 監査内部ID保持期間、目的、承認者、承認日、問い合わせ先。
+- [ ] backup最長7日と復元時再削除をprivacy policy/UIへ記載する文言。
+- [ ] 現行DB全損時の削除replay sourceを導入するか、残余リスクを承認するか。
+- [ ] 同一email/username再登録とusername再利用を許可するプロダクト判断。
+- [ ] 同期cascadeのperformance合格値。暫定基準はplatform request timeoutの50%以内かつ5秒以内の短い方。
+- [ ] production cleanupの実行者・承認者・実行時間帯・通知先。
+
+## 対象ファイル一覧
+
+`<timestamp>` と「候補」と記載した新規名は実装時に確定し、`## 実装完了` で実ファイル名へ更新する。
+
+### 新規候補
+
+| ファイル                                                                           | 変更種別 | 内容                                               |
+| ---------------------------------------------------------------------------------- | -------- | -------------------------------------------------- |
+| `backend/prisma/migrations/<timestamp>_add_account_deletion_indexes/migration.sql` | 新規候補 | cascade FKとlegacy selectorのexpand index          |
+| `backend/prisma/migrations/<timestamp>_drop_users_deleted_at/migration.sql`        | 新規候補 | 旧backup失効後のguard付きcontract migration        |
+| `backend/src/lib/serializable-transaction.ts`                                      | 新規候補 | P2034最大2回retryの共通helper                      |
+| `backend/src/lib/serializable-transaction.test.ts`                                 | 新規候補 | retry/non-retry/exhaustion test                    |
+| `backend/src/jobs/deleteLegacySoftDeletedUsers.ts`                                 | 新規候補 | dry-run、batch execute、aggregate、許可field log   |
+| `backend/src/jobs/deleteLegacySoftDeletedUsers.test.ts`                            | 新規候補 | cleanup unit test                                  |
+| `backend/src/jobs/deleteLegacySoftDeletedUsers.cli.ts`                             | 新規候補 | CLI引数・環境gate・PrismaPg初期化                  |
+| `backend/src/jobs/deleteLegacySoftDeletedUsers.cli.test.ts`                        | 新規候補 | CLI安全策・秘密情報非出力test                      |
+| `backend/src/jobs/accountDeletion.integration.test.ts`                             | 新規候補 | 専用PostgreSQLでcascade/監査/rollback/冪等性を検証 |
+| `backend/src/services/account-deletion-schema.test.ts`                             | 新規候補 | User所有relationとcascade/index inventory contract |
+| `.github/workflows/staging-account-data-deletion.yml`                              | 新規候補 | staging固定dry-run/execute workflow                |
+| `backend/src/jobs/stagingAccountDataDeletionWorkflow.test.ts`                      | 新規候補 | staging workflow contract test                     |
+| `frontend/src/lib/stores/auth.svelte.test.ts`                                      | 新規候補 | account deletion後のcurrent/cross-tab clear test   |
+
+### 修正対象
+
+| ファイル                                                                        | 変更種別 | 内容                                                                           |
+| ------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `backend/prisma/schema.prisma`                                                  | 修正     | `userId` index、移行用index、最終phaseで `deletedAt` 削除                      |
+| `backend/src/services/user.service.ts`                                          | 修正     | 本人物理削除、password再確認、最後の管理者保護、成功監査、409整合              |
+| `backend/src/services/user.service.test.ts`                                     | 修正     | self delete unit/rollback/concurrency/last-admin test                          |
+| `backend/src/services/admin.service.ts`                                         | 修正     | 管理者物理削除、actor再確認、共通retry、互換集計                               |
+| `backend/src/services/admin.service.test.ts`                                    | 修正     | cascade呼出し、actor権限、last-admin、P2034、404、統計test                     |
+| `backend/src/services/audit-events.ts`                                          | 修正     | `USER_ACCOUNT_DELETE` 成功schema                                               |
+| `backend/src/services/audit.service.test.ts`                                    | 修正     | 新action strict schema、PII/余剰field拒否                                      |
+| `backend/src/routes/users/index.ts`                                             | 修正     | 409を含む物理削除error契約を維持、Cookie確認                                   |
+| `backend/src/routes/users/delete-me.test.ts`                                    | 修正     | status/body/Cookie/error形式回帰                                               |
+| `backend/src/routes/admin/index.ts`                                             | 修正     | 互換fieldを合成しつつ物理削除後404契約へ整合                                   |
+| `backend/src/routes/admin/user-delete.test.ts`                                  | 修正     | 200/404/409/429/500 response契約                                               |
+| `backend/src/routes/admin/users.test.ts`                                        | 修正     | `status=deleted` deprecation互換と空結果                                       |
+| `backend/src/routes/admin/user-detail.test.ts`                                  | 修正     | 物理削除済みIDの404                                                            |
+| `backend/src/routes/admin/user-status.test.ts`                                  | 修正     | deprecated `deletedAt:null` 互換field                                          |
+| `backend/src/routes/admin/user-role.test.ts`                                    | 修正     | deprecated `deletedAt:null` 互換field                                          |
+| `backend/src/routes/admin/stats.test.ts`                                        | 修正     | current row count、deprecated `deleted:0`、current data集計                    |
+| `backend/src/services/auth.service.ts`                                          | 修正     | cleanup後の再登録・login/forgot/refresh、contract phaseで `deletedAt` 参照除去 |
+| `backend/src/routes/auth/register.test.ts`                                      | 修正     | 削除後の同一email/username再登録                                               |
+| `backend/src/routes/auth/login.test.ts`                                         | 修正     | 旧資格情報401、contract後のaccount state                                       |
+| `backend/src/services/ranking.service.ts`                                       | 修正     | contract phaseで `deletedAt` filter除去、`isActive` と物理存在へ整合           |
+| `backend/src/services/ranking.service.test.ts`                                  | 修正     | suspended/不存在のranking除外回帰                                              |
+| `backend/src/services/admin-create.service.ts`                                  | 修正     | contract phaseで `deletedAt` 参照除去                                          |
+| `backend/src/services/admin-create.service.test.ts`                             | 修正     | contract後の既存user判定                                                       |
+| `backend/src/lib/config.ts`                                                     | 修正     | legacy削除execute flag・batch sizeの一元検証                                   |
+| `backend/src/lib/config.test.ts`                                                | 修正     | default false、境界、不正値test                                                |
+| `backend/.env.example`                                                          | 修正     | 安全側defaultの環境変数例                                                      |
+| `backend/package.json` / `backend/package-lock.json`                            | 修正     | cleanup/integration npm script                                                 |
+| `.github/workflows/production-database.yml`                                     | 修正     | dry-run/execute operation、確認文字列、backup gate、concurrency                |
+| `backend/src/jobs/productionDatabaseWorkflow.test.ts`                           | 修正     | production workflow安全契約                                                    |
+| `frontend/src/lib/api/admin.ts`                                                 | 修正     | UI内部型からdeleted状態を除去し、v1互換extra fieldを許容                       |
+| `frontend/src/lib/api/admin.test.ts`                                            | 修正     | 物理削除後のvalidator/query/統計契約                                           |
+| `frontend/src/lib/admin/query.ts`                                               | 修正     | 旧 `status=deleted` URLをdropしてcanonicalize                                  |
+| `frontend/src/lib/admin/query.test.ts`                                          | 修正     | 旧URL、active/suspended、未知値の正規化                                        |
+| `frontend/src/lib/admin/actions.ts` / `actions.test.ts`                         | 修正     | soft-deleted状態依存を除去                                                     |
+| `frontend/src/lib/components/admin/AdminUserFilters.svelte` / `.test.ts`        | 修正     | 退会済みfilter除去、keyboard/label回帰                                         |
+| `frontend/src/lib/components/admin/AdminUserList.svelte` / `.test.ts`           | 修正     | 退会済み表示・分岐除去、削除後focus対象                                        |
+| `frontend/src/lib/components/admin/AdminUserDetail.svelte` / `.test.ts`         | 修正     | 退会済み表示・分岐除去、404/empty回帰                                          |
+| `frontend/src/lib/components/admin/AdminActionConfirmation.svelte` / `.test.ts` | 修正     | 物理削除説明、既存dialog A11Y維持                                              |
+| `frontend/src/lib/components/admin/AdminStatsSection.svelte` / `.test.ts`       | 修正     | 「現在の登録ユーザー」表示、退会済みcard除去                                   |
+| `frontend/src/routes/(app)/admin/+page.svelte`                                  | 修正     | delete成功時detail再取得禁止、一覧同期、focus/live region                      |
+| `frontend/src/routes/(app)/admin/admin-page.test.ts`                            | 修正     | delete後404防止、focus、live message、sync failure                             |
+| `frontend/src/routes/(app)/settings/+page.svelte`                               | 修正     | 説明文、control別error、focus、busy/live、account deletion clear               |
+| `frontend/src/routes/(app)/settings/settings-page.test.ts`                      | 修正     | A11Y、keyboard、多重送信、error、成功遷移test                                  |
+| `frontend/src/lib/stores/auth.svelte.ts`                                        | 修正     | PIIなしcross-tab deletion event、refresh abort、state clear                    |
+| `docs/02_security.md`                                                           | 修正     | 稼働DB削除、監査/backup例外、正式承認                                          |
+| `docs/04_api.md`                                                                | 修正     | self/admin/auth/admin statsの最終契約とdeprecation                             |
+| `docs/05_progress.md`                                                           | 修正     | 計画書link、実装中/完了状態                                                    |
+| `docs/07_testing_flow.md`                                                       | 修正     | 専用account deletion integration DB手順                                        |
+| `docs/09_startup_commands.md`                                                   | 修正     | dry-run/executeの安全な起動方法                                                |
+| `docs/11_deployment.md`                                                         | 修正     | rollout、cleanup、backup、restore、rollback runbook                            |
+| `docs/plans/account-data-complete-deletion/plan.md`                             | 修正     | 実装中checkと実装完了記録                                                      |
+
+### 確認のみ・変更禁止
+
+| ファイル                                                    | 理由                                                                   |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 既存 `backend/prisma/migrations/**`                         | migration履歴は編集しない                                              |
+| `docs/plans/settings-page/plan.md`                          | soft delete採用当時の履歴として保持し、今回の計画・API文書で上書きする |
+| `docs/plans/admin-apis/plan.md` / `admin-dashboard/plan.md` | 実装当時の履歴として保持し、今回の計画でcontract変更を記録する         |
+| `docs/plans/audit-log-production-operations/plan.md`        | 監査保持のsourceを参照し、完全削除の実装記録は本計画へ分離する         |
+
+## 実装方針
+
+### 不変条件
+
+1. APIが200を返した時点で、対象Userと全ユーザー所有rowは稼働DBから消えている。
+2. Userまたは子rowの削除と成功監査は、すべてcommitするか、すべてrollbackする。
+3. `Element` と承認済み保持期間内の `AuditLog` は削除しない。
+4. 成功監査には内部IDとroleだけを保存し、PII、秘密情報、request body、raw errorを保存しない。
+5. 本人退会・管理者強制退会のどちらでも、利用可能な管理者を0人にしない。
+6. 並行password/role/status/deleteと整合できない場合は削除せず409を返す。
+7. legacy cleanupは対象が0件でも成功し、再実行で追加削除がなければ0件成功になる。
+8. backupを復元して公開trafficへ切り替える前に、復元後の再削除checkを完了する。
+9. log、Actions summary、error responseへ内部ID、email、username、接続情報、生Errorを出さない。
+10. `deletedAt` contract drop前に、稼働code、rollback対象、保持中backupのすべてがdropと互換であることを確認する。
+
+### データ状態の最終形
+
+- 現在利用中または停止中のaccountだけが `users` に存在する。
+- 退会完了したaccountのtombstone、email hash、username reservationは作らない。
+- 同一email/usernameで再登録したaccountは新しいUser IDを持ち、旧監査内部IDへ自動的に結び付けない。
+- 管理画面の「退会済み」表示・filter・累計は廃止する。
+- v1互換の `deletedAt` / `users.deleted` / `status=deleted` は移行期間中だけdeprecated互換値を返し、DB soft deleteの根拠にはしない。
+- `users.total` は「現在DBに存在するUser row数」であり、退会者を含むhistorical KPIではない。
+- game/learning集計も現在保持しているUser所有rowの集計であり、退会後に減少する。
+
+## DB変更方針
+
+### relation・cascade
+
+物理削除はUserを起点にし、個別tableの `deleteMany` を列挙して削除の正しさを担保しない。DBの外部キーcascadeをsource of truthとする。個別token削除はUser削除前に実行しない。重複実装を避け、将来のrelation追加をschema contract testで検知する。
+
+| relation                  | 現行制約                                | 最終方針                 |
+| ------------------------- | --------------------------------------- | ------------------------ |
+| User → RefreshToken       | Cascade                                 | 維持、`userId` index追加 |
+| User → EmailVerification  | Cascade                                 | 維持、`userId` index追加 |
+| User → PasswordResetToken | Cascade、`userId` unique                | 維持、追加index不要      |
+| User → WeakElement        | Cascade、`(userId, elementId)` unique   | 維持、追加index不要      |
+| User → GameSession        | Cascade、`(userId, playedAt, id)` index | 維持、追加index不要      |
+| GameSession → GameAnswer  | Cascade、`sessionId` prefix index       | 維持、追加index不要      |
+| User → GameQuestionSet    | Cascade                                 | 維持、`userId` index追加 |
+| User → UserStats          | Cascade、`userId` PK                    | 維持、追加index不要      |
+| AuditLog → User           | relationなし                            | 維持                     |
+| Element → 学習row         | 共有master、RESTRICT                    | 維持                     |
+
+### index
+
+expand migrationで以下を追加する。
+
+- `RefreshToken`: `@@index([userId])`
+- `EmailVerification`: `@@index([userId])`
+- `GameQuestionSet`: `@@index([userId])`
+- `User`: `@@index([deletedAt, id])`。legacy cleanup専用の一時indexとし、`deletedAt` contract migrationで列とともに削除する。
+
+index migration前にstagingで作成時間とwrite lockを測定する。通常の `CREATE INDEX` がproduction maintenance windowの許容時間を超える場合は、同じmigration履歴内で安易に `IF NOT EXISTS` を足さず、`CREATE INDEX CONCURRENTLY` の失敗時にinvalid indexを検出・除去できるrunbookを別途確定してから計画を更新する。
+
+### query効率
+
+- live deleteはUser PK lookup 2回と、必要時のusable admin count 1回、User delete 1回、AuditLog insert 1回の固定本数とする。
+- admin一覧は現行のrelation `select` を維持し、行ごとのstats queryを追加しない。
+- legacy dry-runはtableごとのaggregate countを固定本数で実行し、IDごとのcount loopを禁止する。
+- legacy executeは `deletedAt != null` のUser IDを小さいbatchで取得し、batchごとの `deleteMany` とDB cascadeを使う。
+- admin statsは現在保持中のrowだけを数える。`deletedAt` 移行中はrelation filterでlegacy rowを除き、contract後は全現存rowを集計する。
+
+### expand / contract
+
+`deletedAt` は物理削除releaseと同時にdropしない。
+
+1. expand index migrationを先行適用する。
+2. `deletedAt` を残したまま物理削除codeをdeployする。
+3. legacy cleanupを完了し、dry-run 0件を確認する。
+4. `deletedAt` を参照しないcodeを先にdeployする。v1互換fieldはDB列を読まず定数で合成する。
+5. cleanup後の暗号化backupを作成し、soft-deleted rowを含み得る旧Artifactが7日保持期限を過ぎたことを確認する。
+6. `deletedAt IS NOT NULL` が1件でもあればgeneric errorで中止するguard付きmigrationで列と一時indexをdropする。
+7. drop後は非参照版codeだけをrollback候補とする。
+
+## API変更方針
+
+### 共通エラーレスポンス
+
+```json
+{ "error": "日本語のメッセージ" }
+```
+
+Zod validationは既存どおり次を返す。
+
+```json
+{
+  "error": "バリデーションエラー",
+  "details": []
+}
+```
+
+stack trace、DB error、内部path、対象ID、email、usernameを返さない。
+
+### DELETE `/api/v1/users/me`
+
+#### Request
+
+Headers:
+
+- `Authorization: Bearer <accessToken>`
+- `Content-Type: application/json`
+
+Body:
+
+```json
+{ "currentPassword": "Pass1234!" }
+```
+
+- Zod objectは `.strict()` を維持する。
+- `currentPassword` は空文字不可。
+- 既存password照合値のためUTF-8 72byte上限を適用しない。
+- frontend/backendとも正規化後の値を1回だけ計算し、同じ値を照合・送信に使う。
+
+#### Response 200
+
+```json
+{ "message": "アカウントを削除しました" }
+```
+
+Cookie:
+
+- `refreshToken` を `/api/v1/auth` と `/api/v1/auth/refresh` の両pathで削除する。
+- Cookie属性は既存helperを使い、routeへ重複実装しない。
+
+#### Status / error
+
+| status | 条件・message                                                                          |
+| ------ | -------------------------------------------------------------------------------------- |
+| 400    | validation / `現在のパスワードが正しくありません`                                      |
+| 401    | 認証なし / token不正 / 既に物理削除済みで `ユーザーが見つかりません`                   |
+| 403    | 停止、メール未確認、lock中などauth middleware拒否                                      |
+| 409    | `最後の管理者は退会できません` / password hash変更 / 同時削除 / Serializable retry枯渇 |
+| 429    | account rate limit超過                                                                 |
+| 500    | 予期しない内部error。削除はrollback                                                    |
+| 503    | fail-closed account rate-limit store利用不可                                           |
+
+#### 変更後の挙動
+
+- success時はUserと全所有rowを物理削除し、成功監査だけを残す。
+- 古いaccess tokenは次requestのauth middlewareで401。
+- 古いrefresh tokenはcascadeで消え、refresh APIは401。
+- 同じrequestがtransaction開始後に競合した場合は409。通常の再requestはauth middlewareで401。
+- 削除成功後にlogout APIを成功させる必要はない。frontendは専用local clearを使い、backend responseのCookie clearを信頼する。
+
+### DELETE `/api/v1/admin/users/:id`
+
+#### Request
+
+- `Authorization: Bearer <accessToken>`
+- bodyなし。
+- `id` は既存Zod paramでtrim後空文字を拒否する。
+
+#### Response 200
+
+```json
+{ "message": "ユーザーを強制退会しました" }
+```
+
+#### Status / error
+
+| status | 条件・message                                                                  |
+| ------ | ------------------------------------------------------------------------------ |
+| 400    | path validation                                                                |
+| 401    | 認証なし / token不正 / actor不存在                                             |
+| 403    | actorがADMINでない、停止、未確認、lock中                                       |
+| 404    | target不存在、物理削除済み、cleanup済みlegacy target                           |
+| 409    | 自分自身 / 最後の管理者 / actor権限・target状態の競合 / Serializable retry枯渇 |
+| 429    | general API rate limit超過                                                     |
+| 500    | 予期しない内部error。削除はrollback                                            |
+
+- 同じtargetの再実行は404とし、successを偽装しない。
+- transition中に残るlegacy soft-deleted targetは既存409を維持できるが、cleanup完了後の最終契約は404だけとする。
+- 管理者自身の削除はこのendpointでは引き続き409。本人退会endpointは最後の管理者でなければ利用可能。
+
+### 認証関連の確認・変更
+
+| endpoint                     | 物理削除後の契約                                                      |
+| ---------------------------- | --------------------------------------------------------------------- |
+| `POST /auth/register`        | 同一email/usernameを新しいUser IDで登録可能。通常の201契約            |
+| `POST /auth/login`           | 旧資格情報は存在しないaccountとしてgeneric 401。削除済み専用403は廃止 |
+| `POST /auth/forgot-password` | 存在列挙を防ぎ、従来どおり200で何もしない                             |
+| `POST /auth/refresh`         | token rowがないため401                                                |
+| Bearer認証endpoint           | User rowがないため401                                                 |
+
+### 管理API v1の互換方針
+
+旧frontendや開いたままのtabを壊さないため、v1からfieldを即時削除しない。DB列drop後も次のdeprecated互換をroute境界で合成する。
+
+| contract                   | 移行後のv1互換値               | 新frontend                                      |
+| -------------------------- | ------------------------------ | ----------------------------------------------- |
+| user summaryの `deletedAt` | 常に `null`                    | 内部型・UIでは使用しない。extra fieldとして許容 |
+| query `status=deleted`     | 200、空一覧、`nextCursor=null` | URL parserが削除してcanonicalize                |
+| `users.deleted`            | 常に `0`                       | 表示しない                                      |
+| `users.total`              | 現在存在するUser row数         | 「現在の登録ユーザー」                          |
+
+- `status` の実用値は `"active" | "suspended"`。
+- API v1からdeprecated fieldを物理削除する作業はAPI v2またはversion/asset退役を保証できる別計画へ分離する。
+- 一覧・詳細・status/role mutationは物理削除済みUserを返さない。
+- game/learning statsは現在保持中のrowだけを数え、historical KPIではないことを文書化する。
+
+## UI / A11Y方針
+
+### 設定画面
+
+- 警告文は、稼働DBのprofile/auth/learning dataが削除され、操作を取り消せないことを明示する。
+- 正式承認後、監査内部IDの目的・期間と、暗号化backupが最長7日残り復元時に再削除することへのlink/補足を表示する。
+- email/username再登録が可能になることを必要に応じて説明する。
+- `deleteCurrentPasswordError`、`deleteAcknowledgementError`、`deleteFormError` を分離する。
+- password inputはpassword errorだけを `aria-invalid` / `aria-describedby` で関連付ける。
+- checkboxはwarningとacknowledgement errorを関連付け、色だけでなく文言でerrorを示す。
+- validation失敗後は `tick()` 後に最初のinvalid controlへfocusする。
+- formへ `aria-busy={isDeleting}` を付け、送信buttonは既存guardと `disabled` を維持する。
+- API errorは `role="alert"` で通知し、backendの具体的な日本語messageを上書きしない。
+- successは既存global toastのpolite live regionで通知してから `/` へ遷移する。
+- account delete request中にpageが破棄された場合のAbort方針を統一する。ただしrequestがserverへ到達した後のclient abortを「削除失敗」と断定しない。結果不明時は再認証でUser不存在を確認できる案内をtestする。
+
+### 他タブの認証状態
+
+- `authStore.completeAccountDeletion()`（仮称）は現在tabのrefreshをabortし、stateとsessionStorageを同期的にclearする。
+- PII、User ID、tokenを含めない `{ type: "account-deleted" }` eventだけを `BroadcastChannel` へ送る。
+- 受信tabもrefreshをabortし、local auth stateをclearしてlogin/topへ遷移できる状態にする。
+- SSRと未対応browserではchannelを作らず、安全にcurrent tab clearだけを行う。
+- serverではUser/tokenが既にないため、channel非対応でも保護対象dataへのaccessは401になる。
+
+### 管理画面
+
+- 「退会済み」filter、badge、detail status、操作不可理由、stats cardを除去する。
+- 強制退会確認文は「プロフィール・認証・学習データを稼働DBから物理削除し、取り消せない」ことを明示する。
+- delete成功時はdetailを再取得しない。
+- 一覧を再取得し、対象が消えた後は同じ位置の次の操作button、なければ前の行、なければ一覧headingへfocusする。
+- success messageを既存page live regionとtoastで通知する。
+- 一覧同期失敗時も削除成功を取り消したように見せない。「削除は完了したが一覧を更新できない」と分離して表示する。
+- loading、empty、error、paginationは既存の `aria-live` / `role=alert` を維持する。
+- `AdminDialog` のfocus trap、Escape、busy中close禁止、fallback focusは再利用する。
+
+## 設計上の決定事項
+
+1. **物理削除か匿名化か**
+   - 選択: User rowの物理削除。
+   - 根拠: email、username、passwordHash、学習relationを一括で消し、soft-deleted PIIを残さないため。
+
+2. **email/username tombstoneを残すか**
+   - 選択: 残さない。
+   - 根拠: identifier保持を継続せず、unique値を解放する。再利用リスクは正式承認事項とする。
+
+3. **再登録時のID**
+   - 選択: 常に新しいUser ID。
+   - 根拠: 旧監査内部IDと新accountを暗黙に関連付けない。
+
+4. **削除のsource of truth**
+   - 選択: DB FK cascade。
+   - 根拠: 個別delete listの更新漏れを避け、transaction原子性をDBで保証する。
+
+5. **共有Element**
+   - 選択: 保持。
+   - 根拠: 個人所有データではない。
+
+6. **監査ログ**
+   - 選択: 承認期間中はUser relationなしの内部IDだけ保持。
+   - 根拠: incident/admin操作の相関と、PII完全削除を分離する。正式承認必須。
+
+7. **本人退会action**
+   - 選択: `USER_ACCOUNT_DELETE / SUCCESS` のみ追加。
+   - 根拠: password不一致等の失敗は現行PASSWORD_CHANGEと同様に監査対象外とし、成功した不可逆変更を必須監査にする。
+
+8. **成功監査失敗時**
+   - 選択: 削除全体をrollback。
+   - 根拠: 削除完了の証跡欠落を許容しない。
+
+9. **bcryptの位置**
+   - 選択: transaction外で実行し、transaction内でhash一致を再確認。
+   - 根拠: 長いCPU処理でDB transactionを保持せず、TOCTOUも防ぐ。
+
+10. **transaction isolation/retry**
+    - 選択: Serializable、P2034は最大2attempt。
+    - 根拠: 現行admin mutationと同じ競合方針に統一する。
+
+11. **最後の管理者**
+    - 選択: 本人退会・強制退会の両方で保護。
+    - 根拠: 管理機能のlockoutを防ぐ。
+
+12. **管理者actor再確認**
+    - 選択: 強制退会transaction内で利用可能ADMINを再確認。
+    - 根拠: 不可逆操作の認可TOCTOUを閉じる。
+
+13. **self delete二重実行**
+    - 選択: 競合中は409、commit後の再requestは401。
+    - 根拠: successを偽装せず、実際のroute到達状態に合わせる。
+
+14. **admin delete二重実行**
+    - 選択: 2回目は404。
+    - 根拠: targetの不存在を正しく返す。
+
+15. **legacy cleanup 0件**
+    - 選択: dry-run/executeとも成功。
+    - 根拠: 冪等な運用とrestore時の再実行を可能にする。
+
+16. **legacy cleanup transaction単位**
+    - 選択: 小さいbatch単位でatomic commit。
+    - 根拠: 全件一括lockを避け、失敗時は前batchを維持して再実行できる。
+
+17. **cleanup log**
+    - 選択: mode、件数、batch番号、所要時間、完了/失敗分類だけ。
+    - 根拠: PII・内部ID・secret・raw error漏えいを防ぐ。
+
+18. **admin v1互換field**
+    - 選択: deprecated定数として維持し、DB soft deleteには使わない。
+    - 根拠: 古いfrontend/open tabを壊さず、DB列をdropできる。
+
+19. **historical KPI**
+    - 選択: 本タスクでは作らない。
+    - 根拠: 匿名集計の粒度・再識別リスク・削除時差分の要件が別途必要。
+
+20. **`deletedAt` drop**
+    - 選択: code非参照deployと旧backup失効後の別contract migration。
+    - 根拠: migration→API deploy順序とrestore互換性を守る。
+
+21. **backup内PII**
+    - 選択: 即時改変せず、暗号化・7日失効・復元時再削除・開示。
+    - 根拠: 既存logical backup全体から個別rowだけを安全に除去できない。
+
+22. **全損時replay gap**
+    - 選択: external source導入または残余リスクの正式承認をrelease gateにする。
+    - 根拠: 現行DBも失うとbackup後の削除actionを取得できない。
+
+23. **同期削除**
+    - 選択: performance gateを満たす間は同期transaction。
+    - 根拠: 200時点の削除完了を明確にできる。上限超過時は非同期方式を再設計する。
+
+24. **cross-tab clear**
+    - 選択: PIIなしBroadcastChannel event。
+    - 根拠: sessionStorageがtab単位である一方、token/PIIを共有storageへ置かないため。
+
+25. **管理画面の削除後focus**
+    - 選択: 次行→前行→一覧headingの順。
+    - 根拠: 消えたtriggerへfocusせず、keyboard利用者が操作を継続できる。
+
+## 削除transaction設計
+
+### 本人退会
+
+1. routeのZodとrate limitを通す。
+2. middlewareで認証済みUser IDを取得する。
+3. `normalizePassword()` を1回適用する。
+4. Userの `id`, `passwordHash`, `role` を最小selectで取得する。既にない場合はraceとして409、通常はmiddlewareで401になる。
+5. bcrypt完全比較をtransaction外で行う。不一致は400。
+6. 共通helperでSerializable transactionを開始する。
+7. transaction内でUserの `id`, `passwordHash`, `role`, `isActive`, `emailVerified`, `lockedUntil`, 移行中は `deletedAt` を再取得する。
+8. User不存在、hash変更、legacy deleted状態は削除せずdomain errorにする。
+9. 最新Userが利用可能ADMINなら、同一transaction内で利用可能ADMIN数を数える。1以下なら409。
+10. 削除前の `id` と `role` を局所変数へ保持する。
+11. `tx.user.delete({ where: { id } })` を実行し、DB cascadeで所有rowを削除する。
+12. 同じtransactionで `USER_ACCOUNT_DELETE / SUCCESS` を `actorId=targetId=id` と削除前roleで作成する。
+13. commit後だけrouteが両Cookie pathをclearして200を返す。
+14. frontendはlocal/cross-tab auth stateをclearし、toast後に `/` へ移動する。
+
+### 管理者強制退会
+
+1. routeでauth/admin middleware、Zod param、general rate limitを通す。
+2. 自分自身targetは既存どおり409とbest-effort failure audit。
+3. Serializable transaction内でactorを再取得し、利用可能ADMINであることを確認する。権限変化は削除せず409。
+4. targetを最新状態で取得する。不在は404。移行中legacy deletedは409、cleanup後は不在404。
+5. targetが利用可能ADMINならusable admin countを同一transactionで確認し、1以下なら409。
+6. `tx.user.delete` でUserと所有rowをcascade削除する。
+7. 既存 `ADMIN_USER_FORCE_DELETE / SUCCESS` を同じtransactionへ作成する。
+8. P2034はtransaction全体を最大2attempt。commitされたattemptの成功監査1件だけを残す。
+9. 404、自分自身、最後の管理者、state競合、retry枯渇は既存分類のbest-effort failure auditを1件だけ残す。
+
+### 監査とrollback
+
+- AuditLogはUser relationを持たないため、User delete後にも同じtransaction内でinsertできる。
+- audit schemaは `.strict()` を維持し、新actionの余剰fieldを拒否する。
+- audit insertが失敗した場合、User、全cascade、AuditLogのいずれもcommitしない。
+- P2034 retryではrollback済みattemptのaudit rowは残らない。
+- app/workflow logへAuditLog ID、actorId、targetIdを出さない。
+
+### concurrency・0件の意味
+
+| 状況                             | 結果                                              |
+| -------------------------------- | ------------------------------------------------- |
+| self delete中にpassword変更      | hash不一致409、削除なし                           |
+| self delete中に最後のADMINになる | 409、削除なし                                     |
+| self delete 2requestが競合       | 1件だけ200。もう一方は409または次requestで401     |
+| admin targetを別adminが先に削除  | 404またはSerializable後404、重複success auditなし |
+| admin actorが直前に降格/停止     | 409、削除なし                                     |
+| P2034 1回後成功                  | success 1件、audit 1件                            |
+| P2034 2回                        | 409、削除なし、failure audit 1件                  |
+| legacy dry-run対象0              | exit 0、deleted 0                                 |
+| legacy execute対象0              | exit 0、deleted 0                                 |
+| restore replay targetが既にない  | 冪等successとしてcount、API 404とは分離           |
+
+## 公開インターフェース案
+
+実装コードではなく責務と型の案を示す。名称は既存命名と重複を確認して実装時に確定する。
+
+```ts
+export async function runSerializableTransaction<T>(
+  callback: (tx: Prisma.TransactionClient) => Promise<T>,
+  options?: { maxAttempts?: number },
+): Promise<T>;
+
+export class SerializationRetryExhaustedError extends Error {}
+
+export async function deleteCurrentUser(input: {
+  userId: string;
+  currentPassword: string;
+}): Promise<void>;
+
+export async function forceDeleteAdminUser(input: {
+  adminUserId: string;
+  targetUserId: string;
+}): Promise<{ message: string }>;
+
+export type DeleteLegacySoftDeletedUsersMode = "dry-run" | "execute";
+
+export type DeleteLegacySoftDeletedUsersResult = Readonly<{
+  mode: DeleteLegacySoftDeletedUsersMode;
+  matchedUsers: number;
+  deletedUsers: number;
+  processedBatches: number;
+  remainingUsers: number;
+}>;
+
+export async function deleteLegacySoftDeletedUsers(input: {
+  mode: DeleteLegacySoftDeletedUsersMode;
+  batchSize: number;
+}): Promise<DeleteLegacySoftDeletedUsersResult>;
+
+export function getAccountDataDeletionConfig(options?: {
+  environment?: Readonly<Record<string, string | undefined>>;
+}): Readonly<{
+  executeEnabled: boolean;
+  batchSize: number;
+}>;
+
+export function deleteCurrentUser(options: {
+  accessToken: string;
+  currentPassword: string;
+  signal?: AbortSignal;
+}): Promise<{ message: string }>;
+
+export interface AuthStoreAccountDeletion {
+  completeAccountDeletion(): void;
+}
+```
+
+## legacy soft-deleted user移行
+
+### CLI・実行契約
+
+```bash
+# defaultは必ずdry-run
+npm run delete:legacy-soft-deleted-users
+
+# executeは引数・環境flag・確認文字列の3条件を必須にする
+ACCOUNT_DATA_DELETION_EXECUTE_ENABLED=true \
+  npm run delete:legacy-soft-deleted-users -- \
+  --execute \
+  --confirm=DELETE_LEGACY_SOFT_DELETED_USERS
+```
+
+| 環境変数                                | default | validation       | 用途                   |
+| --------------------------------------- | ------- | ---------------- | ---------------------- |
+| `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED` | `false` | `true` / `false` | executeの二重gate      |
+| `ACCOUNT_DATA_DELETION_BATCH_SIZE`      | `25`    | 1〜100の整数     | 1transactionのUser上限 |
+
+- unknown/重複引数、確認文字列不一致、flag false、不正batchはDB dependency load前に拒否する。
+- dry-runはexecute flagがtrueでも削除しない。
+- CLIはPrisma v7の `PrismaPg` adapterを使い、終了時にdisconnectする。
+- raw connection/disconnect errorは出さず、許可した日本語分類messageだけを返す。
+
+### dry-run
+
+`deletedAt != null` のUser数と、対象Userに属するRefreshToken、EmailVerification、PasswordResetToken、WeakElement、GameSession、GameAnswer、GameQuestionSet、UserStatsの総row数、batch size、必要batch数を固定本数queryで集計する。
+
+許可logはevent、mode、table別件数、matched/deleted/remaining、batch size/count、duration、完了分類だけとする。User/Audit ID、email、username、password hash、token、Cookie、`DATABASE_URL`、project ref、host、stack、生Errorは禁止する。
+
+### execute
+
+1. transaction外で `deletedAt != null` の次batch IDを順序固定で取得し、memory内だけで扱う。
+2. table別countは集合queryで取得し、ユーザーごとのcount loopを禁止する。
+3. Serializable transactionで `id IN batchIds AND deletedAt != null` のUserを `deleteMany` する。
+4. FK cascadeで所有rowを削除する。移行自体のUserごとのAuditLogは新規作成しない。
+5. commit後に件数だけをlogする。
+6. 失敗batchはrollbackし、以前のcommit済みbatchは維持する。再実行は残件から続ける。
+7. 終了時remaining 0を再countし、残件があればexit non-zero。
+8. execute直後にdry-runを再実行し、matched 0を記録する。
+
+dry-run 0件、execute 0件、2回目execute 0件はいずれも正常終了とする。1Userの子rowだけが部分commitされることは許さない。cleanup中に旧codeが新soft rowを作らないよう、旧API instanceをdrainしてからexecuteする。
+
+### workflow
+
+stagingは固定Environmentのmanual workflowで `dry-run` / `execute` を選択し、既存staging DB concurrencyを再利用する。専用fixtureだけを使い、active/suspended user、Element、AuditLogへの非影響を確認して後片付けする。
+
+productionは既存 `.github/workflows/production-database.yml` に `account-deletion-dry-run` と `account-deletion-execute` を追加する。executeは次を必須にする。
+
+1. branch `develop`、Environment `production`、`BATCH_ENVIRONMENT=production`。
+2. `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED=true`。
+3. confirmation input完全一致。
+4. 24時間以内の成功backup Artifact。
+5. `gensoko-batch-jobs` concurrency。
+6. dry-run結果と承認者のchange record。
+
+実行後はflagをfalseへ戻し、dry-run 0件、DB容量、API smoke testを確認する。
+
+## backup・restore後の再削除
+
+### 媒体境界
+
+- 稼働DB: API 200時点で物理削除。
+- AuditLog: 正式承認期間だけ内部IDを保持し、retention cleanupでrowごと削除。
+- 暗号化backup: Artifactを最長7日保持し、個別User単位で編集しない。
+- メール・外部log・browser: 媒体ごとの保持と制約をprivacy policyへ記載する。
+
+### 復元手順
+
+1. 新しいSupabase projectへ復元し、現在のproductionを上書きしない。
+2. 公開trafficを流さず、Environment/接続先を二名で確認する。
+3. cleanup前backupなら、互換code/CLIでlegacy soft-deleted userを先に削除する。
+4. backup時刻後の `USER_ACCOUNT_DELETE / SUCCESS` と `ADMIN_USER_FORCE_DELETE / SUCCESS` のtarget IDを、読取可能な現行production AuditLogからmemoryへ取得する。IDをfile/logへ出さない。
+5. 復元DBに存在する該当Userを小batchで再削除し、不在IDは冪等successとする。
+6. 現行migrationを適用し、drop guardがlegacy rowを検出したら公開を中止する。
+7. orphan 0、監査保持row、Element、active/suspended user、admin数を検証する。
+8. login、refresh、本人退会、管理者強制退会、ranking、admin一覧をsmoke testする。
+9. 件数と確認時刻だけをchange recordへ残す。
+10. release/privacy責任者の承認前に切り替えない。
+
+### 現行DB全損時の制約
+
+現行DBも読めない場合、backup後に削除されたtarget IDを現行設計だけでは再構成できない。同期的・暗号化済みの外部削除ledgerを別設計するか、最大7日の隔離復元リスクを正式承認・開示する。未決定なら本番公開と「backupを含む完全削除」の対外表明をblockする。通常のAuditLogは外部ledgerの代替ではない。
+
+## リリース・移行方針
+
+### Phase 0: 承認・計測
+
+監査保持、backup/replay、username再利用、privacy copy、performance基準、maintenance windowを確定し、`docs/05_progress.md` を `[-]` にする。
+
+### Phase 1: expand index
+
+schema contract/indexをTDD実装し、専用DB→staging→24時間以内backup付きproductionの順でmigrationする。追加indexは旧codeと互換であり、緊急時もindexを残したまま旧appへ戻せる。
+
+### Phase 2: 物理削除backend
+
+共通Serializable helper、監査action、self/admin物理削除、last-admin、actor再確認、cleanup CLI/workflowを実装する。v1 deprecated admin shapeは維持する。backend deploy後に新規退会がUserを残さないことを確認し、旧instanceをdrainする。
+
+### Phase 3: legacy cleanup
+
+stagingでdry-run→execute→dry-run 0→execute 0→Playwrightを行う。productionはdry-run承認→backup→execute→dry-run 0→容量・active/suspended/admin数・smoke test→flag falseの順とする。
+
+### Phase 4: frontend・表示整合
+
+設定画面のA11Y/cross-tab clearと、管理画面のdeleted UI除去・削除後focusをdeployする。新frontendは旧backendのextra deprecated fieldを許容し、関連docsを更新する。
+
+### Phase 5: `deletedAt` 非参照code
+
+auth、admin、ranking、admin-create、testからDB列依存を除去する。v1互換値はroute境界で合成する。columnを残したままdeployし最低1release cycle soakする。旧版rollbackでsoft rowが増えた場合は再cleanupする。
+
+### Phase 6: backup世代更新
+
+legacy 0件・非参照code稼働中に新backupを作り、旧Artifactの7日失効と手動保管なしを確認する。isolated restore drillを行う。
+
+### Phase 7: contract migration
+
+legacy rowが1件でもあればIDを出さず中止するguardをTDD実装する。staging確認後、24時間以内backup付きproductionでdropする。drop後はPhase 5以降の非参照版だけをrollback候補とし、orphan checkとsmoke testを行う。
+
+## ロールバック方針
+
+| phase            | rollback                        | データ上の注意                                    |
+| ---------------- | ------------------------------- | ------------------------------------------------- |
+| expand index     | 旧appへ戻せる                   | indexは残し緊急削除しない                         |
+| 物理削除backend  | column残存中は旧appへ戻せる     | 物理削除Userを復元しない。新soft rowは再cleanup   |
+| legacy cleanup   | code rollback可能               | cleanupは不可逆。通常rollbackで全DB restoreしない |
+| frontend         | 旧frontendへ戻せる              | v1互換shapeを維持                                 |
+| 非参照code       | drop前はPhase 2版へ戻せる       | soft rowをdry-run                                 |
+| `deletedAt` drop | Phase 5非参照版だけへ戻す       | 旧参照版は禁止                                    |
+| backup restore   | 切替前なら新projectを破棄できる | 再削除完了までtraffic禁止                         |
+
+application rollbackは削除済み個人データを復元する権限を意味しない。誤削除が疑われても他ユーザー変更を巻き戻す全DB restoreを即断しない。audit失敗、timeout、P2034枯渇はtransaction rollbackし、成功を返さない。
+
+## リスクと対策
+
+| リスク               | 影響               | 対策                                     | 残余リスク               |
+| -------------------- | ------------------ | ---------------------------------------- | ------------------------ |
+| FK index/cascade漏れ | 遅延・PII残存      | expand index、schema/実DBtest            | 将来model review         |
+| 最後のADMIN          | lockout            | self/admin保護、Serializable             | 別理由の全ADMIN停止      |
+| password/role競合    | 誤削除             | transaction再読込、409                   | client再試行             |
+| audit失敗            | 証跡欠落           | 同一transaction rollback                 | audit障害中は削除不能    |
+| 同期timeout          | 削除未完了         | 性能gate、全rollback                     | 超過時は非同期再設計     |
+| cleanup誤実行        | 大量不可逆削除     | dry-run、flag、確認、backup、Environment | 誤承認                   |
+| batch途中失敗        | 一部移行済み       | batch atomic、remaining、再実行          | 全件同時rollbackでない   |
+| stats低下            | KPI誤解            | current dataと明記                       | historical比較不可       |
+| username再利用       | 表示上のなりすまし | 新ID、承認、説明                         | usernameは本人保証でない |
+| 旧frontend           | validator破損      | v1互換shape                              | 将来v2管理               |
+| 他tab                | 古い表示           | PIIなしchannel、server 401               | 非対応browser            |
+| backup復活           | privacy違反        | 7日失効、隔離、replay                    | 現行DB全損gap            |
+| 監査内部ID           | 再識別             | 目的限定、期限、承認                     | 保持中の内部相関         |
+| migration順序        | API停止            | 非参照code先行、guard                    | 手順逸脱                 |
+| log漏えい            | 二次漏えい         | 許可field、negative test                 | platform metadata        |
+
+## 作業手順
+
+1. planと関連docsを実装開始時に再読する。
+2. branchと差分を確認し、未コミット変更があれば止める。
+3. `docs/05_progress.md` を `[-]` にする。
+4. schema/index/retry/audit/self/admin/cleanup/API/frontend testをRedで先行追加する。
+5. expand index migrationを実装し、専用DB/stagingで適用・性能確認する。
+6. 共通Serializable helper、監査action、本人・管理者物理削除を実装する。
+7. 実DBcascade/rollback integration testを通す。
+8. legacy cleanup service/CLI/workflowを実装する。
+9. 認証・admin v1互換契約を更新する。
+10. 設定・auth store・管理UIをA11Y test先行で更新する。
+11. API/security/testing/deployment docsを更新する。
+12. backend/frontend全品質checkを通す。
+13. stagingでmigration、cleanup、Playwright、restore drillを実施する。
+14. 承認gateを満たしてproductionを段階rolloutする。
+15. 旧backup失効と非参照code soak後にcontract migrationを行う。
+16. planのcheckbox、対象file、判断、実装完了sectionを実態へ更新する。
+17. 種類別commit、push、詳細PRを作成する。
+
+## タスクリスト（進捗管理）
+
+| ID  | 内容                                            | 主対象                | 依存        | 優先度 |
+| --- | ----------------------------------------------- | --------------------- | ----------- | ------ |
+| T1  | privacy・監査・backup・再登録・replay方針を承認 | docs/plan             | なし        | High   |
+| T2  | 進捗を実装中へ更新                              | `docs/05_progress.md` | T1          | High   |
+| T3  | schema cascade/index contract Red test          | schema test           | T2          | High   |
+| T4  | expand index schema/migration                   | Prisma                | T3          | High   |
+| T5  | Serializable helper Red test                    | lib test              | T2          | High   |
+| T6  | 共通Serializable helper実装・admin回帰          | lib/admin             | T5          | High   |
+| T7  | self delete audit schema Red/Green              | audit                 | T2          | High   |
+| T8  | self物理削除・last-admin・競合 Red test         | user test             | T6,T7       | High   |
+| T9  | self物理削除実装                                | user service          | T8          | High   |
+| T10 | admin物理削除・actor再確認 Red test             | admin test            | T6          | High   |
+| T11 | admin物理削除実装                               | admin service         | T10         | High   |
+| T12 | self/admin route契約test・実装                  | routes                | T9,T11      | High   |
+| T13 | 専用DB cascade/監査/rollback integration        | integration           | T4,T9,T11   | High   |
+| T14 | cleanup config Red/Green                        | config/env            | T2          | High   |
+| T15 | legacy cleanup service Red test                 | job test              | T14         | High   |
+| T16 | legacy cleanup service実装                      | job                   | T15         | High   |
+| T17 | cleanup CLI Red test                            | CLI test              | T16         | High   |
+| T18 | cleanup CLI・npm script実装                     | CLI/package           | T17         | High   |
+| T19 | staging/production workflow Red test            | workflow tests        | T18         | High   |
+| T20 | staging/production workflow実装                 | workflows             | T19         | High   |
+| T21 | auth削除後回帰                                  | auth tests/service    | T9          | High   |
+| T22 | admin v1互換一覧/detail/stats契約               | admin API             | T11         | High   |
+| T23 | settings A11Y Red test                          | settings test         | T12         | High   |
+| T24 | settings説明/error/focus/busy実装               | settings              | T23         | High   |
+| T25 | auth store cross-tab Red test                   | store test            | T23         | Medium |
+| T26 | local/cross-tab clear実装                       | auth store            | T25         | Medium |
+| T27 | admin frontend Red test                         | admin FE tests        | T22         | High   |
+| T28 | deleted UI除去・削除後focus実装                 | admin FE              | T27         | High   |
+| T29 | 関連docs更新                                    | docs                  | T12,T20,T28 | High   |
+| T30 | backend品質check                                | backend               | T29         | High   |
+| T31 | frontend品質check                               | frontend              | T29         | High   |
+| T32 | 専用DB integration実行                          | Docker PostgreSQL     | T30         | High   |
+| T33 | staging expand migration・性能                  | staging               | T4,T32      | High   |
+| T34 | staging API/UI・Playwright                      | staging               | T31,T33     | High   |
+| T35 | staging cleanup dry/execute/再実行              | workflow              | T20,T34     | High   |
+| T36 | production expand migration                     | production            | T33         | High   |
+| T37 | production物理削除rollout                       | deploy                | T35,T36     | High   |
+| T38 | production legacy cleanup                       | workflow              | T37         | High   |
+| T39 | `deletedAt` 非参照code Red/Green                | backend               | T38         | High   |
+| T40 | 非参照code deploy・soak                         | deploy                | T39         | High   |
+| T41 | cleanup後backup・旧Artifact失効                 | production            | T40         | High   |
+| T42 | isolated restore drill・replay                  | restore               | T41         | High   |
+| T43 | guard付きcontract migration Red/Green           | Prisma                | T41,T42     | High   |
+| T44 | staging/production contract migration           | workflows             | T43         | High   |
+| T45 | release gate・plan完了・PR                      | docs/GitHub           | T44         | High   |
+
+- [ ] T1: privacy・監査・backup・再登録・replay方針を承認する
+- [ ] T2: `docs/05_progress.md` を実装中へ更新する
+- [ ] T3: schema cascade/index contract Red testを追加する
+- [ ] T4: expand index schema/migrationを実装する
+- [ ] T5: Serializable helper Red testを追加する
+- [ ] T6: 共通Serializable helperを実装しadmin回帰を通す
+- [ ] T7: `USER_ACCOUNT_DELETE` audit schemaをTDD実装する
+- [ ] T8: self物理削除・last-admin・競合 Red testを追加する
+- [ ] T9: self物理削除を実装する
+- [ ] T10: admin物理削除・actor再確認 Red testを追加する
+- [ ] T11: admin物理削除を実装する
+- [ ] T12: self/admin route契約testと実装を更新する
+- [ ] T13: 専用DB cascade/監査/rollback integration testを追加する
+- [ ] T14: cleanup configをTDD実装する
+- [ ] T15: legacy cleanup service Red testを追加する
+- [ ] T16: legacy cleanup serviceを実装する
+- [ ] T17: cleanup CLI Red testを追加する
+- [ ] T18: cleanup CLI・npm scriptを実装する
+- [ ] T19: staging/production workflow Red testを追加する
+- [ ] T20: staging/production workflowを実装する
+- [ ] T21: auth削除後回帰testとservice契約を更新する
+- [ ] T22: admin v1互換一覧/detail/stats契約を更新する
+- [ ] T23: settings A11Y Red testを追加する
+- [ ] T24: settings説明/error/focus/busyを実装する
+- [ ] T25: auth store cross-tab Red testを追加する
+- [ ] T26: account deletion local/cross-tab clearを実装する
+- [ ] T27: admin frontend Red testを追加する
+- [ ] T28: admin deleted UI除去・削除後focusを実装する
+- [ ] T29: API/security/testing/deployment docsを更新する
+- [ ] T30: backend品質checkを通す
+- [ ] T31: frontend品質checkを通す
+- [ ] T32: 専用Docker PostgreSQL integration testを通す
+- [ ] T33: staging expand migration・性能を確認する
+- [ ] T34: staging API/UI・Playwrightを確認する
+- [ ] T35: staging cleanup dry-run/execute/再実行を確認する
+- [ ] T36: production expand migrationを適用する
+- [ ] T37: production物理削除を段階deployする
+- [ ] T38: production legacy cleanupを完了する
+- [ ] T39: `deletedAt` 非参照codeをTDD実装する
+- [ ] T40: 非参照codeをdeploy・soakする
+- [ ] T41: cleanup後backupと旧Artifact失効を確認する
+- [ ] T42: isolated restore drillと削除replayを確認する
+- [ ] T43: guard付きcontract migrationをTDD実装する
+- [ ] T44: staging/production contract migrationを完了する
+- [ ] T45: release gate、進捗、plan実装完了、PRを完了する
+
+## 技術的注意点
+
+- ESM importは `.js` 拡張子を付ける。
+- union例は `"USER" | "ADMIN"` のようにquoteする。
+- P2034判定、usable admin条件、error message、Cookie clearを複製しない。
+- 共通transaction helperはdomain messageを知らず、serviceが日本語errorへ変換する。
+- batch IDをloggerへ渡さず、loggerは許可fieldを型で限定する。
+- `process.env` のdefault/validationは `config.ts` に一元化する。
+- integration testだけは専用DB名を厳格に要求する。
+- migration guardのerrorへ件数やIDを出さない。
+- frontendは `parseErrorResponse` でbackend messageを保持する。
+- delete成功後のclient logout APIは不要。server token/Cookie削除とlocal clearを分離する。
+- AbortErrorは通常error toastにしないが、結果不明時の再確認導線をtestする。
+- 候補ファイル名は実装時に実在確認し、不要fileを作らない。
+
+## テスト方針
+
+TDDのRed → Green → Refactorを守り、mock unit、専用PostgreSQL、workflow contract、frontend DOM/A11Y、staging Playwrightを組み合わせる。
+
+### backend unit / service
+
+| ケース                             | 期待結果                                          |
+| ---------------------------------- | ------------------------------------------------- |
+| self 正しいpassword                | User deleteとsuccess auditを同一transactionで呼ぶ |
+| self password不一致                | 400、transaction未開始                            |
+| self 73byte password               | 省略せず完全値をbcrypt比較                        |
+| self 初回/transaction内User不存在  | 409、削除なし                                     |
+| self password hash変更             | 409、削除なし                                     |
+| self USER                          | admin countなしで削除                             |
+| self ADMIN、他ADMINあり            | 成功                                              |
+| self 最後のADMIN                   | 409、削除/auditなし                               |
+| self P2034→成功                    | 2attempt、success audit 1件                       |
+| self P2034×2                       | 409、削除なし                                     |
+| self audit insert失敗              | User/cascade rollback                             |
+| admin 正常削除                     | target delete、success audit                      |
+| admin self/target不存在/last-admin | 409/404/409、分類済みfailure audit                |
+| admin actor降格/停止               | 409、削除なし                                     |
+| admin P2034 retry/枯渇             | success 1件 / 409 failure 1件                     |
+| audit新action                      | strict受理、actor=target必須                      |
+| audit余剰/PII field                | schema拒否                                        |
+| retry helper非P2034                | retryせず再throw                                  |
+
+### route / API
+
+| ケース                                  | 期待結果                                     |
+| --------------------------------------- | -------------------------------------------- |
+| self valid                              | 200、既存message、Cookie両path削除           |
+| self empty/extra field                  | 400 validation形式                           |
+| self wrong password/last admin/conflict | 400/409/409                                  |
+| self rate limit/store障害               | 429/503                                      |
+| self unexpected                         | 500 generic、stackなし                       |
+| admin valid/invalid id                  | 200/400                                      |
+| admin auth/role拒否                     | 401/403                                      |
+| admin missing/repeat                    | 404                                          |
+| admin self/last-admin/conflict          | 409                                          |
+| admin rate limit                        | 429                                          |
+| register after deletion                 | 201、新User ID                               |
+| old credential login                    | generic 401                                  |
+| forgot/refresh/access token             | 200 no-op / 401 / 401                        |
+| `status=deleted` v1互換                 | 200空一覧                                    |
+| admin summary/stats互換                 | `deletedAt:null`、`deleted:0`、total=current |
+
+### 専用PostgreSQL integration
+
+専用DB名候補は `gensoko_account_deletion_test`、専用envは `ACCOUNT_DELETION_INTEGRATION_DATABASE_URL` とする。hostは `localhost`、`127.0.0.1`、`postgres` だけを許可し、DB名完全一致前にfixture操作をしない。通常unit suiteはenv未設定時skipする。
+
+| ケース                        | 期待結果                              |
+| ----------------------------- | ------------------------------------- |
+| 全所有model fixture           | User delete後に全て0件                |
+| GameAnswer間接cascade         | GameSession経由で0件                  |
+| 共有Element                   | 残存                                  |
+| self/admin success audit      | Userなし、監査あり、PIIなし           |
+| audit insert失敗              | Userと全子rowがrollback               |
+| 大量fixture                   | performance gate内、orphan 0          |
+| concurrent self delete        | 1commitだけ                           |
+| concurrent last-admin deletes | usable ADMIN 1以上                    |
+| legacy cleanup                | 対象だけ削除、active/suspended保持    |
+| cleanup再実行                 | 0件success                            |
+| batch途中失敗                 | 失敗batch rollback、再実行remaining 0 |
+
+### cleanup CLI / workflow
+
+| ケース                          | 期待結果                                |
+| ------------------------------- | --------------------------------------- |
+| 引数なし / flag trueだけ        | dry-run、delete未呼出し                 |
+| `--execute`だけ / confirm不一致 | DB load前に拒否                         |
+| unknown/duplicate arg           | 拒否                                    |
+| batch 0/101/小数/空             | 拒否                                    |
+| batch 1/25/100                  | 受理                                    |
+| dry-run/execute 0               | exit 0                                  |
+| execute残件あり                 | exit non-zero                           |
+| errorにsecret/ID                | stdout/stderrへ出さない                 |
+| disconnect error                | generic warningだけ                     |
+| staging workflow                | staging固定、manualのみ                 |
+| production dry-run              | executeなし                             |
+| production execute              | flag/confirm/24h backup/concurrency必須 |
+| schedule                        | executeを自動選択しない                 |
+
+### frontend / A11Y
+
+| ケース                   | 期待結果                               |
+| ------------------------ | -------------------------------------- |
+| password空               | passwordだけinvalid、passwordへfocus   |
+| 同意なし                 | checkboxだけinvalid、checkboxへfocus   |
+| 両方invalid              | 最初のpasswordへfocus                  |
+| API 400/409/429/503      | backend messageをalert表示             |
+| network/Abort            | 共通message / 結果不明を誤断定しない   |
+| 二重submit               | API 1回、button disabled               |
+| delete中                 | form busyと読み上げ状態                |
+| success                  | toast、local clear、broadcast、`/`遷移 |
+| channel受信/未対応/SSR   | refresh abortとclear / 例外なし        |
+| 旧 `status=deleted` URL  | dropしてcanonicalize                   |
+| admin filter             | active/suspendedだけ                   |
+| admin delete list        | target消失、次/前/headingへfocus       |
+| admin delete detail      | detail再fetchなし、dialog close        |
+| post-delete sync失敗     | successとsync errorを分離              |
+| live/empty/loading/error | 支援技術へ通知                         |
+| keyboard/color           | keyboard完結、文言で状態識別           |
+
+### 品質check
+
+```bash
+cd backend
+npm run lint
+npm run format:check
+npm run build
+npm run test -- --run
+npm run test:integration:account-deletion
+
+cd ../frontend
+npm run format
+npm run lint
+npm run check
+npm run build
+npm run test:run
+```
+
+- schema変更後は `npx prisma validate` と専用DB/stagingの `npx prisma migrate deploy` を実行する。
+- workflow YAML parseとcontract testを実行する。
+- DB変更のため、本人退会・管理者強制退会・再登録の3導線をPlaywrightで確認する。
+
+## 手動確認
+
+### 本人退会
+
+1. USERでloginし、学習履歴、苦手、stats、tokenを作る。
+2. keyboardだけでpassword/同意error、誤password、429/503、focusを確認する。
+3. 正しいpasswordで削除し、toast、top遷移、別tab clear、旧token 401を確認する。
+4. DBでUser・所有row 0、Element残存、AuditLog success 1件を確認する。ID/PIIをscreenshotへ残さない。
+5. 同一email/usernameで再登録し、新ID・旧履歴なしを確認する。
+
+### 管理者強制退会
+
+1. 一覧起点とdetail起点で実行する。
+2. focus trap、Escape、busy中close禁止を確認する。
+3. success後にdetail 404を出さず、一覧から消え、focusが次/前/headingへ移ることを確認する。
+4. self、最後のADMIN、既削除IDの409/404を確認する。
+5. statsがcurrent semanticsで減少することを確認する。
+
+### migration・restore
+
+1. staging legacy fixtureでdry-run/execute/再実行0を確認する。
+2. active/suspended userとElementが残ることを確認する。
+3. cleanup後backupをisolated projectへrestoreし、backup後actionをreplayする。
+4. legacy row 1件ではdrop guardがIDなしで失敗し、0件では成功することを確認する。
+5. contract migration後に3主要導線を再確認する。
+
+## release gate
+
+### merge前
+
+- [ ] 設計判断と未確認事項にowner回答がある。
+- [ ] 監査内部IDの期間・目的・承認者・日付がある。
+- [ ] backup/replay gapとusername再利用が承認済み。
+- [ ] schema inventory/cascade/indexとv1互換がreview済み。
+- [ ] unit、route、frontend、workflow testが全通過。
+- [ ] 専用PostgreSQL integrationが全通過。
+- [ ] log negative testでPII/secret/internal IDがない。
+
+### staging
+
+- [ ] expand/contract migration成功。
+- [ ] cascade performanceが基準内。
+- [ ] legacy dry-run/execute/再実行0成功。
+- [ ] 本人・管理者・再登録Playwright成功。
+- [ ] keyboard、screen reader、focus、live region確認。
+- [ ] restore drillと再削除成功。
+- [ ] drop guardのfail/success確認。
+
+### production
+
+- [ ] `BACKUP_ENCRYPTION_PASSPHRASE` とbackup実績を確認。
+- [ ] 破壊的operation前24時間以内の暗号化backup成功。
+- [ ] maintenance window、実行者、承認者、通知先を記録。
+- [ ] 旧backend instanceをdrain。
+- [ ] legacy dry-run承認、execute後0件、flag false。
+- [ ] active/suspended/admin数とcurrent statsを照合。
+- [ ] 非参照codeをsoak。
+- [ ] cleanup後backupと旧Artifact 7日失効を確認。
+- [ ] contract後rollback artifactが非参照版。
+- [ ] privacy policy `/privacy` が公開済み。
+- [ ] UI/privacy文言が正式承認値と一致。
+- [ ] 全損時replay gapが未解決なら公開しない、または正式承認・開示がある。
+- [ ] 本人・管理者・再登録smoke test成功。
+
+## 実装完了時の更新ルール
+
+- 対象ファイルを実変更へ合わせ、候補名を確定名へ置換する。
+- 不要候補は削除または未実装理由を記録する。
+- checkboxと `docs/05_progress.md` を実態へ合わせる。
+- Red→Green→Refactor、test件数、integration、Playwright、run IDを記録する。
+- 監査/backup/privacyの承認者・日付・正式値を秘密情報なしで記録する。
+- rollout中の判断変更、互換期間、rollback制限、残余リスクを記録する。
+
+## 実装完了
+
+- 完了日: YYYY-MM-DD
+- 実装ブランチ: feature/account-data-complete-deletion
+- PR: #N
+- expand migration: ...
+- legacy cleanup staging run: ...
+- legacy cleanup production run: ...
+- contract migration run: ...
+- restore drill: ...
+- 監査内部ID保持承認者・承認日: ...
+- backup/replay方針承認者・承認日: ...
+
+### TDD実施記録
+
+- Red:
+- Green:
+- Refactor:
+- backend unit/route tests:
+- frontend tests:
+- PostgreSQL integration tests:
+- Playwright:
+- lint / format / build / check:
+
+### 計画からの変更点
+
+<!-- 計画時と実装が異なった箇所、理由、privacy/API/rollbackへの影響を記録する。 -->
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+| -------- | -------- | ---- |
+| `...`    | 修正     | ...  |
+
+### 移行・運用結果
+
+- legacy dry-run対象件数（ID/PIIなし）:
+- legacy execute削除件数:
+- 再dry-run残件:
+- execute flag停止:
+- cleanup後backup:
+- 旧Artifact失効確認:
+- `deletedAt` drop前guard結果:
+- production smoke test:
+
+### 承認済み残余リスク
+
+- 監査内部ID:
+- 暗号化backup:
+- 現行DB全損時の削除replay:
+- メール・外部log・browser:
+- username再利用:
+
+### 未実施・follow-up
+
+- ...
