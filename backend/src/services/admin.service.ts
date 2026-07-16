@@ -99,7 +99,7 @@ export type AdminStats = {
 export const ADMIN_USERS_DEFAULT_LIMIT = 20;
 export const ADMIN_USERS_MAX_LIMIT = 100;
 const ADMIN_MUTATION_CONFLICT_MESSAGE = "同時操作により処理できませんでした。再試行してください";
-const currentAdminUserWhere = { deletedAt: null } satisfies Prisma.UserWhereInput;
+const currentUserWhere = { deletedAt: null } satisfies Prisma.UserWhereInput;
 
 type AdminAuditDescriptor = {
   action: AdminAuditAction;
@@ -186,7 +186,7 @@ function buildAdminUsersWhere(input: {
   status?: AdminUserStatusFilter;
   cursor?: { id: string; createdAt: Date };
 }): Prisma.UserWhereInput {
-  const where: Prisma.UserWhereInput = { ...currentAdminUserWhere };
+  const where: Prisma.UserWhereInput = { ...currentUserWhere };
   const andConditions: Prisma.UserWhereInput[] = [];
   const normalizedQuery = input.q?.trim();
 
@@ -660,15 +660,15 @@ export async function getAdminStats(): Promise<AdminStats> {
     totalWeakElements,
     statsAggregate,
   ] = await Promise.all([
-    prisma.user.count({ where: currentAdminUserWhere }),
-    prisma.user.count({ where: { ...currentAdminUserWhere, isActive: true } }),
-    prisma.user.count({ where: { ...currentAdminUserWhere, isActive: false } }),
-    prisma.user.count({ where: { ...currentAdminUserWhere, role: "ADMIN" } }),
-    prisma.user.count({ where: { ...currentAdminUserWhere, emailVerified: true } }),
-    prisma.gameSession.count({ where: { user: currentAdminUserWhere } }),
-    prisma.weakElement.count({ where: { user: currentAdminUserWhere } }),
+    prisma.user.count({ where: currentUserWhere }),
+    prisma.user.count({ where: { ...currentUserWhere, isActive: true } }),
+    prisma.user.count({ where: { ...currentUserWhere, isActive: false } }),
+    prisma.user.count({ where: { ...currentUserWhere, role: "ADMIN" } }),
+    prisma.user.count({ where: { ...currentUserWhere, emailVerified: true } }),
+    prisma.gameSession.count({ where: { user: currentUserWhere } }),
+    prisma.weakElement.count({ where: { user: currentUserWhere } }),
     prisma.userStats.aggregate({
-      where: { user: currentAdminUserWhere },
+      where: { user: currentUserWhere },
       _sum: { totalAnswered: true, totalCorrect: true, masteredCount: true },
     }),
   ]);
