@@ -204,6 +204,7 @@
   - [x] T29: API・security・testing・deployment文書を実装済み契約と未承認gateへ同期（6文書とworkflow/CLIを照合、Prettier・diff check成功。実環境workflow未実行）
   - [x] T30: backend品質check完了（ESLint・Prettier・TypeScript build・Prisma validate成功、通常全test 793件成功・専用DB 7件skip）
   - [x] T31: frontend品質check完了（Prettier・ESLint・Svelte/TypeScript check・production build成功、通常全test 490件成功）
+  - [x] T32: 専用Docker PostgreSQL integration 5件成功（15 migrations適用済み・pending 0、終了後fixture 0件）
   - [ ] Phase 5: `deletedAt` 非参照codeへの移行、v1 deprecated互換値の維持、deploy・soak
   - [ ] Phase 6: cleanup後backup、旧Artifactの7日失効、isolated restore drill・削除replay
   - [ ] Phase 7: guard付きcontract migrationをstaging・productionへ適用

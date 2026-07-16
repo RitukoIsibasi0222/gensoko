@@ -1157,7 +1157,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 - [x] T29: API/security/testing/deployment docsを更新する
 - [x] T30: backend品質checkを通す
 - [x] T31: frontend品質checkを通す
-- [ ] T32: 専用Docker PostgreSQL integration testを通す
+- [x] T32: 専用Docker PostgreSQL integration testを通す
 - [ ] T33: staging expand migration・性能を確認する
 - [ ] T34: staging API/UI・Playwrightを確認する
 - [ ] T35: staging cleanup dry-run/execute/再実行を確認する
@@ -1221,6 +1221,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 > T30 backend品質check記録（2026-07-16）: backendのESLint、Prettier check、TypeScript build、Prisma schema validateが成功した。通常全testは73 files・793件成功、専用DB 3 files・7件skipで、skip内訳はaccount deletion 5件、監査rollback 1件、監査cleanup 1件だった。T29でaccount deletion単体を7件と記載していた誤りを`docs/07_testing_flow.md`で5件へ修正し、全専用DB test合計が7件であることを明記した。専用DBを実接続するT32、frontend品質checkのT31、staging/production workflowは実行していない。
 
 > T31 frontend品質check記録（2026-07-16）: frontendのPrettier適用、ESLint、Svelte/TypeScript check、production buildが成功し、`svelte-check`は0 errors・0 warningsだった。通常全testは44 files・490件すべて成功した。Prettier適用とbuild後にfrontend source差分がないことを確認した。adapter-autoの配備先未確定messageは既知の非errorでbuild終了codeは0だった。実browser・PlaywrightはT34、専用DBはT32、staging/production workflowは各タスク境界まで実行していない。
+
+> T32 専用DB integration記録（2026-07-16）: ローカルDocker PostgreSQLの専用DB `gensoko_account_deletion_test`へ接続し、15 migrationsが適用済み・pending 0件であることを確認した。`ACCOUNT_DELETION_INTEGRATION_DATABASE_URL`を明示してaccount deletion integration 5件を実行し、本人退会・管理者強制退会の全所有row cascade、共有Element保持、PIIなし成功監査、監査insert失敗時rollback、同一User並行退会の1commit、2 ADMIN並行退会時のlast-admin保護がすべて成功した。1 file・5件成功、test時間3.08秒、全体3.66秒だった。終了後の専用DBはUser 0件・AuditLog 0件・fixture Element 0件で、後片付け完了を確認した。staging/productionへの接続・workflowは実行していない。
 
 ## 技術的注意点
 
