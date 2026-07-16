@@ -157,6 +157,15 @@ npm run format
 - execute完了後はCLIがdry-runを再実行し、残件があれば終了code 1になる
 - unknown・位置・重複引数、確認文字列不一致、環境設定不備はDB接続前に拒否する
 - このCLIを`batch:scheduled`へ追加しない。本番実行は承認付きmanual workflowだけで行う
+- ローカルshellからstaging/productionの`DATABASE_URL`を渡して実行しない。実環境では次のGitHub Actionsだけを入口とする
+
+| Environment | workflow                         | operation                                               | 主なgate                                                                                                |
+| ----------- | -------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| staging     | `Staging Account Data Deletion`  | `dry-run` / `execute`                                   | `develop`、staging固定、execute flag、確認文字列                                                        |
+| production  | `Production Database Operations` | `account-deletion-dry-run` / `account-deletion-execute` | `develop`、production固定、24時間以内のbackup・dry-run、execute flag、確認文字列、承認者、change record |
+
+- workflowは実装済みだが実環境では未実行である。staging executeはT35で明示承認を得てから行い、T1Bのprivacy・監査保持・削除replay・本番cleanup体制が承認されるまでproduction executeを行わない
+- staging dry-run/executeはT35、production dry-run/executeはT38のタスク境界で、`docs/11_deployment.md`のrunbookに従って実行する
 
 backend/.env の DATABASE_URL は Docker Compose 内ホスト名 postgres を使うため、ホスト側の cd backend && npm run reset:weekly-scores は標準手順にしない。
 
@@ -187,11 +196,13 @@ T19の期限境界確認はActionsの`Staging Audit Cleanup Fixtures`から`prep
 
 本番DBの容量確認・backup・migrationはローカルshellから接続せず、Actionsの`Production Database Operations`を`develop` branchで実行する。
 
-| operation        | 入力                      | 実行条件                                                         |
-| ---------------- | ------------------------- | ---------------------------------------------------------------- |
-| `capacity-check` | なし                      | 500MB（500,000,000 bytes）quotaに対する70%・85%閾値を確認        |
-| `backup`         | なし                      | production Environmentに`BACKUP_ENCRYPTION_PASSPHRASE`が設定済み |
-| `migrate-deploy` | `confirmed_backup_run_id` | 24時間以内に成功した`backup` run IDを指定                        |
+| operation                  | 入力                                                     | 実行条件                                                         |
+| -------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------- |
+| `capacity-check`           | なし                                                     | 500MB（500,000,000 bytes）quotaに対する70%・85%閾値を確認        |
+| `backup`                   | なし                                                     | production Environmentに`BACKUP_ENCRYPTION_PASSPHRASE`が設定済み |
+| `migrate-deploy`           | `confirmed_backup_run_id`                                | 24時間以内に成功した`backup` run IDを指定                        |
+| `account-deletion-dry-run` | なし                                                     | legacy soft-deleted Userと所有rowの件数をpreviewし、削除しない   |
+| `account-deletion-execute` | backup/dry-run run ID、確認文字列、承認者、change record | 24時間以内の両runと期限内Artifact、execute flagを検証後に削除    |
 
 backup ArtifactにはAES-256暗号化済みarchiveとSHA-256だけが含まれる。平文dump、`DATABASE_URL`、DB password、暗号化passphraseをActions log・Issue・PR・チャットへ貼らない。download・復号・復元手順は`docs/11_deployment.md`の「backupの手動実行と復元」に従う。
 

@@ -5,12 +5,14 @@
 ## SEC-001: パスワード
 
 ### 要件
+
 - 最低8文字以上
 - 英大文字・英小文字・数字・記号（`!@#$%^&*`など）を各1文字以上含む
 - メールアドレス・ユーザー名と同一の文字列は禁止
 - 新しくbcryptハッシュとして保存するパスワードは、正規化後のUTF-8表現で72バイト以内
 
 ### ハッシュ化
+
 - アルゴリズム: **bcryptjs**（Node.js用のnpmパッケージ）
 - コストファクター: `12`（サーバー負荷を考慮して調整）
 - DBにはハッシュのみ保存（平文パスワードは保存しない）
@@ -40,14 +42,16 @@
 > Vercel（フロントエンド）と Cloudflare Workers（API）が別ドメインのため、Cookie方式は使えずトークン方式を採用します。
 
 ### hono/jwtトークン認証フロー
-| 項目 | 値 |
-|------|----|
-| 認証方式 | Bearer Token（Personal Access Token） |
+
+| 項目             | 値                                                  |
+| ---------------- | --------------------------------------------------- |
+| 認証方式         | Bearer Token（Personal Access Token）               |
 | トークン保存場所 | SvelteKitのメモリ（Svelteストア）+ `sessionStorage` |
-| トークン送信方法 | リクエストヘッダー `Authorization: Bearer <token>` |
-| トークン有効期限 | 7日（DBで管理。ログアウト時に即時削除） |
+| トークン送信方法 | リクエストヘッダー `Authorization: Bearer <token>`  |
+| トークン有効期限 | 7日（DBで管理。ログアウト時に即時削除）             |
 
 ### トークンの保管について
+
 ```
 ✅ sessionStorage: タブを閉じると消えるため比較的安全
 ❌ localStorage: XSS攻撃でトークンが盗まれるリスクがあるため使用禁止
@@ -58,6 +62,7 @@
 > XSS防止（SEC-006）と組み合わせて使います。
 
 ### ログアウト
+
 - `POST /api/v1/auth/logout` → HonoサイドでDBのトークンを削除
 - SvelteKit側のストアと `sessionStorage` もクリア
 
@@ -67,12 +72,13 @@
 
 ### ロール定義
 
-| ロール | 権限 |
-|--------|------|
-| `user` | 自分のデータの読み書き、ゲームプレイ、ランキング閲覧 |
-| `admin` | `user`の全権限 ＋ 管理者APIへのアクセス |
+| ロール  | 権限                                                 |
+| ------- | ---------------------------------------------------- |
+| `user`  | 自分のデータの読み書き、ゲームプレイ、ランキング閲覧 |
+| `admin` | `user`の全権限 ＋ 管理者APIへのアクセス              |
 
 ### 認可チェックのルール
+
 - すべての保護APIは**JWTの検証**をミドルウェアで実施
 - 管理者APIは**`role === "admin"`チェック**を追加実施
 - 自分以外のユーザーデータへのアクセスは `userId` の一致チェックで拒否（管理者を除く）
@@ -82,6 +88,7 @@
 ## SEC-004: ブルートフォース対策
 
 ### ログイン失敗ロック
+
 - ログイン失敗 **5回** で **15分間**アカウントをロック
 - ロック中は「しばらく時間をおいてお試しください」と表示（残り時間は開示しない）
 
@@ -89,16 +96,16 @@
 
 すべての非除外 `/api/v1/*` は一般API制限を消費し、次の対象では専用制限も追加で消費する。
 
-| Policy ID | 対象 | 制限 | キー | store障害時 |
-|---|---|---:|---|---|
-| `GENERAL_API_IP` | healthとOPTIONSを除く `/api/v1/*` | 60回/60秒 | IP | fail-open |
-| `AUTH_IP` | register/login/forgot-password/reset-passwordで共有 | 10回/600秒 | IP | fail-closed |
-| `AUTH_EMAIL` | register/login/forgot-passwordの操作ごと | 10回/600秒 | 操作 + 正規化メールアドレスのHMAC | fail-closed |
-| `ACCOUNT_IP` | パスワード変更・アカウント削除 | 10回/600秒 | IP | fail-closed |
-| `ACCOUNT_USER` | パスワード変更・アカウント削除 | 10回/600秒 | 認証済みユーザーIDのHMAC | fail-closed |
-| `GAME_QUESTIONS_IP` | `GET /game/questions` | 30回/60秒 | IP | fail-open |
-| `GAME_SUBMIT_IP` | `POST /game/sessions` | 20回/60秒 | IP | fail-closed |
-| `GAME_SUBMIT_USER` | `POST /game/sessions` | 20回/60秒 | 認証済みユーザーIDのHMAC | fail-closed |
+| Policy ID           | 対象                                                |       制限 | キー                              | store障害時 |
+| ------------------- | --------------------------------------------------- | ---------: | --------------------------------- | ----------- |
+| `GENERAL_API_IP`    | healthとOPTIONSを除く `/api/v1/*`                   |  60回/60秒 | IP                                | fail-open   |
+| `AUTH_IP`           | register/login/forgot-password/reset-passwordで共有 | 10回/600秒 | IP                                | fail-closed |
+| `AUTH_EMAIL`        | register/login/forgot-passwordの操作ごと            | 10回/600秒 | 操作 + 正規化メールアドレスのHMAC | fail-closed |
+| `ACCOUNT_IP`        | パスワード変更・アカウント削除                      | 10回/600秒 | IP                                | fail-closed |
+| `ACCOUNT_USER`      | パスワード変更・アカウント削除                      | 10回/600秒 | 認証済みユーザーIDのHMAC          | fail-closed |
+| `GAME_QUESTIONS_IP` | `GET /game/questions`                               |  30回/60秒 | IP                                | fail-open   |
+| `GAME_SUBMIT_IP`    | `POST /game/sessions`                               |  20回/60秒 | IP                                | fail-closed |
+| `GAME_SUBMIT_USER`  | `POST /game/sessions`                               |  20回/60秒 | 認証済みユーザーIDのHMAC          | fail-closed |
 
 - `/`、`/api/v1/health`、すべての `OPTIONS` はHonoのレート制限から除外する。
 - `POST /game/sessions` のIPとユーザーID、パスワード変更・アカウント削除のIPとユーザーIDは、複合キー1個ではなく独立した2つのバケットとして評価する。
@@ -122,6 +129,7 @@
 ## SEC-005: メール認証
 
 ### 登録フロー
+
 1. ランダムなトークン（`crypto.randomBytes(32)`）を生成
 2. トークンのハッシュをDBに保存（平文は保存しない）
 3. 認証URLをメールで送信（有効期限: **24時間**）
@@ -129,6 +137,7 @@
 5. 使用済みトークンは即時削除
 
 ### パスワードリセット
+
 1. 登録メールアドレスに対してリセットURL送信
 2. トークン有効期限: **1時間**
 3. リセット完了後、そのユーザーの**全リフレッシュトークンを無効化**
@@ -177,6 +186,7 @@ X-Permitted-Cross-Domain-Policies: none
 - credentials、`Content-Type`、`Authorization` の既存許可設定を維持する
 
 ### CSRF対策
+
 - リフレッシュトークンCookieの `SameSite=Strict` で対策
 - 状態変更APIはすべてJSONボディを必須とし、フォームからの直接送信を防ぐ
 
@@ -186,17 +196,19 @@ X-Permitted-Cross-Domain-Policies: none
 
 ### バリデーションルール
 
-| フィールド | ルール |
-|-----------|--------|
-| ユーザー名 | 3〜20文字、`[a-zA-Z0-9_]` のみ（正規表現で検証） |
-| メールアドレス | RFC準拠形式 |
-| パスワード | SEC-001の要件 |
+| フィールド     | ルール                                           |
+| -------------- | ------------------------------------------------ |
+| ユーザー名     | 3〜20文字、`[a-zA-Z0-9_]` のみ（正規表現で検証） |
+| メールアドレス | RFC準拠形式                                      |
+| パスワード     | SEC-001の要件                                    |
 
 ### XSS対策
+
 - ユーザー入力はDBへの保存前にサーバーサイドでサニタイズ
 - フロントエンドはReactの自動エスケープを活用（`dangerouslySetInnerHTML`は使用しない）
 
 ### SQLインジェクション対策
+
 - **Prisma ORM**のプリペアドステートメントのみ使用
 - 生SQL（`$queryRaw`）は使用しない
 
@@ -205,18 +217,21 @@ X-Permitted-Cross-Domain-Policies: none
 ## SEC-008: ログ・監査
 
 ### システムエラー監視
+
 - 本番環境の `500` 系エラーは Sentry 等のエラートラッキング、または構造化ログで検知する
 - ログには `requestId` / `method` / `path` / `status` / `durationMs` / `environment` を含める
 - エラー通知は開発者が即時確認できる通知先に送る
 - パスワード・トークン・Cookie・メールアドレスなどの秘密情報や個人情報は送信しない
 
 ### ログに記録する操作
+
 - ログイン成功 / 失敗
 - パスワード変更
 - メール認証
 - 管理者によるユーザー操作（停止・削除・ロール変更）
 
 ### ログの取り扱い
+
 - ログに**パスワード・トークン・個人情報**は含めない
 - ログはサーバー外（ログ収集サービス）に保存
 
@@ -244,10 +259,13 @@ X-Permitted-Cross-Domain-Policies: none
 
 - 収集する個人情報: **メールアドレス** と **ユーザー名** のみ（最小限）
 - プライバシーポリシーページを設置（公開前に必須）
-- アカウント削除時に個人情報・学習データを完全削除することを目標要件とする
-- 現在の本人退会・管理者強制退会はsoft deleteであり、Userのメール・username・学習データが残るため、この目標要件は未達である
-- physical deleteまたは匿名化、学習データ削除範囲、既存soft-deleted userの移行は、監査ログ内部IDの期間限定保持とは分離した本番公開前ブロッカーとして扱う
-- 監査内部IDを例外保持する正式期間・目的・問い合わせ先は、承認後にプライバシーポリシーへ記載する
+- 本人退会・管理者強制退会の現行codeは、Serializable transactionでUserを物理削除し、認証token・学習dataなどの所有rowをDB cascadeで削除する。共有masterのElementは削除しない
+- 削除成功監査はUser削除と同じtransactionへ保存する。監査rowにはemail・usernameを保存せず、内部User IDと削除前roleだけをSEC-008の例外保持方針に従って残す
+- 物理削除後は旧email・usernameで別User IDとして再登録できる。旧資格情報、学習履歴、監査内部IDを新Userへ自動関連付けしない
+- 既存soft-deleted User向けcleanup CLI・staging/production manual workflowは実装済みだが、実環境では未実行である。通常実行はdry-runとし、production executeは承認済みgateをすべて満たすまで行わない
+- 物理削除backendとcleanupを本番公開する前に、プライバシーポリシー、監査内部IDの正式保持期間・目的・問い合わせ先、backup境界、全損復元時の削除replay方針、本番cleanup体制を承認・記録する
+- 暗号化backupは作成時点の削除済みdataを含む可能性がある。backup Artifactの保持・失効とisolated restore後の削除replayを確認するまで、backupからの復元を完全削除の代替と扱わない
+- 上記の正式承認はT1Bとして未完了であり、production公開・production cleanup・contract migrationのブロッカーである
 
 ---
 

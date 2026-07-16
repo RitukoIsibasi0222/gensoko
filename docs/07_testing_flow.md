@@ -41,6 +41,7 @@ src/
 ## テストの種類
 
 ### ユニットテスト（Unit Test）
+
 - 対象: ミドルウェア・サービス関数など「部品」単体
 - DB や外部サービスは **モック（偽物）** に差し替える
 - 速くて安定している
@@ -130,6 +131,8 @@ docker compose exec -T \
 - 同一Userの並行削除は1commit・成功監査1件になることを確認する
 - 2人のADMINの並行本人退会後も利用可能なADMINが1人残ることを確認する
 - 各test終了時に専用DBのUser・AuditLog fixtureを削除する
+- suiteは7件で、通常suiteでは専用環境変数がないためskipされる。T32で上記commandを明示実行し、7件すべての成功を記録する
+- この手順はローカルDocker PostgreSQL専用である。staging/productionの接続URLを渡さず、実環境確認はT33以降の承認付き手順へ分離する
 
 ---
 
@@ -160,7 +163,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // describe: テスト対象をグループ化
 describe("authMiddleware", () => {
-
   // beforeEach: 各テスト前に実行（モックのリセットなど）
   beforeEach(() => {
     vi.clearAllMocks();
@@ -186,16 +188,16 @@ describe("authMiddleware", () => {
 
 ## よく使う Vitest の関数
 
-| 関数 | 用途 |
-|---|---|
-| `vi.mock("パス")` | モジュールをモック化 |
-| `vi.fn()` | モック関数を作成 |
+| 関数                                 | 用途                           |
+| ------------------------------------ | ------------------------------ |
+| `vi.mock("パス")`                    | モジュールをモック化           |
+| `vi.fn()`                            | モック関数を作成               |
 | `vi.mocked(fn).mockResolvedValue(x)` | 非同期モック関数の戻り値を設定 |
-| `vi.clearAllMocks()` | 全モックをリセット |
-| `vi.stubEnv("KEY", "value")` | 環境変数を一時的に設定 |
-| `expect(x).toBe(y)` | 厳密に等しいか検証 |
-| `expect(x).toEqual(y)` | 深い比較で等しいか検証 |
-| `expect(fn).rejects.toThrow()` | エラーが投げられるか検証 |
+| `vi.clearAllMocks()`                 | 全モックをリセット             |
+| `vi.stubEnv("KEY", "value")`         | 環境変数を一時的に設定         |
+| `expect(x).toBe(y)`                  | 厳密に等しいか検証             |
+| `expect(x).toEqual(y)`               | 深い比較で等しいか検証         |
+| `expect(fn).rejects.toThrow()`       | エラーが投げられるか検証       |
 
 ---
 
@@ -227,8 +229,10 @@ npm run test -- --coverage
 1. マイグレーション適用（開発環境）
 2. バックエンドテスト実行（回帰確認）
 3. フロントエンドの主要導線を Playwright で確認
-  - 例: 認証（register/login/verify-email）
-  - 例: DB変更の影響がある画面（settings、一覧、詳細など）
+
+- 例: 認証（register/login/verify-email）
+- 例: DB変更の影響がある画面（settings、一覧、詳細など）
+
 4. 「画面表示は成功したが裏で 500 が出ていないか」を確認
 
 ### 記録ルール
@@ -240,10 +244,10 @@ npm run test -- --coverage
 
 ## 各フェーズのテスト方針
 
-| フェーズ | テスト対象 | 種類 |
-|---|---|---|
-| フェーズ2 | middleware・auth routes | ユニットテスト |
-| フェーズ3 | elements・game routes | ユニットテスト |
-| フェーズ4 | users・ranking routes | ユニットテスト |
+| フェーズ   | テスト対象                 | 種類                               |
+| ---------- | -------------------------- | ---------------------------------- |
+| フェーズ2  | middleware・auth routes    | ユニットテスト                     |
+| フェーズ3  | elements・game routes      | ユニットテスト                     |
+| フェーズ4  | users・ranking routes      | ユニットテスト                     |
 | フェーズ10 | 監査insert失敗時のrollback | Docker PostgreSQL integration test |
-| 将来 | API 全体 | インテグレーションテスト |
+| 将来       | API 全体                   | インテグレーションテスト           |

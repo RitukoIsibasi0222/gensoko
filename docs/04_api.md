@@ -10,17 +10,17 @@
 
 Hono API が生成する正常・エラー・404・CORS preflight レスポンスには、以下のセキュリティヘッダーを付与する。
 
-| ヘッダー | 値 | 適用環境 |
-|---|---|---|
-| `Content-Security-Policy` | `default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'` | 全環境 |
-| `X-Frame-Options` | `DENY` | 全環境 |
-| `X-Content-Type-Options` | `nosniff` | 全環境 |
-| `Referrer-Policy` | `strict-origin-when-cross-origin` | 全環境 |
-| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` | 全環境 |
-| `Cross-Origin-Resource-Policy` | `same-origin` | 全環境 |
-| `X-XSS-Protection` | `0` | 全環境 |
-| `X-Permitted-Cross-Domain-Policies` | `none` | 全環境 |
-| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | productionのみ |
+| ヘッダー                            | 値                                                                                | 適用環境       |
+| ----------------------------------- | --------------------------------------------------------------------------------- | -------------- |
+| `Content-Security-Policy`           | `default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'` | 全環境         |
+| `X-Frame-Options`                   | `DENY`                                                                            | 全環境         |
+| `X-Content-Type-Options`            | `nosniff`                                                                         | 全環境         |
+| `Referrer-Policy`                   | `strict-origin-when-cross-origin`                                                 | 全環境         |
+| `Permissions-Policy`                | `camera=(), microphone=(), geolocation=()`                                        | 全環境         |
+| `Cross-Origin-Resource-Policy`      | `same-origin`                                                                     | 全環境         |
+| `X-XSS-Protection`                  | `0`                                                                               | 全環境         |
+| `X-Permitted-Cross-Domain-Policies` | `none`                                                                            | 全環境         |
+| `Strict-Transport-Security`         | `max-age=31536000; includeSubDomains`                                             | productionのみ |
 
 - `X-Powered-By` は削除する。
 - development/testではHSTSを付与しない。
@@ -31,19 +31,25 @@ Hono API が生成する正常・エラー・404・CORS preflight レスポン�
 - Hono appでrouteが一致しない場合は404と `{ "error": "エンドポイントが見つかりません" }` を返す。
 - Hono app内の未捕捉例外は500と `{ "error": "サーバーエラーが発生しました" }` を返し、内部の例外messageやstack traceをresponseへ含めない。server logにもraw例外を出さず、固定イベント名だけを記録する。
 
+### account data完全削除の公開状態
+
+- 本文に記載する本人退会・管理者強制退会・削除後auth・admin v1互換は、現行branchで実装済みのAPI契約である。
+- staging/productionでのmigration・API/UI確認・legacy cleanupは未実行であり、本番適用済みとは扱わない。
+- T1Bのprivacy・監査内部ID保持・backup/削除replay・本番cleanup体制が承認されるまで、物理削除backendの本番公開、production cleanup、contract migrationを行わない。
+
 ---
 
 ## 認証 `/api/v1/auth`
 
-| メソッド | パス | 説明 | 認証 |
-|---------|------|------|------|
-| POST | `/auth/register` | ユーザー登録 | なし |
-| POST | `/auth/verify-email` | メール認証 | なし |
-| POST | `/auth/login` | ログイン | なし |
-| POST | `/auth/refresh` | アクセストークン更新 | Cookie |
-| POST | `/auth/logout` | ログアウト（リフレッシュトークン削除） | 🔒 |
-| POST | `/auth/forgot-password` | パスワードリセットメール送信 | なし |
-| POST | `/auth/reset-password` | パスワードリセット実行 | なし |
+| メソッド | パス                    | 説明                                   | 認証   |
+| -------- | ----------------------- | -------------------------------------- | ------ |
+| POST     | `/auth/register`        | ユーザー登録                           | なし   |
+| POST     | `/auth/verify-email`    | メール認証                             | なし   |
+| POST     | `/auth/login`           | ログイン                               | なし   |
+| POST     | `/auth/refresh`         | アクセストークン更新                   | Cookie |
+| POST     | `/auth/logout`          | ログアウト（リフレッシュトークン削除） | 🔒     |
+| POST     | `/auth/forgot-password` | パスワードリセットメール送信           | なし   |
+| POST     | `/auth/reset-password`  | パスワードリセット実行                 | なし   |
 
 ### パスワード入力の共通方針
 
@@ -54,6 +60,7 @@ Hono API が生成する正常・エラー・404・CORS preflight レスポン�
 - バイト数は文字数ではなくUTF-8表現で数える。ASCII、日本語、絵文字のいずれも72バイトは受理し、73バイトは新規保存値として拒否する。
 
 ### POST `/auth/register`
+
 ```
 Request:
 {
@@ -78,6 +85,7 @@ Error:
 - cleanup前のlegacy soft-deleted rowが残る移行期間は、同じemail・usernameの再登録を403で拒否する。cleanup完了後は通常の新規登録として201を返す。
 
 ### POST `/auth/login`
+
 ```
 Request:
 {
@@ -158,6 +166,7 @@ Response 200:
 - password、password hash、reset token、token hash、request body、raw errorは保存しない。
 
 Error:
+
 - 400: バリデーションエラー / トークンの有効期限が切れています / 無効または期限切れのトークンです
 - 404: 無効なトークンです
 - 429: リクエストが多すぎます。しばらく待ってから再試行してください
@@ -168,12 +177,13 @@ Error:
 
 ## 元素 `/api/v1/elements`
 
-| メソッド | パス | 説明 | 認証 |
-|---------|------|------|------|
-| GET | `/elements` | 元素一覧取得 | 任意 |
-| GET | `/elements/:id` | 元素詳細取得 | なし |
+| メソッド | パス            | 説明         | 認証 |
+| -------- | --------------- | ------------ | ---- |
+| GET      | `/elements`     | 元素一覧取得 | 任意 |
+| GET      | `/elements/:id` | 元素詳細取得 | なし |
 
 ### GET `/elements`
+
 ```
 Headers:
   Authorization: "Bearer <accessToken>"  // 任意。ログイン時のみ指定し、習得状態を付与
@@ -223,6 +233,7 @@ Error:
 ```
 
 ### GET `/elements/:id`
+
 ```
 Path params:
   id: number  // 元素ID（1〜118 の10進整数）
@@ -252,14 +263,15 @@ Error:
 
 ## ゲーム `/api/v1/game`
 
-| メソッド | パス | 説明 | 認証 |
-|---------|------|------|------|
-| GET | `/game/questions` | 問題セット取得（10問） | 🔒 |
-| POST | `/game/sessions` | ゲーム結果を保存 | 🔒 |
-| GET | `/game/sessions` | ゲーム履歴一覧 | 🔒 |
-| GET | `/game/sessions/:sessionId` | ゲーム結果詳細取得 | 🔒 |
+| メソッド | パス                        | 説明                   | 認証 |
+| -------- | --------------------------- | ---------------------- | ---- |
+| GET      | `/game/questions`           | 問題セット取得（10問） | 🔒   |
+| POST     | `/game/sessions`            | ゲーム結果を保存       | 🔒   |
+| GET      | `/game/sessions`            | ゲーム履歴一覧         | 🔒   |
+| GET      | `/game/sessions/:sessionId` | ゲーム結果詳細取得     | 🔒   |
 
 ### GET `/game/questions`
+
 ```
 Query params:
   mode: GameMode  // 必須（例: "SYMBOL_TO_NAME_LV1"）
@@ -296,6 +308,7 @@ Error:
 ```
 
 ### POST `/game/sessions`
+
 ```
 Request:
 {
@@ -381,6 +394,7 @@ Error:
 ```
 
 ### GET `/game/sessions`
+
 ```
 Query params:
   limit?: number  // 1〜50 の整数。未指定・空文字は 20
@@ -419,6 +433,7 @@ Error:
 ```
 
 ### GET `/game/sessions/:sessionId`
+
 ```
 Path params:
   sessionId: string  // 必須、trim 後に空文字不可
@@ -478,12 +493,13 @@ Error:
 
 ## 苦手リスト `/api/v1/weak`
 
-| メソッド | パス | 説明 | 認証 |
-|---------|------|------|------|
-| GET | `/weak` | 苦手リスト取得 | 🔒 |
-| DELETE | `/weak/:elementId` | 苦手リストから削除 | 🔒 |
+| メソッド | パス               | 説明               | 認証 |
+| -------- | ------------------ | ------------------ | ---- |
+| GET      | `/weak`            | 苦手リスト取得     | 🔒   |
+| DELETE   | `/weak/:elementId` | 苦手リストから削除 | 🔒   |
 
 ### GET `/weak`
+
 ```
 Response 200:
 {
@@ -508,6 +524,7 @@ Error:
 ※ `GET /weak` は `/game` の苦手件数表示・苦手モード開始可否判定に利用する。
 
 ### DELETE `/weak/:elementId`
+
 ```
 Path params:
   elementId: 1から118の整数
@@ -537,6 +554,7 @@ Error:
 **すべてのエラーレスポンス**は `error` フィールドを必ず含みます：
 
 **基本形式**:
+
 ```json
 {
   "error": "エラーメッセージ（文字列）"
@@ -544,6 +562,7 @@ Error:
 ```
 
 **バリデーションエラー時** (400):
+
 ```json
 {
   "error": "バリデーションエラー",
@@ -564,18 +583,18 @@ Error:
 
 **ステータスコード一覧**:
 
-| コード | 意味 | 使用例 |
-|--------|------|--------|
-| 400 | Bad Request | バリデーションエラー・リクエスト形式不正 |
-| 401 | Unauthorized | 認証失敗・トークン無効・アカウントロック |
-| 403 | Forbidden | 権限不足・メール未確認 |
-| 404 | Not Found | リソースが存在しない |
-| 409 | Conflict | メールアドレス重複・ユーザー名重複 |
-| 429 | Too Many Requests | レート制限超過 |
-| 500 | Internal Server Error | サーバー内部エラー |
-| 502 | Bad Gateway | サーバーダウン（リバースプロキシ） |
-| 503 | Service Unavailable | sensitive APIのレート制限store障害 |
-| 504 | Gateway Timeout | サーバータイムアウト |
+| コード | 意味                  | 使用例                                   |
+| ------ | --------------------- | ---------------------------------------- |
+| 400    | Bad Request           | バリデーションエラー・リクエスト形式不正 |
+| 401    | Unauthorized          | 認証失敗・トークン無効・アカウントロック |
+| 403    | Forbidden             | 権限不足・メール未確認                   |
+| 404    | Not Found             | リソースが存在しない                     |
+| 409    | Conflict              | メールアドレス重複・ユーザー名重複       |
+| 429    | Too Many Requests     | レート制限超過                           |
+| 500    | Internal Server Error | サーバー内部エラー                       |
+| 502    | Bad Gateway           | サーバーダウン（リバースプロキシ）       |
+| 503    | Service Unavailable   | sensitive APIのレート制限store障害       |
+| 504    | Gateway Timeout       | サーバータイムアウト                     |
 
 #### レート制限の共通レスポンス
 
@@ -611,15 +630,15 @@ Content-Type: application/json
 }
 ```
 
-| 対象 | 一般制限 | 専用制限 |
-|---|---|---|
-| register/login/forgot-password | 60回/60秒・IP | 10回/600秒・共有IP + 操作別email |
-| reset-password | 60回/60秒・IP | 10回/600秒・共有IP |
-| password変更・account削除 | 60回/60秒・IP | 10回/600秒・IP + user |
-| `GET /game/questions` | 60回/60秒・IP | 30回/60秒・IP |
-| `POST /game/sessions` | 60回/60秒・IP | 20回/60秒・IP + 20回/60秒・user |
-| その他の `/api/v1/*` | 60回/60秒・IP | なし |
-| `/`、`/api/v1/health`、`OPTIONS` | 対象外 | なし |
+| 対象                             | 一般制限      | 専用制限                         |
+| -------------------------------- | ------------- | -------------------------------- |
+| register/login/forgot-password   | 60回/60秒・IP | 10回/600秒・共有IP + 操作別email |
+| reset-password                   | 60回/60秒・IP | 10回/600秒・共有IP               |
+| password変更・account削除        | 60回/60秒・IP | 10回/600秒・IP + user            |
+| `GET /game/questions`            | 60回/60秒・IP | 30回/60秒・IP                    |
+| `POST /game/sessions`            | 60回/60秒・IP | 20回/60秒・IP + 20回/60秒・user  |
+| その他の `/api/v1/*`             | 60回/60秒・IP | なし                             |
+| `/`、`/api/v1/health`、`OPTIONS` | 対象外        | なし                             |
 
 - email制限はZod検証成功後に適用します。不正JSON・不正emailはIPバケットだけを消費します。
 - `POST /game/sessions` は専用IP制限、認証、専用user制限、Zod検証の順です。未認証リクエストはIPバケットを消費しますがuserバケットを消費しません。
@@ -636,30 +655,34 @@ Content-Type: application/json
 #### パターン 1: 基本的なエラーハンドリング
 
 ```typescript
-import { API_BASE_URL } from '$lib/api/config';
-import { ApiError } from '$lib/api/errors';
+import { API_BASE_URL } from "$lib/api/config";
+import { ApiError } from "$lib/api/errors";
 
 async function callApi() {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: email.trim(), password: password.trim() }),
-    credentials: 'include' // HttpOnly Cookie 用
+    credentials: "include", // HttpOnly Cookie 用
   });
 
   // ステップ 1: response.ok を最初にチェック
   if (!response.ok) {
     // ステップ 2: JSON パースを try-catch で囲む（502/504 対策）
-    let errorBody: { error?: string; details?: { message: string }[] } | null = null;
+    let errorBody: { error?: string; details?: { message: string }[] } | null =
+      null;
     try {
       errorBody = await response.json();
     } catch {
       // JSON パース失敗 = 非 JSON レスポンス（HTML、プレーンテキスト等）
       // null を使う（空オブジェクト {} は使わない）
     }
-    
+
     // ステップ 3: details[0].message を優先（400 バリデーションエラー時の具体的な Zod メッセージを使用）
-    const message = errorBody?.details?.[0]?.message ?? errorBody?.error ?? 'エラーが発生しました';
+    const message =
+      errorBody?.details?.[0]?.message ??
+      errorBody?.error ??
+      "エラーが発生しました";
     throw new ApiError(response.status, message, errorBody);
   }
 
@@ -669,6 +692,7 @@ async function callApi() {
 ```
 
 **なぜこの順序が重要か**:
+
 - **502/504 等サーバーダウン時は非 JSON（HTML、プレーンテキスト等）が返る可能性がある** → JSON パースで例外が発生
 - `response.ok` を先にチェックすれば、エラー時も安全に JSON パースできる
 - バックエンドが返す具体的なエラーメッセージ（例: 「メールアドレスが確認されていません」）を上書きしない
@@ -681,7 +705,7 @@ async function callApi() {
 function toJpMessage(status: number, fallback: string): string {
   switch (status) {
     case 400:
-      return '入力内容を確認してください';
+      return "入力内容を確認してください";
     case 401:
       // バックエンドが具体的な理由を返す場合は fallback を優先
       // 例: "メールアドレスまたはパスワードが正しくありません"
@@ -691,7 +715,7 @@ function toJpMessage(status: number, fallback: string): string {
       // 例: "メールアドレスが確認されていません"
       return fallback;
     case 404:
-      return 'リソースが見つかりません';
+      return "リソースが見つかりません";
     case 409:
       // 例: "メールアドレスは既に使用されています"
       return fallback;
@@ -700,9 +724,9 @@ function toJpMessage(status: number, fallback: string): string {
     case 503:
       return fallback;
     case 500:
-      return 'サーバーエラーが発生しました';
+      return "サーバーエラーが発生しました";
     default:
-      return fallback || 'エラーが発生しました';
+      return fallback || "エラーが発生しました";
   }
 }
 
@@ -728,13 +752,13 @@ function validate(): string | null {
   const normalizedPassword = password.trim();
 
   // 空欄チェック
-  if (!normalizedEmail) return 'メールアドレスを入力してください';
-  if (!normalizedPassword) return 'パスワードを入力してください';
+  if (!normalizedEmail) return "メールアドレスを入力してください";
+  if (!normalizedPassword) return "パスワードを入力してください";
 
   // 形式チェック（正規化済みの値を使う）
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailPattern.test(normalizedEmail)) {
-    return 'メールアドレスの形式が正しくありません';
+    return "メールアドレスの形式が正しくありません";
   }
 
   return null;
@@ -750,12 +774,12 @@ async function handleSubmit() {
 
   // 送信時も同じように trim した値を使う
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      email: email.trim(),    // バリデーションと同じ
-      password: password.trim() // バリデーションと同じ
-    })
+      email: email.trim(), // バリデーションと同じ
+      password: password.trim(), // バリデーションと同じ
+    }),
   });
 }
 ```
@@ -766,29 +790,30 @@ async function handleSubmit() {
 
 ### よくある実装ミスと修正方法
 
-| ミス | 問題 | 修正方法 |
-|------|------|----------|
-| JSON パースを先にする | 502/504 で例外が発生 | `response.ok` を先にチェック |
-| エラー時の JSON パースを try-catch しない | 非 JSON レスポンスで例外 | try-catch で囲む |
-| バックエンドのメッセージを上書き | 具体的なエラー理由が失われる | `fallback` を優先する |
-| バリデーションと送信で異なる値を使う | サーバー側で認証失敗 | 両方で `trim()` した値を使う |
-| 存在しないステータスコードをハンドリング | 到達不能コード | `backend/src/services/auth.service.ts` を確認 |
-| 環境変数を各ファイルで重複定義 | 方針がズレる | `$lib/api/config.ts` で一元管理 |
+| ミス                                      | 問題                         | 修正方法                                      |
+| ----------------------------------------- | ---------------------------- | --------------------------------------------- |
+| JSON パースを先にする                     | 502/504 で例外が発生         | `response.ok` を先にチェック                  |
+| エラー時の JSON パースを try-catch しない | 非 JSON レスポンスで例外     | try-catch で囲む                              |
+| バックエンドのメッセージを上書き          | 具体的なエラー理由が失われる | `fallback` を優先する                         |
+| バリデーションと送信で異なる値を使う      | サーバー側で認証失敗         | 両方で `trim()` した値を使う                  |
+| 存在しないステータスコードをハンドリング  | 到達不能コード               | `backend/src/services/auth.service.ts` を確認 |
+| 環境変数を各ファイルで重複定義            | 方針がズレる                 | `$lib/api/config.ts` で一元管理               |
 
 ---
 
 ## ユーザー `/api/v1/users`
 
-| メソッド | パス | 説明 | 認証 |
-|---------|------|------|------|
-| GET | `/users/me` | 自分のプロフィール取得 | 🔒 |
-| PATCH | `/users/me` | ユーザー名・パスワード変更 | 🔒 |
-| DELETE | `/users/me` | アカウント削除 | 🔒 |
-| GET | `/users/me/stats` | 自分の統計取得 | 🔒 |
+| メソッド | パス              | 説明                       | 認証 |
+| -------- | ----------------- | -------------------------- | ---- |
+| GET      | `/users/me`       | 自分のプロフィール取得     | 🔒   |
+| PATCH    | `/users/me`       | ユーザー名・パスワード変更 | 🔒   |
+| DELETE   | `/users/me`       | アカウント削除             | 🔒   |
+| GET      | `/users/me/stats` | 自分の統計取得             | 🔒   |
 
 ### GET `/users/me`
 
 Headers:
+
 - `Authorization: Bearer <accessToken>`
 
 Response 200:
@@ -804,6 +829,7 @@ Response 200:
     }
 
 Response fields:
+
 - user.id: ユーザーID
 - user.username: ユーザー名
 - user.email: メールアドレス
@@ -818,6 +844,7 @@ Error:
 ### PATCH `/users/me`
 
 Headers:
+
 - `Authorization: Bearer <accessToken>`
 - `Content-Type: application/json`
 
@@ -852,6 +879,7 @@ Headers:
     }
 
 Cookie:
+
 - パスワード変更成功時は既存 refresh token を DB から削除し、`refreshToken` Cookie を削除する
 - 削除対象 Cookie path: `/api/v1/auth`, `/api/v1/auth/refresh`
 - 変更後は再ログインが必要
@@ -863,6 +891,7 @@ Cookie:
 - username変更、入力検証失敗、現在password不一致、認証middlewareでの拒否は監査対象外。
 
 Validation:
+
 - `username` は username schema に従う
 - `currentPassword` は空文字不可。既存ユーザー照合値のためUTF-8・72バイト上限は適用しない
 - `newPassword` は strong password schema とUTF-8・72バイト上限に従う
@@ -882,6 +911,7 @@ Error:
 ### DELETE `/users/me`
 
 Headers:
+
 - `Authorization: Bearer <accessToken>`
 - `Content-Type: application/json`
 
@@ -892,6 +922,7 @@ Request:
     }
 
 Validation:
+
 - `currentPassword` は空文字不可
 - 既存ユーザー照合値のためUTF-8・72バイト上限は適用せず、正規化後の完全な値を比較する
 
@@ -902,6 +933,7 @@ Response 200:
     }
 
 Deletion behavior:
+
 - bcrypt照合後、Serializable transaction内でUser・password hash・利用状態を再確認する
 - Userを物理削除し、refresh token、password reset token、email verification token、学習データなどの所有rowはDB cascadeで削除する
 - 最後の利用可能な管理者は409で保護する
@@ -920,6 +952,7 @@ Error:
 ### GET /users/me/stats
 
 Headers:
+
 - `Authorization: Bearer <accessToken>`
 
 Response 200:
@@ -967,6 +1000,7 @@ Empty response 200:
     }
 
 Response fields:
+
 - stats.totalGames: 累計ゲーム回数。0 以上の整数
 - stats.totalCorrect: 累計正解数。0 以上かつ stats.totalAnswered 以下の整数
 - stats.totalAnswered: 累計回答数。0 以上の整数
@@ -988,22 +1022,23 @@ Error:
 403 error: アカウントが停止されています / メールアドレスが確認されていません / アカウントがロックされています / ユーザーが見つかりません（サービス層で検出した場合）
 500 error: サーバーエラーが発生しました
 
-
 ---
 
 ## ランキング `/api/v1/ranking`
 
-| メソッド | パス | 説明 | 認証 |
-|---------|------|------|------|
-| GET | `/ranking/weekly` | 週間ランキング（上位50件・自分の順位） | 任意 |
-| GET | `/ranking/alltime` | 全期間ランキング（上位50件・自分の順位） | 任意 |
+| メソッド | パス               | 説明                                     | 認証 |
+| -------- | ------------------ | ---------------------------------------- | ---- |
+| GET      | `/ranking/weekly`  | 週間ランキング（上位50件・自分の順位）   | 任意 |
+| GET      | `/ranking/alltime` | 全期間ランキング（上位50件・自分の順位） | 任意 |
 
 認証:
+
 - 未ログインでも閲覧可能
 - `myRank` フィールドは常に返す。`Authorization: Bearer <accessToken>` がある場合のみ順位を算出し、未ログイン・ランキング対象外の場合は `null` を返す
 - Authorization ヘッダー形式不正・token 無効時は 401
 
 ランキング対象:
+
 - `UserStats.totalGames > 0`
 - `User.isActive = true`
 - `User.deletedAt = null`
@@ -1044,6 +1079,7 @@ Response 200:
     }
 
 Response fields:
+
 - ranking: 最大50件
 - ranking[].rank: score 降順の順位。同点は同順位
 - ranking[].username: 表示名
@@ -1061,14 +1097,14 @@ Error:
 
 ## 管理者 `/api/v1/admin`
 
-| メソッド | パス | 説明 | 認証 |
-|---------|------|------|------|
-| GET | `/admin/users` | ユーザー一覧 | 👑 |
-| GET | `/admin/users/:id` | ユーザー詳細 | 👑 |
-| PATCH | `/admin/users/:id/status` | アカウント停止・解除 | 👑 |
-| PATCH | `/admin/users/:id/role` | ロール変更 | 👑 |
-| DELETE | `/admin/users/:id` | 強制退会 | 👑 |
-| GET | `/admin/stats` | サービス全体の統計 | 👑 |
+| メソッド | パス                      | 説明                 | 認証 |
+| -------- | ------------------------- | -------------------- | ---- |
+| GET      | `/admin/users`            | ユーザー一覧         | 👑   |
+| GET      | `/admin/users/:id`        | ユーザー詳細         | 👑   |
+| PATCH    | `/admin/users/:id/status` | アカウント停止・解除 | 👑   |
+| PATCH    | `/admin/users/:id/role`   | ロール変更           | 👑   |
+| DELETE   | `/admin/users/:id`        | 強制退会             | 👑   |
+| GET      | `/admin/stats`            | サービス全体の統計   | 👑   |
 
 ### 共通仕様
 
@@ -1115,13 +1151,13 @@ account data完全削除への移行中も、旧frontendとのv1互換を次の�
 
 Query params:
 
-| パラメータ | 型 | 既定値 | 説明 |
-|---|---|---|---|
-| `limit` | number | 20 | 1〜100。未指定または空文字は20 |
-| `cursor` | string | なし | 前回レスポンスの `nextCursor`。trim 後空文字は400 |
-| `q` | string | なし | `username` / `email` の部分一致。trim 後100文字以内。空文字は未指定扱い |
-| `role` | `"USER" \| "ADMIN"` | なし | ロール filter |
-| `status` | `"active" \| "suspended" \| "deleted"` | なし | 状態 filter。`deleted` はdeprecated互換入力 |
+| パラメータ | 型                                     | 既定値 | 説明                                                                    |
+| ---------- | -------------------------------------- | ------ | ----------------------------------------------------------------------- |
+| `limit`    | number                                 | 20     | 1〜100。未指定または空文字は20                                          |
+| `cursor`   | string                                 | なし   | 前回レスポンスの `nextCursor`。trim 後空文字は400                       |
+| `q`        | string                                 | なし   | `username` / `email` の部分一致。trim 後100文字以内。空文字は未指定扱い |
+| `role`     | `"USER" \| "ADMIN"`                    | なし   | ロール filter                                                           |
+| `status`   | `"active" \| "suspended" \| "deleted"` | なし   | 状態 filter。`deleted` はdeprecated互換入力                             |
 
 Response 200:
 
@@ -1173,9 +1209,9 @@ Error:
 
 Path params:
 
-| パラメータ | 型 | 説明 |
-|---|---|---|
-| `id` | string | ユーザーID。trim 後に空文字不可 |
+| パラメータ | 型     | 説明                            |
+| ---------- | ------ | ------------------------------- |
+| `id`       | string | ユーザーID。trim 後に空文字不可 |
 
 Response 200:
 
@@ -1220,15 +1256,15 @@ Error:
 
 Path params:
 
-| パラメータ | 型 | 説明 |
-|---|---|---|
-| `id` | string | ユーザーID。trim 後に空文字不可 |
+| パラメータ | 型     | 説明                            |
+| ---------- | ------ | ------------------------------- |
+| `id`       | string | ユーザーID。trim 後に空文字不可 |
 
 Request:
 
 ```ts
 {
-  isActive: boolean
+  isActive: boolean;
 }
 ```
 
@@ -1272,15 +1308,15 @@ Error:
 
 Path params:
 
-| パラメータ | 型 | 説明 |
-|---|---|---|
-| `id` | string | ユーザーID。trim 後に空文字不可 |
+| パラメータ | 型     | 説明                            |
+| ---------- | ------ | ------------------------------- |
+| `id`       | string | ユーザーID。trim 後に空文字不可 |
 
 Request:
 
 ```ts
 {
-  role: "USER" | "ADMIN"
+  role: "USER" | "ADMIN";
 }
 ```
 
@@ -1325,15 +1361,15 @@ Error:
 
 Path params:
 
-| パラメータ | 型 | 説明 |
-|---|---|---|
-| `id` | string | ユーザーID。trim 後に空文字不可 |
+| パラメータ | 型     | 説明                            |
+| ---------- | ------ | ------------------------------- |
+| `id`       | string | ユーザーID。trim 後に空文字不可 |
 
 Response 200:
 
 ```ts
 {
-  message: "ユーザーを強制退会しました"
+  message: "ユーザーを強制退会しました";
 }
 ```
 
