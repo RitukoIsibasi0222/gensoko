@@ -1152,7 +1152,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 - [x] T24: settings説明/error/focus/busyを実装する
 - [x] T25: auth store cross-tab Red testを追加する
 - [x] T26: account deletion local/cross-tab clearを実装する
-- [ ] T27: admin frontend Red testを追加する
+- [x] T27: admin frontend Red testを追加する
 - [ ] T28: admin deleted UI除去・削除後focusを実装する
 - [ ] T29: API/security/testing/deployment docsを更新する
 - [ ] T30: backend品質checkを通す
@@ -1211,6 +1211,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 > T25 Red記録（2026-07-16）: auth storeへ、本人退会完了時に現在tabのrefreshをabortして認証state・sessionStorageを同期clearする契約と、PIIを含まない厳密な`{ type: "account-deleted" }`だけをBroadcastChannelで送受信する契約testを追加した。受信tabはeventを再送せず同じlocal clearを行い、別type・`null`・追加fieldを持つeventは無視する。BroadcastChannel未対応browserとSSRではchannelを作らず現在tabだけを安全にclearし、logout APIは呼ばない。専用5件は`completeAccountDeletion()`とchannel未実装により全件Redとなり、frontend全体は既存473件成功・追加5件Redで他43 test fileに回帰失敗はない。lint、Prettier、Svelte/TypeScript checkは成功した。auth store sourceは変更せず、GreenはT26で行う。
 
 > T26 Green/Refactor記録（2026-07-16）: auth storeへ`completeAccountDeletion()`を追加し、送信側・受信側が共有するlocal clearで実行中refreshをabortして認証state・sessionStorageを同期消去する。browserかつ対応環境だけ`gensoko-auth` BroadcastChannelを生成し、PIIを含まない厳密な`{ type: "account-deleted" }`だけを受理する。本人操作はlocal clear後に1回通知し、受信tabは再送しない。channel生成・送信失敗、未対応browser、SSRでもcurrent tab clearを維持する。settingsの退会成功処理は、削除済みserverへlogout APIを送らず専用clearを呼んでtoast後にトップへ遷移するよう更新し、通常の401・password変更logoutは維持した。settings接続testを先行追加したRedは対象24件中18件成功・6件失敗、Green/Refactor後は対象24件とfrontend全体479件が全通過した。lint、Prettier、Svelte/TypeScript check、production buildが成功した。実browserの複数tab・staging確認は未実施。
+
+> T27 Red記録（2026-07-16）: admin frontendの8 test fileへ11件を追加し、既存期待値も完全削除後のUI契約へ更新した。deprecated `status=deleted`のURL除去、退会済みfilter・badge・detail status・操作不可理由・stats card・「未退会」表現の除去、互換`deletedAt`を表示判断に使わないこと、強制退会確認で稼働DBのプロフィール・認証情報・学習データを物理削除して取り消せないことを契約化した。強制退会成功後はdetailを再取得せずlist/statsだけを同期し、消えた行の同位置にある次行操作button→前行操作button→一覧headingの順でfocusする。一覧同期失敗時も成功toast/live messageを維持し、削除成功と一覧更新失敗を分離する。確定Redは対象85件中68件成功・17件失敗、frontend全体490件中473件成功・同じ17件失敗で、他36 test fileに回帰失敗はない。一覧が空になった場合のheading focusは既存実装でGreenだった。lint、Prettier、Svelte/TypeScript checkは成功した。admin sourceは変更せず、GreenはT28で行う。
 
 ## 技術的注意点
 
