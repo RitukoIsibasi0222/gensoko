@@ -111,6 +111,7 @@ function mockTransaction() {
   const tx = {
     user: {
       count: vi.fn(),
+      delete: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
     },
@@ -534,23 +535,29 @@ describe("forceDeleteAdminUser", () => {
     vi.useRealTimers();
   });
 
-  it("対象ユーザーを物理削除せず soft delete し、全 token を削除する", async () => {
+  it("利用可能なactorを再確認し、targetを物理削除して同じtransactionへ成功監査を保存する", async () => {
     const tx = mockTransaction();
-    tx.user.findUnique.mockResolvedValue(baseTargetUser);
-    tx.user.update.mockResolvedValue({ ...baseTargetUser, isActive: false, deletedAt: NOW });
+    tx.user.findUnique.mockResolvedValueOnce(baseAdminUser).mockResolvedValueOnce(baseTargetUser);
+    tx.user.delete.mockResolvedValue({ id: "user-1" });
 
     const result = await forceDeleteAdminUser({ adminUserId: "admin-1", targetUserId: "user-1" });
 
-    expect(tx.user.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "user-1" },
-        data: { isActive: false, deletedAt: NOW, lockedUntil: null },
-        select: { id: true },
-      }),
-    );
-    expect(tx.refreshToken.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
-    expect(tx.passwordResetToken.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
-    expect(tx.emailVerification.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
+    expect(tx.user.findUnique).toHaveBeenNthCalledWith(1, {
+      where: { id: "admin-1" },
+      select: {
+        id: true,
+        role: true,
+        isActive: true,
+        emailVerified: true,
+        lockedUntil: true,
+        deletedAt: true,
+      },
+    });
+    expect(tx.user.delete).toHaveBeenCalledWith({ where: { id: "user-1" } });
+    expect(tx.user.update).not.toHaveBeenCalled();
+    expect(tx.refreshToken.deleteMany).not.toHaveBeenCalled();
+    expect(tx.passwordResetToken.deleteMany).not.toHaveBeenCalled();
+    expect(tx.emailVerification.deleteMany).not.toHaveBeenCalled();
     expectSuccessAudit(tx.auditLog.create, "ADMIN_USER_FORCE_DELETE");
     expect(result).toEqual({ message: "ユーザーを強制退会しました" });
   });
@@ -566,9 +573,47 @@ describe("forceDeleteAdminUser", () => {
     expectFailureAudit("ADMIN_USER_FORCE_DELETE", "admin-1", "SELF_OPERATION_DENIED");
   });
 
+  it.each([
+    ["不存在", null],
+    ["USERへ降格", { ...baseAdminUser, role: "USER" }],
+    ["停止", { ...baseAdminUser, isActive: false }],
+    ["メール未確認", { ...baseAdminUser, emailVerified: false }],
+    ["lock中", { ...baseAdminUser, lockedUntil: new Date("2099-01-01T00:00:00.000Z") }],
+    ["legacy削除済み", { ...baseAdminUser, deletedAt: BASE_DATE }],
+  ])("actorが%sなら409でtarget取得前に中止する", async (_label, actor) => {
+    const tx = mockTransaction();
+    tx.user.findUnique.mockResolvedValueOnce(actor);
+
+    await expect(
+      forceDeleteAdminUser({ adminUserId: "admin-1", targetUserId: "user-1" }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "管理者の状態が変更されています。再ログインしてください",
+    });
+    expect(tx.user.findUnique).toHaveBeenCalledOnce();
+    expect(tx.user.delete).not.toHaveBeenCalled();
+    expectFailureAudit("ADMIN_USER_FORCE_DELETE", null, "ACTOR_STATE_CONFLICT");
+  });
+
+  it("targetが存在しない場合は404で失敗監査を記録する", async () => {
+    const tx = mockTransaction();
+    tx.user.findUnique.mockResolvedValueOnce(baseAdminUser).mockResolvedValueOnce(null);
+
+    await expect(
+      forceDeleteAdminUser({ adminUserId: "admin-1", targetUserId: "user-1" }),
+    ).rejects.toMatchObject({
+      status: 404,
+      message: "ユーザーが見つかりません",
+    });
+    expect(tx.user.delete).not.toHaveBeenCalled();
+    expectFailureAudit("ADMIN_USER_FORCE_DELETE", null, "TARGET_NOT_FOUND");
+  });
+
   it("既に削除済みのユーザーは AdminServiceError(409) にする", async () => {
     const tx = mockTransaction();
-    tx.user.findUnique.mockResolvedValue({ ...baseTargetUser, deletedAt: BASE_DATE });
+    tx.user.findUnique
+      .mockResolvedValueOnce(baseAdminUser)
+      .mockResolvedValueOnce({ ...baseTargetUser, deletedAt: BASE_DATE });
 
     await expect(
       forceDeleteAdminUser({ adminUserId: "admin-1", targetUserId: "user-1" }),
@@ -576,8 +621,72 @@ describe("forceDeleteAdminUser", () => {
       status: 409,
       message: "ユーザーは既に削除されています",
     });
-    expect(tx.user.update).not.toHaveBeenCalled();
+    expect(tx.user.delete).not.toHaveBeenCalled();
     expectFailureAudit("ADMIN_USER_FORCE_DELETE", "user-1", "TARGET_STATE_CONFLICT");
+  });
+
+  it("最後の利用可能なADMIN targetは409で保護する", async () => {
+    const tx = mockTransaction();
+    tx.user.findUnique
+      .mockResolvedValueOnce(baseAdminUser)
+      .mockResolvedValueOnce({ ...baseAdminUser, id: "admin-2" });
+    tx.user.count.mockResolvedValue(1);
+
+    await expect(
+      forceDeleteAdminUser({ adminUserId: "admin-1", targetUserId: "admin-2" }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "最後の管理者は変更できません",
+    });
+    expect(tx.user.delete).not.toHaveBeenCalled();
+    expectFailureAudit("ADMIN_USER_FORCE_DELETE", "admin-2", "LAST_ADMIN_PROTECTED");
+  });
+
+  it("P2034後の再試行成功では物理削除と成功監査を1件だけ実行する", async () => {
+    const tx = mockTransaction();
+    tx.user.findUnique.mockResolvedValueOnce(baseAdminUser).mockResolvedValueOnce(baseTargetUser);
+    tx.user.delete.mockResolvedValue({ id: "user-1" });
+    vi.mocked(prisma.$transaction)
+      .mockReset()
+      .mockRejectedValueOnce(createSerializationConflictError())
+      .mockImplementationOnce(async (fn) => fn(tx as never));
+
+    await expect(
+      forceDeleteAdminUser({ adminUserId: "admin-1", targetUserId: "user-1" }),
+    ).resolves.toEqual({ message: "ユーザーを強制退会しました" });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(tx.user.delete).toHaveBeenCalledOnce();
+    expectSuccessAudit(tx.auditLog.create, "ADMIN_USER_FORCE_DELETE");
+  });
+
+  it("P2034が2回続いた場合は409と分類済み失敗監査を返す", async () => {
+    mockTransaction();
+    vi.mocked(prisma.$transaction)
+      .mockReset()
+      .mockRejectedValue(createSerializationConflictError());
+
+    await expect(
+      forceDeleteAdminUser({ adminUserId: "admin-1", targetUserId: "user-1" }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "同時操作により処理できませんでした。再試行してください",
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expectFailureAudit("ADMIN_USER_FORCE_DELETE", null, "SERIALIZATION_CONFLICT");
+  });
+
+  it("成功監査の保存に失敗した場合はerrorを伝播して成功扱いにしない", async () => {
+    const auditError = new Error("audit insert failed");
+    const tx = mockTransaction();
+    tx.user.findUnique.mockResolvedValueOnce(baseAdminUser).mockResolvedValueOnce(baseTargetUser);
+    tx.user.delete.mockResolvedValue({ id: "user-1" });
+    tx.auditLog.create.mockRejectedValue(auditError);
+
+    await expect(
+      forceDeleteAdminUser({ adminUserId: "admin-1", targetUserId: "user-1" }),
+    ).rejects.toBe(auditError);
+    expect(tx.user.delete).toHaveBeenCalledOnce();
+    expect(prisma.auditLog.create).not.toHaveBeenCalled();
   });
 });
 
