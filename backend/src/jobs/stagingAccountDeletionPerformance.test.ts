@@ -141,7 +141,9 @@ describe("cleanupStagingAccountDeletionFixture", () => {
     expect(auditDeleteMany).toHaveBeenCalledWith({
       where: {
         action: "USER_ACCOUNT_DELETE",
+        result: "SUCCESS",
         actorId: "synthetic-user",
+        targetType: "USER",
         targetId: "synthetic-user",
       },
     });

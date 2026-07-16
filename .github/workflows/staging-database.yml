@@ -89,6 +89,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           set -euo pipefail
+          target_migration="20260716112500_add_account_deletion_indexes"
           set +e
           migration_status="$(npx prisma migrate status 2>&1)"
           migration_status_exit=$?
@@ -114,8 +115,8 @@ jobs:
                 }
               '
           )"
-          if ! printf '%s\n' "$pending_migrations" | grep -Fxq "20260716112500_add_account_deletion_indexes"; then
-            echo "対象のaccount deletion index migrationがpendingではありません"
+          if [ "$pending_migrations" != "$target_migration" ]; then
+            echo "対象のaccount deletion index migrationだけがpendingの状態ではありません"
             exit 1
           fi
 

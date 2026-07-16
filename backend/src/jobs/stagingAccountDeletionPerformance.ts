@@ -208,7 +208,9 @@ export async function cleanupStagingAccountDeletionFixture(
   await client.auditLog.deleteMany({
     where: {
       action: "USER_ACCOUNT_DELETE",
+      result: "SUCCESS",
       actorId: userId,
+      targetType: "USER",
       targetId: userId,
     },
   });

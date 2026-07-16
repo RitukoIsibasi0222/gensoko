@@ -46,7 +46,9 @@ describe("staging database GitHub Actions workflow", () => {
     expect(workflow).toContain("migration_status_exit=$?");
     expect(workflow).toContain('if [ "$migration_status_exit" -ne 1 ]; then');
     expect(workflow).toContain("/^Following migrations? have not yet been applied:$/");
-    expect(workflow).toContain('grep -Fxq "20260716112500_add_account_deletion_indexes"');
+    expect(workflow).toContain('target_migration="20260716112500_add_account_deletion_indexes"');
+    expect(workflow).toContain('if [ "$pending_migrations" != "$target_migration" ]; then');
+    expect(workflow).not.toContain('grep -Fxq "20260716112500_add_account_deletion_indexes"');
     expect(workflow).not.toContain('grep -Fq "20260716112500_add_account_deletion_indexes"');
     expect(workflow).toContain(
       "STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED: ${{ vars.STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED }}",
