@@ -77,6 +77,52 @@ describe("POST /auth/register", () => {
     expect(body).toEqual({ message: "確認メールを送信しました" });
   });
 
+  it("物理削除後: 同じメールアドレス・ユーザー名で新しいUser IDを発行して再登録できる", async () => {
+    const findFirst = vi.fn().mockResolvedValue(null);
+    const createUser = vi.fn().mockResolvedValue({ id: "new-user-id" });
+    const createEmailVerification = vi.fn().mockResolvedValue({});
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+      return fn({
+        user: {
+          findFirst,
+          create: createUser,
+        },
+        emailVerification: { create: createEmailVerification },
+      } as never);
+    });
+    vi.mocked(mailer.sendMail).mockResolvedValue(undefined as never);
+
+    const res = await app.request("/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "taro123",
+        email: "taro@example.com",
+        password: "Pass1234!",
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    expect(findFirst).toHaveBeenCalledOnce();
+    expect(createUser).toHaveBeenCalledWith({
+      data: {
+        username: "taro123",
+        email: "taro@example.com",
+        passwordHash: expect.any(String),
+      },
+      select: { id: true },
+    });
+    expect(createEmailVerification).toHaveBeenCalledWith({
+      data: {
+        userId: "new-user-id",
+        tokenHash: expect.any(String),
+        expiresAt: expect.any(Date),
+      },
+    });
+    expect(mailer.sendMail).toHaveBeenCalledOnce();
+  });
+
   it("バリデーション: email が不正な場合は 400 を返す", async () => {
     const res = await app.request("/auth/register", {
       method: "POST",
@@ -246,7 +292,7 @@ describe("POST /auth/register", () => {
     expect(create).toHaveBeenCalled();
   });
 
-  it("削除済みアカウントと同じメール/ユーザー名では再登録できず 403 を返す", async () => {
+  it("移行中: cleanup前のlegacy soft-deleted rowは再登録できず403を返す", async () => {
     vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
       return fn({
         user: {

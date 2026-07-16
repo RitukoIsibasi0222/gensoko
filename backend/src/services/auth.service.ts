@@ -236,6 +236,8 @@ type LoginResult = {
   user: { id: string; username: string; role: Role };
 };
 
+const INVALID_LOGIN_CREDENTIALS_MESSAGE = "メールアドレスまたはパスワードが正しくありません";
+
 type LoginAccountState = {
   role: Role;
   emailVerified: boolean;
@@ -246,7 +248,7 @@ type LoginAccountState = {
 
 function assertLoginAccountIsUsable(user: LoginAccountState, now = new Date()): void {
   if (user.deletedAt) {
-    throw new AuthError(403, "このアカウントは削除されています");
+    throw new AuthError(401, INVALID_LOGIN_CREDENTIALS_MESSAGE);
   }
 
   if (!user.isActive) {
@@ -306,7 +308,7 @@ async function loginWithRequiredAudit(input: {
   });
 
   if (!user) {
-    throw new AuthError(401, "メールアドレスまたはパスワードが正しくありません");
+    throw new AuthError(401, INVALID_LOGIN_CREDENTIALS_MESSAGE);
   }
 
   // 2. アカウント状態チェック
@@ -334,7 +336,7 @@ async function loginWithRequiredAudit(input: {
       updateData.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
     }
     await prisma.user.update({ where: { id: user.id }, data: updateData });
-    throw new AuthError(401, "メールアドレスまたはパスワードが正しくありません");
+    throw new AuthError(401, INVALID_LOGIN_CREDENTIALS_MESSAGE);
   }
 
   // 6. JWT署名とrefresh token生成はtransaction開始前に完了する
@@ -365,7 +367,7 @@ async function loginWithRequiredAudit(input: {
     });
 
     if (!currentUser) {
-      throw new AuthError(401, "メールアドレスまたはパスワードが正しくありません");
+      throw new AuthError(401, INVALID_LOGIN_CREDENTIALS_MESSAGE);
     }
 
     assertLoginAccountIsUsable(currentUser, stateCheckedAt);
