@@ -957,6 +957,21 @@ productionは既存 `.github/workflows/production-database.yml` に `account-del
 
 ## リリース・移行方針
 
+### 実装フェーズと本番適用ゲートの関係
+
+Phase番号は実装・検証する作業パッケージであり、番号順に無条件で本番公開する指示ではない。互換なexpand indexは先行適用できるが、物理削除backend、不可逆cleanup、contract migrationは、それぞれの前提を満たしてから本番へ適用する。
+
+| 本番操作 | 実装・検証の前提 | 切り出しタスクの完了期限 |
+|---|---|---|
+| expand index適用 | Phase 1のschema contract・専用DB・staging検証、24時間以内のbackup | index作成時間とmaintenance windowを確定 |
+| 物理削除backend・frontend公開 | Phase 2とPhase 4、専用DB integration、staging Playwright | 監査保持承認、`/privacy` 公開、backup/replay方針、username再利用承認、本番cleanup体制を確定 |
+| legacy cleanup execute | 物理削除backend公開、旧instance drain、dry-run承認、24時間以内のbackup | production実行者・承認者・時間帯・通知先を記録 |
+| `deletedAt` 非参照code公開 | legacy cleanup後のdry-run 0件、v1互換test | 旧frontendとの互換期間を確認 |
+| cleanup後backup・restore drill | 非参照codeのsoak、cleanup後backup作成 | 全損時replay source導入、または残余リスクの正式承認 |
+| guard付きcontract migration | 旧Artifactの7日失効、restore drill、legacy 0件、非参照rollback artifact | 管理API v2は不要。deprecated field廃止は別計画で行う |
+
+同期cascadeがstaging性能基準を超えた場合は、物理削除backendの本番公開を止め、非同期削除queueを別計画として作成する。匿名化済みhistorical KPIと管理API v2は本機能の本番公開後に実施できるため、release blockerにはしない。
+
 ### Phase 0: 承認・計測
 
 監査保持、backup/replay、username再利用、privacy copy、performance基準、maintenance windowを確定し、`docs/05_progress.md` を `[-]` にする。
@@ -967,15 +982,15 @@ schema contract/indexをTDD実装し、専用DB→staging→24時間以内backup
 
 ### Phase 2: 物理削除backend
 
-共通Serializable helper、監査action、self/admin物理削除、last-admin、actor再確認、cleanup CLI/workflowを実装する。v1 deprecated admin shapeは維持する。backend deploy後に新規退会がUserを残さないことを確認し、旧instanceをdrainする。
+共通Serializable helper、監査action、self/admin物理削除、last-admin、actor再確認、cleanup CLI/workflowを実装し、専用DBとstagingで検証する。v1 deprecated admin shapeは維持する。本番公開はPhase 4のfrontend・`/privacy` と切り出しタスクのgate完了後に行い、新規退会がUserを残さないことを確認して旧instanceをdrainする。
 
 ### Phase 3: legacy cleanup
 
-stagingでdry-run→execute→dry-run 0→execute 0→Playwrightを行う。productionはdry-run承認→backup→execute→dry-run 0→容量・active/suspended/admin数・smoke test→flag falseの順とする。
+Phase 2の実装後、stagingでdry-run→execute→dry-run 0→execute 0→Playwrightを行う。production cleanupはPhase 2とPhase 4の同時公開、切り出しタスクのgate完了、旧instance drain後に実施し、dry-run承認→backup→execute→dry-run 0→容量・active/suspended/admin数・smoke test→flag falseの順とする。
 
 ### Phase 4: frontend・表示整合
 
-設定画面のA11Y/cross-tab clearと、管理画面のdeleted UI除去・削除後focusをdeployする。新frontendは旧backendのextra deprecated fieldを許容し、関連docsを更新する。
+設定画面のA11Y/cross-tab clearと、管理画面のdeleted UI除去・削除後focusを実装し、stagingで検証する。新frontendは旧backendのextra deprecated fieldを許容する。`/privacy` と関連docsを確定し、Phase 2のbackendと同じ本番公開gateでdeployする。
 
 ### Phase 5: `deletedAt` 非参照code
 
@@ -1048,19 +1063,19 @@ application rollbackは削除済み個人データを復元する権限を意味
 | ID  | 内容                                            | 主対象                | 依存        | 優先度 |
 | --- | ----------------------------------------------- | --------------------- | ----------- | ------ |
 | T1  | privacy・監査・backup・再登録・replay方針を承認 | docs/plan             | なし        | High   |
-| T2  | 進捗を実装中へ更新                              | `docs/05_progress.md` | T1          | High   |
-| T3  | schema cascade/index contract Red test          | schema test           | T2          | High   |
+| T2  | 進捗を実装準備中へ更新                          | `docs/05_progress.md` | なし（文書整備） | High   |
+| T3  | schema cascade/index contract Red test          | schema test           | T1,T2       | High   |
 | T4  | expand index schema/migration                   | Prisma                | T3          | High   |
-| T5  | Serializable helper Red test                    | lib test              | T2          | High   |
+| T5  | Serializable helper Red test                    | lib test              | T1,T2       | High   |
 | T6  | 共通Serializable helper実装・admin回帰          | lib/admin             | T5          | High   |
-| T7  | self delete audit schema Red/Green              | audit                 | T2          | High   |
+| T7  | self delete audit schema Red/Green              | audit                 | T1,T2       | High   |
 | T8  | self物理削除・last-admin・競合 Red test         | user test             | T6,T7       | High   |
 | T9  | self物理削除実装                                | user service          | T8          | High   |
 | T10 | admin物理削除・actor再確認 Red test             | admin test            | T6          | High   |
 | T11 | admin物理削除実装                               | admin service         | T10         | High   |
 | T12 | self/admin route契約test・実装                  | routes                | T9,T11      | High   |
 | T13 | 専用DB cascade/監査/rollback integration        | integration           | T4,T9,T11   | High   |
-| T14 | cleanup config Red/Green                        | config/env            | T2          | High   |
+| T14 | cleanup config Red/Green                        | config/env            | T1,T2       | High   |
 | T15 | legacy cleanup service Red test                 | job test              | T14         | High   |
 | T16 | legacy cleanup service実装                      | job                   | T15         | High   |
 | T17 | cleanup CLI Red test                            | CLI test              | T16         | High   |
@@ -1094,7 +1109,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 | T45 | release gate・plan完了・PR                      | docs/GitHub           | T44         | High   |
 
 - [ ] T1: privacy・監査・backup・再登録・replay方針を承認する
-- [ ] T2: `docs/05_progress.md` を実装中へ更新する
+- [x] T2: `docs/05_progress.md` を実装準備中へ更新する
 - [ ] T3: schema cascade/index contract Red testを追加する
 - [ ] T4: expand index schema/migrationを実装する
 - [ ] T5: Serializable helper Red testを追加する
@@ -1138,6 +1153,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 - [ ] T43: guard付きcontract migrationをTDD実装する
 - [ ] T44: staging/production contract migrationを完了する
 - [ ] T45: release gate、進捗、plan実装完了、PRを完了する
+
+> 実施順に関する注記（2026-07-16）: 実装前にタスクの現在地と段階的なrelease gateを可視化するため、文書整備だけを行うT2はT1の正式承認前に実施した。T1は未完了のままとし、T3以降のコード・DB・workflow変更はT1の確認後に開始する。
 
 ## 技術的注意点
 
