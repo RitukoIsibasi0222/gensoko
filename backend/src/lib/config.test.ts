@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getAccountDataDeletionConfig,
+  getStagingAccountDeletionPerformanceConfig,
   getAuditLogRetentionConfig,
   getFrontendUrl,
   getRateLimitConfig,
@@ -326,6 +327,37 @@ describe("getAccountDataDeletionConfig", () => {
           },
         }),
       ).toThrow("ACCOUNT_DATA_DELETION_BATCH_SIZEは1から100までの10進整数で設定してください");
+    },
+  );
+});
+
+describe("getStagingAccountDeletionPerformanceConfig", () => {
+  it("未設定時は性能測定executeを無効化する", () => {
+    expect(getStagingAccountDeletionPerformanceConfig({ environment: {} })).toEqual({
+      executeEnabled: false,
+    });
+  });
+
+  it("前後空白を除去したtrueだけを有効値として受理する", () => {
+    expect(
+      getStagingAccountDeletionPerformanceConfig({
+        environment: {
+          STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED: " true ",
+        },
+      }),
+    ).toEqual({ executeEnabled: true });
+  });
+
+  it.each(["", "TRUE", "1", "yes"])(
+    "不正なSTAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED=%sを拒否する",
+    (executeEnabled) => {
+      expect(() =>
+        getStagingAccountDeletionPerformanceConfig({
+          environment: {
+            STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED: executeEnabled,
+          },
+        }),
+      ).toThrow("STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLEDはtrueまたはfalseで設定してください");
     },
   );
 });

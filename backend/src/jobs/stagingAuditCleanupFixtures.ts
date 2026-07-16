@@ -1,4 +1,5 @@
 import { MILLISECONDS_PER_DAY } from "../lib/time.js";
+import { validateStagingDatabaseTarget } from "../lib/staging-database-target.js";
 
 const INVALID_ENVIRONMENT_MESSAGE = "staging監査ログfixture設定が不正です";
 const INVALID_TIME_MESSAGE = "staging監査ログfixtureの基準時刻が不正です";
@@ -52,19 +53,8 @@ export function validateStagingAuditCleanupFixtureEnvironment(
   environment: StagingAuditCleanupFixtureEnvironment,
 ): void {
   try {
-    const projectRef = environment.STAGING_SUPABASE_PROJECT_REF;
-    const databaseUrl = new URL(environment.DATABASE_URL ?? "");
-
-    if (
-      environment.BATCH_ENVIRONMENT !== "staging" ||
-      environment.AUDIT_LOG_STAGING_FIXTURES_ENABLED !== "true" ||
-      !projectRef ||
-      databaseUrl.protocol !== "postgresql:" ||
-      databaseUrl.username !== `postgres.${projectRef}` ||
-      !databaseUrl.hostname.endsWith(".pooler.supabase.com") ||
-      databaseUrl.port !== "5432" ||
-      databaseUrl.pathname !== "/postgres"
-    ) {
+    validateStagingDatabaseTarget(environment);
+    if (environment.AUDIT_LOG_STAGING_FIXTURES_ENABLED !== "true") {
       throw new Error(INVALID_ENVIRONMENT_MESSAGE);
     }
   } catch {
