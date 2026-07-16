@@ -244,7 +244,8 @@ describe('/settings existing-password compatibility', () => {
     });
     expect(mocks.deleteCurrentUser).toHaveBeenCalledWith({
       accessToken: 'access-token',
-      currentPassword: STRONG_PASSWORD_73_BYTES
+      currentPassword: STRONG_PASSWORD_73_BYTES,
+      signal: expect.any(AbortSignal)
     });
     expect(currentPasswordInput.hasAttribute('maxlength')).toBe(false);
   });
