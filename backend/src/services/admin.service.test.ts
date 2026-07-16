@@ -255,6 +255,26 @@ describe("getAdminUsers", () => {
     });
     expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
+
+  it("status 未指定でも legacy soft-deleted user を一覧から除外する", async () => {
+    vi.mocked(prisma.user.findMany).mockResolvedValue([] as never);
+
+    await getAdminUsers();
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { deletedAt: null },
+      }),
+    );
+  });
+
+  it("deprecated status=deleted は cursor を参照せず空一覧を返す", async () => {
+    const result = await getAdminUsers({ status: "deleted", cursor: "legacy-cursor" });
+
+    expect(result).toEqual({ users: [], nextCursor: null });
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
+  });
 });
 
 describe("getAdminUserDetail", () => {
@@ -281,6 +301,18 @@ describe("getAdminUserDetail", () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue(null as never);
 
     await expect(getAdminUserDetail({ userId: "missing" })).rejects.toMatchObject({
+      status: 404,
+      message: "ユーザーが見つかりません",
+    });
+  });
+
+  it("legacy soft-deleted user は物理削除済みと同じ404を返す", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      ...createUser(),
+      deletedAt: BASE_DATE,
+    } as never);
+
+    await expect(getAdminUserDetail({ userId: "user-1" })).rejects.toMatchObject({
       status: 404,
       message: "ユーザーが見つかりません",
     });
@@ -695,11 +727,10 @@ describe("getAdminStats", () => {
     vi.clearAllMocks();
   });
 
-  it("UserStats aggregate を中心にサービス統計を返す", async () => {
+  it("legacy soft-deleted userを除外したcurrent data統計とdeleted互換値0を返す", async () => {
     vi.mocked(prisma.user.count)
-      .mockResolvedValueOnce(100 as never)
+      .mockResolvedValueOnce(95 as never)
       .mockResolvedValueOnce(90 as never)
-      .mockResolvedValueOnce(5 as never)
       .mockResolvedValueOnce(5 as never)
       .mockResolvedValueOnce(2 as never)
       .mockResolvedValueOnce(80 as never);
@@ -717,10 +748,10 @@ describe("getAdminStats", () => {
 
     expect(result).toEqual({
       users: {
-        total: 100,
+        total: 95,
         active: 90,
         suspended: 5,
-        deleted: 5,
+        deleted: 0,
         admins: 2,
         emailVerified: 80,
       },
@@ -734,7 +765,16 @@ describe("getAdminStats", () => {
         totalMasteredCount: 250,
       },
     });
+    expect(prisma.user.count).toHaveBeenNthCalledWith(1, { where: { deletedAt: null } });
+    expect(prisma.user.count).toHaveBeenCalledTimes(5);
+    expect(prisma.gameSession.count).toHaveBeenCalledWith({
+      where: { user: { deletedAt: null } },
+    });
+    expect(prisma.weakElement.count).toHaveBeenCalledWith({
+      where: { user: { deletedAt: null } },
+    });
     expect(prisma.userStats.aggregate).toHaveBeenCalledWith({
+      where: { user: { deletedAt: null } },
       _sum: { totalAnswered: true, totalCorrect: true, masteredCount: true },
     });
   });

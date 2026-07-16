@@ -99,6 +99,7 @@ export type AdminStats = {
 export const ADMIN_USERS_DEFAULT_LIMIT = 20;
 export const ADMIN_USERS_MAX_LIMIT = 100;
 const ADMIN_MUTATION_CONFLICT_MESSAGE = "同時操作により処理できませんでした。再試行してください";
+const currentAdminUserWhere = { deletedAt: null } satisfies Prisma.UserWhereInput;
 
 type AdminAuditDescriptor = {
   action: AdminAuditAction;
@@ -185,7 +186,7 @@ function buildAdminUsersWhere(input: {
   status?: AdminUserStatusFilter;
   cursor?: { id: string; createdAt: Date };
 }): Prisma.UserWhereInput {
-  const where: Prisma.UserWhereInput = {};
+  const where: Prisma.UserWhereInput = { ...currentAdminUserWhere };
   const andConditions: Prisma.UserWhereInput[] = [];
   const normalizedQuery = input.q?.trim();
 
@@ -195,16 +196,10 @@ function buildAdminUsersWhere(input: {
 
   if (input.status === "active") {
     where.isActive = true;
-    where.deletedAt = null;
   }
 
   if (input.status === "suspended") {
     where.isActive = false;
-    where.deletedAt = null;
-  }
-
-  if (input.status === "deleted") {
-    where.deletedAt = { not: null };
   }
 
   if (normalizedQuery) {
@@ -349,6 +344,10 @@ export async function getAdminUsers(input: AdminUserListQuery = {}): Promise<{
   users: AdminUserListItem[];
   nextCursor: string | null;
 }> {
+  if (input.status === "deleted") {
+    return { users: [], nextCursor: null };
+  }
+
   const limit = normalizeLimit(input.limit);
   const normalizedCursor = input.cursor?.trim();
   const normalizedQuery = input.q?.trim();
@@ -400,7 +399,7 @@ export async function getAdminUserDetail(input: {
     select: adminUserDetailSelect,
   });
 
-  if (!user) {
+  if (!user || user.deletedAt) {
     throw new AdminServiceError(404, "ユーザーが見つかりません");
   }
 
@@ -655,22 +654,21 @@ export async function getAdminStats(): Promise<AdminStats> {
     totalUsers,
     activeUsers,
     suspendedUsers,
-    deletedUsers,
     adminUsers,
     emailVerifiedUsers,
     totalSessions,
     totalWeakElements,
     statsAggregate,
   ] = await Promise.all([
-    prisma.user.count(),
-    prisma.user.count({ where: { isActive: true, deletedAt: null } }),
-    prisma.user.count({ where: { isActive: false, deletedAt: null } }),
-    prisma.user.count({ where: { deletedAt: { not: null } } }),
-    prisma.user.count({ where: { role: "ADMIN", deletedAt: null } }),
-    prisma.user.count({ where: { emailVerified: true, deletedAt: null } }),
-    prisma.gameSession.count(),
-    prisma.weakElement.count(),
+    prisma.user.count({ where: currentAdminUserWhere }),
+    prisma.user.count({ where: { ...currentAdminUserWhere, isActive: true } }),
+    prisma.user.count({ where: { ...currentAdminUserWhere, isActive: false } }),
+    prisma.user.count({ where: { ...currentAdminUserWhere, role: "ADMIN" } }),
+    prisma.user.count({ where: { ...currentAdminUserWhere, emailVerified: true } }),
+    prisma.gameSession.count({ where: { user: currentAdminUserWhere } }),
+    prisma.weakElement.count({ where: { user: currentAdminUserWhere } }),
     prisma.userStats.aggregate({
+      where: { user: currentAdminUserWhere },
       _sum: { totalAnswered: true, totalCorrect: true, masteredCount: true },
     }),
   ]);
@@ -683,7 +681,7 @@ export async function getAdminStats(): Promise<AdminStats> {
       total: normalizeNonNegativeCount(totalUsers),
       active: normalizeNonNegativeCount(activeUsers),
       suspended: normalizeNonNegativeCount(suspendedUsers),
-      deleted: normalizeNonNegativeCount(deletedUsers),
+      deleted: 0,
       admins: normalizeNonNegativeCount(adminUsers),
       emailVerified: normalizeNonNegativeCount(emailVerifiedUsers),
     },

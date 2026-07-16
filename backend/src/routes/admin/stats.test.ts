@@ -88,7 +88,7 @@ describe("GET /admin/stats", () => {
 
   it("統計を返す", async () => {
     vi.mocked(getAdminStats).mockResolvedValue({
-      users: { total: 100, active: 90, suspended: 5, deleted: 5, admins: 2, emailVerified: 80 },
+      users: { total: 95, active: 90, suspended: 5, deleted: 0, admins: 2, emailVerified: 80 },
       games: { totalSessions: 320, totalAnswered: 3200, averageAccuracyRate: 78 },
       learning: { totalWeakElements: 45, totalMasteredCount: 250 },
     });
@@ -99,7 +99,7 @@ describe("GET /admin/stats", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      users: { total: 100, active: 90, suspended: 5, deleted: 5, admins: 2, emailVerified: 80 },
+      users: { total: 95, active: 90, suspended: 5, deleted: 0, admins: 2, emailVerified: 80 },
       games: { totalSessions: 320, totalAnswered: 3200, averageAccuracyRate: 78 },
       learning: { totalWeakElements: 45, totalMasteredCount: 250 },
     });

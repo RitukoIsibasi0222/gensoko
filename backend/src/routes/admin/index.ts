@@ -122,7 +122,7 @@ function toPublicAdminUserSummary(user: AdminUserSummary) {
     role: user.role,
     emailVerified: user.emailVerified,
     isActive: user.isActive,
-    deletedAt: toIsoString(user.deletedAt),
+    deletedAt: null,
     lockedUntil: toIsoString(user.lockedUntil),
     lastLoginAt: toIsoString(user.lastLoginAt),
     createdAt: user.createdAt.toISOString(),
