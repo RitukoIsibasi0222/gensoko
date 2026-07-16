@@ -90,14 +90,20 @@ type DeleteFormControls = {
 };
 
 function getDeleteFormControls(target: HTMLElement): DeleteFormControls {
-  const currentPasswordInput = target.querySelector('#delete-current-password') as HTMLInputElement;
-  const form = currentPasswordInput.closest('form') as HTMLFormElement;
+  const currentPasswordInput = target.querySelector<HTMLInputElement>('#delete-current-password');
+  const form = currentPasswordInput?.closest('form');
+  const acknowledgement = form?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  const submitButton = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
+
+  if (!currentPasswordInput || !form || !acknowledgement || !submitButton) {
+    throw new Error('アカウント削除フォームのcontrolが見つかりません');
+  }
 
   return {
     currentPasswordInput,
-    acknowledgement: form.querySelector('input[type="checkbox"]') as HTMLInputElement,
+    acknowledgement,
     form,
-    submitButton: form.querySelector('button[type="submit"]') as HTMLButtonElement
+    submitButton
   };
 }
 
@@ -302,10 +308,13 @@ describe('/settings account deletion A11Y contract', () => {
 
   it('同意なしはcheckboxだけをinvalidにしてwarning・errorを関連付けてfocusする', async () => {
     const target = await renderPage();
-    const controls = await submitDeleteForm(target, {
-      currentPassword: 'CurrentPass1!',
-      acknowledged: false
-    });
+    const controls = getDeleteFormControls(target);
+    setInputValue(controls.currentPasswordInput, 'CurrentPass1!');
+
+    expect(controls.submitButton.disabled).toBe(false);
+    controls.submitButton.click();
+    await tick();
+    await tick();
 
     expect(target.querySelector('#delete-acknowledgement-error')?.textContent ?? '').toContain(
       'アカウント削除の確認チェックを入れてください'
