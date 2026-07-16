@@ -502,7 +502,16 @@ Zod validationは既存どおり次を返す。
 ```json
 {
   "error": "バリデーションエラー",
-  "details": []
+  "details": [
+    {
+      "origin": "string",
+      "code": "too_small",
+      "minimum": 1,
+      "inclusive": true,
+      "message": "現在のパスワードを入力してください",
+      "path": ["currentPassword"]
+    }
+  ]
 }
 ```
 
@@ -591,13 +600,13 @@ Cookie:
 
 ### 認証関連の確認・変更
 
-| endpoint                     | 物理削除後の契約                                                      |
-| ---------------------------- | --------------------------------------------------------------------- |
-| `POST /auth/register`        | 同一email/usernameを新しいUser IDで登録可能。通常の201契約            |
-| `POST /auth/login`           | 旧資格情報は存在しないaccountとしてgeneric 401。削除済み専用403は廃止 |
-| `POST /auth/forgot-password` | 存在列挙を防ぎ、従来どおり200で何もしない                             |
-| `POST /auth/refresh`         | token rowがないため401                                                |
-| Bearer認証endpoint           | User rowがないため401                                                 |
+| endpoint                                         | 物理削除後の契約                                                      |
+| ------------------------------------------------ | --------------------------------------------------------------------- |
+| `POST /api/v1/auth/register`                     | 同一email/usernameを新しいUser IDで登録可能。通常の201契約            |
+| `POST /api/v1/auth/login`                        | 旧資格情報は存在しないaccountとしてgeneric 401。削除済み専用403は廃止 |
+| `POST /api/v1/auth/forgot-password`              | 存在列挙を防ぎ、従来どおり200で何もしない                             |
+| `POST /api/v1/auth/refresh`                      | token rowがないため401                                                |
+| Bearer認証endpoint（例: `GET /api/v1/users/me`） | User rowがないため401                                                 |
 
 ### 管理API v1の互換方針
 
