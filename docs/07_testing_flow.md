@@ -56,7 +56,7 @@ vi.mock("../lib/prisma.js", () => ({
 
 - 対象: 複数の処理とDBを組み合わせた境界（サービスtransaction、またはミドルウェア + ルートハンドラ + DB）
 - 実際の DB を使う（テスト用 DB を別途用意）
-- 原則は今後拡充する。監査ログのtransaction rollbackのみ、Docker PostgreSQLを使う明示実行testを実装済み
+- 通常suiteでは専用env未設定時にskipし、Docker PostgreSQLを使うtestだけを明示実行する
 
 #### 監査ログrollback test
 
@@ -99,6 +99,37 @@ docker compose exec -T \
 - 500件を超える分割削除、`occurredAt < cutoff`境界、2回目0件の冪等性を確認する
 - User row削除後も保持対象監査rowの`actorId`・`targetId`が維持されることを確認する
 - test終了時に専用DBの監査fixtureを削除する
+
+#### account deletion cascade・rollback test
+
+本人退会・管理者強制退会は広いcascade削除を行うため、通常の開発DBとは分離した専用DB
+`gensoko_account_deletion_test`だけで実行する。通常の`npm run test -- --run`ではDB接続を要求せずskipする。
+
+初回だけ専用DBを作成し、migrationを適用する。
+
+```bash
+docker compose exec -T postgres createdb -U gensoko gensoko_account_deletion_test
+docker compose exec -T \
+  -e DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_account_deletion_test \
+  hono npx prisma migrate deploy
+```
+
+integration testを実行する。
+
+```bash
+docker compose exec -T \
+  -e ACCOUNT_DELETION_INTEGRATION_DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_account_deletion_test \
+  hono npm run test:integration:account-deletion
+```
+
+- 接続先hostは`localhost`、`127.0.0.1`、`postgres`だけを許可する
+- DB名が`gensoko_account_deletion_test`でなければfixture削除を含むDB操作を開始しない
+- Userを直接参照する7modelとGameAnswerの間接cascade、共有Element保持を確認する
+- self/admin成功監査が残り、email・usernameを含まないことを確認する
+- 監査insert失敗時にUserと全所有rowがrollbackすることを確認する
+- 同一Userの並行削除は1commit・成功監査1件になることを確認する
+- 2人のADMINの並行本人退会後も利用可能なADMINが1人残ることを確認する
+- 各test終了時に専用DBのUser・AuditLog fixtureを削除する
 
 ---
 

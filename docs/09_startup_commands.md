@@ -80,6 +80,11 @@ docker compose exec -T \
   -e AUDIT_CLEANUP_INTEGRATION_DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_audit_cleanup_test \
   hono npm run test:integration:audit-cleanup
 
+# account deletionの実DB test（専用DBの作成・migration手順はdocs/07_testing_flow.mdを参照）
+docker compose exec -T \
+  -e ACCOUNT_DELETION_INTEGRATION_DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_account_deletion_test \
+  hono npm run test:integration:account-deletion
+
 # Lint チェック
 npm run lint
 
@@ -127,6 +132,31 @@ npm run format
 - `--execute`を指定してもcleanup有効設定が`false`なら削除せずskipする
 - dry-runと本実行のログに監査ログID・内部ID・メール・username・生DB errorは出ない
 - 最大10,000件または8分到達後も期限超過rowが残る場合は終了code 1になる。原因確認後に再実行する
+
+### 既存soft-deleted User完全削除の手動確認
+
+引数なしでは必ずdry-runになり、環境flagが`true`でも削除しない。実削除は旧API instanceのdrain、dry-run確認、承認、backup確認が完了した場合だけ行う。
+
+    cd ~/labs/Gensoko
+
+    # 推奨: dry-run（Userと所有tableの集計だけを行い、削除しない）
+    docker compose exec \
+      -e ACCOUNT_DATA_DELETION_EXECUTE_ENABLED=false \
+      -e ACCOUNT_DATA_DELETION_BATCH_SIZE=25 \
+      hono npm run delete:legacy-soft-deleted-users
+
+    # 実削除: 環境flag・--execute・確認文字列の三重gateが必要
+    docker compose exec \
+      -e ACCOUNT_DATA_DELETION_EXECUTE_ENABLED=true \
+      -e ACCOUNT_DATA_DELETION_BATCH_SIZE=25 \
+      hono npm run delete:legacy-soft-deleted-users -- \
+      --execute \
+      --confirm=DELETE_LEGACY_SOFT_DELETED_USERS
+
+- batch sizeは1〜100だけを許可し、既定値は25
+- execute完了後はCLIがdry-runを再実行し、残件があれば終了code 1になる
+- unknown・位置・重複引数、確認文字列不一致、環境設定不備はDB接続前に拒否する
+- このCLIを`batch:scheduled`へ追加しない。本番実行は承認付きmanual workflowだけで行う
 
 backend/.env の DATABASE_URL は Docker Compose 内ホスト名 postgres を使うため、ホスト側の cd backend && npm run reset:weekly-scores は標準手順にしない。
 

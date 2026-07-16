@@ -886,15 +886,17 @@ Response 200:
     }
 
 Deletion behavior:
-- ユーザー行は物理削除せず、`isActive = false` と `deletedAt` を設定する
-- `lockedUntil` は `null` にする
-- refresh token / password reset token / email verification token を削除する
+- bcrypt照合後、Serializable transaction内でUser・password hash・利用状態を再確認する
+- Userを物理削除し、refresh token、password reset token、email verification token、学習データなどの所有rowはDB cascadeで削除する
+- 最後の利用可能な管理者は409で保護する
+- User削除と`USER_ACCOUNT_DELETE / SUCCESS`監査を同じtransactionへ保存する。成功監査は内部User IDと削除前roleだけを保持する
 - 成功時は `refreshToken` Cookie を `/api/v1/auth` と `/api/v1/auth/refresh` の両方で削除する
 
 Error:
 400 error: バリデーションエラー / 現在のパスワードが正しくありません
 401 error: 認証が必要です / トークンが無効です / ユーザーが見つかりません（認証ミドルウェアで検出した場合）
-403 error: アカウントが停止されています / メールアドレスが確認されていません / アカウントがロックされています / ユーザーが見つかりません（サービス層で検出した場合）
+403 error: アカウントが停止されています / メールアドレスが確認されていません / アカウントがロックされています
+409 error: 最後の管理者は退会できません / アカウントの状態が変更されています。再ログインしてください / 同時操作により退会できませんでした。再試行してください
 429 error: リクエストが多すぎます。しばらく待ってから再試行してください
 500 error: サーバーエラーが発生しました
 503 error: 一時的に利用できません。しばらく待ってから再試行してください
@@ -1313,18 +1315,25 @@ Response 200:
 
 Rules:
 
-- 物理削除ではなく soft delete とする。
+- Serializable transaction内でactorを再取得し、現在も利用可能なADMINであることを確認する。
+- actorが降格・停止・メール未確認・lock・削除済みの場合は、target取得前に409で中止する。
+- Userを物理削除し、認証・学習データなどの所有rowはDB cascadeで削除する。
+- User削除と`ADMIN_USER_FORCE_DELETE / SUCCESS`監査を同じtransactionへ保存する。
 - 自分自身は強制退会できない。
 - 利用可能な管理者が0人になる強制退会は409。
-- 既に削除済みのユーザーは409。
-- `isActive=false`, `deletedAt=現在時刻`, `lockedUntil=null` を設定する。
-- refresh token / password reset token / email verification token を削除する。
+- 物理削除済みまたはcleanup済みのユーザーは404。移行中に残るlegacy soft-deleted userは409。
+- actor状態競合の失敗監査には、未確認のtarget IDを保存しない。
 
 Error:
 
 ```text
+400 error: バリデーションエラー / ユーザーIDが正しくありません
+401 error: 認証が必要です / トークンが無効です
+403 error: 管理者権限が必要です
 404 error: ユーザーが見つかりません
-409 error: 自分自身には実行できません / 最後の管理者は変更できません / ユーザーは既に削除されています / 同時操作により処理できませんでした。再試行してください
+409 error: 自分自身には実行できません / 最後の管理者は変更できません / 管理者の状態が変更されています。再ログインしてください / ユーザーは既に削除されています / 同時操作により処理できませんでした。再試行してください
+429 error: リクエストが多すぎます。しばらく待ってから再試行してください
+500 error: サーバーエラーが発生しました
 ```
 
 ### GET `/admin/stats`
