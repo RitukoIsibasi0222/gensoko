@@ -1148,7 +1148,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 - [x] T20: staging/production workflowを実装する
 - [x] T21: auth削除後回帰testとservice契約を更新する
 - [x] T22: admin v1互換一覧/detail/stats契約を更新する
-- [ ] T23: settings A11Y Red testを追加する
+- [x] T23: settings A11Y Red testを追加する
 - [ ] T24: settings説明/error/focus/busyを実装する
 - [ ] T25: auth store cross-tab Red testを追加する
 - [ ] T26: account deletion local/cross-tab clearを実装する
@@ -1203,6 +1203,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 > T21 TDD記録（2026-07-16）: 物理削除後の同一email/username再登録、旧資格情報login、forgot-password no-op、refresh token cascade後401、旧access token 401と、cleanup前のlegacy row契約をtest先行で追加・更新した。Redは対象71件中69件成功・2件失敗で、legacy soft-deleted loginが削除済み専用403を返す不一致だけを確認した。Greenではlegacy rowも不存在accountと同じ汎用401へ統一し、対象71件が全通過した。Refactorでは同じlogin汎用message 4箇所を共通定数へ集約した。物理削除後のregister/forgot/refresh/Bearerとtransaction中User消失は既存実装が契約を満たしていたため、テストを通すだけのsource変更は加えなかった。`deletedAt`参照自体はcleanup・soak後のT39まで維持する。backend全体は789件成功、専用DB test 7件skip、lint、format check、buildが成功した。専用DB・staging・productionは実行していない。
 
 > T22 TDD記録（2026-07-16）: admin v1のdeprecated互換として、無指定一覧からlegacy soft-deleted userを除外し、`status=deleted`はcursorを参照せず200空一覧、legacy詳細は404、一覧・詳細・status/role mutationの`deletedAt`はroute境界で常に`null`、statsの`users.deleted`は常に0とするtestを先行追加・更新した。game/learning statsもlegacy userの所有dataをrelation filterで除外する。Redは対象55件中47件成功・8件失敗で、一覧・詳細・互換field・current data集計の不一致を確認した。Greenでは一覧のcurrent User条件、deleted filterの早期空応答、legacy詳細404、route互換値合成、statsのcurrent row限定を実装し、対象55件が全通過した。Refactorではcurrent User条件を共通定数へ集約した。mutationのlegacy 409判定とDB `deletedAt`参照はT39まで維持する。backend全体は793件成功、専用DB test 7件skip、lint、format check、buildが成功した。専用DB・staging・productionは実行していない。
+
+> T23 Red記録（2026-07-16）: settings退会フォームへ、稼働DBのprofile/auth/learning dataと不可逆性の警告、password・同意checkbox別error、`aria-invalid` / `aria-describedby`、最初のinvalid controlへのfocus、送信中の`aria-busy`・button無効化・二重submit防止、400/409/429/503のbackend message保持、network message、Abort時の結果不明案内、page破棄時のrequest abort契約testを追加した。T1B未承認の監査保持期間・backup表示と、T25/T26のlocal/cross-tab clearは対象外とした。初回は将来のform error IDへAPI/network testも依存して12件Redだったため、control別IDとform alertの責務を分離してtestをRefactorした。確定Redは専用18件中11件成功・7件失敗で、警告文、control別error/focus、busy、Abort契約の不足だけを確認した。frontend全体は466件成功・同じ7件Redで、他42 test fileに回帰失敗はない。lint、Prettier、Svelte/TypeScript checkは成功した。画面sourceは変更せず、GreenはT24で行う。
 
 ## 技術的注意点
 
