@@ -14,9 +14,16 @@ const AUDIT_LOG_RETENTION_DAYS_INVALID_MESSAGE =
   "AUDIT_LOG_RETENTION_DAYSは30から3650までの10進整数で設定してください";
 const AUDIT_LOG_CLEANUP_ENABLED_INVALID_MESSAGE =
   "AUDIT_LOG_CLEANUP_ENABLEDはtrueまたはfalseで設定してください";
+const ACCOUNT_DATA_DELETION_EXECUTE_ENABLED_INVALID_MESSAGE =
+  "ACCOUNT_DATA_DELETION_EXECUTE_ENABLEDはtrueまたはfalseで設定してください";
+const ACCOUNT_DATA_DELETION_BATCH_SIZE_INVALID_MESSAGE =
+  "ACCOUNT_DATA_DELETION_BATCH_SIZEは1から100までの10進整数で設定してください";
 const MIN_RATE_LIMIT_KEY_BYTES = 32;
 const MIN_AUDIT_LOG_RETENTION_DAYS = 30;
 const MAX_AUDIT_LOG_RETENTION_DAYS = 3650;
+const DEFAULT_ACCOUNT_DATA_DELETION_BATCH_SIZE = 25;
+const MIN_ACCOUNT_DATA_DELETION_BATCH_SIZE = 1;
+const MAX_ACCOUNT_DATA_DELETION_BATCH_SIZE = 100;
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const DECIMAL_INTEGER_PATTERN = /^\d+$/;
 
@@ -54,6 +61,15 @@ export type AuditLogRetentionConfigOptions = Readonly<{
 export type AuditLogRetentionConfig = Readonly<{
   retentionDays: number;
   cleanupEnabled: boolean;
+}>;
+
+export type AccountDataDeletionConfigOptions = Readonly<{
+  environment?: Readonly<Record<string, string | undefined>>;
+}>;
+
+export type AccountDataDeletionConfig = Readonly<{
+  executeEnabled: boolean;
+  batchSize: number;
 }>;
 
 function parseFrontendOrigin(value: string): string {
@@ -221,5 +237,62 @@ export function getAuditLogRetentionConfig({
   return {
     retentionDays: parseAuditLogRetentionDays(environment.AUDIT_LOG_RETENTION_DAYS),
     cleanupEnabled: parseAuditLogCleanupEnabled(environment.AUDIT_LOG_CLEANUP_ENABLED),
+  };
+}
+
+function parseAccountDataDeletionExecuteEnabled(value: string | undefined): boolean {
+  if (value === undefined) {
+    return false;
+  }
+
+  const normalizedValue = value.trim();
+
+  if (normalizedValue === "true") {
+    return true;
+  }
+
+  if (normalizedValue === "false") {
+    return false;
+  }
+
+  throw new Error(ACCOUNT_DATA_DELETION_EXECUTE_ENABLED_INVALID_MESSAGE);
+}
+
+function parseAccountDataDeletionBatchSize(value: string | undefined): number {
+  if (value === undefined) {
+    return DEFAULT_ACCOUNT_DATA_DELETION_BATCH_SIZE;
+  }
+
+  const normalizedValue = value.trim();
+
+  if (!DECIMAL_INTEGER_PATTERN.test(normalizedValue)) {
+    throw new Error(ACCOUNT_DATA_DELETION_BATCH_SIZE_INVALID_MESSAGE);
+  }
+
+  const batchSize = Number(normalizedValue);
+
+  if (
+    !Number.isSafeInteger(batchSize) ||
+    batchSize < MIN_ACCOUNT_DATA_DELETION_BATCH_SIZE ||
+    batchSize > MAX_ACCOUNT_DATA_DELETION_BATCH_SIZE
+  ) {
+    throw new Error(ACCOUNT_DATA_DELETION_BATCH_SIZE_INVALID_MESSAGE);
+  }
+
+  return batchSize;
+}
+
+/**
+ * 既存soft-deleted user cleanupの実行許可と1 transactionあたりの件数を検証して返す。
+ * 未設定時は削除を無効化し、batch sizeを25件に制限する。
+ */
+export function getAccountDataDeletionConfig({
+  environment = process.env,
+}: AccountDataDeletionConfigOptions = {}): AccountDataDeletionConfig {
+  return {
+    executeEnabled: parseAccountDataDeletionExecuteEnabled(
+      environment.ACCOUNT_DATA_DELETION_EXECUTE_ENABLED,
+    ),
+    batchSize: parseAccountDataDeletionBatchSize(environment.ACCOUNT_DATA_DELETION_BATCH_SIZE),
   };
 }
