@@ -89,8 +89,32 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           set -euo pipefail
-          migration_status="$(npx prisma migrate status 2>&1 || true)"
-          if ! printf '%s\n' "$migration_status" | grep -Fq "20260716112500_add_account_deletion_indexes"; then
+          set +e
+          migration_status="$(npx prisma migrate status 2>&1)"
+          migration_status_exit=$?
+          set -e
+
+          if [ "$migration_status_exit" -ne 1 ]; then
+            echo "対象のaccount deletion index migrationがpendingではありません"
+            exit 1
+          fi
+
+          pending_migrations="$(
+            printf '%s\n' "$migration_status" |
+              awk '
+                /^Following migrations? have not yet been applied:$/ {
+                  in_pending_section = 1
+                  next
+                }
+                in_pending_section && /^$/ {
+                  exit
+                }
+                in_pending_section {
+                  print
+                }
+              '
+          )"
+          if ! printf '%s\n' "$pending_migrations" | grep -Fxq "20260716112500_add_account_deletion_indexes"; then
             echo "対象のaccount deletion index migrationがpendingではありません"
             exit 1
           fi

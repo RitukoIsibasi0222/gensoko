@@ -43,6 +43,11 @@ describe("staging database GitHub Actions workflow", () => {
 
   it("対象migrationだけを初回計測し、synthetic write probeへ三重gateを要求する", () => {
     expect(workflow).toContain("20260716112500_add_account_deletion_indexes");
+    expect(workflow).toContain("migration_status_exit=$?");
+    expect(workflow).toContain('if [ "$migration_status_exit" -ne 1 ]; then');
+    expect(workflow).toContain("/^Following migrations? have not yet been applied:$/");
+    expect(workflow).toContain('grep -Fxq "20260716112500_add_account_deletion_indexes"');
+    expect(workflow).not.toContain('grep -Fq "20260716112500_add_account_deletion_indexes"');
     expect(workflow).toContain(
       "STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED: ${{ vars.STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED }}",
     );
