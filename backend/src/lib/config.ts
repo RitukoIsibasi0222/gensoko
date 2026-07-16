@@ -18,6 +18,8 @@ const ACCOUNT_DATA_DELETION_EXECUTE_ENABLED_INVALID_MESSAGE =
   "ACCOUNT_DATA_DELETION_EXECUTE_ENABLEDはtrueまたはfalseで設定してください";
 const ACCOUNT_DATA_DELETION_BATCH_SIZE_INVALID_MESSAGE =
   "ACCOUNT_DATA_DELETION_BATCH_SIZEは1から100までの10進整数で設定してください";
+const STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED_INVALID_MESSAGE =
+  "STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLEDはtrueまたはfalseで設定してください";
 const MIN_RATE_LIMIT_KEY_BYTES = 32;
 const MIN_AUDIT_LOG_RETENTION_DAYS = 30;
 const MAX_AUDIT_LOG_RETENTION_DAYS = 3650;
@@ -70,6 +72,14 @@ export type AccountDataDeletionConfigOptions = Readonly<{
 export type AccountDataDeletionConfig = Readonly<{
   executeEnabled: boolean;
   batchSize: number;
+}>;
+
+export type StagingAccountDeletionPerformanceConfigOptions = Readonly<{
+  environment?: Readonly<Record<string, string | undefined>>;
+}>;
+
+export type StagingAccountDeletionPerformanceConfig = Readonly<{
+  executeEnabled: boolean;
 }>;
 
 function parseFrontendOrigin(value: string): string {
@@ -240,7 +250,7 @@ export function getAuditLogRetentionConfig({
   };
 }
 
-function parseAccountDataDeletionExecuteEnabled(value: string | undefined): boolean {
+function parseDisabledByDefaultBoolean(value: string | undefined, invalidMessage: string): boolean {
   if (value === undefined) {
     return false;
   }
@@ -255,7 +265,7 @@ function parseAccountDataDeletionExecuteEnabled(value: string | undefined): bool
     return false;
   }
 
-  throw new Error(ACCOUNT_DATA_DELETION_EXECUTE_ENABLED_INVALID_MESSAGE);
+  throw new Error(invalidMessage);
 }
 
 function parseAccountDataDeletionBatchSize(value: string | undefined): number {
@@ -290,9 +300,21 @@ export function getAccountDataDeletionConfig({
   environment = process.env,
 }: AccountDataDeletionConfigOptions = {}): AccountDataDeletionConfig {
   return {
-    executeEnabled: parseAccountDataDeletionExecuteEnabled(
+    executeEnabled: parseDisabledByDefaultBoolean(
       environment.ACCOUNT_DATA_DELETION_EXECUTE_ENABLED,
+      ACCOUNT_DATA_DELETION_EXECUTE_ENABLED_INVALID_MESSAGE,
     ),
     batchSize: parseAccountDataDeletionBatchSize(environment.ACCOUNT_DATA_DELETION_BATCH_SIZE),
+  };
+}
+
+export function getStagingAccountDeletionPerformanceConfig({
+  environment = process.env,
+}: StagingAccountDeletionPerformanceConfigOptions = {}): StagingAccountDeletionPerformanceConfig {
+  return {
+    executeEnabled: parseDisabledByDefaultBoolean(
+      environment.STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED,
+      STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED_INVALID_MESSAGE,
+    ),
   };
 }

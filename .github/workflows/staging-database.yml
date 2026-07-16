@@ -2,6 +2,24 @@ name: Staging Database Setup
 
 on:
   workflow_dispatch:
+    inputs:
+      operation:
+        description: staging migrationの実行方法
+        required: true
+        type: choice
+        default: apply
+        options:
+          - apply
+          - measure-account-deletion-indexes
+      write_probe_duration_ms:
+        description: account deletion index計測時のsynthetic write probe duration（5000〜120000ms）
+        required: false
+        type: string
+        default: "30000"
+      confirmation:
+        description: account deletion index計測時だけMEASURE_STAGING_ACCOUNT_DELETION_MIGRATIONを入力
+        required: false
+        type: string
 
 jobs:
   migrate-staging:
@@ -10,26 +28,64 @@ jobs:
     timeout-minutes: 20
     environment: staging
     concurrency:
-      group: gensoko-staging-database
+      group: gensoko-batch-jobs
       cancel-in-progress: false
     permissions:
       contents: read
     env:
       BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
+      STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+      STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED: ${{ vars.STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED }}
 
     steps:
       - name: Validate staging environment
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REQUESTED_OPERATION: ${{ inputs.operation }}
+          REQUESTED_CONFIRMATION: ${{ inputs.confirmation }}
+          WRITE_PROBE_DURATION_MS: ${{ inputs.write_probe_duration_ms }}
         run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_REF_NAME" != "develop" ]; then
+            echo "staging migrationはdevelop branchから実行してください"
+            exit 1
+          fi
           if [ "$BATCH_ENVIRONMENT" != "staging" ]; then
             echo "staging DB設定が不正です"
             exit 1
           fi
-          if [ -z "$DATABASE_URL" ]; then
-            echo "stagingのDATABASE_URL Secretが設定されていません"
+          if [ -z "$STAGING_SUPABASE_PROJECT_REF" ] || [ -z "$DATABASE_URL" ]; then
+            echo "staging migration設定が不足しています"
             exit 1
           fi
+
+          case "$REQUESTED_OPERATION" in
+            apply)
+              if [ -n "$REQUESTED_CONFIRMATION" ]; then
+                echo "通常migration適用では確認文字列を指定しないでください"
+                exit 1
+              fi
+              ;;
+            measure-account-deletion-indexes)
+              if [ "$STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED" != "true" ]; then
+                echo "staging migration write probeは無効です"
+                exit 1
+              fi
+              if [ "$REQUESTED_CONFIRMATION" != "MEASURE_STAGING_ACCOUNT_DELETION_MIGRATION" ]; then
+                echo "staging migrationの確認文字列が一致しません"
+                exit 1
+              fi
+              if ! [[ "$WRITE_PROBE_DURATION_MS" =~ ^[0-9]+$ ]] || [ "$WRITE_PROBE_DURATION_MS" -lt 5000 ] || [ "$WRITE_PROBE_DURATION_MS" -gt 120000 ]; then
+                echo "write probe時間が不正です"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "未対応のstaging migration操作です"
+              exit 1
+              ;;
+          esac
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,8 +101,116 @@ jobs:
         working-directory: backend
         run: npm ci
 
-      - name: Apply Prisma migrations
+      - name: Validate exact staging database target
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run staging:validate-database-target
+
+      - name: Validate migration operation against pending migrations
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REQUESTED_OPERATION: ${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+          target_migration="20260716112500_add_account_deletion_indexes"
+          set +e
+          migration_status="$(npx prisma migrate status 2>&1)"
+          migration_status_exit=$?
+          set -e
+
+          if [ "$migration_status_exit" -ne 0 ] && [ "$migration_status_exit" -ne 1 ]; then
+            echo "staging migration statusの確認に失敗しました"
+            exit 1
+          fi
+
+          pending_migrations="$(
+            printf '%s\n' "$migration_status" |
+              awk '
+                /^Following migrations? have not yet been applied:$/ {
+                  in_pending_section = 1
+                  next
+                }
+                in_pending_section && /^$/ {
+                  exit
+                }
+                in_pending_section {
+                  print
+                }
+              '
+          )"
+
+          if [ "$migration_status_exit" -eq 1 ] && [ -z "$pending_migrations" ]; then
+            echo "staging migration statusが安全に判定できません"
+            exit 1
+          fi
+
+          case "$REQUESTED_OPERATION" in
+            apply)
+              if printf '%s\n' "$pending_migrations" | grep -Fxq "$target_migration"; then
+                echo "対象のaccount deletion index migrationは計測モードで適用してください"
+                exit 1
+              fi
+              ;;
+            measure-account-deletion-indexes)
+              if [ "$migration_status_exit" -ne 1 ] || [ "$pending_migrations" != "$target_migration" ]; then
+                echo "対象のaccount deletion index migrationだけがpendingの状態ではありません"
+                exit 1
+              fi
+              ;;
+          esac
+
+      - name: Apply standard Prisma migrations
+        if: inputs.operation == 'apply'
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npx prisma migrate deploy
+
+      - name: Apply migrations with synthetic write probe
+        if: inputs.operation == 'measure-account-deletion-indexes'
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          WRITE_PROBE_DURATION_MS: ${{ inputs.write_probe_duration_ms }}
+        run: |
+          set -uo pipefail
+
+          probe_log="$RUNNER_TEMP/account-deletion-write-probe.log"
+          npm run staging:account-deletion-performance -- \
+            --migration-write-probe \
+            --probe-duration-ms="$WRITE_PROBE_DURATION_MS" \
+            --confirm=MEASURE_STAGING_ACCOUNT_DELETION_MIGRATION \
+            > "$probe_log" 2>&1 &
+          probe_pid=$!
+
+          sleep 2
+          migration_started_at="$(date +%s%3N)"
+          npx prisma migrate deploy
+          migration_status=$?
+          migration_finished_at="$(date +%s%3N)"
+
+          wait "$probe_pid"
+          probe_status=$?
+          cat "$probe_log"
+
+          migration_duration_ms=$((migration_finished_at - migration_started_at))
+          write_probe_max_duration_ms="$(grep '"event":"account_deletion.performance.completed"' "$probe_log" | tail -n 1 | jq -r '.writeProbeMaxDurationMs // empty')"
+
+          {
+            echo "### Staging account deletion index migration"
+            echo "- migrationDurationMs: $migration_duration_ms"
+            echo "- writeProbeMaxDurationMs: ${write_probe_max_duration_ms:-unavailable}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$migration_status" -ne 0 ] || [ "$probe_status" -ne 0 ] || [ -z "$write_probe_max_duration_ms" ]; then
+            echo "staging migrationまたはwrite probeに失敗しました"
+            exit 1
+          fi
+
+      - name: Verify migrations are current
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma migrate status
