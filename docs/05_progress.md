@@ -200,6 +200,7 @@
     - [x] T25: auth storeのlocal/cross-tab clear・refresh abort・安全event・SSR fallback契約をRed test化（専用5件Red、frontend既存473件成功・追加5件Red）
     - [x] T26: auth storeのlocal/cross-tab clearを実装しsettings退会成功処理へ接続（対象24件・frontend全体479件成功）
     - [x] T27: admin frontendのdeleted UI除去・完全削除警告・削除後focus・同期失敗分離をRed test化（対象85件中68件成功・17件Red、frontend全体473件成功・17件Red）
+    - [x] T28: admin deleted UIを除去し、強制退会後の同期・focus・失敗表示を実装（対象85件・frontend全体490件成功）
   - [ ] Phase 5: `deletedAt` 非参照codeへの移行、v1 deprecated互換値の維持、deploy・soak
   - [ ] Phase 6: cleanup後backup、旧Artifactの7日失効、isolated restore drill・削除replay
   - [ ] Phase 7: guard付きcontract migrationをstaging・productionへ適用
