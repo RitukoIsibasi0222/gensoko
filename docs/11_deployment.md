@@ -272,7 +272,7 @@ DBを即時に巻き戻す前提にはしない。まず直前のアプリケー
 | production  | Variable | `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED`        | 通常`false`。T38の承認済みexecute中だけ`true`                          |
 | production  | Variable | `ACCOUNT_DATA_DELETION_BATCH_SIZE`             | 1〜100。既定25                                                         |
 
-`DATABASE_URL`と`BATCH_ENVIRONMENT`は既存のEnvironment単位設定を使い、repository共通値やローカルshellへ複製しない。staging/productionで同じ接続文字列を共用しない。
+`DATABASE_URL`、`STAGING_SUPABASE_PROJECT_REF`、`BATCH_ENVIRONMENT`は既存のEnvironment単位設定を使い、repository共通値やローカルshellへ複製しない。project refは接続先照合用の値だが、Actionsのenv一覧への表示を防ぐためEnvironment Secretで管理する。staging/productionで同じ接続文字列を共用しない。
 
 ### staging expand migration・性能runbook（T33）
 
@@ -418,7 +418,7 @@ GitHub の Settings > Environments で`staging`と`production`を分離し、そ
 | staging     | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 検証用`365`                                                                         |
 | staging     | Variable | `AUDIT_LOG_CLEANUP_ENABLED`          | 初期値`false`。実削除確認中だけ明示的に`true`へ変更する                             |
 | staging     | Variable | `AUDIT_LOG_STAGING_FIXTURES_ENABLED` | 初期値`false`。T19のfixture操作中だけ`true`へ変更する                               |
-| staging     | Variable | `STAGING_SUPABASE_PROJECT_REF`       | staging Supabase project ref。接続先取り違え防止用で、URLやpasswordは含めない       |
+| staging     | Secret   | `STAGING_SUPABASE_PROJECT_REF`       | staging Supabase project ref。接続先取り違え防止用。Actionsのenv一覧へ表示させない  |
 | production  | Secret   | `DATABASE_URL`                       | production専用DB接続文字列。stagingと共用しない                                     |
 | production  | Secret   | `BACKUP_ENCRYPTION_PASSPHRASE`       | 20文字以上のbackup暗号化専用値。password managerにも保存し、DB passwordと共用しない |
 | production  | Variable | `BATCH_ENVIRONMENT`                  | `production`                                                                        |
