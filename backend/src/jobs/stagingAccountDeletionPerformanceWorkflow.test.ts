@@ -34,8 +34,9 @@ describe("staging account deletion performance workflow", () => {
 
   it("project refとDB secretを検証して専用CLIだけを実行する", () => {
     expect(workflow).toContain(
-      "STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}",
+      "STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}",
     );
+    expect(workflow).not.toContain("${{ vars.STAGING_SUPABASE_PROJECT_REF }}");
     expect(workflow).toContain("DATABASE_URL: ${{ secrets.DATABASE_URL }}");
     expect(workflow).toContain("npm run staging:account-deletion-performance");
     expect(workflow).toContain("SESSION_COUNT: ${{ inputs.session_count }}");
@@ -54,5 +55,15 @@ describe("staging account deletion performance workflow", () => {
     expect(workflow).not.toContain("delete:legacy-soft-deleted-users");
     expect(workflow).not.toContain('echo "$DATABASE_URL"');
     expect(workflow).not.toContain('echo "$STAGING_SUPABASE_PROJECT_REF"');
+  });
+
+  it("Prisma Clientを生成してからpreviewまたはexecute CLIを起動する", () => {
+    const generateIndex = workflow.indexOf("run: npx prisma generate");
+    const previewIndex = workflow.indexOf("run: npm run staging:account-deletion-performance");
+    const executeIndex = workflow.lastIndexOf("npm run staging:account-deletion-performance");
+
+    expect(generateIndex).toBeGreaterThan(-1);
+    expect(previewIndex).toBeGreaterThan(generateIndex);
+    expect(executeIndex).toBeGreaterThan(generateIndex);
   });
 });
