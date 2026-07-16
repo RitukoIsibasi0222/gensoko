@@ -1,6 +1,6 @@
 # Gensoko 実装タスク一覧
 
-> 更新日: 2026-07-14
+> 更新日: 2026-07-16
 > ステータス: `[ ]` 未実装 / `[-]` 実装中 / `[x]` 完了
 
 ---
@@ -173,7 +173,35 @@
 - [x] セキュリティヘッダーミドルウェア（CSP/HSTS/X-Frame-Options/nosniff等） — 計画書: [`docs/plans/security-headers/plan.md`](plans/security-headers/plan.md) / PR: #84
 - [-] APIレート制限の本番設計・適用（認証系 / 一般API / `POST /game/sessions`） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md) — Hono・フロントエンド先行実装済み。本番Durable Object・WAF・実機検証はフェーズ12基盤後に実施
 - [-] 監査ログ本番運用設計（保持期間・容量監視・cleanup・退会後の内部ID保持方針） — 計画書: [docs/plans/audit-log-production-operations/plan.md](plans/audit-log-production-operations/plan.md)
-- [ ] 退会時の個人情報・学習データ完全削除方針（本人退会・管理者強制退会・既存soft-deleted userの移行） — 計画書: [docs/plans/account-data-complete-deletion/plan.md](plans/account-data-complete-deletion/plan.md) — 監査ログ保持とは分離した本番公開前ブロッカー
+- [-] 退会時の個人情報・学習データ完全削除方針（本人退会・管理者強制退会・既存soft-deleted userの移行） — 計画書: [docs/plans/account-data-complete-deletion/plan.md](plans/account-data-complete-deletion/plan.md) — 監査ログ保持とは分離した本番公開前ブロッカー（ドキュメント整備・実装準備中）
+  - [x] 実装計画・現行soft delete・User配下のcascade対象・不足indexを確認
+  - [-] Phase 0: privacy・監査内部ID・backup・再登録・削除replay・性能基準・本番cleanup体制を決定（コード・DB変更は未着手）
+  - [ ] Phase 1: cascade/index契約test、expand index migration、専用DB・staging検証
+  - [ ] Phase 2: 共通Serializable transaction、本人退会・管理者強制退会の物理削除、成功監査、cleanup CLI・workflow
+  - [ ] Phase 3: staging cleanupを検証し、Phase 2・4の同時公開後にproductionの既存soft-deleted userをdry-run・batch削除・冪等再実行
+  - [ ] Phase 4: 設定画面・認証store・管理画面の契約／A11Y整合
+  - [ ] Phase 5: `deletedAt` 非参照codeへの移行、v1 deprecated互換値の維持、deploy・soak
+  - [ ] Phase 6: cleanup後backup、旧Artifactの7日失効、isolated restore drill・削除replay
+  - [ ] Phase 7: guard付きcontract migrationをstaging・productionへ適用
+  - [ ] Release gate: privacy policy、監査保持承認、全損時replay方針、本番cleanup体制、integration・Playwright・smoke testを完了
+
+### 完全削除から切り出した関連タスクの着手タイミング
+
+> Phase番号は作業パッケージを表し、そのまま本番公開順を意味しない。Phase 2のバックエンドを先に実装・staging検証してもよいが、下表の「完了期限」を満たすまで本番公開・不可逆cleanupへ進まない。
+
+| 切り出しタスク | 着手タイミング | 完了期限・合流点 | 進捗管理先 |
+|---|---|---|---|
+| 監査ログ保持期間・退会後内部IDの承認 | Phase 0で既存案の確認を開始し、本体と並行 | Phase 2の物理削除backendを本番公開する前 | [`audit-log-production-operations`](plans/audit-log-production-operations/plan.md) |
+| プライバシーポリシー `/privacy` | Phase 0で文言案を作り、Phase 4のUI文言確定後に実装 | Phase 2の物理削除backendを本番公開する前 | フェーズ11「プライバシーポリシーページ」 |
+| 現行DB全損時の外部削除replay source | Phase 0で「実装」または「残余リスク承認」を決定 | 方針決定・承認はPhase 2本番公開前。実装を選ぶ場合はPhase 6のrestore drill前に完成 | 新規計画を作成する場合は本計画からlink |
+| 監査内部IDのHMAC化・退会時null化・legal hold | 監査保持方針で必要と判断した時点 | 必要と判断した場合はPhase 2本番公開前 | 監査ログ本番運用の追加計画 |
+| 非同期削除queue | Phase 1〜3のstaging性能計測が基準超過した場合だけ着手 | 同期削除を本番公開する前。超過時は本計画を再設計 | 新規計画 |
+| 匿名化済みhistorical KPI | 完全削除後も退会者を含む統計が必要と決まった時点 | 本機能のrelease blockerではない。Phase 7後でも可 | 新規計画 |
+| 管理API v2・deprecated field廃止 | Phase 5の非参照codeが安定し、旧frontend退役条件を定義できた時点 | Phase 7のDB contract migrationとは分離し、旧asset失効後 | 新規API version計画 |
+| メール配送事業者・外部log・browser保持期間の確認 | Phase 0で調査開始 | `/privacy` 文言確定・本番公開前 | security/privacy運用記録 |
+
+### その他の品質タスク
+
 - [ ] エラートラッキング・構造化ログ導入（500通知・requestId・個人情報除外）
 - [ ] ダークモード対応（OS設定追従 + トグルボタン）
 - [ ] レスポンシブデザイン確認・修正（PC/タブレット/スマホ）
