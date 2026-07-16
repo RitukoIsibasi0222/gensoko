@@ -191,6 +191,7 @@
     - [x] T18: legacy cleanup CLI・npm scriptを三重gate・実行後dry-run・安全errorで実装
     - [x] T19: staging/production workflowのmanual限定・三重gate・backup・承認契約をRed test化
     - [x] T20: staging/production workflowを実装（manual限定、productionは24時間以内のbackup・dry-run marker・承認記録を必須化。実環境検証はT35/T38）
+    - [x] T21: 物理削除後のregister/login/forgot-password/refresh・Bearer認証契約をTDD更新（対象71件・backend全体789件成功）
   - [ ] Phase 3: staging cleanupを検証し、Phase 2・4の同時公開後にproductionの既存soft-deleted userをdry-run・batch削除・冪等再実行
   - [ ] Phase 4: 設定画面・認証store・管理画面の契約／A11Y整合
   - [ ] Phase 5: `deletedAt` 非参照codeへの移行、v1 deprecated互換値の維持、deploy・soak

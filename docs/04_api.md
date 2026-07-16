@@ -74,6 +74,9 @@ Error:
 503 一時的に利用できません。しばらく待ってから再試行してください
 ```
 
+- 物理削除後はemail・usernameのunique値が解放されるため、同じ値で新しいUser IDを発行して再登録できる。旧User ID・学習履歴・監査内部IDとは自動的に関連付けない。
+- cleanup前のlegacy soft-deleted rowが残る移行期間は、同じemail・usernameの再登録を403で拒否する。cleanup完了後は通常の新規登録として201を返す。
+
 ### POST `/auth/login`
 ```
 Request:
@@ -98,7 +101,6 @@ Set-Cookie: refreshToken=xxx; HttpOnly; SameSite=Strict; Path=/api/v1/auth
 Error:
 401 メールアドレスまたはパスワードが正しくありません
 401 しばらく後に再試行してください
-403 このアカウントは削除されています
 403 アカウントが停止されています
 403 メールアドレスが確認されていません
 409 アカウント情報が変更されました。再試行してください
@@ -113,10 +115,24 @@ Error:
 - email、username、password、token、Cookie、Authorization、request/response body、IP、User-Agent、raw errorは保存しない。
 - 成功監査はlogin状態更新・refresh token保存と同一transactionで記録し、監査保存失敗時は全体をrollbackして500を返す。失敗監査はbest-effortで、保存失敗時も元の401/403/409を維持する。
 - password検証後にアカウント状態やroleが変わった場合に古い状態で成功させないよう、成功transaction内で状態を再確認する。再確認直後の競合は条件付き更新で検出し、409で再試行を求める。
+- 物理削除後の旧資格情報と、cleanup前に残るlegacy soft-deleted rowは、存在しないaccountと同じ401・汎用messageを返す。削除済み専用messageでaccount状態を外部へ開示しない。
+
+### POST `/auth/refresh`
+
+- HttpOnly Cookieのrefresh tokenをsha256 hashで検索し、旧token削除と新token作成を同一transactionで実行する。
+- User物理削除時はrefresh token rowもDB cascadeで削除されるため、旧Cookieによるrefreshは401を返す。
+- token不存在・期限切れ・形式不正・単回使用済みの場合は、`/api/v1/auth` と `/api/v1/auth/refresh` の両PathのCookieを削除する。
+
+Error:
+
+- 401: リフレッシュトークンがありません / リフレッシュトークンの形式が不正です / 無効なリフレッシュトークンです / リフレッシュトークンの有効期限が切れています
+- 403: アカウントが停止されています
+- 500: サーバーエラーが発生しました
 
 ### POST `/auth/forgot-password`
 
 - メールアドレスの存在有無を外部へ漏らさない既存responseを維持する。
+- User物理削除後の旧メールアドレスと、cleanup前に残るlegacy soft-deleted rowは、どちらも200を返してreset token作成・メール送信を行わない。
 - 申請操作は監査DBの対象外。内部例外時もraw error objectを出力せず、固定event名だけを運用ログへ記録する。
 - rate limit超過時は429、rate limit store障害時は503を返し、この場合はメール送信処理を開始しない。
 
