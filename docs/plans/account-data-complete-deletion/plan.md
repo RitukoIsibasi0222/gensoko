@@ -1249,6 +1249,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 
 > T33 review follow-up（2026-07-16）: `Staging Database Setup`がT33専用化されて通常・将来migrationへ使えない不整合を修正し、既定`apply`と`measure-account-deletion-indexes`を分離した。`apply`は対象index migrationがpendingなら拒否して初回計測の迂回を防ぎ、計測側は対象1件だけがpendingの場合に限定する。あわせてperformance execute入力をGitHub Actionsの`env`経由へ変更し、shellへの直接展開を廃止した。CLIは性能測定flagの設定不備を引数不備と区別した。Redは3 files・5件失敗、Greenは3 files・19件成功。最終品質checkはESLint・Prettier・TypeScript build・backend全842件成功、専用DB 7件skip。staging workflowは未実行。
 
+> T33 write probe duration review follow-up（2026-07-16）: migration write probeの開始時刻をsynthetic fixture作成前から作成完了直後へ移し、fixture作成時間を指定durationへ算入しないよう修正した。fixture作成で4,000ms経過する時刻mockに対し、旧実装が5,000ms指定で3回しかprobeしないRedを確認し、修正後は作成後から5,000ms以上にわたり15回probeするGreenを確認した。T33対象61件、backend全843件成功、専用DB 7件skip。staging workflowは未実行。
+
 ## 技術的注意点
 
 - ESM importは `.js` 拡張子を付ける。
