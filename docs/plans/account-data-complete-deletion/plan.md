@@ -1151,7 +1151,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 - [x] T23: settings A11Y Red testを追加する
 - [x] T24: settings説明/error/focus/busyを実装する
 - [x] T25: auth store cross-tab Red testを追加する
-- [ ] T26: account deletion local/cross-tab clearを実装する
+- [x] T26: account deletion local/cross-tab clearを実装する
 - [ ] T27: admin frontend Red testを追加する
 - [ ] T28: admin deleted UI除去・削除後focusを実装する
 - [ ] T29: API/security/testing/deployment docsを更新する
@@ -1209,6 +1209,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 > T24 Green/Refactor記録（2026-07-16）: settings退会フォームの警告を、プロフィール・認証・学習データを稼働DBから物理削除し取り消せない内容へ更新した。password・同意checkbox・form errorを独立stateに分け、両validationを同時評価して`tick()`後にpassword→checkboxの順でfocusし、各controlへ専用の`aria-invalid` / `aria-describedby`を設定した。formの`aria-busy`と既存submit guard・button disabledを維持し、request単位の`AbortController`をAPIへ渡す。AbortErrorは通常network errorと区別して、page表示中は削除結果不明と再ログイン確認を案内し、page破棄時はSvelte 5のeffect cleanupでrequestをabortしてerror toastを出さない。最初のGreen実行は`onDestroy`がtest環境のserver exportへ解決され全18件mount失敗となったため、既存Svelte 5構成に合わせてeffect cleanupへRefactorした。その後、専用18件とfrontend全体473件が全通過し、lint、Prettier、Svelte/TypeScript check、production buildが成功した。T25/T26のlocal/cross-tab clear、実ブラウザ・staging確認は未実施。
 
 > T25 Red記録（2026-07-16）: auth storeへ、本人退会完了時に現在tabのrefreshをabortして認証state・sessionStorageを同期clearする契約と、PIIを含まない厳密な`{ type: "account-deleted" }`だけをBroadcastChannelで送受信する契約testを追加した。受信tabはeventを再送せず同じlocal clearを行い、別type・`null`・追加fieldを持つeventは無視する。BroadcastChannel未対応browserとSSRではchannelを作らず現在tabだけを安全にclearし、logout APIは呼ばない。専用5件は`completeAccountDeletion()`とchannel未実装により全件Redとなり、frontend全体は既存473件成功・追加5件Redで他43 test fileに回帰失敗はない。lint、Prettier、Svelte/TypeScript checkは成功した。auth store sourceは変更せず、GreenはT26で行う。
+
+> T26 Green/Refactor記録（2026-07-16）: auth storeへ`completeAccountDeletion()`を追加し、送信側・受信側が共有するlocal clearで実行中refreshをabortして認証state・sessionStorageを同期消去する。browserかつ対応環境だけ`gensoko-auth` BroadcastChannelを生成し、PIIを含まない厳密な`{ type: "account-deleted" }`だけを受理する。本人操作はlocal clear後に1回通知し、受信tabは再送しない。channel生成・送信失敗、未対応browser、SSRでもcurrent tab clearを維持する。settingsの退会成功処理は、削除済みserverへlogout APIを送らず専用clearを呼んでtoast後にトップへ遷移するよう更新し、通常の401・password変更logoutは維持した。settings接続testを先行追加したRedは対象24件中18件成功・6件失敗、Green/Refactor後は対象24件とfrontend全体479件が全通過した。lint、Prettier、Svelte/TypeScript check、production buildが成功した。実browserの複数tab・staging確認は未実施。
 
 ## 技術的注意点
 

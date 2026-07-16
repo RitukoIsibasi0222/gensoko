@@ -198,6 +198,7 @@
     - [x] T23: settings退会フォームの説明・control別error・focus・busy・Abort契約をRed test化（専用18件中11件成功・7件Red、frontend全体466件成功・7件Red）
     - [x] T24: settings退会フォームの説明・control別error・focus・busy・Abortを実装（専用18件・frontend全体473件成功）
     - [x] T25: auth storeのlocal/cross-tab clear・refresh abort・安全event・SSR fallback契約をRed test化（専用5件Red、frontend既存473件成功・追加5件Red）
+    - [x] T26: auth storeのlocal/cross-tab clearを実装しsettings退会成功処理へ接続（対象24件・frontend全体479件成功）
   - [ ] Phase 5: `deletedAt` 非参照codeへの移行、v1 deprecated互換値の維持、deploy・soak
   - [ ] Phase 6: cleanup後backup、旧Artifactの7日失効、isolated restore drill・削除replay
   - [ ] Phase 7: guard付きcontract migrationをstaging・productionへ適用
