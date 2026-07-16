@@ -441,8 +441,8 @@ PR #99 merge後の再確認で、既存の`Staging Database Setup`はmigration�
 | `backend/src/jobs/stagingAccountDeletionPerformance.cli.ts` / `.test.ts` | 新規     | preview既定、executeのflag・明示引数・確認文字列、終了code、安全log                                                 |
 | `.github/workflows/staging-account-deletion-performance.yml`             | 新規     | manual-only・staging/develop固定のpreview/execute workflow                                                          |
 | `backend/src/jobs/stagingAccountDeletionPerformanceWorkflow.test.ts`     | 新規     | production/schedule不在、共通concurrency、三重gate、秘密非出力のworkflow契約                                        |
-| `.github/workflows/staging-database.yml`                                 | 修正     | project refを含む接続先検証、共通DB concurrency、migration所要時間とsynthetic write待ちの記録                       |
-| `backend/src/jobs/stagingDatabaseWorkflow.test.ts`                       | 修正     | T33 migration計測・直列化・秘密非出力契約                                                                           |
+| `.github/workflows/staging-database.yml`                                 | 修正     | 通常migration適用を維持しつつ、T33計測モードだけで対象migration所要時間とsynthetic write待ちを記録                  |
+| `backend/src/jobs/stagingDatabaseWorkflow.test.ts`                       | 修正     | 通常適用・T33計測の分岐、計測迂回防止、直列化・秘密非出力契約                                                       |
 | `backend/src/jobs/stagingAuditCleanupFixtures.ts` / `.test.ts`           | 修正     | 重複するstaging DB接続先検証を共通helperへ移行                                                                      |
 | `backend/src/lib/config.ts` / `.test.ts` / `backend/.env.example`        | 修正     | staging性能測定flagの安全側defaultと厳格validationを一元管理                                                        |
 | `backend/package.json`                                                   | 修正     | staging接続検証・account deletion性能測定の専用script追加                                                           |
@@ -1246,6 +1246,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 > T32 専用DB integration記録（2026-07-16）: ローカルDocker PostgreSQLの専用DB `gensoko_account_deletion_test`へ接続し、15 migrationsが適用済み・pending 0件であることを確認した。`ACCOUNT_DELETION_INTEGRATION_DATABASE_URL`を明示してaccount deletion integration 5件を実行し、本人退会・管理者強制退会の全所有row cascade、共有Element保持、PIIなし成功監査、監査insert失敗時rollback、同一User並行退会の1commit、2 ADMIN並行退会時のlast-admin保護がすべて成功した。1 file・5件成功、test時間3.08秒、全体3.66秒だった。終了後の専用DBはUser 0件・AuditLog 0件・fixture Element 0件で、後片付け完了を確認した。staging/productionへの接続・workflowは実行していない。
 
 > T33 測定手段TDD記録（2026-07-16）: PR #99 merge後のfollow-up branchで、staging固定の接続先共通validator、既存Userの最大GameSession/GameAnswer件数だけを返すpreview、上限付きsynthetic User fixture、実`deleteCurrentUser` service経路の時間測定、migration中の4 index対象table write probe、全所有row 0件検証、finally cleanup、manual-only workflowを追加した。Redは新規module/workflow未実装と既存migration workflowのconcurrency・project ref・計測不足により5 filesすべて失敗した。Green/Refactor後はT33対象7 files・59件、configを含む8 files・120件が成功し、backend通常全testは78 files・841件成功、専用DB 3 files・7件skip、ESLint・Prettier check・TypeScript buildが成功した。staging Environment Variableは変更せず、migration・preview・performance executeのいずれも実環境では未実行であるため、T33自体は進行中のままとする。
+
+> T33 review follow-up（2026-07-16）: `Staging Database Setup`がT33専用化されて通常・将来migrationへ使えない不整合を修正し、既定`apply`と`measure-account-deletion-indexes`を分離した。`apply`は対象index migrationがpendingなら拒否して初回計測の迂回を防ぎ、計測側は対象1件だけがpendingの場合に限定する。あわせてperformance execute入力をGitHub Actionsの`env`経由へ変更し、shellへの直接展開を廃止した。CLIは性能測定flagの設定不備を引数不備と区別した。Redは3 files・5件失敗、Greenは3 files・19件成功。最終品質checkはESLint・Prettier・TypeScript build・backend全842件成功、専用DB 7件skip。staging workflowは未実行。
 
 ## 技術的注意点
 

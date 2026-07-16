@@ -282,7 +282,7 @@ T33はT35のlegacy cleanupと分離する。PR mergeと明示承認前にworkflo
 2. `Staging Account Deletion Performance`の`preview`を`develop`から実行する。出力は最大GameSession件数・最大GameAnswer件数だけで、既存Userを変更しない。
 3. 対象の`20260716112500_add_account_deletion_indexes`がstagingでpendingであることを確認する。既に適用済みなら同じDB上で計測済みと偽らず、isolated staging相当環境での再現計画を作る。
 4. Environment flagを`true`へ変更する。
-5. `Staging Database Setup`へ`MEASURE_STAGING_ACCOUNT_DELETION_MIGRATION`と5,000〜120,000msのwrite probe時間を入力する。
+5. `Staging Database Setup`で`measure-account-deletion-indexes`を選び、`MEASURE_STAGING_ACCOUNT_DELETION_MIGRATION`と5,000〜120,000msのwrite probe時間を入力する。
 6. workflowはproject ref・Session pooler host・port 5432・path `/postgres`を検証し、synthetic Userと3つのindex対象子rowだけへwriteしながら`prisma migrate deploy`を実行する。
 7. `migrationDurationMs`、`writeProbeMaxDurationMs`、適用後migration statusを記録する。通常`CREATE INDEX`中のwrite待ちがmaintenance windowを超える場合はproductionへ進まない。
 8. preview以上・上限以内のsession/answer件数とplatform request timeoutを決め、performance `execute`へ`MEASURE_STAGING_ACCOUNT_DELETION`を入力する。
@@ -290,6 +290,8 @@ T33はT35のlegacy cleanupと分離する。PR mergeと明示承認前にworkflo
 10. 成功・失敗にかかわらずsynthetic User・所有row・synthetic成功監査が残っていないことを確認し、flagを`false`へ戻す。
 
 workflowは`gensoko-batch-jobs`でmigration、性能確認、監査fixture、legacy cleanupを直列化する。既存User・legacy soft-deleted Userを削除せず、ログへ内部ID・PII・接続情報・生Errorを出さない。run URL、件数、時間、合否だけを計画書へ記録する。
+
+`Staging Database Setup`の既定`apply`は通常・将来migration用で、性能測定flagや確認文字列を要求しない。ただし対象account deletion index migrationがpendingの間は初回計測を迂回しないよう拒否する。対象以外も同時にpendingなら`measure-account-deletion-indexes`も拒否し、対象1件だけをpendingにできる適用順序またはisolated staging相当環境での再現計画を作る。
 
 ### staging runbook（T35）
 
@@ -433,10 +435,10 @@ workflow jobは選択されたEnvironmentを参照する。手動実行は`stagi
 2. database passwordはpassword managerで生成・保存し、repository、文書、Issue、PR、チャットへ記載しない。
 3. projectの`Connect`からSession pooler（port 5432）のURIを取得する。GitHub-hosted runnerから接続するため、IPv4対応のSession poolerを使用する。
 4. GitHub repositoryのSettings > Environments > staging > Environment secretsで、URIを`DATABASE_URL`として登録する。
-5. `.github/workflows/staging-database.yml`が`develop`へmergeされた後、Actions > Staging Database Setup > Run workflowで`develop`を選んで1回だけ実行する。
+5. `.github/workflows/staging-database.yml`が`develop`へmergeされた後、Actions > Staging Database Setup > Run workflowで`develop`と通常の`apply`を選んで実行する。account deletion index migrationがpendingの場合は通常適用せず、T33 runbookの計測モードを使う。
 6. `npx prisma migrate deploy`の成功と、適用済みmigration一覧をActions logで確認する。接続URLやpasswordをlogへ出さない。
 
-Staging Database Setup workflowは手動実行専用で、GitHub Environmentを`staging`へ固定する。productionの選択肢、schedule、schema生成、seed処理は持たない。Environment識別子または`DATABASE_URL`が未設定ならmigration前に失敗する。
+Staging Database Setup workflowは手動実行専用で、GitHub Environmentを`staging`へ固定する。productionの選択肢、schedule、schema生成、seed処理は持たない。通常の`apply`とT33専用の`measure-account-deletion-indexes`を明示選択し、Environment識別子または`DATABASE_URL`が未設定ならmigration前に失敗する。
 
 ### 手動実行・retry
 
