@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getCurrentUserProfile: vi.fn(),
   updateCurrentUsername: vi.fn(),
   goto: vi.fn(),
+  completeAccountDeletion: vi.fn(),
   logout: vi.fn(),
   updateUser: vi.fn(),
   toastSuccess: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock('$lib/stores/auth.svelte', () => ({
     isInitializing: false,
     isLoggedIn: true,
     accessToken: 'access-token',
+    completeAccountDeletion: mocks.completeAccountDeletion,
     logout: mocks.logout,
     updateUser: mocks.updateUser
   }
@@ -252,6 +254,22 @@ describe('/settings existing-password compatibility', () => {
 });
 
 describe('/settings account deletion A11Y contract', () => {
+  it('削除成功後はlogout APIを呼ばずaccount deletion専用clearを使う', async () => {
+    mocks.deleteCurrentUser.mockResolvedValue(undefined);
+    const target = await renderPage();
+
+    await submitDeleteForm(target, {
+      currentPassword: 'CurrentPass1!',
+      acknowledged: true
+    });
+
+    await vi.waitFor(() => {
+      expect(mocks.goto).toHaveBeenCalledWith('/');
+    });
+    expect(mocks.completeAccountDeletion).toHaveBeenCalledOnce();
+    expect(mocks.logout).not.toHaveBeenCalled();
+  });
+
   it('稼働DBのprofile・auth・learning dataを取り消せず削除する警告を表示する', async () => {
     const target = await renderPage();
     const warning = target.querySelector('#delete-warning')?.textContent ?? '';

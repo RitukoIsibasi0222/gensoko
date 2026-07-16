@@ -328,7 +328,7 @@
       deleteCurrentPassword = '';
       deleteAcknowledged = false;
       toastStore.success('アカウントを削除しました');
-      await authStore.logout();
+      authStore.completeAccountDeletion();
       await goto('/');
     } catch (error) {
       if (isAbortError(error)) {
