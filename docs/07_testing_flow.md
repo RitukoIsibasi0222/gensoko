@@ -131,7 +131,7 @@ docker compose exec -T \
 - 同一Userの並行削除は1commit・成功監査1件になることを確認する
 - 2人のADMINの並行本人退会後も利用可能なADMINが1人残ることを確認する
 - 各test終了時に専用DBのUser・AuditLog fixtureを削除する
-- suiteは7件で、通常suiteでは専用環境変数がないためskipされる。T32で上記commandを明示実行し、7件すべての成功を記録する
+- account deletion suiteは5件で、通常suiteでは専用環境変数がないためskipされる。通常suiteで表示される専用DB test 7件は、監査rollback 1件・監査cleanup 1件との合計である。T32で上記commandを明示実行し、account deletion 5件すべての成功を記録する
 - この手順はローカルDocker PostgreSQL専用である。staging/productionの接続URLを渡さず、実環境確認はT33以降の承認付き手順へ分離する
 
 ---

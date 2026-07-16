@@ -1155,7 +1155,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 - [x] T27: admin frontend Red testを追加する
 - [x] T28: admin deleted UI除去・削除後focusを実装する
 - [x] T29: API/security/testing/deployment docsを更新する
-- [ ] T30: backend品質checkを通す
+- [x] T30: backend品質checkを通す
 - [ ] T31: frontend品質checkを通す
 - [ ] T32: 専用Docker PostgreSQL integration testを通す
 - [ ] T33: staging expand migration・性能を確認する
@@ -1217,6 +1217,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 > T28 Green/Refactor記録（2026-07-16）: 新frontendの`AdminUserStatus`を`"active" | "suspended"`へ狭め、deprecated `status=deleted`をURLからcanonicalizeしてfilterから除去した。API v1 responseの`deletedAt`と`users.deleted`は旧asset互換のruntime validatorとして維持する一方、actions・list・detail・confirmation・statsの表示判断から退会済み／未退会UIを除去した。強制退会確認は稼働DBのプロフィール・認証情報・学習データを物理削除し、取り消せないことを明示する。削除成功後はdetailを再取得せずlist/statsだけを同期し、元のdesktop/mobile viewと削除前indexを保持して、同位置の次Userの強制退会button→前Userのbutton→一覧headingへfocusする。同期失敗時は成功toast/live messageを維持し、「強制退会は完了」「ユーザー一覧を更新できない」を分離してread retryできる。最初のGreenはfocus用`data-user-id`が既存mobile card selectorと衝突して85件中83件成功・2件失敗だったため、`data-admin-user-id`へ責務を分離した。Refactor後は対象85件とfrontend全体490件が全通過し、lint、Prettier、Svelte/TypeScript check、production buildが成功した。実browser・staging確認は未実施。
 
 > T29 docs整合記録（2026-07-16）: `docs/02_security.md`、`04_api.md`、`07_testing_flow.md`、`09_startup_commands.md`、`11_deployment.md`を現行service・CLI・workflow契約と突合した。securityの旧soft-delete記述を「codeは物理削除へ移行済み・本番未公開」へ更新し、APIには実装済み契約と未適用状態、testingには専用DB以外へ接続しない境界、startup/deploymentには既定dry-run、stagingのT35明示承認、productionの24時間以内backup/dry-run・execute flag・確認文字列・承認者・change record、不可逆rollback・isolated restore制約を記録した。T1Bはproduction公開・production cleanup・contract migrationの未承認blockerとして維持する。MarkdownへPrettierを適用し、workflow入力名・branch・Artifact保持期間との照合と`git diff --check`が成功した。文書だけの変更であり、コードtest、専用DB、staging/production workflowは実行していない。
+
+> T30 backend品質check記録（2026-07-16）: backendのESLint、Prettier check、TypeScript build、Prisma schema validateが成功した。通常全testは73 files・793件成功、専用DB 3 files・7件skipで、skip内訳はaccount deletion 5件、監査rollback 1件、監査cleanup 1件だった。T29でaccount deletion単体を7件と記載していた誤りを`docs/07_testing_flow.md`で5件へ修正し、全専用DB test合計が7件であることを明記した。専用DBを実接続するT32、frontend品質checkのT31、staging/production workflowは実行していない。
 
 ## 技術的注意点
 
