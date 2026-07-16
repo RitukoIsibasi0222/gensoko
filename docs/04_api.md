@@ -1075,6 +1075,13 @@ Error:
 全 endpoint は `authMiddleware` と `adminMiddleware` を通す。
 レスポンスには `passwordHash`、refresh token、email verification token、password reset token などの機密情報を含めない。
 
+account data完全削除への移行中も、旧frontendとのv1互換を次のとおり維持する。
+
+- 一覧・詳細・status/role mutationのdeprecated `deletedAt` は、DB値を公開せず常に `null` を返す。
+- deprecated `status=deleted` は入力として受理するが、200で `users: []`, `nextCursor: null` を返す。
+- statsのdeprecated `users.deleted` は常に `0` を返し、`users.total` とgame/learning statsは現在保持中のUserとその所有dataだけを集計する。
+- legacy soft-deleted userは一覧へ含めず、詳細は物理削除済みUserと同じ404を返す。mutationの移行用409判定はcontract migrationまで維持する。
+
 共通エラー:
 
 ```text
@@ -1114,7 +1121,7 @@ Query params:
 | `cursor` | string | なし | 前回レスポンスの `nextCursor`。trim 後空文字は400 |
 | `q` | string | なし | `username` / `email` の部分一致。trim 後100文字以内。空文字は未指定扱い |
 | `role` | `"USER" \| "ADMIN"` | なし | ロール filter |
-| `status` | `"active" \| "suspended" \| "deleted"` | なし | 状態 filter |
+| `status` | `"active" \| "suspended" \| "deleted"` | なし | 状態 filter。`deleted` はdeprecated互換入力 |
 
 Response 200:
 
@@ -1149,7 +1156,8 @@ Status filter:
 
 - `active`: `isActive = true` かつ `deletedAt = null`
 - `suspended`: `isActive = false` かつ `deletedAt = null`
-- `deleted`: `deletedAt != null`
+- 未指定: legacy soft-deleted userを除く現在保持中のUser
+- `deleted`: deprecated互換として200の空一覧、`nextCursor = null`
 
 Sort:
 
@@ -1380,9 +1388,11 @@ Response 200:
 
 Aggregation:
 
-- `users.*` は `user.count` を使う。
-- `admins` は利用可能な管理者数ではなく、表示用に `role=ADMIN`, `deletedAt=null` を数える。
-- `games.totalSessions` は `gameSession.count` を使う。
-- `games.totalAnswered` と `games.averageAccuracyRate` は `userStats.aggregate` の `totalAnswered` / `totalCorrect` 合計から算出する。
-- `learning.totalWeakElements` は `weakElement.count` を使う。
-- `learning.totalMasteredCount` は `userStats.aggregate` の `masteredCount` 合計から算出する。
+- `users.total` はlegacy soft-deleted userを除く現在保持中のUserを `user.count` で数える。
+- `users.deleted` はdeprecated v1互換値として常に `0` を返す。
+- `active` / `suspended` / `admins` / `emailVerified` も現在保持中のUserだけを数える。`admins` は利用可能な管理者数ではなく、表示用の `role=ADMIN` 件数。
+- `games.totalSessions` は現在保持中のUserに属する `gameSession.count` を使う。
+- `games.totalAnswered` と `games.averageAccuracyRate` は現在保持中のUserに属する `userStats.aggregate` の `totalAnswered` / `totalCorrect` 合計から算出する。
+- `learning.totalWeakElements` は現在保持中のUserに属する `weakElement.count` を使う。
+- `learning.totalMasteredCount` は現在保持中のUserに属する `userStats.aggregate` の `masteredCount` 合計から算出する。
+- これらは現在保持中のdataの運用統計であり、退会者を含むhistorical KPIではない。
