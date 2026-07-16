@@ -54,27 +54,23 @@
         <h3 class="font-semibold text-blue-950">ユーザー</h3>
         <dl class="mt-3 grid gap-3 text-sm">
           <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">登録ユーザー累計（退会含む）</dt>
+            <dt class="text-gray-700">現在の登録ユーザー</dt>
             <dd class="font-bold text-blue-950">{formatNumber(stats.users.total)}</dd>
           </div>
           <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">有効アカウント（未退会）</dt>
+            <dt class="text-gray-700">有効アカウント</dt>
             <dd class="font-bold text-blue-950">{formatNumber(stats.users.active)}</dd>
           </div>
           <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">停止中（未退会）</dt>
+            <dt class="text-gray-700">停止中</dt>
             <dd class="font-bold text-blue-950">{formatNumber(stats.users.suspended)}</dd>
           </div>
           <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">退会済み</dt>
-            <dd class="font-bold text-blue-950">{formatNumber(stats.users.deleted)}</dd>
-          </div>
-          <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">未退会ADMIN</dt>
+            <dt class="text-gray-700">ADMIN</dt>
             <dd class="font-bold text-blue-950">{formatNumber(stats.users.admins)}</dd>
           </div>
           <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">メール確認済み（未退会）</dt>
+            <dt class="text-gray-700">メール確認済み</dt>
             <dd class="font-bold text-blue-950">{formatNumber(stats.users.emailVerified)}</dd>
           </div>
         </dl>

@@ -131,6 +131,20 @@ function renderPage(): HTMLElement {
   return target;
 }
 
+async function confirmOpenForceDelete(target: HTMLElement): Promise<void> {
+  const input = target.querySelector<HTMLInputElement>('#admin-force-delete-confirmation');
+  const confirmButton = target.querySelector<HTMLButtonElement>('[data-confirm]');
+  if (!input || !confirmButton) {
+    throw new Error('強制退会の確認controlが見つかりません');
+  }
+
+  input.value = '強制退会';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  await tick();
+  confirmButton.click();
+  await flushAsyncWork();
+}
+
 beforeEach(() => {
   mocks.auth.status = 'authenticated';
   mocks.auth.user = { id: 'admin-1', username: 'admin', role: 'ADMIN' };
@@ -320,7 +334,8 @@ describe('/admin mutation・sync orchestration', () => {
     await flushAsyncWork();
 
     expect(target.querySelector('[data-confirmation]')?.textContent).toContain('停止中');
-    expect(target.querySelector('[data-confirmation]')?.textContent).toContain('有効（未退会）');
+    expect(target.querySelector('[data-confirmation]')?.textContent).toContain('有効');
+    expect(target.querySelector('[data-confirmation]')?.textContent).not.toContain('未退会');
     target.querySelector<HTMLButtonElement>('[data-confirm]')?.click();
     await flushAsyncWork();
 
@@ -336,8 +351,10 @@ describe('/admin mutation・sync orchestration', () => {
     target.querySelector<HTMLButtonElement>('button[aria-label="taroのアカウントを停止"]')?.click();
     await flushAsyncWork();
 
-    expect(target.textContent).toContain('有効（未退会）');
-    expect(target.textContent).toContain('停止中');
+    const confirmationText = target.querySelector('[data-confirmation]')?.textContent;
+    expect(confirmationText).toContain('有効');
+    expect(confirmationText).toContain('停止中');
+    expect(confirmationText).not.toContain('未退会');
     expect(document.activeElement).toBe(target.querySelector('[data-cancel]'));
     target.querySelector<HTMLButtonElement>('[data-confirm]')?.click();
     await flushAsyncWork();
@@ -397,6 +414,94 @@ describe('/admin mutation・sync orchestration', () => {
     expect(mocks.deleteAdminUser).toHaveBeenCalledWith(
       expect.objectContaining({ accessToken: 'old-token', userId: 'user-1' })
     );
+  });
+
+  it('詳細からの強制退会成功後はdetailを再取得せずlist・statsだけを同期する', async () => {
+    mocks.getAdminUsers
+      .mockResolvedValueOnce({ users: USERS, nextCursor: null })
+      .mockResolvedValueOnce({ users: [HANAKO], nextCursor: null });
+    const target = renderPage();
+    await flushAsyncWork();
+
+    target.querySelector<HTMLButtonElement>('button[aria-label="taroの詳細を表示"]')?.click();
+    await flushAsyncWork();
+    expect(mocks.getAdminUserDetail).toHaveBeenCalledTimes(1);
+
+    target.querySelector<HTMLButtonElement>('[role=dialog] button[data-action="delete"]')?.click();
+    await flushAsyncWork();
+    await confirmOpenForceDelete(target);
+
+    expect(mocks.deleteAdminUser).toHaveBeenCalledTimes(1);
+    expect(mocks.getAdminUsers).toHaveBeenCalledTimes(2);
+    expect(mocks.getAdminStats).toHaveBeenCalledTimes(2);
+    expect(mocks.getAdminUserDetail).toHaveBeenCalledTimes(1);
+    expect(target.querySelector('[role=dialog]')).toBeNull();
+    expect(target.querySelector('[aria-live=polite]')?.textContent).toContain(
+      'ユーザーを強制退会しました'
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('ユーザーを強制退会しました');
+  });
+
+  it('強制退会で先頭行が消えた後は同じ位置の次行操作buttonへfocusする', async () => {
+    mocks.getAdminUsers
+      .mockResolvedValueOnce({ users: USERS, nextCursor: null })
+      .mockResolvedValueOnce({ users: [HANAKO], nextCursor: null });
+    const target = renderPage();
+    await flushAsyncWork();
+
+    target.querySelector<HTMLButtonElement>('button[aria-label="taroを強制退会"]')?.click();
+    await flushAsyncWork();
+    await confirmOpenForceDelete(target);
+
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('hanakoを強制退会');
+  });
+
+  it('強制退会で最終行が消えた後は前行の操作buttonへfocusする', async () => {
+    mocks.getAdminUsers
+      .mockResolvedValueOnce({ users: USERS, nextCursor: null })
+      .mockResolvedValueOnce({ users: [TARO], nextCursor: null });
+    const target = renderPage();
+    await flushAsyncWork();
+
+    target.querySelector<HTMLButtonElement>('button[aria-label="hanakoを強制退会"]')?.click();
+    await flushAsyncWork();
+    await confirmOpenForceDelete(target);
+
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('taroを強制退会');
+  });
+
+  it('強制退会で一覧が空になった後は一覧headingへfocusする', async () => {
+    mocks.getAdminUsers
+      .mockResolvedValueOnce({ users: [TARO], nextCursor: null })
+      .mockResolvedValueOnce({ users: [], nextCursor: null });
+    const target = renderPage();
+    await flushAsyncWork();
+
+    target.querySelector<HTMLButtonElement>('button[aria-label="taroを強制退会"]')?.click();
+    await flushAsyncWork();
+    await confirmOpenForceDelete(target);
+
+    expect(document.activeElement).toBe(target.querySelector('#admin-user-list-heading'));
+  });
+
+  it('強制退会成功後の一覧同期失敗は削除成功と一覧更新失敗を分離して示す', async () => {
+    mocks.getAdminUsers
+      .mockResolvedValueOnce({ users: USERS, nextCursor: null })
+      .mockRejectedValueOnce(new ApiError(500, 'サーバーエラーが発生しました'));
+    const target = renderPage();
+    await flushAsyncWork();
+
+    target.querySelector<HTMLButtonElement>('button[aria-label="taroを強制退会"]')?.click();
+    await flushAsyncWork();
+    await confirmOpenForceDelete(target);
+
+    const syncAlert = Array.from(target.querySelectorAll<HTMLElement>('[role=alert]')).find(
+      (alert) => alert.textContent?.includes('サーバーエラーが発生しました')
+    );
+    expect(mocks.deleteAdminUser).toHaveBeenCalledTimes(1);
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('ユーザーを強制退会しました');
+    expect(syncAlert?.textContent).toContain('強制退会は完了しました');
+    expect(syncAlert?.textContent).toContain('ユーザー一覧を更新できませんでした');
   });
 
   it('確認dialogをcancelした場合はmutation APIを呼ばない', async () => {

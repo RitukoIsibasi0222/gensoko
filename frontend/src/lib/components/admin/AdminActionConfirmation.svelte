@@ -32,10 +32,7 @@
   );
 
   function getCurrentStatus(): string {
-    if (user.deletedAt !== null) {
-      return '退会済み';
-    }
-    return user.isActive ? '有効（未退会）' : '停止中';
+    return user.isActive ? '有効' : '停止中';
   }
 
   function handleConfirm(): void {
@@ -77,7 +74,7 @@
         <dd class="font-semibold text-gray-900">{getCurrentStatus()}</dd>
         <dt class="text-gray-600">変更後</dt>
         <dd class="font-semibold text-gray-900">
-          {action.nextIsActive ? '有効（未退会）' : '停止中'}
+          {action.nextIsActive ? '有効' : '停止中'}
         </dd>
       </dl>
     </div>
@@ -95,7 +92,7 @@
     <div class="rounded-xl border border-red-200 bg-red-50 p-4">
       <h3 class="font-semibold text-red-900">強制退会</h3>
       <p class="mt-2 text-sm text-red-800">
-        停止と異なり、この管理画面から元に戻せません。対象と影響を確認してください。
+        対象ユーザーのプロフィール・認証情報・学習データを稼働DBから物理削除します。削除後は取り消せません。
       </p>
       <label
         for="admin-force-delete-confirmation"

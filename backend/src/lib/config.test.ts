@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getAuditLogRetentionConfig, getFrontendUrl, getRateLimitConfig } from "./config.js";
+import {
+  getAccountDataDeletionConfig,
+  getAuditLogRetentionConfig,
+  getFrontendUrl,
+  getRateLimitConfig,
+} from "./config.js";
 
 const DEVELOPMENT_FRONTEND_URL = "http://localhost:5174";
 const PRODUCTION_FRONTEND_URL = "https://gensoko.example";
@@ -242,6 +247,85 @@ describe("getAuditLogRetentionConfig", () => {
           },
         }),
       ).toThrow("AUDIT_LOG_CLEANUP_ENABLEDはtrueまたはfalseで設定してください");
+    },
+  );
+});
+
+describe("getAccountDataDeletionConfig", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("未設定の場合は実行無効・batch size 25を返す", () => {
+    expect(getAccountDataDeletionConfig({ environment: {} })).toEqual({
+      executeEnabled: false,
+      batchSize: 25,
+    });
+  });
+
+  it("前後の空白を除去して実行許可とbatch sizeを返す", () => {
+    expect(
+      getAccountDataDeletionConfig({
+        environment: {
+          ACCOUNT_DATA_DELETION_EXECUTE_ENABLED: " true ",
+          ACCOUNT_DATA_DELETION_BATCH_SIZE: " 100 ",
+        },
+      }),
+    ).toEqual({
+      executeEnabled: true,
+      batchSize: 100,
+    });
+  });
+
+  it("呼び出し側が環境を指定しない場合はprocess.envを使う", () => {
+    vi.stubEnv("ACCOUNT_DATA_DELETION_EXECUTE_ENABLED", "false");
+    vi.stubEnv("ACCOUNT_DATA_DELETION_BATCH_SIZE", "1");
+
+    expect(getAccountDataDeletionConfig()).toEqual({
+      executeEnabled: false,
+      batchSize: 1,
+    });
+  });
+
+  it.each([
+    ["下限", "1", 1],
+    ["上限", "100", 100],
+  ])("ACCOUNT_DATA_DELETION_BATCH_SIZEの%sを受理する", (_caseName, batchSize, expected) => {
+    expect(
+      getAccountDataDeletionConfig({
+        environment: {
+          ACCOUNT_DATA_DELETION_BATCH_SIZE: batchSize,
+        },
+      }),
+    ).toEqual({
+      executeEnabled: false,
+      batchSize: expected,
+    });
+  });
+
+  it.each(["", "TRUE", "1", "yes"])(
+    "不正なACCOUNT_DATA_DELETION_EXECUTE_ENABLED=%sを拒否する",
+    (executeEnabled) => {
+      expect(() =>
+        getAccountDataDeletionConfig({
+          environment: {
+            ACCOUNT_DATA_DELETION_EXECUTE_ENABLED: executeEnabled,
+          },
+        }),
+      ).toThrow("ACCOUNT_DATA_DELETION_EXECUTE_ENABLEDはtrueまたはfalseで設定してください");
+    },
+  );
+
+  it.each(["", "0", "101", "-1", "1.5", "NaN", "Infinity", "25件"])(
+    "不正なACCOUNT_DATA_DELETION_BATCH_SIZE=%sを拒否する",
+    (batchSize) => {
+      expect(() =>
+        getAccountDataDeletionConfig({
+          environment: {
+            ACCOUNT_DATA_DELETION_BATCH_SIZE: batchSize,
+          },
+        }),
+      ).toThrow("ACCOUNT_DATA_DELETION_BATCH_SIZEは1から100までの10進整数で設定してください");
     },
   );
 });

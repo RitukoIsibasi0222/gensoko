@@ -41,6 +41,7 @@ src/
 ## テストの種類
 
 ### ユニットテスト（Unit Test）
+
 - 対象: ミドルウェア・サービス関数など「部品」単体
 - DB や外部サービスは **モック（偽物）** に差し替える
 - 速くて安定している
@@ -56,7 +57,7 @@ vi.mock("../lib/prisma.js", () => ({
 
 - 対象: 複数の処理とDBを組み合わせた境界（サービスtransaction、またはミドルウェア + ルートハンドラ + DB）
 - 実際の DB を使う（テスト用 DB を別途用意）
-- 原則は今後拡充する。監査ログのtransaction rollbackのみ、Docker PostgreSQLを使う明示実行testを実装済み
+- 通常suiteでは専用env未設定時にskipし、Docker PostgreSQLを使うtestだけを明示実行する
 
 #### 監査ログrollback test
 
@@ -100,6 +101,39 @@ docker compose exec -T \
 - User row削除後も保持対象監査rowの`actorId`・`targetId`が維持されることを確認する
 - test終了時に専用DBの監査fixtureを削除する
 
+#### account deletion cascade・rollback test
+
+本人退会・管理者強制退会は広いcascade削除を行うため、通常の開発DBとは分離した専用DB
+`gensoko_account_deletion_test`だけで実行する。通常の`npm run test -- --run`ではDB接続を要求せずskipする。
+
+初回だけ専用DBを作成し、migrationを適用する。
+
+```bash
+docker compose exec -T postgres createdb -U gensoko gensoko_account_deletion_test
+docker compose exec -T \
+  -e DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_account_deletion_test \
+  hono npx prisma migrate deploy
+```
+
+integration testを実行する。
+
+```bash
+docker compose exec -T \
+  -e ACCOUNT_DELETION_INTEGRATION_DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_account_deletion_test \
+  hono npm run test:integration:account-deletion
+```
+
+- 接続先hostは`localhost`、`127.0.0.1`、`postgres`だけを許可する
+- DB名が`gensoko_account_deletion_test`でなければfixture削除を含むDB操作を開始しない
+- Userを直接参照する7modelとGameAnswerの間接cascade、共有Element保持を確認する
+- self/admin成功監査が残り、email・usernameを含まないことを確認する
+- 監査insert失敗時にUserと全所有rowがrollbackすることを確認する
+- 同一Userの並行削除は1commit・成功監査1件になることを確認する
+- 2人のADMINの並行本人退会後も利用可能なADMINが1人残ることを確認する
+- 各test終了時に専用DBのUser・AuditLog fixtureを削除する
+- account deletion suiteは5件で、通常suiteでは専用環境変数がないためskipされる。通常suiteで表示される専用DB test 7件は、監査rollback 1件・監査cleanup 1件との合計である。T32で上記commandを明示実行し、account deletion 5件すべての成功を記録する
+- この手順はローカルDocker PostgreSQL専用である。staging/productionの接続URLを渡さず、実環境確認はT33以降の承認付き手順へ分離する
+
 ---
 
 ## Hono のテスト方法
@@ -129,7 +163,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // describe: テスト対象をグループ化
 describe("authMiddleware", () => {
-
   // beforeEach: 各テスト前に実行（モックのリセットなど）
   beforeEach(() => {
     vi.clearAllMocks();
@@ -155,16 +188,16 @@ describe("authMiddleware", () => {
 
 ## よく使う Vitest の関数
 
-| 関数 | 用途 |
-|---|---|
-| `vi.mock("パス")` | モジュールをモック化 |
-| `vi.fn()` | モック関数を作成 |
+| 関数                                 | 用途                           |
+| ------------------------------------ | ------------------------------ |
+| `vi.mock("パス")`                    | モジュールをモック化           |
+| `vi.fn()`                            | モック関数を作成               |
 | `vi.mocked(fn).mockResolvedValue(x)` | 非同期モック関数の戻り値を設定 |
-| `vi.clearAllMocks()` | 全モックをリセット |
-| `vi.stubEnv("KEY", "value")` | 環境変数を一時的に設定 |
-| `expect(x).toBe(y)` | 厳密に等しいか検証 |
-| `expect(x).toEqual(y)` | 深い比較で等しいか検証 |
-| `expect(fn).rejects.toThrow()` | エラーが投げられるか検証 |
+| `vi.clearAllMocks()`                 | 全モックをリセット             |
+| `vi.stubEnv("KEY", "value")`         | 環境変数を一時的に設定         |
+| `expect(x).toBe(y)`                  | 厳密に等しいか検証             |
+| `expect(x).toEqual(y)`               | 深い比較で等しいか検証         |
+| `expect(fn).rejects.toThrow()`       | エラーが投げられるか検証       |
 
 ---
 
@@ -196,8 +229,10 @@ npm run test -- --coverage
 1. マイグレーション適用（開発環境）
 2. バックエンドテスト実行（回帰確認）
 3. フロントエンドの主要導線を Playwright で確認
-  - 例: 認証（register/login/verify-email）
-  - 例: DB変更の影響がある画面（settings、一覧、詳細など）
+
+- 例: 認証（register/login/verify-email）
+- 例: DB変更の影響がある画面（settings、一覧、詳細など）
+
 4. 「画面表示は成功したが裏で 500 が出ていないか」を確認
 
 ### 記録ルール
@@ -209,10 +244,10 @@ npm run test -- --coverage
 
 ## 各フェーズのテスト方針
 
-| フェーズ | テスト対象 | 種類 |
-|---|---|---|
-| フェーズ2 | middleware・auth routes | ユニットテスト |
-| フェーズ3 | elements・game routes | ユニットテスト |
-| フェーズ4 | users・ranking routes | ユニットテスト |
+| フェーズ   | テスト対象                 | 種類                               |
+| ---------- | -------------------------- | ---------------------------------- |
+| フェーズ2  | middleware・auth routes    | ユニットテスト                     |
+| フェーズ3  | elements・game routes      | ユニットテスト                     |
+| フェーズ4  | users・ranking routes      | ユニットテスト                     |
 | フェーズ10 | 監査insert失敗時のrollback | Docker PostgreSQL integration test |
-| 将来 | API 全体 | インテグレーションテスト |
+| 将来       | API 全体                   | インテグレーションテスト           |

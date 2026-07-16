@@ -5,6 +5,7 @@ export const AUDIT_ACTIONS = {
   LOGIN: "LOGIN",
   PASSWORD_CHANGE: "PASSWORD_CHANGE",
   PASSWORD_RESET: "PASSWORD_RESET",
+  USER_ACCOUNT_DELETE: "USER_ACCOUNT_DELETE",
   ADMIN_USER_SUSPEND: "ADMIN_USER_SUSPEND",
   ADMIN_USER_REACTIVATE: "ADMIN_USER_REACTIVATE",
   ADMIN_USER_ROLE_CHANGE: "ADMIN_USER_ROLE_CHANGE",
@@ -12,6 +13,18 @@ export const AUDIT_ACTIONS = {
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
+
+const ACTOR_IS_TARGET_SUCCESS_ACTIONS = [
+  AUDIT_ACTIONS.LOGIN,
+  AUDIT_ACTIONS.PASSWORD_CHANGE,
+  AUDIT_ACTIONS.USER_ACCOUNT_DELETE,
+] as const;
+
+type ActorIsTargetSuccessAction = (typeof ACTOR_IS_TARGET_SUCCESS_ACTIONS)[number];
+
+function isActorIsTargetSuccessAction(action: AuditAction): action is ActorIsTargetSuccessAction {
+  return (ACTOR_IS_TARGET_SUCCESS_ACTIONS as readonly AuditAction[]).includes(action);
+}
 
 export const ADMIN_AUDIT_ACTIONS = [
   AUDIT_ACTIONS.ADMIN_USER_SUSPEND,
@@ -32,6 +45,7 @@ export const AUDIT_FAILURE_REASONS = {
   AUTHENTICATION_FAILED: "AUTHENTICATION_FAILED",
   TARGET_NOT_FOUND: "TARGET_NOT_FOUND",
   SELF_OPERATION_DENIED: "SELF_OPERATION_DENIED",
+  ACTOR_STATE_CONFLICT: "ACTOR_STATE_CONFLICT",
   LAST_ADMIN_PROTECTED: "LAST_ADMIN_PROTECTED",
   TARGET_STATE_CONFLICT: "TARGET_STATE_CONFLICT",
   SERIALIZATION_CONFLICT: "SERIALIZATION_CONFLICT",
@@ -43,6 +57,7 @@ export type AuditFailureReason = (typeof AUDIT_FAILURE_REASONS)[keyof typeof AUD
 const ADMIN_AUDIT_FAILURE_REASONS = [
   AUDIT_FAILURE_REASONS.TARGET_NOT_FOUND,
   AUDIT_FAILURE_REASONS.SELF_OPERATION_DENIED,
+  AUDIT_FAILURE_REASONS.ACTOR_STATE_CONFLICT,
   AUDIT_FAILURE_REASONS.LAST_ADMIN_PROTECTED,
   AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
   AUDIT_FAILURE_REASONS.SERIALIZATION_CONFLICT,
@@ -53,6 +68,7 @@ export type AdminAuditFailureReason = (typeof ADMIN_AUDIT_FAILURE_REASONS)[numbe
 
 const UNCONFIRMED_TARGET_FAILURE_REASONS: readonly AdminAuditFailureReason[] = [
   AUDIT_FAILURE_REASONS.TARGET_NOT_FOUND,
+  AUDIT_FAILURE_REASONS.ACTOR_STATE_CONFLICT,
   AUDIT_FAILURE_REASONS.SERIALIZATION_CONFLICT,
   AUDIT_FAILURE_REASONS.INTERNAL_ERROR,
 ];
@@ -63,7 +79,7 @@ const adminActionSchema = z.enum(ADMIN_AUDIT_ACTIONS);
 
 const actorIsTargetSuccessSchema = z
   .object({
-    action: z.enum([AUDIT_ACTIONS.LOGIN, AUDIT_ACTIONS.PASSWORD_CHANGE]),
+    action: z.enum(ACTOR_IS_TARGET_SUCCESS_ACTIONS),
     result: z.literal(AuditResult.SUCCESS),
     actorId: internalIdSchema,
     actorRole: actorRoleSchema,
@@ -143,7 +159,7 @@ export const auditEventSchema = z
 
     if (
       event.result === AuditResult.SUCCESS &&
-      (event.action === AUDIT_ACTIONS.LOGIN || event.action === AUDIT_ACTIONS.PASSWORD_CHANGE) &&
+      isActorIsTargetSuccessAction(event.action) &&
       event.actorId !== event.targetId
     ) {
       context.addIssue({

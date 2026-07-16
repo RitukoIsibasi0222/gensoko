@@ -25,7 +25,7 @@ function isAdminUserRole(value: string | null): value is AdminUserRole {
 }
 
 function isAdminUserStatus(value: string | null): value is AdminUserStatus {
-  return value === 'active' || value === 'suspended' || value === 'deleted';
+  return value === 'active' || value === 'suspended';
 }
 
 function isCanonicalSearchValue(value: unknown): value is string {

@@ -96,7 +96,7 @@ describe("PATCH /admin/users/:id/status", () => {
         role: "USER",
         emailVerified: true,
         isActive: false,
-        deletedAt: null,
+        deletedAt: new Date("2026-06-01T00:00:00.000Z"),
         lockedUntil: null,
         lastLoginAt: null,
         createdAt: new Date("2026-05-01T00:00:00.000Z"),
@@ -117,6 +117,7 @@ describe("PATCH /admin/users/:id/status", () => {
       isActive: false,
     });
     const body = await res.json();
+    expect(body.user.deletedAt).toBeNull();
     expect(body.user.updatedAt).toBe("2026-06-20T12:00:00.000Z");
   });
 

@@ -174,6 +174,20 @@ describe("authMiddleware", () => {
     expect(body.error).toBe("トークンが無効です");
   });
 
+  it("物理削除後: 古いaccess tokenのUser rowが存在しない場合は401を返す", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
+
+    const app = createApp();
+    const token = await createToken();
+
+    const res = await app.request("/protected", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "ユーザーが見つかりません" });
+  });
+
   // -------------------------------------------------------------------
   // ケース5: isActive=false（停止済みアカウント）→ 403
   // -------------------------------------------------------------------

@@ -247,6 +247,65 @@ DBを即時に巻き戻す前提にはしない。まず直前のアプリケー
 - データ移行が必要な場合は、追加 → backfill → 新旧両対応 → 切替 → 旧列削除の順で進める
 - 障害時は API / フロントを先に直前バージョンへ戻し、データ復元が必要な場合のみバックアップからの復元を判断する
 
+## アカウント完全削除のrollout・legacy cleanup
+
+> 2026-07-16時点: 物理削除backend、legacy cleanup CLI、staging/production manual workflowは実装済み。staging/productionのworkflowは未実行であり、本番適用済みとは扱わない。
+
+### release gate
+
+次をすべて記録するまで、物理削除backendの本番公開、production cleanup、`deletedAt` contract migrationを行わない。
+
+- T30・T31のbackend/frontend品質checkとT32の専用DB integration testが成功している
+- stagingでexpand migration、削除性能、本人退会・管理者強制退会・削除後auth・管理UIを確認している
+- staging legacy cleanupでdry-run、execute、実行後0件、再実行0件を確認している
+- Phase 2 backendとPhase 4 frontendを同じrelease windowで切り替え、旧soft-delete instanceをdrainできる
+- T1Bのプライバシーポリシー、監査内部IDの正式保持、backup境界、全損時の削除replay方針、本番cleanup担当者・承認者・通知先が承認済みである
+- production cleanup前の24時間以内の暗号化backupとdry-run Artifactを確認できる
+
+### Environment設定
+
+| Environment | 種別     | 名前                                    | 値・扱い                                      |
+| ----------- | -------- | --------------------------------------- | --------------------------------------------- |
+| staging     | Variable | `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED` | 通常`false`。T35の承認済みexecute中だけ`true` |
+| staging     | Variable | `ACCOUNT_DATA_DELETION_BATCH_SIZE`      | 1〜100。既定25                                |
+| production  | Variable | `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED` | 通常`false`。T38の承認済みexecute中だけ`true` |
+| production  | Variable | `ACCOUNT_DATA_DELETION_BATCH_SIZE`      | 1〜100。既定25                                |
+
+`DATABASE_URL`と`BATCH_ENVIRONMENT`は既存のEnvironment単位設定を使い、repository共通値やローカルshellへ複製しない。staging/productionで同じ接続文字列を共用しない。
+
+### staging runbook（T35）
+
+Actionsの`Staging Account Data Deletion`を`develop` branchから実行する。T35のタスク境界で明示承認を得るまで実行せず、承認後も次の順序を変更しない。
+
+1. `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED=false`で`dry-run`を実行し、User件数、所有row件数、必要batch数、終了codeを記録する。
+2. 旧API instanceのdrain、staging backup、承認記録を確認する。
+3. flagを`true`へ変更し、operation `execute`と確認文字列`DELETE_LEGACY_SOFT_DELETED_USERS`を指定する。
+4. CLI内の実行後dry-runが残件0件で成功したことを確認する。
+5. 同じexecuteを再実行し、削除0件で成功する冪等性を確認する。
+6. flagを`false`へ戻し、run URL、件数、所要時間、API/UI確認結果を計画書へ記録する。
+
+失敗時は最初にflagを`false`へ戻す。処理済みbatchはcommit済みであり、再実行は残件から継続する。raw DB error、User ID、email、usernameをIssue・PR・チャットへ転載しない。
+
+### production runbook（T38）
+
+Actionsの`Production Database Operations`を`develop` branchから実行する。Environment protection ruleによる承認を維持し、次の順序を変更しない。
+
+1. operation `backup`を実行し、24時間以内の成功run IDと期限内の暗号化Artifactを確認する。
+2. `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED=false`で`account-deletion-dry-run`を実行し、24時間以内の成功run IDと1日保持marker Artifactを確認する。
+3. dry-run件数、必要batch数、DB負荷、旧instance drain、承認者、change recordを確認する。
+4. flagを`true`へ変更し、`account-deletion-execute`へbackup run ID、dry-run run ID、確認文字列、承認者識別子、change record識別子を入力する。
+5. workflow内の実行後dry-runが残件0件で成功し、step summaryへ承認記録が残ったことを確認する。
+6. flagを直ちに`false`へ戻し、再度`account-deletion-dry-run`を実行して0件を確認する。
+7. run URL、件数、所要時間、backup run ID、dry-run run ID、承認者、change recordを安全な運用記録へ残す。
+
+### rollback・restore制約
+
+- アプリケーションを旧versionへ戻しても、commit済みの物理削除User・所有rowは復元されない。障害時は新規削除を停止し、未処理batchだけを保留する
+- backup復元は現在のproductionへ直接上書きせず、isolated projectで行う。復元dataにはbackup取得時点の削除対象Userが含まれる可能性がある
+- isolated restore後に削除済みUserを再削除するreplay sourceと手順はT1Bで未承認である。T42のrestore drill完了前に、復元を完全削除保証済みと判断しない
+- cleanup後backupの取得とcleanup前Artifactの7日失効確認はT41で行う。期限前のArtifactを手動削除せず、保持境界を運用記録へ残す
+- 誤実行時はflagを`false`へ戻し、対象件数・実行時刻・run URL・承認記録だけを保存する。無承認のDB復元や、削除済み個人情報の別DBへの抽出を行わない
+
 ---
 
 ## GitHub Actions による自動デプロイ（CI/CD）

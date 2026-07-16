@@ -95,7 +95,7 @@ describe("GET /admin/users/:id", () => {
         role: "USER",
         emailVerified: true,
         isActive: true,
-        deletedAt: null,
+        deletedAt: new Date("2026-06-01T00:00:00.000Z"),
         loginFailCount: 0,
         lockedUntil: null,
         lastLoginAt: null,
@@ -124,6 +124,7 @@ describe("GET /admin/users/:id", () => {
     expect(getAdminUserDetail).toHaveBeenCalledWith({ userId: "user-1" });
     const body = await res.json();
     expect(body.user.createdAt).toBe("2026-05-01T00:00:00.000Z");
+    expect(body.user.deletedAt).toBeNull();
     expect(body.user.stats.lastActiveDate).toBe("2026-06-20T12:00:00.000Z");
     expect(body.user).not.toHaveProperty("passwordHash");
   });

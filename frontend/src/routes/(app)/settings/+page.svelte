@@ -21,6 +21,8 @@
 
   const NETWORK_ERROR_MESSAGE = 'ネットワークエラーが発生しました。接続を確認してください';
   const AUTH_REQUIRED_MESSAGE = '認証情報が見つかりません。再ログインしてください。';
+  const DELETE_RESULT_UNKNOWN_MESSAGE =
+    '削除結果を確認できませんでした。再ログインしてアカウントの状態を確認してください。';
 
   let profile = $state<CurrentUserProfile | null>(null);
   let username = $state('');
@@ -34,6 +36,8 @@
 
   let deleteCurrentPassword = $state('');
   let deleteAcknowledged = $state(false);
+  let deleteCurrentPasswordInput = $state<HTMLInputElement>();
+  let deleteAcknowledgementInput = $state<HTMLInputElement>();
 
   let isLoadingProfile = $state(false);
   let hasLoadedProfile = $state(false);
@@ -48,7 +52,19 @@
   let currentPasswordError = $state<string | null>(null);
   let newPasswordError = $state<string | null>(null);
   let confirmPasswordError = $state<string | null>(null);
-  let deleteError = $state<string | null>(null);
+  let deleteCurrentPasswordError = $state<string | null>(null);
+  let deleteAcknowledgementError = $state<string | null>(null);
+  let deleteFormError = $state<string | null>(null);
+
+  let deleteRequestAbortController: AbortController | null = null;
+  let isPageDestroyed = false;
+
+  $effect(() => {
+    return () => {
+      isPageDestroyed = true;
+      deleteRequestAbortController?.abort();
+    };
+  });
 
   $effect(() => {
     if (!authStore.isInitializing && !authStore.isLoggedIn) {
@@ -83,7 +99,7 @@
     } else if (target === 'password') {
       passwordFormError = AUTH_REQUIRED_MESSAGE;
     } else {
-      deleteError = AUTH_REQUIRED_MESSAGE;
+      deleteFormError = AUTH_REQUIRED_MESSAGE;
     }
 
     return null;
@@ -105,6 +121,13 @@
       return '-';
     }
     return date.toLocaleDateString('ja-JP');
+  }
+
+  function isAbortError(error: unknown): boolean {
+    return (
+      (error instanceof DOMException && error.name === 'AbortError') ||
+      (error instanceof Error && error.name === 'AbortError')
+    );
   }
 
   async function loadProfile(force = false): Promise<void> {
@@ -277,11 +300,15 @@
 
     const normalizedCurrentPassword = deleteCurrentPassword.trim();
 
-    deleteError = validateCurrentPassword(normalizedCurrentPassword);
-    if (!deleteError) {
-      deleteError = validateDeleteAcknowledgement(deleteAcknowledged);
-    }
-    if (deleteError) {
+    deleteFormError = null;
+    deleteCurrentPasswordError = validateCurrentPassword(normalizedCurrentPassword);
+    deleteAcknowledgementError = validateDeleteAcknowledgement(deleteAcknowledged);
+    if (deleteCurrentPasswordError || deleteAcknowledgementError) {
+      await tick();
+      const firstInvalidInput = deleteCurrentPasswordError
+        ? deleteCurrentPasswordInput
+        : deleteAcknowledgementInput;
+      firstInvalidInput?.focus();
       return;
     }
 
@@ -290,33 +317,47 @@
       return;
     }
 
+    const controller = new AbortController();
+    deleteRequestAbortController = controller;
     isDeleting = true;
-    deleteError = null;
 
     try {
       await deleteCurrentUser({
         accessToken,
-        currentPassword: normalizedCurrentPassword
+        currentPassword: normalizedCurrentPassword,
+        signal: controller.signal
       });
 
       deleteCurrentPassword = '';
       deleteAcknowledged = false;
       toastStore.success('アカウントを削除しました');
-      await authStore.logout();
+      authStore.completeAccountDeletion();
       await goto('/');
     } catch (error) {
+      if (isAbortError(error)) {
+        if (!isPageDestroyed) {
+          deleteFormError = DELETE_RESULT_UNKNOWN_MESSAGE;
+        }
+        return;
+      }
+
       if (error instanceof ApiError) {
         if (await handleUnauthorized(error)) {
           return;
         }
-        deleteError = error.message;
+        deleteFormError = error.message;
         toastStore.fromApiError(error);
       } else {
-        deleteError = NETWORK_ERROR_MESSAGE;
-        toastStore.error(deleteError);
+        deleteFormError = NETWORK_ERROR_MESSAGE;
+        toastStore.error(deleteFormError);
       }
     } finally {
-      isDeleting = false;
+      if (deleteRequestAbortController === controller) {
+        deleteRequestAbortController = null;
+      }
+      if (!isPageDestroyed) {
+        isDeleting = false;
+      }
     }
   }
 </script>
@@ -503,17 +544,17 @@
     <section class="rounded-lg border border-red-200 bg-red-50 p-6">
       <h2 class="text-lg font-semibold text-red-800">アカウント削除</h2>
       <p id="delete-warning" class="mt-1 text-sm text-red-700">
-        この操作は取り消せません。プロフィール情報と学習データが削除されます。
+        この操作は取り消せません。プロフィール情報・認証情報・学習データを稼働DBから物理削除します。
       </p>
 
-      <form class="mt-4 space-y-4" novalidate onsubmit={handleDeleteSubmit}>
-        {#if deleteError}
+      <form class="mt-4 space-y-4" novalidate aria-busy={isDeleting} onsubmit={handleDeleteSubmit}>
+        {#if deleteFormError}
           <div
-            id="delete-error"
+            id="delete-form-error"
             role="alert"
             class="rounded-md border border-red-300 bg-white px-4 py-3 text-sm text-red-800"
           >
-            {deleteError}
+            {deleteFormError}
           </div>
         {/if}
 
@@ -525,26 +566,43 @@
             id="delete-current-password"
             type="password"
             bind:value={deleteCurrentPassword}
+            bind:this={deleteCurrentPasswordInput}
             autocomplete="current-password"
-            aria-invalid={deleteError ? 'true' : undefined}
-            aria-describedby={deleteError ? 'delete-error' : undefined}
+            aria-invalid={deleteCurrentPasswordError ? 'true' : undefined}
+            aria-describedby={deleteCurrentPasswordError
+              ? 'delete-current-password-error'
+              : undefined}
             class="mt-1 w-full rounded-md border border-red-300 bg-white px-3 py-2 focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:outline-none"
           />
+          {#if deleteCurrentPasswordError}
+            <p id="delete-current-password-error" class="mt-1 text-sm text-red-700">
+              {deleteCurrentPasswordError}
+            </p>
+          {/if}
         </div>
 
         <label class="flex items-start gap-2 text-sm text-red-900">
           <input
             type="checkbox"
             bind:checked={deleteAcknowledged}
-            aria-describedby="delete-warning"
+            bind:this={deleteAcknowledgementInput}
+            aria-invalid={deleteAcknowledgementError ? 'true' : undefined}
+            aria-describedby={deleteAcknowledgementError
+              ? 'delete-warning delete-acknowledgement-error'
+              : 'delete-warning'}
             class="mt-0.5 h-4 w-4 rounded border-red-300 text-red-600 focus:ring-red-500"
           />
           <span>上記の内容を確認し、アカウントを削除することに同意します。</span>
         </label>
+        {#if deleteAcknowledgementError}
+          <p id="delete-acknowledgement-error" class="text-sm text-red-700">
+            {deleteAcknowledgementError}
+          </p>
+        {/if}
 
         <button
           type="submit"
-          disabled={isDeleting || !deleteAcknowledged}
+          disabled={isDeleting}
           class="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isDeleting ? '削除中...' : 'アカウントを削除する'}

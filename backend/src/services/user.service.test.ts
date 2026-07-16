@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Prisma } from "@prisma/client";
 
 vi.mock("../lib/prisma.js", () => ({
   prisma: {
@@ -62,42 +63,115 @@ describe("deleteCurrentUser", () => {
     vi.clearAllMocks();
   });
 
-  it("正常系: ユーザーを物理削除せず論理削除する", async () => {
+  const activeUser = {
+    id: "user-1",
+    passwordHash: "$2b$12$hash",
+    role: "USER" as const,
+    isActive: true,
+    emailVerified: true,
+    lockedUntil: null,
+    deletedAt: null,
+  };
+
+  function createSerializationConflictError(): Prisma.PrismaClientKnownRequestError {
+    return new Prisma.PrismaClientKnownRequestError("Transaction write conflict", {
+      code: "P2034",
+      clientVersion: "test",
+    });
+  }
+
+  it("正常系: USERを物理削除し、同じSerializable transactionへ成功監査を保存する", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "user-1",
       passwordHash: "$2b$12$hash",
+      role: "USER",
     } as never);
     vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
 
-    const txUserUpdate = vi.fn().mockResolvedValue({});
-    const txRefreshDeleteMany = vi.fn().mockResolvedValue({ count: 1 });
-    const txPasswordResetDeleteMany = vi.fn().mockResolvedValue({ count: 1 });
-    const txEmailVerificationDeleteMany = vi.fn().mockResolvedValue({ count: 1 });
+    const txUserFindUnique = vi.fn().mockResolvedValue(activeUser);
+    const txUserDelete = vi.fn().mockResolvedValue({ id: "user-1" });
+    const txUserCount = vi.fn();
+    const txAuditLogCreate = vi.fn().mockResolvedValue({});
 
-    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn, options) => {
+      expect(options).toEqual({
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
       return fn({
-        user: { update: txUserUpdate },
-        refreshToken: { deleteMany: txRefreshDeleteMany },
-        passwordResetToken: { deleteMany: txPasswordResetDeleteMany },
-        emailVerification: { deleteMany: txEmailVerificationDeleteMany },
+        user: { findUnique: txUserFindUnique, delete: txUserDelete, count: txUserCount },
+        auditLog: { create: txAuditLogCreate },
       } as never);
     });
 
     await deleteCurrentUser({ userId: "user-1", currentPassword: "Pass1234!" });
 
-    expect(txUserUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "user-1" },
-        data: expect.objectContaining({
-          isActive: false,
-          deletedAt: expect.any(Date),
-          lockedUntil: null,
-        }),
-      }),
+    expect(txUserFindUnique).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: {
+        id: true,
+        passwordHash: true,
+        role: true,
+        isActive: true,
+        emailVerified: true,
+        lockedUntil: true,
+        deletedAt: true,
+      },
+    });
+    expect(txUserCount).not.toHaveBeenCalled();
+    expect(txUserDelete).toHaveBeenCalledWith({ where: { id: "user-1" } });
+    expect(txAuditLogCreate).toHaveBeenCalledWith({
+      data: {
+        action: "USER_ACCOUNT_DELETE",
+        result: "SUCCESS",
+        actorId: "user-1",
+        actorRole: "USER",
+        targetType: "USER",
+        targetId: "user-1",
+        failureReason: null,
+      },
+    });
+    expect(prisma.refreshToken.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.passwordResetToken.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.emailVerification.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("正常系: 他に利用可能なADMINがいれば本人ADMINを削除できる", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      passwordHash: "$2b$12$hash",
+      role: "ADMIN",
+    } as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+
+    const txUserDelete = vi.fn().mockResolvedValue({ id: "user-1" });
+    const txUserCount = vi.fn().mockResolvedValue(2);
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) =>
+      fn({
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ ...activeUser, role: "ADMIN" }),
+          delete: txUserDelete,
+          count: txUserCount,
+        },
+        auditLog: { create: vi.fn().mockResolvedValue({}) },
+      } as never),
     );
-    expect(txRefreshDeleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
-    expect(txPasswordResetDeleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
-    expect(txEmailVerificationDeleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
+
+    await deleteCurrentUser({ userId: "user-1", currentPassword: "Pass1234!" });
+
+    expect(txUserCount).toHaveBeenCalledOnce();
+    expect(txUserDelete).toHaveBeenCalledWith({ where: { id: "user-1" } });
+  });
+
+  it("異常系: 初回取得時にユーザーが存在しなければ409でtransactionを開始しない", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(null as never);
+
+    await expect(
+      deleteCurrentUser({ userId: "user-1", currentPassword: "Pass1234!" }),
+    ).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(bcrypt.compare).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it("異常系: パスワード不一致なら UserError(400) を投げる", async () => {
@@ -129,6 +203,185 @@ describe("deleteCurrentUser", () => {
       message: "現在のパスワードが正しくありません",
     });
     expect(bcrypt.compare).toHaveBeenCalledWith(STRONG_PASSWORD_73_BYTES, "$2b$12$hash");
+  });
+
+  it("異常系: transaction内でユーザーが消えていれば409で削除しない", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      passwordHash: "$2b$12$hash",
+      role: "USER",
+    } as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    const txUserDelete = vi.fn();
+    const txAuditLogCreate = vi.fn();
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) =>
+      fn({
+        user: { findUnique: vi.fn().mockResolvedValue(null), delete: txUserDelete },
+        auditLog: { create: txAuditLogCreate },
+      } as never),
+    );
+
+    await expect(
+      deleteCurrentUser({ userId: "user-1", currentPassword: "Pass1234!" }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(txUserDelete).not.toHaveBeenCalled();
+    expect(txAuditLogCreate).not.toHaveBeenCalled();
+  });
+
+  it("異常系: 本人確認後にpasswordHashが変わっていれば409で削除しない", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      passwordHash: "$2b$12$old-hash",
+      role: "USER",
+    } as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    const txUserDelete = vi.fn();
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) =>
+      fn({
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ ...activeUser, passwordHash: "$2b$12$new-hash" }),
+          delete: txUserDelete,
+        },
+        auditLog: { create: vi.fn() },
+      } as never),
+    );
+
+    await expect(
+      deleteCurrentUser({ userId: "user-1", currentPassword: "Pass1234!" }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(txUserDelete).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["停止済み", { isActive: false }],
+    ["メール未確認", { emailVerified: false }],
+    ["lock中", { lockedUntil: new Date("2099-01-01T00:00:00.000Z") }],
+    ["legacy削除済み", { deletedAt: new Date("2026-07-01T00:00:00.000Z") }],
+  ])("異常系: transaction内で%sなら409で削除しない", async (_label, override) => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      passwordHash: "$2b$12$hash",
+      role: "USER",
+    } as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    const txUserDelete = vi.fn();
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) =>
+      fn({
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ ...activeUser, ...override }),
+          delete: txUserDelete,
+        },
+        auditLog: { create: vi.fn() },
+      } as never),
+    );
+
+    await expect(
+      deleteCurrentUser({ userId: "user-1", currentPassword: "Pass1234!" }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(txUserDelete).not.toHaveBeenCalled();
+  });
+
+  it("異常系: 最後の利用可能なADMINは409で退会を拒否する", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      passwordHash: "$2b$12$hash",
+      role: "ADMIN",
+    } as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    const txUserDelete = vi.fn();
+    const txAuditLogCreate = vi.fn();
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) =>
+      fn({
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ ...activeUser, role: "ADMIN" }),
+          count: vi.fn().mockResolvedValue(1),
+          delete: txUserDelete,
+        },
+        auditLog: { create: txAuditLogCreate },
+      } as never),
+    );
+
+    await expect(
+      deleteCurrentUser({ userId: "user-1", currentPassword: "Pass1234!" }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "最後の管理者は退会できません",
+    });
+    expect(txUserDelete).not.toHaveBeenCalled();
+    expect(txAuditLogCreate).not.toHaveBeenCalled();
+  });
+
+  it("競合系: P2034が1回ならtransaction全体を再試行し成功監査は1件だけ作る", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      passwordHash: "$2b$12$hash",
+      role: "USER",
+    } as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    const txUserDelete = vi.fn().mockResolvedValue({ id: "user-1" });
+    const txAuditLogCreate = vi.fn().mockResolvedValue({});
+    vi.mocked(prisma.$transaction)
+      .mockRejectedValueOnce(createSerializationConflictError())
+      .mockImplementationOnce(async (fn) =>
+        fn({
+          user: {
+            findUnique: vi.fn().mockResolvedValue(activeUser),
+            delete: txUserDelete,
+            count: vi.fn(),
+          },
+          auditLog: { create: txAuditLogCreate },
+        } as never),
+      );
+
+    await deleteCurrentUser({ userId: "user-1", currentPassword: "Pass1234!" });
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(txUserDelete).toHaveBeenCalledOnce();
+    expect(txAuditLogCreate).toHaveBeenCalledOnce();
+  });
+
+  it("競合系: P2034が2回続いたら409へ変換する", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      passwordHash: "$2b$12$hash",
+      role: "USER",
+    } as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    vi.mocked(prisma.$transaction).mockRejectedValue(createSerializationConflictError());
+
+    await expect(
+      deleteCurrentUser({ userId: "user-1", currentPassword: "Pass1234!" }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "同時操作により退会できませんでした。再試行してください",
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it("異常系: 成功監査の保存に失敗したらerrorを伝播して成功扱いにしない", async () => {
+    const auditError = new Error("audit insert failed");
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      passwordHash: "$2b$12$hash",
+      role: "USER",
+    } as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    const txUserDelete = vi.fn().mockResolvedValue({ id: "user-1" });
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) =>
+      fn({
+        user: {
+          findUnique: vi.fn().mockResolvedValue(activeUser),
+          delete: txUserDelete,
+          count: vi.fn(),
+        },
+        auditLog: { create: vi.fn().mockRejectedValue(auditError) },
+      } as never),
+    );
+
+    await expect(
+      deleteCurrentUser({ userId: "user-1", currentPassword: "Pass1234!" }),
+    ).rejects.toBe(auditError);
+    expect(txUserDelete).toHaveBeenCalledOnce();
   });
 });
 

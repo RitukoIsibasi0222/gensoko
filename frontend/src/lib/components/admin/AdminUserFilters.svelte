@@ -72,9 +72,7 @@
     }
 
     const value = (event.currentTarget as HTMLSelectElement).value;
-    onStatusChange(
-      value === 'active' || value === 'suspended' || value === 'deleted' ? value : undefined
-    );
+    onStatusChange(value === 'active' || value === 'suspended' ? value : undefined);
   }
 
   function handleReset(): void {
@@ -156,9 +154,8 @@
         class="focus:border-brand focus:ring-brand mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-1 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100"
       >
         <option value="">すべての状態</option>
-        <option value="active">有効（未退会）</option>
+        <option value="active">有効</option>
         <option value="suspended">停止中</option>
-        <option value="deleted">退会済み</option>
       </select>
     </div>
   </div>

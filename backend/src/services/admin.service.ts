@@ -2,6 +2,11 @@ import { AuditResult, Prisma, type Role } from "@prisma/client";
 import { calculateAccuracyRate, normalizeNonNegativeCount } from "../lib/stats.js";
 import { prisma } from "../lib/prisma.js";
 import {
+  SerializationRetryExhaustedError,
+  runSerializableTransaction,
+} from "../lib/serializable-transaction.js";
+import { getUsableAdminWhere, isUsableAdmin } from "../lib/usable-admin.js";
+import {
   AUDIT_ACTIONS,
   AUDIT_FAILURE_REASONS,
   AUDIT_TARGET_TYPES,
@@ -93,8 +98,8 @@ export type AdminStats = {
 
 export const ADMIN_USERS_DEFAULT_LIMIT = 20;
 export const ADMIN_USERS_MAX_LIMIT = 100;
-const ADMIN_MUTATION_MAX_SERIALIZATION_ATTEMPTS = 2;
 const ADMIN_MUTATION_CONFLICT_MESSAGE = "同時操作により処理できませんでした。再試行してください";
+const currentUserWhere = { deletedAt: null } satisfies Prisma.UserWhereInput;
 
 type AdminAuditDescriptor = {
   action: AdminAuditAction;
@@ -175,33 +180,13 @@ function normalizeLimit(limit: number | undefined): number {
   return Math.min(Math.max(integerLimit, 1), ADMIN_USERS_MAX_LIMIT);
 }
 
-function getUsableAdminWhere(now: Date): Prisma.UserWhereInput {
-  return {
-    role: "ADMIN",
-    isActive: true,
-    deletedAt: null,
-    emailVerified: true,
-    OR: [{ lockedUntil: null }, { lockedUntil: { lte: now } }],
-  };
-}
-
-function isUsableAdmin(user: AdminUserSummaryRow, now: Date): boolean {
-  return (
-    user.role === "ADMIN" &&
-    user.isActive &&
-    user.deletedAt === null &&
-    user.emailVerified &&
-    (user.lockedUntil === null || user.lockedUntil <= now)
-  );
-}
-
 function buildAdminUsersWhere(input: {
   q?: string;
   role?: Role;
   status?: AdminUserStatusFilter;
   cursor?: { id: string; createdAt: Date };
 }): Prisma.UserWhereInput {
-  const where: Prisma.UserWhereInput = {};
+  const where: Prisma.UserWhereInput = { ...currentUserWhere };
   const andConditions: Prisma.UserWhereInput[] = [];
   const normalizedQuery = input.q?.trim();
 
@@ -211,16 +196,10 @@ function buildAdminUsersWhere(input: {
 
   if (input.status === "active") {
     where.isActive = true;
-    where.deletedAt = null;
   }
 
   if (input.status === "suspended") {
     where.isActive = false;
-    where.deletedAt = null;
-  }
-
-  if (input.status === "deleted") {
-    where.deletedAt = { not: null };
   }
 
   if (normalizedQuery) {
@@ -307,55 +286,35 @@ async function deleteUserTokens(tx: TokenCleanupClient, userId: string): Promise
   ]);
 }
 
-function isSerializationConflict(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
-}
-
 // 最後の管理者保護は count -> update なので、write skew を DB 側で検出する。
 async function runAdminMutationTransaction<T>(
   audit: AdminAuditDescriptor,
   callback: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
-  for (let attempt = 1; attempt <= ADMIN_MUTATION_MAX_SERIALIZATION_ATTEMPTS; attempt += 1) {
-    try {
-      return await prisma.$transaction(
-        async (tx) => {
-          const result = await callback(tx);
-          await recordAuditEvent(tx, {
-            action: audit.action,
-            result: AuditResult.SUCCESS,
-            actorId: audit.adminUserId,
-            actorRole: "ADMIN",
-            targetType: AUDIT_TARGET_TYPES.USER,
-            targetId: audit.targetUserId,
-            failureReason: null,
-          });
-          return result;
-        },
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        },
+  try {
+    return await runSerializableTransaction(async (tx) => {
+      const result = await callback(tx);
+      await recordAuditEvent(tx, {
+        action: audit.action,
+        result: AuditResult.SUCCESS,
+        actorId: audit.adminUserId,
+        actorRole: "ADMIN",
+        targetType: AUDIT_TARGET_TYPES.USER,
+        targetId: audit.targetUserId,
+        failureReason: null,
+      });
+      return result;
+    });
+  } catch (error) {
+    if (error instanceof SerializationRetryExhaustedError) {
+      throw new AdminServiceError(
+        409,
+        ADMIN_MUTATION_CONFLICT_MESSAGE,
+        AUDIT_FAILURE_REASONS.SERIALIZATION_CONFLICT,
       );
-    } catch (error) {
-      if (!isSerializationConflict(error)) {
-        throw error;
-      }
-
-      if (attempt === ADMIN_MUTATION_MAX_SERIALIZATION_ATTEMPTS) {
-        throw new AdminServiceError(
-          409,
-          ADMIN_MUTATION_CONFLICT_MESSAGE,
-          AUDIT_FAILURE_REASONS.SERIALIZATION_CONFLICT,
-        );
-      }
     }
+    throw error;
   }
-
-  throw new AdminServiceError(
-    409,
-    ADMIN_MUTATION_CONFLICT_MESSAGE,
-    AUDIT_FAILURE_REASONS.SERIALIZATION_CONFLICT,
-  );
 }
 
 async function runAuditedAdminMutation<T>(
@@ -385,6 +344,10 @@ export async function getAdminUsers(input: AdminUserListQuery = {}): Promise<{
   users: AdminUserListItem[];
   nextCursor: string | null;
 }> {
+  if (input.status === "deleted") {
+    return { users: [], nextCursor: null };
+  }
+
   const limit = normalizeLimit(input.limit);
   const normalizedCursor = input.cursor?.trim();
   const normalizedQuery = input.q?.trim();
@@ -436,7 +399,7 @@ export async function getAdminUserDetail(input: {
     select: adminUserDetailSelect,
   });
 
-  if (!user) {
+  if (!user || user.deletedAt) {
     throw new AdminServiceError(404, "ユーザーが見つかりません");
   }
 
@@ -625,6 +588,26 @@ export async function forceDeleteAdminUser(input: {
     }
 
     return await runAdminMutationTransaction(audit, async (tx) => {
+      const actor = await tx.user.findUnique({
+        where: { id: adminUserId },
+        select: {
+          id: true,
+          role: true,
+          isActive: true,
+          emailVerified: true,
+          lockedUntil: true,
+          deletedAt: true,
+        },
+      });
+      const now = new Date();
+      if (!actor || !isUsableAdmin(actor, now)) {
+        throw new AdminServiceError(
+          409,
+          "管理者の状態が変更されています。再ログインしてください",
+          AUDIT_FAILURE_REASONS.ACTOR_STATE_CONFLICT,
+        );
+      }
+
       const targetUser = await tx.user.findUnique({
         where: { id: targetUserId },
         select: adminUserSummarySelect,
@@ -647,7 +630,6 @@ export async function forceDeleteAdminUser(input: {
         );
       }
 
-      const now = new Date();
       if (isUsableAdmin(targetUser, now)) {
         const usableAdminCount = await tx.user.count({ where: getUsableAdminWhere(now) });
         if (usableAdminCount <= 1) {
@@ -660,12 +642,7 @@ export async function forceDeleteAdminUser(input: {
         }
       }
 
-      await tx.user.update({
-        where: { id: targetUserId },
-        data: { isActive: false, deletedAt: now, lockedUntil: null },
-        select: { id: true },
-      });
-      await deleteUserTokens(tx, targetUserId);
+      await tx.user.delete({ where: { id: targetUserId } });
 
       return { message: "ユーザーを強制退会しました" };
     });
@@ -677,22 +654,21 @@ export async function getAdminStats(): Promise<AdminStats> {
     totalUsers,
     activeUsers,
     suspendedUsers,
-    deletedUsers,
     adminUsers,
     emailVerifiedUsers,
     totalSessions,
     totalWeakElements,
     statsAggregate,
   ] = await Promise.all([
-    prisma.user.count(),
-    prisma.user.count({ where: { isActive: true, deletedAt: null } }),
-    prisma.user.count({ where: { isActive: false, deletedAt: null } }),
-    prisma.user.count({ where: { deletedAt: { not: null } } }),
-    prisma.user.count({ where: { role: "ADMIN", deletedAt: null } }),
-    prisma.user.count({ where: { emailVerified: true, deletedAt: null } }),
-    prisma.gameSession.count(),
-    prisma.weakElement.count(),
+    prisma.user.count({ where: currentUserWhere }),
+    prisma.user.count({ where: { ...currentUserWhere, isActive: true } }),
+    prisma.user.count({ where: { ...currentUserWhere, isActive: false } }),
+    prisma.user.count({ where: { ...currentUserWhere, role: "ADMIN" } }),
+    prisma.user.count({ where: { ...currentUserWhere, emailVerified: true } }),
+    prisma.gameSession.count({ where: { user: currentUserWhere } }),
+    prisma.weakElement.count({ where: { user: currentUserWhere } }),
     prisma.userStats.aggregate({
+      where: { user: currentUserWhere },
       _sum: { totalAnswered: true, totalCorrect: true, masteredCount: true },
     }),
   ]);
@@ -705,7 +681,7 @@ export async function getAdminStats(): Promise<AdminStats> {
       total: normalizeNonNegativeCount(totalUsers),
       active: normalizeNonNegativeCount(activeUsers),
       suspended: normalizeNonNegativeCount(suspendedUsers),
-      deleted: normalizeNonNegativeCount(deletedUsers),
+      deleted: 0,
       admins: normalizeNonNegativeCount(adminUsers),
       emailVerified: normalizeNonNegativeCount(emailVerifiedUsers),
     },

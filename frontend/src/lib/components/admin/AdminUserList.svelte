@@ -39,10 +39,7 @@
   }
 
   function getAccountStatus(user: AdminUserListItem): string {
-    if (user.deletedAt !== null) {
-      return '退会済み';
-    }
-    return user.isActive ? '有効（未退会）' : '停止中';
+    return user.isActive ? '有効' : '停止中';
   }
 
   function isLocked(user: AdminUserListItem): boolean {
@@ -118,6 +115,8 @@
     <button
       type="button"
       data-admin-action="delete"
+      data-admin-view={view}
+      data-admin-user-id={user.id}
       aria-label={user.username + 'を強制退会'}
       aria-describedby={getBlockReasonId(user, 'delete', view)}
       disabled={getAdminActionBlockReason(user, 'delete', currentUserId) !== null}

@@ -96,7 +96,7 @@ describe("PATCH /admin/users/:id/role", () => {
         role: "ADMIN",
         emailVerified: true,
         isActive: true,
-        deletedAt: null,
+        deletedAt: new Date("2026-06-01T00:00:00.000Z"),
         lockedUntil: null,
         lastLoginAt: null,
         createdAt: new Date("2026-05-01T00:00:00.000Z"),
@@ -116,7 +116,9 @@ describe("PATCH /admin/users/:id/role", () => {
       targetUserId: "user-1",
       role: "ADMIN",
     });
-    expect((await res.json()).user.role).toBe("ADMIN");
+    const body = await res.json();
+    expect(body.user.role).toBe("ADMIN");
+    expect(body.user.deletedAt).toBeNull();
   });
 
   it("role が不正なら400を返し service を呼ばない", async () => {
