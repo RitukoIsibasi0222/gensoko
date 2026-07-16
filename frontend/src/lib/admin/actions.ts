@@ -15,9 +15,6 @@ export function getAdminActionBlockReason(
   if (user.id === currentUserId) {
     return '自分自身には管理操作を実行できません';
   }
-  if (user.deletedAt !== null) {
-    return '退会済みユーザーは変更できません';
-  }
   if (action === 'role') {
     if (!user.isActive) {
       return '停止中のユーザーはロール変更できません';

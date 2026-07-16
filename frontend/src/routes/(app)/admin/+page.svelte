@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import {
@@ -41,6 +42,12 @@
     | 'error';
   type DialogMode = 'closed' | 'detail' | 'confirmation';
   type ListLoadMode = 'initial' | 'list' | 'page' | 'sync';
+  type AdminListView = 'desktop' | 'mobile';
+  type PendingDeleteFocus = {
+    userId: string;
+    index: number;
+    view: AdminListView;
+  };
   /* eslint-disable no-unused-vars -- Svelte parserがcallback型の引数名を実変数として判定するため */
   type AuthenticatedRequest<T> = (latestAccessToken: string) => Promise<T>;
   /* eslint-enable no-unused-vars */
@@ -59,6 +66,8 @@
   let paginationError = $state<string | null>(null);
   let isPostMutationSyncing = $state(false);
   let postMutationSyncError = $state<string | null>(null);
+  let postMutationSyncKind = $state<'delete' | 'other' | null>(null);
+  let pendingDeleteFocus = $state<PendingDeleteFocus | null>(null);
   let activeQuery = $state<AdminUsersQuery>({});
   let searchDraft = $state('');
 
@@ -369,6 +378,8 @@
   function resetDialogState(): void {
     closeDetail();
     resetConfirmation();
+    pendingDeleteFocus = null;
+    postMutationSyncKind = null;
   }
 
   function closeAdminDialog(): void {
@@ -420,6 +431,50 @@
     if (accessToken !== null) {
       void synchronizeAfterMutation(null, false, accessToken);
     }
+  }
+
+  function getAdminListView(trigger: HTMLElement | null): AdminListView {
+    if (trigger?.dataset.adminView === 'mobile' || trigger?.closest('[data-mobile-admin-list]')) {
+      return 'mobile';
+    }
+    return 'desktop';
+  }
+
+  function findDeleteActionButton(userId: string, view: AdminListView): HTMLButtonElement | null {
+    const buttons = document.querySelectorAll<HTMLButtonElement>(
+      'button[data-admin-action="delete"][data-admin-view="' + view + '"]'
+    );
+    return (
+      Array.from(buttons).find(
+        (button) => button.dataset.adminUserId === userId && !button.disabled
+      ) ?? null
+    );
+  }
+
+  async function closeAfterDeleteAndFocus(): Promise<void> {
+    const pendingFocus = pendingDeleteFocus;
+    await tick();
+
+    const view = pendingFocus?.view ?? 'desktop';
+    const samePositionUser = pendingFocus ? users[pendingFocus.index] : undefined;
+    const nextUser =
+      pendingFocus && samePositionUser?.id === pendingFocus.userId
+        ? users[pendingFocus.index + 1]
+        : samePositionUser;
+    const previousUser =
+      pendingFocus && pendingFocus.index > 0 ? users[pendingFocus.index - 1] : undefined;
+    const nextAction = nextUser ? findDeleteActionButton(nextUser.id, view) : null;
+    const previousAction =
+      !nextAction && previousUser ? findDeleteActionButton(previousUser.id, view) : null;
+    const focusTarget = nextAction ?? previousAction ?? listHeading ?? pageHeading ?? null;
+
+    returnFocus = focusTarget;
+    pendingDeleteFocus = null;
+    postMutationSyncKind = null;
+    resetConfirmation();
+    selectedListUser = null;
+    await tick();
+    focusTarget?.focus();
   }
 
   function buildAdminUrl(searchParams: URLSearchParams): string {
@@ -524,6 +579,8 @@
       const firstPageQuery = { ...activeQuery };
       delete firstPageQuery.cursor;
       resetConfirmation();
+      pendingDeleteFocus = null;
+      postMutationSyncKind = null;
       liveMessage = '一覧の先頭へ戻りました';
       try {
         await navigateList(firstPageQuery);
@@ -533,7 +590,13 @@
       return;
     }
 
+    if (pendingDeleteFocus !== null) {
+      await closeAfterDeleteAndFocus();
+      return;
+    }
+
     if (!shouldRestoreDetail || targetUser === null) {
+      postMutationSyncKind = null;
       resetConfirmation();
       selectedListUser = null;
       return;
@@ -543,6 +606,7 @@
     confirmationAction = null;
     mutationError = null;
     restoreDetailAfterMutation = false;
+    postMutationSyncKind = null;
     dialogMode = 'detail';
     const latestAccessToken = authStore.accessToken ?? accessToken;
     await loadDetail(targetUser, latestAccessToken);
@@ -564,6 +628,8 @@
     const shouldRestoreDetail = restoreDetailAfterMutation;
     isMutationSubmitting = true;
     mutationError = null;
+    postMutationSyncKind = null;
+    pendingDeleteFocus = null;
 
     try {
       const response = await requestWithReauth(accessToken, (latestAccessToken) => {
@@ -587,6 +653,14 @@
         });
       });
 
+      postMutationSyncKind = action.type === 'delete' ? 'delete' : 'other';
+      if (action.type === 'delete') {
+        pendingDeleteFocus = {
+          userId: targetUser.id,
+          index: users.findIndex((user) => user.id === targetUser.id),
+          view: getAdminListView(returnFocus)
+        };
+      }
       liveMessage = response.message;
       toastStore.success(response.message);
       const latestAccessToken = authStore.accessToken ?? accessToken;
@@ -737,7 +811,9 @@
       {#if postMutationSyncError !== null}
         <div role="alert" class="rounded-xl border border-amber-300 bg-amber-50 p-4">
           <p class="font-semibold text-amber-950">
-            管理操作は完了しましたが、最新情報を取得できませんでした
+            {postMutationSyncKind === 'delete'
+              ? '強制退会は完了しましたが、ユーザー一覧を更新できませんでした'
+              : '管理操作は完了しましたが、最新情報を取得できませんでした'}
           </p>
           <p class="mt-1 text-sm text-amber-900">{postMutationSyncError}</p>
           <button

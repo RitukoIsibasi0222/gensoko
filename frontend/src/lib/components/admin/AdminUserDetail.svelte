@@ -31,10 +31,7 @@
   }
 
   function getAccountStatus(detail: AdminUserDetail): string {
-    if (detail.deletedAt !== null) {
-      return '退会済み';
-    }
-    return detail.isActive ? '有効（未退会）' : '停止中';
+    return detail.isActive ? '有効' : '停止中';
   }
 
   function getBlockReasonId(detail: AdminUserDetail, action: AdminListAction): string | undefined {
