@@ -125,6 +125,35 @@ describe("runStagingAccountDeletionMigrationWriteProbe", () => {
     ).rejects.toThrow("staging account deletion性能測定に失敗しました");
     expect(cleanupFixture).toHaveBeenCalledWith("synthetic-user");
   });
+
+  it("fixture作成時間を除外し、作成完了後から指定時間write probeを続ける", async () => {
+    let currentTime = 0;
+    const probeOnce = vi.fn().mockImplementation(async () => {
+      currentTime += 100;
+    });
+
+    await expect(
+      runStagingAccountDeletionMigrationWriteProbe(5_000, {
+        createFixture: vi.fn().mockImplementation(async () => {
+          currentTime += 4_000;
+          return {
+            userId: "synthetic-user",
+            currentPassword: "SyntheticPass1!",
+          };
+        }),
+        probeOnce,
+        cleanupFixture: vi.fn().mockResolvedValue(undefined),
+        getMonotonicTime: () => currentTime,
+        wait: vi.fn().mockImplementation(async (waitMs: number) => {
+          currentTime += waitMs;
+        }),
+      }),
+    ).resolves.toEqual({
+      probeCount: 15,
+      writeProbeMaxDurationMs: 100,
+    });
+    expect(probeOnce).toHaveBeenCalledTimes(15);
+  });
 });
 
 describe("cleanupStagingAccountDeletionFixture", () => {

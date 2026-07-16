@@ -358,10 +358,10 @@ export async function runStagingAccountDeletionMigrationWriteProbe(
   let failure: Error | undefined;
   let probeCount = 0;
   let writeProbeMaxDurationMs = 0;
-  const probeStartedAt = dependencies.getMonotonicTime();
 
   try {
     fixture = await dependencies.createFixture();
+    const probeStartedAt = dependencies.getMonotonicTime();
     do {
       const startedAt = dependencies.getMonotonicTime();
       await dependencies.probeOnce(fixture.userId);
