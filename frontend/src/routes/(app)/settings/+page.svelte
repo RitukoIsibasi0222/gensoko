@@ -124,7 +124,10 @@
   }
 
   function isAbortError(error: unknown): boolean {
-    return error instanceof DOMException && error.name === 'AbortError';
+    return (
+      (error instanceof DOMException && error.name === 'AbortError') ||
+      (error instanceof Error && error.name === 'AbortError')
+    );
   }
 
   async function loadProfile(force = false): Promise<void> {

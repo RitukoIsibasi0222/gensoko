@@ -407,20 +407,26 @@ describe('/settings account deletion A11Y contract', () => {
     });
   });
 
-  it('AbortErrorは削除失敗と断定せず再ログインでの状態確認を案内する', async () => {
-    mocks.deleteCurrentUser.mockRejectedValue(new DOMException('aborted', 'AbortError'));
-    const target = await renderPage();
+  it.each([
+    ['DOMException', new DOMException('aborted', 'AbortError')],
+    ['Error', Object.assign(new Error('aborted'), { name: 'AbortError' })]
+  ])(
+    '%s形式のAbortErrorは削除失敗と断定せず再ログインでの状態確認を案内する',
+    async (_type, error) => {
+      mocks.deleteCurrentUser.mockRejectedValue(error);
+      const target = await renderPage();
 
-    const controls = await submitDeleteForm(target, {
-      currentPassword: 'CurrentPass1!',
-      acknowledged: true
-    });
+      const controls = await submitDeleteForm(target, {
+        currentPassword: 'CurrentPass1!',
+        acknowledged: true
+      });
 
-    const message = controls.form.querySelector('[role="alert"]')?.textContent ?? '';
-    expect(message).toContain('削除結果を確認できませんでした');
-    expect(message).toContain('再ログイン');
-    expect(mocks.toastError).not.toHaveBeenCalled();
-  });
+      const message = controls.form.querySelector('[role="alert"]')?.textContent ?? '';
+      expect(message).toContain('削除結果を確認できませんでした');
+      expect(message).toContain('再ログイン');
+      expect(mocks.toastError).not.toHaveBeenCalled();
+    }
+  );
 
   it('page破棄時はdelete requestへ渡したsignalをabortする', async () => {
     let capturedSignal: AbortSignal | undefined;
