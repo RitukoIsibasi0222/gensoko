@@ -1156,7 +1156,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 - [x] T28: admin deleted UI除去・削除後focusを実装する
 - [x] T29: API/security/testing/deployment docsを更新する
 - [x] T30: backend品質checkを通す
-- [ ] T31: frontend品質checkを通す
+- [x] T31: frontend品質checkを通す
 - [ ] T32: 専用Docker PostgreSQL integration testを通す
 - [ ] T33: staging expand migration・性能を確認する
 - [ ] T34: staging API/UI・Playwrightを確認する
@@ -1219,6 +1219,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 > T29 docs整合記録（2026-07-16）: `docs/02_security.md`、`04_api.md`、`07_testing_flow.md`、`09_startup_commands.md`、`11_deployment.md`を現行service・CLI・workflow契約と突合した。securityの旧soft-delete記述を「codeは物理削除へ移行済み・本番未公開」へ更新し、APIには実装済み契約と未適用状態、testingには専用DB以外へ接続しない境界、startup/deploymentには既定dry-run、stagingのT35明示承認、productionの24時間以内backup/dry-run・execute flag・確認文字列・承認者・change record、不可逆rollback・isolated restore制約を記録した。T1Bはproduction公開・production cleanup・contract migrationの未承認blockerとして維持する。MarkdownへPrettierを適用し、workflow入力名・branch・Artifact保持期間との照合と`git diff --check`が成功した。文書だけの変更であり、コードtest、専用DB、staging/production workflowは実行していない。
 
 > T30 backend品質check記録（2026-07-16）: backendのESLint、Prettier check、TypeScript build、Prisma schema validateが成功した。通常全testは73 files・793件成功、専用DB 3 files・7件skipで、skip内訳はaccount deletion 5件、監査rollback 1件、監査cleanup 1件だった。T29でaccount deletion単体を7件と記載していた誤りを`docs/07_testing_flow.md`で5件へ修正し、全専用DB test合計が7件であることを明記した。専用DBを実接続するT32、frontend品質checkのT31、staging/production workflowは実行していない。
+
+> T31 frontend品質check記録（2026-07-16）: frontendのPrettier適用、ESLint、Svelte/TypeScript check、production buildが成功し、`svelte-check`は0 errors・0 warningsだった。通常全testは44 files・490件すべて成功した。Prettier適用とbuild後にfrontend source差分がないことを確認した。adapter-autoの配備先未確定messageは既知の非errorでbuild終了codeは0だった。実browser・PlaywrightはT34、専用DBはT32、staging/production workflowは各タスク境界まで実行していない。
 
 ## 技術的注意点
 

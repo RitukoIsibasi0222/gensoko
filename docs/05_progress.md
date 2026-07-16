@@ -203,6 +203,7 @@
     - [x] T28: admin deleted UIを除去し、強制退会後の同期・focus・失敗表示を実装（対象85件・frontend全体490件成功）
   - [x] T29: API・security・testing・deployment文書を実装済み契約と未承認gateへ同期（6文書とworkflow/CLIを照合、Prettier・diff check成功。実環境workflow未実行）
   - [x] T30: backend品質check完了（ESLint・Prettier・TypeScript build・Prisma validate成功、通常全test 793件成功・専用DB 7件skip）
+  - [x] T31: frontend品質check完了（Prettier・ESLint・Svelte/TypeScript check・production build成功、通常全test 490件成功）
   - [ ] Phase 5: `deletedAt` 非参照codeへの移行、v1 deprecated互換値の維持、deploy・soak
   - [ ] Phase 6: cleanup後backup、旧Artifactの7日失効、isolated restore drill・削除replay
   - [ ] Phase 7: guard付きcontract migrationをstaging・productionへ適用
