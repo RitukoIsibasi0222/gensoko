@@ -121,7 +121,7 @@ describe('AdminUserDetail', () => {
     ]);
   });
 
-  it('自分自身・退会済み・停止中role変更をdisabledにして理由を関連付ける', async () => {
+  it('自分自身・停止中role変更をdisabledにして理由を関連付ける', async () => {
     const selfTarget = renderDetail({ currentUserId: USER.id });
     const selfButtons = Array.from(
       selfTarget.querySelectorAll<HTMLButtonElement>('button[data-action]')
@@ -142,5 +142,18 @@ describe('AdminUserDetail', () => {
     expect(roleButton?.disabled).toBe(true);
     expect(roleButton?.getAttribute('aria-describedby')).toBe('admin-detail-role-block-reason');
     expect(suspendedTarget.textContent).toContain('停止中のユーザーはロール変更できません');
+  });
+
+  it('deprecated deletedAtをstatus表示・操作可否の判断に使用しない', () => {
+    const target = renderDetail({
+      user: { ...USER, deletedAt: '2026-07-11T00:00:00.000Z' }
+    });
+    const buttons = Array.from(target.querySelectorAll<HTMLButtonElement>('button[data-action]'));
+
+    expect(target.textContent).toContain('有効');
+    expect(target.textContent).not.toContain('退会済み');
+    expect(target.textContent).not.toContain('未退会');
+    expect(buttons.every((button) => !button.disabled)).toBe(true);
+    expect(target.textContent).not.toContain('退会済みユーザーは変更できません');
   });
 });

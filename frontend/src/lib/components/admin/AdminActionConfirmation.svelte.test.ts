@@ -63,8 +63,9 @@ describe('AdminActionConfirmation', () => {
     const target = renderConfirmation({ type: 'status', nextIsActive: false });
 
     expect(target.textContent).toContain('taro');
-    expect(target.textContent).toContain('有効（未退会）');
+    expect(target.textContent).toContain('有効');
     expect(target.textContent).toContain('停止中');
+    expect(target.textContent).not.toContain('未退会');
   });
 
   it('role変更の現在値と変更後を表示する', () => {
@@ -81,7 +82,12 @@ describe('AdminActionConfirmation', () => {
     const input = target.querySelector('input') as HTMLInputElement;
     const confirmButton = target.querySelector('[data-confirm]') as HTMLButtonElement;
 
-    expect(target.textContent).toContain('この管理画面から元に戻せません');
+    expect(target.textContent).toContain('稼働DB');
+    expect(target.textContent).toContain('プロフィール');
+    expect(target.textContent).toContain('認証情報');
+    expect(target.textContent).toContain('学習データ');
+    expect(target.textContent).toContain('物理削除');
+    expect(target.textContent).toContain('取り消せません');
     expect(input.getAttribute('autocomplete')).toBe('off');
     expect(input.getAttribute('spellcheck')).toBe('false');
     expect(confirmButton.disabled).toBe(true);
@@ -93,6 +99,17 @@ describe('AdminActionConfirmation', () => {
     expect(confirmButton.disabled).toBe(false);
     confirmButton.click();
     expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('deprecated deletedAtを現在statusの表示判断に使用しない', () => {
+    const target = renderConfirmation(
+      { type: 'status', nextIsActive: false },
+      { user: { ...USER, deletedAt: '2026-07-11T00:00:00.000Z' } }
+    );
+
+    expect(target.textContent).toContain('有効');
+    expect(target.textContent).not.toContain('退会済み');
+    expect(target.textContent).not.toContain('未退会');
   });
 
   it('cancelはconfirmを実行せず親へ通知する', () => {

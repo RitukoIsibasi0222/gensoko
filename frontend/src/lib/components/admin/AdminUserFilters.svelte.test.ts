@@ -46,7 +46,7 @@ afterEach(async () => {
 });
 
 describe('AdminUserFilters', () => {
-  it('検索・role・statusに明示的なlabelと選択肢を表示する', () => {
+  it('検索・role・current statusに明示的なlabelと選択肢を表示する', () => {
     const target = renderFilters();
 
     expect(target.querySelector('label[for=admin-user-search]')?.textContent).toContain(
@@ -57,7 +57,10 @@ describe('AdminUserFilters', () => {
       'アカウント状態'
     );
     expect(target.textContent).toContain('すべてのロール');
+    expect(target.textContent).toContain('有効');
     expect(target.textContent).toContain('停止中');
+    expect(target.textContent).not.toContain('退会済み');
+    expect(target.textContent).not.toContain('未退会');
     expect(target.textContent).not.toContain('ログイン可能');
   });
 
@@ -135,6 +138,17 @@ describe('AdminUserFilters', () => {
 
     expect(onRoleChange).toHaveBeenCalledWith('ADMIN');
     expect(onStatusChange).toHaveBeenCalledWith('suspended');
+  });
+
+  it('deprecated deleted statusを親へ通知しない', () => {
+    const onStatusChange = vi.fn();
+    const target = renderFilters({ onStatusChange });
+    const statusSelect = target.querySelector('#admin-user-status') as HTMLSelectElement;
+
+    statusSelect.value = 'deleted';
+    statusSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(onStatusChange).toHaveBeenCalledWith(undefined);
   });
 
   it('resetで入力errorを消し、親へ全条件リセットを通知する', async () => {
