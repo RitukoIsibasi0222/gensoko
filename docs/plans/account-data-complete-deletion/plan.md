@@ -1149,7 +1149,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 - [x] T21: auth削除後回帰testとservice契約を更新する
 - [x] T22: admin v1互換一覧/detail/stats契約を更新する
 - [x] T23: settings A11Y Red testを追加する
-- [ ] T24: settings説明/error/focus/busyを実装する
+- [x] T24: settings説明/error/focus/busyを実装する
 - [ ] T25: auth store cross-tab Red testを追加する
 - [ ] T26: account deletion local/cross-tab clearを実装する
 - [ ] T27: admin frontend Red testを追加する
@@ -1205,6 +1205,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 > T22 TDD記録（2026-07-16）: admin v1のdeprecated互換として、無指定一覧からlegacy soft-deleted userを除外し、`status=deleted`はcursorを参照せず200空一覧、legacy詳細は404、一覧・詳細・status/role mutationの`deletedAt`はroute境界で常に`null`、statsの`users.deleted`は常に0とするtestを先行追加・更新した。game/learning statsもlegacy userの所有dataをrelation filterで除外する。Redは対象55件中47件成功・8件失敗で、一覧・詳細・互換field・current data集計の不一致を確認した。Greenでは一覧のcurrent User条件、deleted filterの早期空応答、legacy詳細404、route互換値合成、statsのcurrent row限定を実装し、対象55件が全通過した。Refactorではcurrent User条件を共通定数へ集約した。mutationのlegacy 409判定とDB `deletedAt`参照はT39まで維持する。backend全体は793件成功、専用DB test 7件skip、lint、format check、buildが成功した。専用DB・staging・productionは実行していない。
 
 > T23 Red記録（2026-07-16）: settings退会フォームへ、稼働DBのprofile/auth/learning dataと不可逆性の警告、password・同意checkbox別error、`aria-invalid` / `aria-describedby`、最初のinvalid controlへのfocus、送信中の`aria-busy`・button無効化・二重submit防止、400/409/429/503のbackend message保持、network message、Abort時の結果不明案内、page破棄時のrequest abort契約testを追加した。T1B未承認の監査保持期間・backup表示と、T25/T26のlocal/cross-tab clearは対象外とした。初回は将来のform error IDへAPI/network testも依存して12件Redだったため、control別IDとform alertの責務を分離してtestをRefactorした。確定Redは専用18件中11件成功・7件失敗で、警告文、control別error/focus、busy、Abort契約の不足だけを確認した。frontend全体は466件成功・同じ7件Redで、他42 test fileに回帰失敗はない。lint、Prettier、Svelte/TypeScript checkは成功した。画面sourceは変更せず、GreenはT24で行う。
+
+> T24 Green/Refactor記録（2026-07-16）: settings退会フォームの警告を、プロフィール・認証・学習データを稼働DBから物理削除し取り消せない内容へ更新した。password・同意checkbox・form errorを独立stateに分け、両validationを同時評価して`tick()`後にpassword→checkboxの順でfocusし、各controlへ専用の`aria-invalid` / `aria-describedby`を設定した。formの`aria-busy`と既存submit guard・button disabledを維持し、request単位の`AbortController`をAPIへ渡す。AbortErrorは通常network errorと区別して、page表示中は削除結果不明と再ログイン確認を案内し、page破棄時はSvelte 5のeffect cleanupでrequestをabortしてerror toastを出さない。最初のGreen実行は`onDestroy`がtest環境のserver exportへ解決され全18件mount失敗となったため、既存Svelte 5構成に合わせてeffect cleanupへRefactorした。その後、専用18件とfrontend全体473件が全通過し、lint、Prettier、Svelte/TypeScript check、production buildが成功した。T25/T26のlocal/cross-tab clear、実ブラウザ・staging確認は未実施。
 
 ## 技術的注意点
 

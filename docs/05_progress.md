@@ -196,6 +196,7 @@
   - [ ] Phase 3: staging cleanupを検証し、Phase 2・4の同時公開後にproductionの既存soft-deleted userをdry-run・batch削除・冪等再実行
   - [-] Phase 4: 設定画面・認証store・管理画面の契約／A11Y整合
     - [x] T23: settings退会フォームの説明・control別error・focus・busy・Abort契約をRed test化（専用18件中11件成功・7件Red、frontend全体466件成功・7件Red）
+    - [x] T24: settings退会フォームの説明・control別error・focus・busy・Abortを実装（専用18件・frontend全体473件成功）
   - [ ] Phase 5: `deletedAt` 非参照codeへの移行、v1 deprecated互換値の維持、deploy・soak
   - [ ] Phase 6: cleanup後backup、旧Artifactの7日失効、isolated restore drill・削除replay
   - [ ] Phase 7: guard付きcontract migrationをstaging・productionへ適用
