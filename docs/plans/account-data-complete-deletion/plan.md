@@ -504,8 +504,10 @@ Zod validationは既存どおり次を返す。
   "error": "バリデーションエラー",
   "details": [
     {
+      "origin": "string",
       "code": "too_small",
       "minimum": 1,
+      "inclusive": true,
       "message": "現在のパスワードを入力してください",
       "path": ["currentPassword"]
     }
