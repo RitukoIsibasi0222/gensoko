@@ -167,6 +167,27 @@ npm run format
 - workflowは実装済みだが実環境では未実行である。staging executeはT35で明示承認を得てから行い、T1Bのprivacy・監査保持・削除replay・本番cleanup体制が承認されるまでproduction executeを行わない
 - staging dry-run/executeはT35、production dry-run/executeはT38のタスク境界で、`docs/11_deployment.md`のrunbookに従って実行する
 
+### T33 staging expand migration・cascade性能確認
+
+T33ではlegacy cleanup workflowを使わず、次の2つのmanual workflowを分離して使う。どちらも`develop`・staging Environment固定で、`gensoko-batch-jobs` concurrencyにより他のDB batchと直列化する。
+
+| workflow                               | 用途                                                                  | DB変更                           |
+| -------------------------------------- | --------------------------------------------------------------------- | -------------------------------- |
+| `Staging Database Setup`               | 対象expand migrationの適用時間とsynthetic write待ち時間を測定         | migrationとsynthetic fixtureだけ |
+| `Staging Account Deletion Performance` | 既存Userの最大件数preview、実`deleteCurrentUser`経路のcascade時間測定 | execute時のsynthetic Userだけ    |
+
+実行前にstaging Environmentへ`STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED=false`を登録する。previewは`false`のまま実行できる。migration write probeまたはperformance executeの明示承認中だけ`true`へ変更し、終了・失敗後は直ちに`false`へ戻す。
+
+1. `Staging Account Deletion Performance`の`preview`を実行し、既存Userの最大GameSession・GameAnswer件数だけを記録する。
+2. 対象migrationが未適用であることを確認する。初回適用後は同じindex作成時間を再測定できないため、計測workflowをmergeする前に適用しない。
+3. flagを`true`へ変更し、`Staging Database Setup`へ確認文字列`MEASURE_STAGING_ACCOUNT_DELETION_MIGRATION`と5,000〜120,000msのprobe時間を指定する。
+4. summaryの`migrationDurationMs`、`writeProbeMaxDurationMs`、migration pending 0を確認する。
+5. preview値以上かつ上限以内（GameSession 5,000、GameAnswer 50,000）の件数、platform request timeout、確認文字列`MEASURE_STAGING_ACCOUNT_DELETION`を指定し、performance `execute`を実行する。
+6. `durationMs <= min(platform timeoutの50%, 5,000ms)`、synthetic fixture cleanup成功を確認する。
+7. flagを`false`へ戻す。
+
+既存User ID、email、username、DATABASE_URL、project ref、生ErrorをActions log・Issue・PR・チャットへ転記しない。preview最大値が上限を超える、または同期削除が基準を超える場合は本番公開を停止し、fixture上限を安易に引き上げず非同期削除方式を再設計する。T35の`Staging Account Data Deletion` executeはこの手順では実行しない。
+
 backend/.env の DATABASE_URL は Docker Compose 内ホスト名 postgres を使うため、ホスト側の cd backend && npm run reset:weekly-scores は標準手順にしない。
 
 ### 定期バッチ wrapper の手動確認

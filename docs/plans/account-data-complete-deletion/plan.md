@@ -429,6 +429,27 @@
 | `docs/plans/admin-apis/plan.md` / `admin-dashboard/plan.md` | 実装当時の履歴として保持し、今回の計画でcontract変更を記録する         |
 | `docs/plans/audit-log-production-operations/plan.md`        | 監査保持のsourceを参照し、完全削除の実装記録は本計画へ分離する         |
 
+### T33 staging検証follow-upで追加する対象
+
+PR #99 merge後の再確認で、既存の`Staging Database Setup`はmigration適用のみ、`Staging Account Data Deletion`はT35のlegacy cleanup専用であり、T33のindex作成時間・write待ち・live cascade性能を安全に測定する手段が未実装と判明した。T33では既存Userを変更せず、staging固定のsynthetic fixtureだけを使う専用手段を追加する。
+
+| ファイル                                                                 | 変更種別 | 内容                                                                                                                |
+| ------------------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `backend/src/lib/staging-database-target.ts` / `.test.ts`                | 新規     | `BATCH_ENVIRONMENT`、project ref、DATABASE_URLのprotocol・username・host・port・pathを一元検証                      |
+| `backend/src/jobs/validateStagingDatabaseTarget.cli.ts` / `.test.ts`     | 新規     | migration前に秘密情報を出さずstaging接続先を検証                                                                    |
+| `backend/src/jobs/stagingAccountDeletionPerformance.ts` / `.test.ts`     | 新規     | 既存Userの最大session/answer preview、上限付きsynthetic fixture、実service経路の削除時間・合格判定・finally cleanup |
+| `backend/src/jobs/stagingAccountDeletionPerformance.cli.ts` / `.test.ts` | 新規     | preview既定、executeのflag・明示引数・確認文字列、終了code、安全log                                                 |
+| `.github/workflows/staging-account-deletion-performance.yml`             | 新規     | manual-only・staging/develop固定のpreview/execute workflow                                                          |
+| `backend/src/jobs/stagingAccountDeletionPerformanceWorkflow.test.ts`     | 新規     | production/schedule不在、共通concurrency、三重gate、秘密非出力のworkflow契約                                        |
+| `.github/workflows/staging-database.yml`                                 | 修正     | project refを含む接続先検証、共通DB concurrency、migration所要時間とsynthetic write待ちの記録                       |
+| `backend/src/jobs/stagingDatabaseWorkflow.test.ts`                       | 修正     | T33 migration計測・直列化・秘密非出力契約                                                                           |
+| `backend/src/jobs/stagingAuditCleanupFixtures.ts` / `.test.ts`           | 修正     | 重複するstaging DB接続先検証を共通helperへ移行                                                                      |
+| `backend/src/lib/config.ts` / `.test.ts` / `backend/.env.example`        | 修正     | staging性能測定flagの安全側defaultと厳格validationを一元管理                                                        |
+| `backend/package.json`                                                   | 修正     | staging接続検証・account deletion性能測定の専用script追加                                                           |
+| `docs/09_startup_commands.md` / `docs/11_deployment.md`                  | 修正     | T33 workflowのpreview/execute、停止条件、結果記録手順                                                               |
+
+T33のperformance executeは、専用Environment flag、`--execute`、確認文字列、session件数、answer件数、platform request timeoutをすべて明示した場合だけ許可する。既存Userの最大件数がfixture上限または指定件数を超える場合は削除を開始せず、本番公開をblockして計画を再レビューする。
+
 ## 実装方針
 
 ### 不変条件
@@ -1223,6 +1244,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 > T31 frontend品質check記録（2026-07-16）: frontendのPrettier適用、ESLint、Svelte/TypeScript check、production buildが成功し、`svelte-check`は0 errors・0 warningsだった。通常全testは44 files・490件すべて成功した。Prettier適用とbuild後にfrontend source差分がないことを確認した。adapter-autoの配備先未確定messageは既知の非errorでbuild終了codeは0だった。実browser・PlaywrightはT34、専用DBはT32、staging/production workflowは各タスク境界まで実行していない。
 
 > T32 専用DB integration記録（2026-07-16）: ローカルDocker PostgreSQLの専用DB `gensoko_account_deletion_test`へ接続し、15 migrationsが適用済み・pending 0件であることを確認した。`ACCOUNT_DELETION_INTEGRATION_DATABASE_URL`を明示してaccount deletion integration 5件を実行し、本人退会・管理者強制退会の全所有row cascade、共有Element保持、PIIなし成功監査、監査insert失敗時rollback、同一User並行退会の1commit、2 ADMIN並行退会時のlast-admin保護がすべて成功した。1 file・5件成功、test時間3.08秒、全体3.66秒だった。終了後の専用DBはUser 0件・AuditLog 0件・fixture Element 0件で、後片付け完了を確認した。staging/productionへの接続・workflowは実行していない。
+
+> T33 測定手段TDD記録（2026-07-16）: PR #99 merge後のfollow-up branchで、staging固定の接続先共通validator、既存Userの最大GameSession/GameAnswer件数だけを返すpreview、上限付きsynthetic User fixture、実`deleteCurrentUser` service経路の時間測定、migration中の4 index対象table write probe、全所有row 0件検証、finally cleanup、manual-only workflowを追加した。Redは新規module/workflow未実装と既存migration workflowのconcurrency・project ref・計測不足により5 filesすべて失敗した。Green/Refactor後はT33対象7 files・59件、configを含む8 files・120件が成功し、backend通常全testは78 files・841件成功、専用DB 3 files・7件skip、ESLint・Prettier check・TypeScript buildが成功した。staging Environment Variableは変更せず、migration・preview・performance executeのいずれも実環境では未実行であるため、T33自体は進行中のままとする。
 
 ## 技術的注意点
 

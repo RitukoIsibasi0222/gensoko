@@ -264,14 +264,32 @@ DBを即時に巻き戻す前提にはしない。まず直前のアプリケー
 
 ### Environment設定
 
-| Environment | 種別     | 名前                                    | 値・扱い                                      |
-| ----------- | -------- | --------------------------------------- | --------------------------------------------- |
-| staging     | Variable | `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED` | 通常`false`。T35の承認済みexecute中だけ`true` |
-| staging     | Variable | `ACCOUNT_DATA_DELETION_BATCH_SIZE`      | 1〜100。既定25                                |
-| production  | Variable | `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED` | 通常`false`。T38の承認済みexecute中だけ`true` |
-| production  | Variable | `ACCOUNT_DATA_DELETION_BATCH_SIZE`      | 1〜100。既定25                                |
+| Environment | 種別     | 名前                                           | 値・扱い                                                               |
+| ----------- | -------- | ---------------------------------------------- | ---------------------------------------------------------------------- |
+| staging     | Variable | `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED`        | 通常`false`。T35の承認済みexecute中だけ`true`                          |
+| staging     | Variable | `ACCOUNT_DATA_DELETION_BATCH_SIZE`             | 1〜100。既定25                                                         |
+| staging     | Variable | `STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED` | 通常`false`。T33の承認済みmigration probe・cascade execute中だけ`true` |
+| production  | Variable | `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED`        | 通常`false`。T38の承認済みexecute中だけ`true`                          |
+| production  | Variable | `ACCOUNT_DATA_DELETION_BATCH_SIZE`             | 1〜100。既定25                                                         |
 
 `DATABASE_URL`と`BATCH_ENVIRONMENT`は既存のEnvironment単位設定を使い、repository共通値やローカルshellへ複製しない。staging/productionで同じ接続文字列を共用しない。
+
+### staging expand migration・性能runbook（T33）
+
+T33はT35のlegacy cleanupと分離する。PR mergeと明示承認前にworkflowを実行せず、次の順序を変更しない。
+
+1. `STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED=false`を確認する。
+2. `Staging Account Deletion Performance`の`preview`を`develop`から実行する。出力は最大GameSession件数・最大GameAnswer件数だけで、既存Userを変更しない。
+3. 対象の`20260716112500_add_account_deletion_indexes`がstagingでpendingであることを確認する。既に適用済みなら同じDB上で計測済みと偽らず、isolated staging相当環境での再現計画を作る。
+4. Environment flagを`true`へ変更する。
+5. `Staging Database Setup`へ`MEASURE_STAGING_ACCOUNT_DELETION_MIGRATION`と5,000〜120,000msのwrite probe時間を入力する。
+6. workflowはproject ref・Session pooler host・port 5432・path `/postgres`を検証し、synthetic Userと3つのindex対象子rowだけへwriteしながら`prisma migrate deploy`を実行する。
+7. `migrationDurationMs`、`writeProbeMaxDurationMs`、適用後migration statusを記録する。通常`CREATE INDEX`中のwrite待ちがmaintenance windowを超える場合はproductionへ進まない。
+8. preview以上・上限以内のsession/answer件数とplatform request timeoutを決め、performance `execute`へ`MEASURE_STAGING_ACCOUNT_DELETION`を入力する。
+9. 実`deleteCurrentUser` service経路の`durationMs`が`min(timeout * 0.5, 5,000)`以内であることを確認する。超過時はproduction公開をblockして非同期方式を再設計する。
+10. 成功・失敗にかかわらずsynthetic User・所有row・synthetic成功監査が残っていないことを確認し、flagを`false`へ戻す。
+
+workflowは`gensoko-batch-jobs`でmigration、性能確認、監査fixture、legacy cleanupを直列化する。既存User・legacy soft-deleted Userを削除せず、ログへ内部ID・PII・接続情報・生Errorを出さない。run URL、件数、時間、合否だけを計画書へ記録する。
 
 ### staging runbook（T35）
 
