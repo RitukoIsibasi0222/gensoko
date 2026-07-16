@@ -22,6 +22,7 @@ const COMPLETED_EVENT = "account_deletion.performance.completed";
 const FAILED_EVENT = "account_deletion.performance.failed";
 const DISCONNECT_FAILED_EVENT = "account_deletion.performance.disconnect_failed";
 const ARGUMENT_ERROR_MESSAGE = "staging account deletion性能測定CLIの引数が正しくありません";
+const CONFIGURATION_ERROR_MESSAGE = "staging account deletion性能測定の環境設定が不正です";
 const ENVIRONMENT_ERROR_MESSAGE = "staging account deletion性能測定の接続先が不正です";
 const EXECUTION_FAILED_MESSAGE = "staging account deletion性能測定に失敗しました";
 const DISCONNECT_FAILED_MESSAGE = "staging account deletion性能測定のDB接続終了に失敗しました";
@@ -218,10 +219,18 @@ export async function runStagingAccountDeletionPerformanceCli({
   environment: Readonly<Record<string, string | undefined>>;
   dependencies?: CliDependencies;
 }): Promise<number> {
-  let mode: CliMode;
+  let executeEnabled: boolean;
   try {
     const config = dependencies.getPerformanceConfig(environment);
-    mode = parseCliMode(argv, config.executeEnabled);
+    executeEnabled = config.executeEnabled;
+  } catch {
+    dependencies.error({ event: FAILED_EVENT, message: CONFIGURATION_ERROR_MESSAGE });
+    return 2;
+  }
+
+  let mode: CliMode;
+  try {
+    mode = parseCliMode(argv, executeEnabled);
   } catch {
     dependencies.error({ event: FAILED_EVENT, message: ARGUMENT_ERROR_MESSAGE });
     return 2;

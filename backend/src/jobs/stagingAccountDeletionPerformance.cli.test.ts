@@ -192,6 +192,29 @@ describe("staging account deletion performance CLI", () => {
     });
   });
 
+  it("性能測定flagの設定不備を引数不備と区別してDB load前に拒否する", async () => {
+    const dependencies = createDependencies();
+    dependencies.getPerformanceConfig.mockImplementation(() => {
+      throw new Error("raw configuration error");
+    });
+
+    await expect(
+      runStagingAccountDeletionPerformanceCli({
+        argv: [],
+        environment: createEnvironment({
+          STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED: "invalid",
+        }),
+        dependencies,
+      }),
+    ).resolves.toBe(2);
+    expect(dependencies.validateEnvironment).not.toHaveBeenCalled();
+    expect(dependencies.loadRuntime).not.toHaveBeenCalled();
+    expect(dependencies.error).toHaveBeenCalledWith({
+      event: "account_deletion.performance.failed",
+      message: "staging account deletion性能測定の環境設定が不正です",
+    });
+  });
+
   it("fixture上限外はDB load前に拒否する", async () => {
     const dependencies = createDependencies();
 

@@ -122,10 +122,13 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SESSION_COUNT: ${{ inputs.session_count }}
+          ANSWER_COUNT: ${{ inputs.answer_count }}
+          PLATFORM_REQUEST_TIMEOUT_MS: ${{ inputs.platform_request_timeout_ms }}
         run: |
           npm run staging:account-deletion-performance -- \
             --execute \
-            --session-count="${{ inputs.session_count }}" \
-            --answer-count="${{ inputs.answer_count }}" \
-            --platform-request-timeout-ms="${{ inputs.platform_request_timeout_ms }}" \
+            --session-count="$SESSION_COUNT" \
+            --answer-count="$ANSWER_COUNT" \
+            --platform-request-timeout-ms="$PLATFORM_REQUEST_TIMEOUT_MS" \
             --confirm=MEASURE_STAGING_ACCOUNT_DELETION

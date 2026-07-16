@@ -38,6 +38,19 @@ describe("staging account deletion performance workflow", () => {
     );
     expect(workflow).toContain("DATABASE_URL: ${{ secrets.DATABASE_URL }}");
     expect(workflow).toContain("npm run staging:account-deletion-performance");
+    expect(workflow).toContain("SESSION_COUNT: ${{ inputs.session_count }}");
+    expect(workflow).toContain("ANSWER_COUNT: ${{ inputs.answer_count }}");
+    expect(workflow).toContain(
+      "PLATFORM_REQUEST_TIMEOUT_MS: ${{ inputs.platform_request_timeout_ms }}",
+    );
+    expect(workflow).toContain('--session-count="$SESSION_COUNT"');
+    expect(workflow).toContain('--answer-count="$ANSWER_COUNT"');
+    expect(workflow).toContain('--platform-request-timeout-ms="$PLATFORM_REQUEST_TIMEOUT_MS"');
+    expect(workflow).not.toContain('--session-count="${{ inputs.session_count }}"');
+    expect(workflow).not.toContain('--answer-count="${{ inputs.answer_count }}"');
+    expect(workflow).not.toContain(
+      '--platform-request-timeout-ms="${{ inputs.platform_request_timeout_ms }}"',
+    );
     expect(workflow).not.toContain("delete:legacy-soft-deleted-users");
     expect(workflow).not.toContain('echo "$DATABASE_URL"');
     expect(workflow).not.toContain('echo "$STAGING_SUPABASE_PROJECT_REF"');
