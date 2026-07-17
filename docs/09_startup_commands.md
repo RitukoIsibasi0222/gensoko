@@ -171,20 +171,21 @@ npm run format
 
 T33ではlegacy cleanup workflowを使わず、次の2つのmanual workflowを分離して使う。どちらも`develop`・staging Environment固定で、`gensoko-batch-jobs` concurrencyにより他のDB batchと直列化する。
 
-| workflow                               | 用途                                                                  | DB変更                               |
-| -------------------------------------- | --------------------------------------------------------------------- | ------------------------------------ |
-| `Staging Database Setup`               | 通常migration適用、または対象expand migrationの初回性能測定           | migration、計測時はsynthetic fixture |
-| `Staging Account Deletion Performance` | 既存Userの最大件数preview、実`deleteCurrentUser`経路のcascade時間測定 | execute時のsynthetic Userだけ        |
+| workflow                               | 用途                                                                  | DB変更                                 |
+| -------------------------------------- | --------------------------------------------------------------------- | -------------------------------------- |
+| `Staging Database Setup`               | 通常migration適用、対象expand migrationの初回性能測定、Element seed   | migration、計測fixture、Element upsert |
+| `Staging Account Deletion Performance` | 既存Userの最大件数preview、実`deleteCurrentUser`経路のcascade時間測定 | execute時のsynthetic Userだけ          |
 
 実行前にstaging Environmentへ`STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED=false`を登録する。previewは`false`のまま実行できる。migration write probeまたはperformance executeの明示承認中だけ`true`へ変更し、終了・失敗後は直ちに`false`へ戻す。
 
-1. `Staging Account Deletion Performance`の`preview`を実行し、既存Userの最大GameSession・GameAnswer件数、`staleSyntheticFixtureUsers`、`fixtureSourceElementAvailable`だけを記録する。残存fixtureが1件以上、またはElementが0件ならexecuteは開始前に拒否されるため、原因確認と承認済みの後片付けを先に行う。
-2. 対象migrationが未適用であることを確認する。初回適用後は同じindex作成時間を再測定できないため、計測workflowをmergeする前に適用しない。
-3. flagを`true`へ変更し、`Staging Database Setup`で`measure-account-deletion-indexes`を選び、確認文字列`MEASURE_STAGING_ACCOUNT_DELETION_MIGRATION`と5,000〜120,000msのprobe時間を指定する。
-4. summaryの`migrationResult`、`probeResult`、`migrationDurationMs`、`writeProbeMaxDurationMs`、`fixtureCleanupStatus`と、最終migration status成功を確認する。probe失敗時も最終status確認後にjob全体が失敗する。
-5. preview値以上かつ上限以内（GameSession 5,000、GameAnswer 50,000）の件数、platform request timeout、確認文字列`MEASURE_STAGING_ACCOUNT_DELETION`を指定し、performance `execute`を実行する。
-6. `durationMs <= min(platform timeoutの50%, 5,000ms)`、synthetic fixture cleanup成功を確認する。
-7. flagを`false`へ戻す。
+1. `Staging Account Deletion Performance`の`preview`を実行し、既存Userの最大GameSession・GameAnswer件数、`staleSyntheticFixtureUsers`、`fixtureSourceElementAvailable`だけを記録する。残存fixtureが1件以上、またはfixture元Elementがない場合はcascade executeを開始しない。残存fixtureがある場合は、原因確認と承認済みの後片付けを先に行う。
+2. `fixtureSourceElementAvailable=false`の場合は、`Staging Database Setup`の`seed-elements`へ確認文字列`SEED_STAGING_ELEMENTS`を指定する。対象index migrationだけがpending、または全migration適用済みの場合に限り、既存seedの118元素をPrisma `upsert`し、削除は行わない。完了後にpreviewを再実行し、Element有りを確認する。
+3. 対象migrationが未適用であることを確認する。初回適用後は同じindex作成時間を再測定できないため、計測workflowをmergeする前に適用しない。
+4. flagを`true`へ変更し、`Staging Database Setup`で`measure-account-deletion-indexes`を選び、確認文字列`MEASURE_STAGING_ACCOUNT_DELETION_MIGRATION`と5,000〜120,000msのprobe時間を指定する。
+5. summaryの`migrationResult`、`probeResult`、`migrationDurationMs`、`writeProbeMaxDurationMs`、`fixtureCleanupStatus`と、最終migration status成功を確認する。probe失敗時も最終status確認後にjob全体が失敗する。
+6. preview値以上かつ上限以内（GameSession 5,000、GameAnswer 50,000）の件数、platform request timeout、確認文字列`MEASURE_STAGING_ACCOUNT_DELETION`を指定し、performance `execute`を実行する。
+7. `durationMs <= min(platform timeoutの50%, 5,000ms)`、synthetic fixture cleanup成功を確認する。
+8. flagを`false`へ戻す。
 
 通常または将来のstaging migrationは`Staging Database Setup`の`apply`を使い、性能測定flag・確認文字列を要求しない。ただし対象account deletion index migrationがpendingの間は`apply`が意図的に失敗し、初回性能測定の迂回適用を防ぐ。対象以外も同時にpendingなら計測値を混在させず、対象1件だけをpendingにできる適用順序を再計画する。
 

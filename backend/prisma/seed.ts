@@ -138,6 +138,26 @@ async function main() {
   console.log(`完了: ${elements.length} 件の元素を登録しました`);
 }
 
-main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect());
+async function run() {
+  let hasFailure = false;
+
+  try {
+    await main();
+  } catch {
+    console.error("元素データの投入に失敗しました");
+    hasFailure = true;
+  }
+
+  try {
+    await prisma.$disconnect();
+  } catch {
+    console.error("元素データ投入後のDB接続終了に失敗しました");
+    hasFailure = true;
+  }
+
+  if (hasFailure) {
+    process.exitCode = 1;
+  }
+}
+
+void run();
