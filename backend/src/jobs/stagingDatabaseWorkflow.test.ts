@@ -77,4 +77,26 @@ describe("staging database GitHub Actions workflow", () => {
     expect(workflow).not.toContain('echo "$STAGING_SUPABASE_PROJECT_REF"');
     expect(workflow).not.toContain('echo "$DATABASE_URL"');
   });
+
+  it("probe失敗時も安全な結果だけを集計し、migration確認後にjobを失敗させる", () => {
+    expect(workflow).toContain("id: measure-account-deletion-indexes");
+    expect(workflow).toContain('migration_log="$RUNNER_TEMP/account-deletion-migration.log"');
+    expect(workflow).toContain('npx prisma migrate deploy > "$migration_log" 2>&1');
+    expect(workflow).toContain('npx prisma migrate status > "$migration_status_log" 2>&1');
+    expect(workflow).toContain("set +e");
+    expect(workflow).toContain('wait "$probe_pid"');
+    expect(workflow).toContain("probe_status=$?");
+    expect(workflow).toContain("set -e");
+    expect(workflow).toContain("fixtureCleanupStatus");
+    expect(workflow).toContain('echo "measurement_result=$measurement_result" >> "$GITHUB_OUTPUT"');
+    expect(workflow).toContain(
+      "if: inputs.operation == 'apply' || steps.measure-account-deletion-indexes.outputs.measurement_result != ''",
+    );
+    expect(workflow).toContain(
+      "if: steps.measure-account-deletion-indexes.outputs.measurement_result == 'failure'",
+    );
+    expect(workflow).not.toContain('cat "$probe_log"');
+    expect(workflow).not.toContain('cat "$migration_log"');
+    expect(workflow).not.toContain('cat "$migration_status_log"');
+  });
 });

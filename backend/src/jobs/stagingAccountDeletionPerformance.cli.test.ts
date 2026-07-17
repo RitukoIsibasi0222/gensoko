@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { runStagingAccountDeletionPerformanceCli } from "./stagingAccountDeletionPerformance.cli.js";
+import { StagingAccountDeletionPerformanceFailure } from "./stagingAccountDeletionPerformance.js";
 
 function createEnvironment(
   overrides: Partial<Record<string, string | undefined>> = {},
@@ -17,7 +18,12 @@ function createEnvironment(
 
 function createDependencies() {
   const runtime = {
-    preview: vi.fn().mockResolvedValue({ maxGameSessions: 12, maxGameAnswers: 120 }),
+    preview: vi.fn().mockResolvedValue({
+      maxGameSessions: 12,
+      maxGameAnswers: 120,
+      staleSyntheticFixtureUsers: 0,
+      fixtureSourceElementAvailable: true,
+    }),
     execute: vi.fn().mockResolvedValue({
       maxGameSessions: 12,
       maxGameAnswers: 120,
@@ -26,10 +32,14 @@ function createDependencies() {
       durationMs: 400,
       thresholdMs: 5_000,
       passed: true,
+      staleSyntheticFixtureUsers: 0,
+      fixtureSourceElementAvailable: true,
+      fixtureCleanupStatus: "completed",
     }),
     probeMigrationWrites: vi.fn().mockResolvedValue({
       probeCount: 3,
       writeProbeMaxDurationMs: 25,
+      fixtureCleanupStatus: "completed",
     }),
     disconnect: vi.fn().mockResolvedValue(undefined),
   };
@@ -252,6 +262,33 @@ describe("staging account deletion performance CLI", () => {
     expect(JSON.stringify(dependencies.error.mock.calls)).toBe(
       '[[{"event":"account_deletion.performance.failed","message":"staging account deletion性能測定に失敗しました"}]]',
     );
+  });
+
+  it("probe失敗時はmodeとcleanup状態だけを安全な構造化logへ残す", async () => {
+    const dependencies = createDependencies();
+    dependencies.runtime.probeMigrationWrites.mockRejectedValue(
+      new StagingAccountDeletionPerformanceFailure("completed"),
+    );
+
+    await expect(
+      runStagingAccountDeletionPerformanceCli({
+        argv: [
+          "--migration-write-probe",
+          "--probe-duration-ms=30000",
+          "--confirm=MEASURE_STAGING_ACCOUNT_DELETION_MIGRATION",
+        ],
+        environment: createEnvironment({
+          STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED: "true",
+        }),
+        dependencies,
+      }),
+    ).resolves.toBe(1);
+    expect(dependencies.error).toHaveBeenCalledWith({
+      event: "account_deletion.performance.failed",
+      mode: "migration-write-probe",
+      fixtureCleanupStatus: "completed",
+      message: "staging account deletion性能測定に失敗しました",
+    });
   });
 
   it("disconnect失敗は確定済み結果を変えずgeneric warningだけを出す", async () => {
