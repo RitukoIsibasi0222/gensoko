@@ -1259,6 +1259,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 
 > T33 migration failure diagnostics TDD記録（2026-07-17）: `bash -e`中断、cleanup状態欠落、Prisma生ログの接続先表示、失敗後のmigration最終確認skipを再現するcontract testと、残存synthetic fixture・Element未投入時のexecute開始前拒否testを追加した。Redは3 files・38件中9件失敗、その後の安全条件追加は1 file・21件中2件失敗、Prisma生ログ隔離は1 file・6件中1件失敗を確認した。Green/Refactorではmigration/probeの終了codeを明示回収し、許可fieldだけを`jq`で再構成してsummaryへ出し、最終migration status確認後にjob全体を失敗させる。CLIはcleanup状態を`completed` / `failed` / `not-required`だけで返し、previewは最大件数に加えて残存synthetic fixture User件数とfixture元Element有無をread-only取得する。残存fixtureが1件以上またはElementが0件ならexecuteを開始しない。対象3 files・40件、backend通常全testは78 files・850件成功、専用DB 3 files・7件skip。ESLint・Prettier check・TypeScript build・Prisma Client生成・schema validateが成功した。修正は未mergeで、staging preview再確認・migration current確認・cascade executeは未実行。
 
+> T33 PR #102 review follow-up（2026-07-17）: fixture件数・上限・Element前提のvalidation失敗もfixture未作成を示す`StagingAccountDeletionPerformanceFailure("not-required")`へ統一し、CLIの構造化失敗logからcleanup状態が欠落しないよう修正した。cleanup失敗testはError全体の等価比較をやめ、`message`と`fixtureCleanupStatus`だけを`toMatchObject`で検証する安定した契約へ変更した。対象3 files・40件、ESLint・Prettier check・TypeScript buildが成功した。
+
 ## 技術的注意点
 
 - ESM importは `.js` 拡張子を付ける。
