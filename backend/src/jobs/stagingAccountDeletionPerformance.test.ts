@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   MAX_STAGING_PERFORMANCE_ANSWER_COUNT,
   MAX_STAGING_PERFORMANCE_SESSION_COUNT,
-  StagingAccountDeletionPerformanceFailure,
   calculateAccountDeletionPerformanceThresholdMs,
   cleanupStagingAccountDeletionFixture,
   getStagingAccountDeletionPreview,
@@ -194,7 +193,10 @@ describe("runStagingAccountDeletionMigrationWriteProbe", () => {
         getMonotonicTime: vi.fn().mockReturnValue(0),
         wait: vi.fn().mockResolvedValue(undefined),
       }),
-    ).rejects.toEqual(new StagingAccountDeletionPerformanceFailure("failed"));
+    ).rejects.toMatchObject({
+      message: "staging account deletion性能測定に失敗しました",
+      fixtureCleanupStatus: "failed",
+    });
   });
 });
 
@@ -307,7 +309,10 @@ describe("runStagingAccountDeletionPerformance", () => {
 
     await expect(
       runStagingAccountDeletionPerformance({ ...validInput, sessionCount: 9 }, dependencies),
-    ).rejects.toThrow("性能測定fixtureの件数が不正です");
+    ).rejects.toMatchObject({
+      message: "性能測定fixtureの件数が不正です",
+      fixtureCleanupStatus: "not-required",
+    });
     expect(dependencies.createFixture).not.toHaveBeenCalled();
   });
 

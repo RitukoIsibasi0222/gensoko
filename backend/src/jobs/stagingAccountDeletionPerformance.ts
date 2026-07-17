@@ -167,7 +167,7 @@ function validateFixtureCounts(
     preview.staleSyntheticFixtureUsers !== 0 ||
     !preview.fixtureSourceElementAvailable
   ) {
-    throw new Error(INVALID_FIXTURE_MESSAGE);
+    throw new StagingAccountDeletionPerformanceFailure("not-required", INVALID_FIXTURE_MESSAGE);
   }
 }
 
