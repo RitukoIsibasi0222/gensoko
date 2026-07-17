@@ -279,17 +279,17 @@ DBを即時に巻き戻す前提にはしない。まず直前のアプリケー
 T33はT35のlegacy cleanupと分離する。PR mergeと明示承認前にworkflowを実行せず、次の順序を変更しない。
 
 1. `STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED=false`を確認する。
-2. `Staging Account Deletion Performance`の`preview`を`develop`から実行する。出力は最大GameSession件数・最大GameAnswer件数だけで、既存Userを変更しない。
+2. `Staging Account Deletion Performance`の`preview`を`develop`から実行する。出力は最大GameSession件数・最大GameAnswer件数、残存synthetic fixture User件数、fixture元Elementの有無だけで、既存Userを変更しない。残存fixtureが1件以上、またはElementが0件ならcascade executeを開始しない。
 3. 対象の`20260716112500_add_account_deletion_indexes`がstagingでpendingであることを確認する。既に適用済みなら同じDB上で計測済みと偽らず、isolated staging相当環境での再現計画を作る。
 4. Environment flagを`true`へ変更する。
 5. `Staging Database Setup`で`measure-account-deletion-indexes`を選び、`MEASURE_STAGING_ACCOUNT_DELETION_MIGRATION`と5,000〜120,000msのwrite probe時間を入力する。
 6. workflowはproject ref・Session pooler host・port 5432・path `/postgres`を検証し、synthetic Userと3つのindex対象子rowだけへwriteしながら`prisma migrate deploy`を実行する。
-7. `migrationDurationMs`、`writeProbeMaxDurationMs`、適用後migration statusを記録する。通常`CREATE INDEX`中のwrite待ちがmaintenance windowを超える場合はproductionへ進まない。
+7. `migrationResult`、`probeResult`、`migrationDurationMs`、`writeProbeMaxDurationMs`、`fixtureCleanupStatus`、適用後migration statusを記録する。probe失敗時も許可済みfieldだけを集計し、migration statusを最終確認してからjobを失敗させる。通常`CREATE INDEX`中のwrite待ちがmaintenance windowを超える場合はproductionへ進まない。
 8. preview以上・上限以内のsession/answer件数とplatform request timeoutを決め、performance `execute`へ`MEASURE_STAGING_ACCOUNT_DELETION`を入力する。
 9. 実`deleteCurrentUser` service経路の`durationMs`が`min(timeout * 0.5, 5,000)`以内であることを確認する。超過時はproduction公開をblockして非同期方式を再設計する。
 10. 成功・失敗にかかわらずsynthetic User・所有row・synthetic成功監査が残っていないことを確認し、flagを`false`へ戻す。
 
-workflowは`gensoko-batch-jobs`でmigration、性能確認、監査fixture、legacy cleanupを直列化する。既存User・legacy soft-deleted Userを削除せず、ログへ内部ID・PII・接続情報・生Errorを出さない。run URL、件数、時間、合否だけを計画書へ記録する。
+workflowは`gensoko-batch-jobs`でmigration、性能確認、監査fixture、legacy cleanupを直列化する。既存User・legacy soft-deleted Userを削除せず、Prismaとprobeの生ログを表示せず、ログへ内部ID・PII・接続情報・生Errorを出さない。run URL、件数、時間、cleanup状態、合否だけを計画書へ記録する。
 
 `Staging Database Setup`の既定`apply`は通常・将来migration用で、性能測定flagや確認文字列を要求しない。ただし対象account deletion index migrationがpendingの間は初回計測を迂回しないよう拒否する。対象以外も同時にpendingなら`measure-account-deletion-indexes`も拒否し、対象1件だけをpendingにできる適用順序またはisolated staging相当環境での再現計画を作る。
 

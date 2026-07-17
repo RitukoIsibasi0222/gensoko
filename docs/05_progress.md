@@ -1,6 +1,6 @@
 # Gensoko 実装タスク一覧
 
-> 更新日: 2026-07-16
+> 更新日: 2026-07-17
 > ステータス: `[ ]` 未実装 / `[-]` 実装中 / `[x]` 完了
 
 ---
@@ -205,7 +205,7 @@
   - [x] T30: backend品質check完了（ESLint・Prettier・TypeScript build・Prisma validate成功、通常全test 793件成功・専用DB 7件skip）
   - [x] T31: frontend品質check完了（Prettier・ESLint・Svelte/TypeScript check・production build成功、通常全test 490件成功）
   - [x] T32: 専用Docker PostgreSQL integration 5件成功（15 migrations適用済み・pending 0、終了後fixture 0件）
-  - [-] T33: staging expand migration・write待ち・最大規模cascade性能の安全な測定手段をTDD実装。初回previewはPrisma Client未生成によりDB処理前に安全停止し、Prisma生成・project ref Secret参照をTDD修正（対象14件・backend全845件成功）。再実行は修正merge・明示承認後
+  - [-] T33: 修正版previewは既存最大GameSession 0件・GameAnswer 0件で成功。expand index migrationはstagingへ適用済みだが、write probe失敗時に`bash -e`で診断・最終status確認が中断したため性能確認は継続中。flagは`false`へ復旧済み。失敗時もcleanup状態・安全な集計・最終migration確認を残す修正と、残存synthetic fixture件数・Element利用可否を返すread-only previewをTDD実装（対象40件・backend全850件成功）。修正merge後のpreview・明示承認前にcascade executeを行わない
   - [ ] Phase 5: `deletedAt` 非参照codeへの移行、v1 deprecated互換値の維持、deploy・soak
   - [ ] Phase 6: cleanup後backup、旧Artifactの7日失効、isolated restore drill・削除replay
   - [ ] Phase 7: guard付きcontract migrationをstaging・productionへ適用
