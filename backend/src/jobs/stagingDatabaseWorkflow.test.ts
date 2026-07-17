@@ -121,11 +121,14 @@ describe("staging database GitHub Actions workflow", () => {
     expect(workflow).not.toContain('cat "$seed_log"');
   });
 
-  it("Element seed失敗時は生Errorを出さず非ゼロ終了する", () => {
+  it("Element seedとdisconnectの失敗時は生Errorを出さず非ゼロ終了する", () => {
     const seed = readFileSync(SEED_PATH, "utf8");
 
     expect(seed).toContain('console.error("元素データの投入に失敗しました")');
+    expect(seed).toContain('console.error("元素データ投入後のDB接続終了に失敗しました")');
+    expect(seed).toContain("await prisma.$disconnect()");
     expect(seed).toContain("process.exitCode = 1");
     expect(seed).not.toContain(".catch(console.error)");
+    expect(seed).not.toContain(".finally(");
   });
 });
