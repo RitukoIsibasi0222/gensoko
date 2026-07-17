@@ -139,5 +139,8 @@ async function main() {
 }
 
 main()
-  .catch(console.error)
+  .catch(() => {
+    console.error("元素データの投入に失敗しました");
+    process.exitCode = 1;
+  })
   .finally(() => prisma.$disconnect());

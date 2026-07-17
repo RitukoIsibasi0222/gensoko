@@ -11,13 +11,14 @@ on:
         options:
           - apply
           - measure-account-deletion-indexes
+          - seed-elements
       write_probe_duration_ms:
         description: account deletion index計測時のsynthetic write probe duration（5000〜120000ms）
         required: false
         type: string
         default: "30000"
       confirmation:
-        description: account deletion index計測時だけMEASURE_STAGING_ACCOUNT_DELETION_MIGRATIONを入力
+        description: 計測時はMEASURE_STAGING_ACCOUNT_DELETION_MIGRATION、seed時はSEED_STAGING_ELEMENTSを入力
         required: false
         type: string
 
@@ -78,6 +79,12 @@ jobs:
               fi
               if ! [[ "$WRITE_PROBE_DURATION_MS" =~ ^[0-9]+$ ]] || [ "$WRITE_PROBE_DURATION_MS" -lt 5000 ] || [ "$WRITE_PROBE_DURATION_MS" -gt 120000 ]; then
                 echo "write probe時間が不正です"
+                exit 1
+              fi
+              ;;
+            seed-elements)
+              if [ "$REQUESTED_CONFIRMATION" != "SEED_STAGING_ELEMENTS" ]; then
+                echo "staging Element seedの確認文字列が一致しません"
                 exit 1
               fi
               ;;
@@ -165,6 +172,12 @@ jobs:
                 exit 1
               fi
               ;;
+            seed-elements)
+              if [ "$migration_status_exit" -eq 1 ] && [ "$pending_migrations" != "$target_migration" ]; then
+                echo "Element seed前に対象外のstaging migrationを適用してください"
+                exit 1
+              fi
+              ;;
           esac
 
       - name: Apply standard Prisma migrations
@@ -180,6 +193,24 @@ jobs:
             exit 1
           fi
           echo "staging migrationを適用しました"
+
+      - name: Seed staging elements
+        if: inputs.operation == 'seed-elements'
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          seed_log="$RUNNER_TEMP/staging-element-seed.log"
+          if ! npx tsx prisma/seed.ts > "$seed_log" 2>&1; then
+            echo "staging元素データの投入に失敗しました"
+            exit 1
+          fi
+          if ! grep -Fq "完了: 118 件の元素を登録しました" "$seed_log"; then
+            echo "staging元素データの投入結果を確認できませんでした"
+            exit 1
+          fi
+          echo "staging元素データを118件upsertしました"
 
       - name: Apply migrations with synthetic write probe
         id: measure-account-deletion-indexes

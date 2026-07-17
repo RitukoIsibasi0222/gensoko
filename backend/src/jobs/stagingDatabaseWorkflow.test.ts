@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 const WORKFLOW_PATH = fileURLToPath(
   new URL("../../../.github/workflows/staging-database.yml", import.meta.url),
 );
+const SEED_PATH = fileURLToPath(new URL("../../prisma/seed.ts", import.meta.url));
 
 describe("staging database GitHub Actions workflow", () => {
   const workflow = readFileSync(WORKFLOW_PATH, "utf8");
@@ -15,6 +16,7 @@ describe("staging database GitHub Actions workflow", () => {
     expect(workflow).toContain("default: apply");
     expect(workflow).toContain("- apply");
     expect(workflow).toContain("- measure-account-deletion-indexes");
+    expect(workflow).toContain("- seed-elements");
     expect(workflow).not.toContain("schedule:");
     expect(workflow).toContain("environment: staging");
     expect(workflow).not.toContain("production");
@@ -98,5 +100,32 @@ describe("staging database GitHub Actions workflow", () => {
     expect(workflow).not.toContain('cat "$probe_log"');
     expect(workflow).not.toContain('cat "$migration_log"');
     expect(workflow).not.toContain('cat "$migration_status_log"');
+  });
+
+  it("Element seedは明示確認と互換schemaを要求し、接続先検証後だけ実行する", () => {
+    expect(workflow).toContain("SEED_STAGING_ELEMENTS");
+    expect(workflow).toContain("seed-elements)");
+    expect(workflow).toContain('if [ "$REQUESTED_CONFIRMATION" != "SEED_STAGING_ELEMENTS" ]; then');
+    expect(workflow).toContain(
+      'if [ "$migration_status_exit" -eq 1 ] && [ "$pending_migrations" != "$target_migration" ]; then',
+    );
+    expect(workflow).toContain("Element seed前に対象外のstaging migrationを適用してください");
+
+    const targetValidationIndex = workflow.indexOf("run: npm run staging:validate-database-target");
+    const seedIndex = workflow.indexOf("npx tsx prisma/seed.ts");
+
+    expect(seedIndex).toBeGreaterThan(targetValidationIndex);
+    expect(workflow).toContain("if: inputs.operation == 'seed-elements'");
+    expect(workflow).toContain('seed_log="$RUNNER_TEMP/staging-element-seed.log"');
+    expect(workflow).toContain('npx tsx prisma/seed.ts > "$seed_log" 2>&1');
+    expect(workflow).not.toContain('cat "$seed_log"');
+  });
+
+  it("Element seed失敗時は生Errorを出さず非ゼロ終了する", () => {
+    const seed = readFileSync(SEED_PATH, "utf8");
+
+    expect(seed).toContain('console.error("元素データの投入に失敗しました")');
+    expect(seed).toContain("process.exitCode = 1");
+    expect(seed).not.toContain(".catch(console.error)");
   });
 });
