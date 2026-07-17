@@ -279,7 +279,7 @@ DBを即時に巻き戻す前提にはしない。まず直前のアプリケー
 T33はT35のlegacy cleanupと分離する。PR mergeと明示承認前にworkflowを実行せず、次の順序を変更しない。
 
 1. `STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED=false`を確認する。
-2. `Staging Account Deletion Performance`の`preview`を`develop`から実行する。出力は最大GameSession件数・最大GameAnswer件数、残存synthetic fixture User件数、fixture元Elementの有無だけで、既存Userを変更しない。残存fixtureが1件以上ならcascade executeを開始しない。
+2. `Staging Account Deletion Performance`の`preview`を`develop`から実行する。出力は最大GameSession件数・最大GameAnswer件数、残存synthetic fixture User件数、fixture元Elementの有無だけで、既存Userを変更しない。残存fixtureが1件以上、またはfixture元Elementがない場合はcascade executeを開始しない。
 3. fixture元Elementがない場合は、`Staging Database Setup`の`seed-elements`へ`SEED_STAGING_ELEMENTS`を入力する。対象index migrationだけがpending、または全migration適用済みの場合に限り、118元素をPrisma `upsert`する。生ログは表示せず、削除は行わない。成功後にpreviewを再実行してElement有りを確認する。
 4. 対象の`20260716112500_add_account_deletion_indexes`がstagingでpendingであることを確認する。既に適用済みなら同じDB上で計測済みと偽らず、isolated staging相当環境での再現計画を作る。
 5. Environment flagを`true`へ変更する。

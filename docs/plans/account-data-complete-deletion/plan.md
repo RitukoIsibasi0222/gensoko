@@ -1264,6 +1264,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 
 > T33 PR #102 merge後preview・Element precondition follow-up（2026-07-17）: `develop`のmerge commit `bd7dc2b`からread-only previewを再実行し成功した（run: https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29548067973）。最大GameSession・GameAnswer・残存synthetic fixtureはいずれも0件だったが、`fixtureSourceElementAvailable=false`を検出したためcascade executeを停止した。flagは実行前後とも`false`で、execute stepはskipされた。既存のstaging workflowにseed経路がないため、`Staging Database Setup`へ`seed-elements`を追加する。`develop`・staging固定、確認文字列、接続先完全検証、対象外pending migration拒否、生ログ非表示を要求し、既存118元素をPrisma `upsert`する。Redは対象8件中3件失敗、互換schema条件の再レビューでは1件失敗を確認し、Greenは対象8件成功。backend通常全testは78 files・852件成功、専用DB 3 files・7件skip、ESLint・Prettier check・TypeScript build、workflow・文書のPrettier checkが成功した。merge後にseedとpreview再実行が必要なため、T33は進行中を維持する。
 
+> T33 PR #104 review follow-up（2026-07-17）: runbookのpreview停止条件へfixture元Elementなしを明記し、実装のexecute拒否条件と一致させた。Element seedは`main()`と`prisma.$disconnect()`を個別のtry-catchで処理し、どちらの失敗も生Error・stackを参照せず日本語の一般化メッセージと終了code 1だけを返す。Redは対象8件中1件失敗、Greenは8件成功。backend通常全testは78 files・852件成功、専用DB 3 files・7件skip、ESLint・Prettier check・TypeScript buildが成功した。
+
 ## 技術的注意点
 
 - ESM importは `.js` 拡張子を付ける。

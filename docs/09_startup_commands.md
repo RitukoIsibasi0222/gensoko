@@ -178,7 +178,7 @@ T33ではlegacy cleanup workflowを使わず、次の2つのmanual workflowを�
 
 実行前にstaging Environmentへ`STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED=false`を登録する。previewは`false`のまま実行できる。migration write probeまたはperformance executeの明示承認中だけ`true`へ変更し、終了・失敗後は直ちに`false`へ戻す。
 
-1. `Staging Account Deletion Performance`の`preview`を実行し、既存Userの最大GameSession・GameAnswer件数、`staleSyntheticFixtureUsers`、`fixtureSourceElementAvailable`だけを記録する。残存fixtureが1件以上ならexecuteを開始せず、原因確認と承認済みの後片付けを先に行う。
+1. `Staging Account Deletion Performance`の`preview`を実行し、既存Userの最大GameSession・GameAnswer件数、`staleSyntheticFixtureUsers`、`fixtureSourceElementAvailable`だけを記録する。残存fixtureが1件以上、またはfixture元Elementがない場合はcascade executeを開始しない。残存fixtureがある場合は、原因確認と承認済みの後片付けを先に行う。
 2. `fixtureSourceElementAvailable=false`の場合は、`Staging Database Setup`の`seed-elements`へ確認文字列`SEED_STAGING_ELEMENTS`を指定する。対象index migrationだけがpending、または全migration適用済みの場合に限り、既存seedの118元素をPrisma `upsert`し、削除は行わない。完了後にpreviewを再実行し、Element有りを確認する。
 3. 対象migrationが未適用であることを確認する。初回適用後は同じindex作成時間を再測定できないため、計測workflowをmergeする前に適用しない。
 4. flagを`true`へ変更し、`Staging Database Setup`で`measure-account-deletion-indexes`を選び、確認文字列`MEASURE_STAGING_ACCOUNT_DELETION_MIGRATION`と5,000〜120,000msのprobe時間を指定する。
