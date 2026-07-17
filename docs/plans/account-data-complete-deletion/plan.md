@@ -433,20 +433,22 @@
 
 PR #99 merge後の再確認で、既存の`Staging Database Setup`はmigration適用のみ、`Staging Account Data Deletion`はT35のlegacy cleanup専用であり、T33のindex作成時間・write待ち・live cascade性能を安全に測定する手段が未実装と判明した。T33では既存Userを変更せず、staging固定のsynthetic fixtureだけを使う専用手段を追加する。
 
-| ファイル                                                                 | 変更種別 | 内容                                                                                                                |
-| ------------------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------- |
-| `backend/src/lib/staging-database-target.ts` / `.test.ts`                | 新規     | `BATCH_ENVIRONMENT`、project ref、DATABASE_URLのprotocol・username・host・port・pathを一元検証                      |
-| `backend/src/jobs/validateStagingDatabaseTarget.cli.ts` / `.test.ts`     | 新規     | migration前に秘密情報を出さずstaging接続先を検証                                                                    |
-| `backend/src/jobs/stagingAccountDeletionPerformance.ts` / `.test.ts`     | 新規     | 既存Userの最大session/answer preview、上限付きsynthetic fixture、実service経路の削除時間・合格判定・finally cleanup |
-| `backend/src/jobs/stagingAccountDeletionPerformance.cli.ts` / `.test.ts` | 新規     | preview既定、executeのflag・明示引数・確認文字列、終了code、安全log                                                 |
-| `.github/workflows/staging-account-deletion-performance.yml`             | 新規     | manual-only・staging/develop固定のpreview/execute workflow                                                          |
-| `backend/src/jobs/stagingAccountDeletionPerformanceWorkflow.test.ts`     | 新規     | production/schedule不在、共通concurrency、三重gate、秘密非出力のworkflow契約                                        |
-| `.github/workflows/staging-database.yml`                                 | 修正     | 通常migration適用を維持しつつ、T33計測モードだけで対象migration所要時間とsynthetic write待ちを記録                  |
-| `backend/src/jobs/stagingDatabaseWorkflow.test.ts`                       | 修正     | 通常適用・T33計測の分岐、計測迂回防止、直列化・秘密非出力契約                                                       |
-| `backend/src/jobs/stagingAuditCleanupFixtures.ts` / `.test.ts`           | 修正     | 重複するstaging DB接続先検証を共通helperへ移行                                                                      |
-| `backend/src/lib/config.ts` / `.test.ts` / `backend/.env.example`        | 修正     | staging性能測定flagの安全側defaultと厳格validationを一元管理                                                        |
-| `backend/package.json`                                                   | 修正     | staging接続検証・account deletion性能測定の専用script追加                                                           |
-| `docs/09_startup_commands.md` / `docs/11_deployment.md`                  | 修正     | T33 workflowのpreview/execute、停止条件、結果記録手順                                                               |
+| ファイル                                                                                                                | 変更種別 | 内容                                                                                                                |
+| ----------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `backend/src/lib/staging-database-target.ts` / `.test.ts`                                                               | 新規     | `BATCH_ENVIRONMENT`、project ref、DATABASE_URLのprotocol・username・host・port・pathを一元検証                      |
+| `backend/src/jobs/validateStagingDatabaseTarget.cli.ts` / `.test.ts`                                                    | 新規     | migration前に秘密情報を出さずstaging接続先を検証                                                                    |
+| `backend/src/jobs/stagingAccountDeletionPerformance.ts` / `.test.ts`                                                    | 新規     | 既存Userの最大session/answer preview、上限付きsynthetic fixture、実service経路の削除時間・合格判定・finally cleanup |
+| `backend/src/jobs/stagingAccountDeletionPerformance.cli.ts` / `.test.ts`                                                | 新規     | preview既定、executeのflag・明示引数・確認文字列、終了code、安全log                                                 |
+| `.github/workflows/staging-account-deletion-performance.yml`                                                            | 新規     | manual-only・staging/develop固定のpreview/execute workflow                                                          |
+| `backend/src/jobs/stagingAccountDeletionPerformanceWorkflow.test.ts`                                                    | 新規     | production/schedule不在、共通concurrency、三重gate、秘密非出力のworkflow契約                                        |
+| `.github/workflows/staging-database.yml`                                                                                | 修正     | 通常migration適用を維持しつつ、T33計測モードだけで対象migration所要時間とsynthetic write待ちを記録                  |
+| `backend/src/jobs/stagingDatabaseWorkflow.test.ts`                                                                      | 修正     | 通常適用・T33計測の分岐、計測迂回防止、直列化・秘密非出力契約                                                       |
+| `backend/src/jobs/stagingAuditCleanupFixtures.ts` / `.test.ts`                                                          | 修正     | 重複するstaging DB接続先検証を共通helperへ移行                                                                      |
+| `.github/workflows/staging-audit-cleanup-fixtures.yml` / `backend/src/jobs/stagingAuditCleanupFixturesWorkflow.test.ts` | 修正     | project refをEnvironment Secret参照へ統一し、Actionsのenv一覧への露出を防止                                         |
+| `backend/src/lib/config.ts` / `.test.ts` / `backend/.env.example`                                                       | 修正     | staging性能測定flagの安全側defaultと厳格validationを一元管理                                                        |
+| `backend/package.json`                                                                                                  | 修正     | staging接続検証・account deletion性能測定の専用script追加                                                           |
+| `docs/09_startup_commands.md` / `docs/11_deployment.md`                                                                 | 修正     | T33 workflowのpreview/execute、停止条件、結果記録手順                                                               |
+| `docs/05_progress.md` / 本計画書                                                                                        | 修正     | 初回preview失敗、安全停止、Prisma生成・Secret参照修正を記録                                                         |
 
 T33のperformance executeは、専用Environment flag、`--execute`、確認文字列、session件数、answer件数、platform request timeoutをすべて明示した場合だけ許可する。既存Userの最大件数がfixture上限または指定件数を超える場合は削除を開始せず、本番公開をblockして計画を再レビューする。
 
@@ -1250,6 +1252,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 > T33 review follow-up（2026-07-16）: `Staging Database Setup`がT33専用化されて通常・将来migrationへ使えない不整合を修正し、既定`apply`と`measure-account-deletion-indexes`を分離した。`apply`は対象index migrationがpendingなら拒否して初回計測の迂回を防ぎ、計測側は対象1件だけがpendingの場合に限定する。あわせてperformance execute入力をGitHub Actionsの`env`経由へ変更し、shellへの直接展開を廃止した。CLIは性能測定flagの設定不備を引数不備と区別した。Redは3 files・5件失敗、Greenは3 files・19件成功。最終品質checkはESLint・Prettier・TypeScript build・backend全842件成功、専用DB 7件skip。staging workflowは未実行。
 
 > T33 write probe duration review follow-up（2026-07-16）: migration write probeの開始時刻をsynthetic fixture作成前から作成完了直後へ移し、fixture作成時間を指定durationへ算入しないよう修正した。fixture作成で4,000ms経過する時刻mockに対し、旧実装が5,000ms指定で3回しかprobeしないRedを確認し、修正後は作成後から5,000ms以上にわたり15回probeするGreenを確認した。T33対象61件、backend全843件成功、専用DB 7件skip。staging workflowは未実行。
+
+> T33 初回staging preview・安全停止記録（2026-07-17）: staging Environmentへ`STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED=false`を明示設定し、`develop`のPR #100 merge commitからread-only previewを実行した（run: https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29505517333）。branch・Environment・入力検証、checkout、依存installまでは成功したが、Prisma Client未生成のため性能測定CLIのmodule読込で失敗し、接続先検証・既存User件数取得を含むDB処理前に停止した。migration、write probe、synthetic fixture、performance executeは未実行で、終了後もflagが`false`であることを確認した。さらにproject refを通常Variableからjob envへ渡すとActionsのenv一覧へ表示されることが判明したため、再実行を停止した。修正ではT33の2 workflowへ`npx prisma generate`を追加し、project refをstaging Environment Secret参照へ統一した。Redは3 files・14件中5件失敗、Greenは3 files・14件成功、backend通常全testは78 files・845件成功、専用DB 3 files・7件skip。Prisma Client生成・schema validate、ESLint、Prettier、TypeScript build、workflow・文書のPrettier checkも成功した。修正は未mergeでpreview未再実行のため、T33は進行中のままとする。
 
 ## 技術的注意点
 

@@ -25,8 +25,9 @@ describe("staging database GitHub Actions workflow", () => {
     expect(workflow).toContain("BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}");
     expect(workflow).toContain("DATABASE_URL: ${{ secrets.DATABASE_URL }}");
     expect(workflow).toContain(
-      "STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}",
+      "STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}",
     );
+    expect(workflow).not.toContain("${{ vars.STAGING_SUPABASE_PROJECT_REF }}");
     expect(workflow).toContain('if [ "$BATCH_ENVIRONMENT" != "staging" ]; then');
     expect(workflow).toContain(
       'if [ -z "$STAGING_SUPABASE_PROJECT_REF" ] || [ -z "$DATABASE_URL" ]; then',
@@ -43,6 +44,14 @@ describe("staging database GitHub Actions workflow", () => {
     expect(workflow).toContain("npx prisma migrate deploy");
     expect(workflow).toContain("migrationDurationMs");
     expect(workflow).toContain("writeProbeMaxDurationMs");
+  });
+
+  it("Prisma Clientを生成してからmigration write probe CLIを起動する", () => {
+    const generateIndex = workflow.indexOf("run: npx prisma generate");
+    const probeIndex = workflow.indexOf("npm run staging:account-deletion-performance");
+
+    expect(generateIndex).toBeGreaterThan(-1);
+    expect(probeIndex).toBeGreaterThan(generateIndex);
   });
 
   it("対象migrationだけを初回計測し、synthetic write probeへ三重gateを要求する", () => {

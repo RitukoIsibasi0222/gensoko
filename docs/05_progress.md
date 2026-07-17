@@ -205,7 +205,7 @@
   - [x] T30: backend品質check完了（ESLint・Prettier・TypeScript build・Prisma validate成功、通常全test 793件成功・専用DB 7件skip）
   - [x] T31: frontend品質check完了（Prettier・ESLint・Svelte/TypeScript check・production build成功、通常全test 490件成功）
   - [x] T32: 専用Docker PostgreSQL integration 5件成功（15 migrations適用済み・pending 0、終了後fixture 0件）
-  - [-] T33: staging expand migration・write待ち・最大規模cascade性能の安全な測定手段をTDD実装（T33対象61件・backend全843件成功）。workflow実行はmerge・明示承認後
+  - [-] T33: staging expand migration・write待ち・最大規模cascade性能の安全な測定手段をTDD実装。初回previewはPrisma Client未生成によりDB処理前に安全停止し、Prisma生成・project ref Secret参照をTDD修正（対象14件・backend全845件成功）。再実行は修正merge・明示承認後
   - [ ] Phase 5: `deletedAt` 非参照codeへの移行、v1 deprecated互換値の維持、deploy・soak
   - [ ] Phase 6: cleanup後backup、旧Artifactの7日失効、isolated restore drill・削除replay
   - [ ] Phase 7: guard付きcontract migrationをstaging・productionへ適用
