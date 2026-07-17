@@ -1266,6 +1266,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 
 > T33 PR #104 review follow-up（2026-07-17）: runbookのpreview停止条件へfixture元Elementなしを明記し、実装のexecute拒否条件と一致させた。Element seedは`main()`と`prisma.$disconnect()`を個別のtry-catchで処理し、どちらの失敗も生Error・stackを参照せず日本語の一般化メッセージと終了code 1だけを返す。Redは対象8件中1件失敗、Greenは8件成功。backend通常全testは78 files・852件成功、専用DB 3 files・7件skip、ESLint・Prettier check・TypeScript buildが成功した。
 
+> T33 staging Element seed・cascade性能記録（2026-07-17）: PR #104 merge commit `567eb1f`から`Staging Database Setup`の`seed-elements`を実行し、既存118元素のPrisma `upsert`に成功した（run: https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29549872910）。flag `false`のread-only previewは最大GameSession 0件・最大GameAnswer 0件・残存synthetic fixture 0件・Element有りで成功した（run: https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29549921830）。明示承認後、flagを`true`へ変更し、synthetic GameSession 5,000件・GameAnswer 50,000件、platform timeout 10,000msで実`deleteCurrentUser`経路を測定した（run: https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29550089330）。削除時間は1,446.32msで基準5,000ms以内、`passed=true`、`fixtureCleanupStatus=completed`だった。終了直後にflagを`false`へ戻し、事後previewでも最大件数0件・残存fixture 0件・Element有りを確認した（run: https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29550170012）。既存Userの更新・削除、migration、write probeはこの一連のrunでは実行していない。cascade性能は合格したが、初回index migration時のwrite probe計測値は同じstaging DBで再取得できないため、isolated staging相当環境での再現またはproduction判断を残し、T33は進行中を維持する。
+
 ## 技術的注意点
 
 - ESM importは `.js` 拡張子を付ける。
