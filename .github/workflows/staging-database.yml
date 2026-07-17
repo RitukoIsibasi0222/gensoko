@@ -172,9 +172,17 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: npx prisma migrate deploy
+        run: |
+          set -euo pipefail
+          migration_log="$RUNNER_TEMP/staging-standard-migration.log"
+          if ! npx prisma migrate deploy > "$migration_log" 2>&1; then
+            echo "staging migrationの適用に失敗しました"
+            exit 1
+          fi
+          echo "staging migrationを適用しました"
 
       - name: Apply migrations with synthetic write probe
+        id: measure-account-deletion-indexes
         if: inputs.operation == 'measure-account-deletion-indexes'
         working-directory: backend
         env:
@@ -184,6 +192,7 @@ jobs:
           set -uo pipefail
 
           probe_log="$RUNNER_TEMP/account-deletion-write-probe.log"
+          migration_log="$RUNNER_TEMP/account-deletion-migration.log"
           npm run staging:account-deletion-performance -- \
             --migration-write-probe \
             --probe-duration-ms="$WRITE_PROBE_DURATION_MS" \
@@ -193,30 +202,86 @@ jobs:
 
           sleep 2
           migration_started_at="$(date +%s%3N)"
-          npx prisma migrate deploy
+          set +e
+          npx prisma migrate deploy > "$migration_log" 2>&1
           migration_status=$?
           migration_finished_at="$(date +%s%3N)"
 
           wait "$probe_pid"
           probe_status=$?
-          cat "$probe_log"
+          set -e
 
           migration_duration_ms=$((migration_finished_at - migration_started_at))
-          write_probe_max_duration_ms="$(grep '"event":"account_deletion.performance.completed"' "$probe_log" | tail -n 1 | jq -r '.writeProbeMaxDurationMs // empty')"
+          probe_event="$(grep -E '"event":"account_deletion\.performance\.(completed|failed)"' "$probe_log" | tail -n 1 || true)"
+          safe_probe_event="$(
+            printf '%s\n' "$probe_event" |
+              jq -c '
+                select(
+                  .event == "account_deletion.performance.completed" or
+                  .event == "account_deletion.performance.failed"
+                ) |
+                {
+                  event,
+                  mode,
+                  probeCount,
+                  writeProbeMaxDurationMs,
+                  fixtureCleanupStatus,
+                  message
+                }
+              ' 2>/dev/null || true
+          )"
+          if [ -n "$safe_probe_event" ]; then
+            printf '%s\n' "$safe_probe_event"
+          else
+            echo "staging write probe結果を安全に取得できませんでした"
+          fi
+
+          write_probe_max_duration_ms="$(printf '%s\n' "$safe_probe_event" | jq -r '.writeProbeMaxDurationMs // empty' 2>/dev/null || true)"
+          fixture_cleanup_status="$(printf '%s\n' "$safe_probe_event" | jq -r '.fixtureCleanupStatus // empty' 2>/dev/null || true)"
+          migration_result="success"
+          probe_result="success"
+          measurement_result="success"
+
+          if [ "$migration_status" -ne 0 ]; then
+            migration_result="failure"
+            measurement_result="failure"
+          fi
+          if [ "$probe_status" -ne 0 ] || [ -z "$write_probe_max_duration_ms" ] || [ "$fixture_cleanup_status" != "completed" ]; then
+            probe_result="failure"
+            measurement_result="failure"
+          fi
+
+          echo "measurement_result=$measurement_result" >> "$GITHUB_OUTPUT"
 
           {
             echo "### Staging account deletion index migration"
+            echo "- migrationResult: $migration_result"
+            echo "- probeResult: $probe_result"
             echo "- migrationDurationMs: $migration_duration_ms"
             echo "- writeProbeMaxDurationMs: ${write_probe_max_duration_ms:-unavailable}"
+            echo "- fixtureCleanupStatus: ${fixture_cleanup_status:-unavailable}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if [ "$migration_status" -ne 0 ] || [ "$probe_status" -ne 0 ] || [ -z "$write_probe_max_duration_ms" ]; then
+          if [ "$measurement_result" = "failure" ]; then
             echo "staging migrationまたはwrite probeに失敗しました"
-            exit 1
           fi
 
       - name: Verify migrations are current
+        if: inputs.operation == 'apply' || steps.measure-account-deletion-indexes.outputs.measurement_result != ''
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: npx prisma migrate status
+        run: |
+          set -euo pipefail
+          migration_status_log="$RUNNER_TEMP/staging-migration-status.log"
+          if ! npx prisma migrate status > "$migration_status_log" 2>&1; then
+            echo "staging migration statusの最終確認に失敗しました"
+            exit 1
+          fi
+          echo "staging migrationは最新です"
+
+      - name: Fail when account deletion index measurement failed
+        if: steps.measure-account-deletion-indexes.outputs.measurement_result == 'failure'
+        run: |
+          echo "staging account deletion index計測に失敗しました"
+          exit 1

@@ -18,6 +18,8 @@ function createDependencies(
     preview: vi.fn().mockResolvedValue({
       maxGameSessions: 10,
       maxGameAnswers: 100,
+      staleSyntheticFixtureUsers: 0,
+      fixtureSourceElementAvailable: true,
     }),
     createFixture: vi.fn().mockResolvedValue({
       userId: "synthetic-user",
@@ -41,14 +43,19 @@ describe("getStagingAccountDeletionPreview", () => {
         gameSessions: [{ _count: { answers: 9 } }],
       },
     ]);
+    const countSyntheticFixtures = vi.fn().mockResolvedValue(1);
+    const countElements = vi.fn().mockResolvedValue(118);
 
     await expect(
       getStagingAccountDeletionPreview({
-        user: { findMany },
+        user: { findMany, count: countSyntheticFixtures },
+        element: { count: countElements },
       }),
     ).resolves.toEqual({
       maxGameSessions: 2,
       maxGameAnswers: 9,
+      staleSyntheticFixtureUsers: 1,
+      fixtureSourceElementAvailable: true,
     });
     expect(findMany).toHaveBeenCalledWith({
       select: {
@@ -61,16 +68,30 @@ describe("getStagingAccountDeletionPreview", () => {
         },
       },
     });
+    expect(countSyntheticFixtures).toHaveBeenCalledWith({
+      where: {
+        id: { startsWith: "staging-account-deletion-performance-" },
+        username: { startsWith: "staging_perf_" },
+        email: { endsWith: "@example.invalid" },
+      },
+    });
+    expect(countElements).toHaveBeenCalledWith();
   });
 
   it("既存Userが0件なら最大件数0を返す", async () => {
     await expect(
       getStagingAccountDeletionPreview({
-        user: { findMany: vi.fn().mockResolvedValue([]) },
+        user: {
+          findMany: vi.fn().mockResolvedValue([]),
+          count: vi.fn().mockResolvedValue(0),
+        },
+        element: { count: vi.fn().mockResolvedValue(0) },
       }),
     ).resolves.toEqual({
       maxGameSessions: 0,
       maxGameAnswers: 0,
+      staleSyntheticFixtureUsers: 0,
+      fixtureSourceElementAvailable: false,
     });
   });
 });
@@ -102,6 +123,7 @@ describe("runStagingAccountDeletionMigrationWriteProbe", () => {
     ).resolves.toEqual({
       probeCount: 2,
       writeProbeMaxDurationMs: 250,
+      fixtureCleanupStatus: "completed",
     });
     expect(probeOnce).toHaveBeenCalledTimes(2);
     expect(probeOnce).toHaveBeenCalledWith("synthetic-user");
@@ -122,7 +144,10 @@ describe("runStagingAccountDeletionMigrationWriteProbe", () => {
         getMonotonicTime: vi.fn().mockReturnValue(0),
         wait: vi.fn().mockResolvedValue(undefined),
       }),
-    ).rejects.toThrow("staging account deletion性能測定に失敗しました");
+    ).rejects.toMatchObject({
+      message: "staging account deletion性能測定に失敗しました",
+      fixtureCleanupStatus: "completed",
+    });
     expect(cleanupFixture).toHaveBeenCalledWith("synthetic-user");
   });
 
@@ -151,8 +176,27 @@ describe("runStagingAccountDeletionMigrationWriteProbe", () => {
     ).resolves.toEqual({
       probeCount: 15,
       writeProbeMaxDurationMs: 100,
+      fixtureCleanupStatus: "completed",
     });
     expect(probeOnce).toHaveBeenCalledTimes(15);
+  });
+
+  it("cleanup失敗時は生Errorを隠してcleanup状態だけを返す", async () => {
+    await expect(
+      runStagingAccountDeletionMigrationWriteProbe(5_000, {
+        createFixture: vi.fn().mockResolvedValue({
+          userId: "synthetic-user",
+          currentPassword: "SyntheticPass1!",
+        }),
+        probeOnce: vi.fn().mockRejectedValue(new Error("raw write error")),
+        cleanupFixture: vi.fn().mockRejectedValue(new Error("raw cleanup error")),
+        getMonotonicTime: vi.fn().mockReturnValue(0),
+        wait: vi.fn().mockResolvedValue(undefined),
+      }),
+    ).rejects.toMatchObject({
+      message: "staging account deletion性能測定に失敗しました",
+      fixtureCleanupStatus: "failed",
+    });
   });
 });
 
@@ -248,6 +292,9 @@ describe("runStagingAccountDeletionPerformance", () => {
       durationMs: 250,
       thresholdMs: 5_000,
       passed: true,
+      staleSyntheticFixtureUsers: 0,
+      fixtureSourceElementAvailable: true,
+      fixtureCleanupStatus: "completed",
     });
     expect(dependencies.deleteCurrentUser).toHaveBeenCalledWith({
       userId: "synthetic-user",
@@ -262,6 +309,42 @@ describe("runStagingAccountDeletionPerformance", () => {
 
     await expect(
       runStagingAccountDeletionPerformance({ ...validInput, sessionCount: 9 }, dependencies),
+    ).rejects.toMatchObject({
+      message: "性能測定fixtureの件数が不正です",
+      fixtureCleanupStatus: "not-required",
+    });
+    expect(dependencies.createFixture).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: "synthetic fixtureが残存",
+      preview: {
+        maxGameSessions: 0,
+        maxGameAnswers: 0,
+        staleSyntheticFixtureUsers: 1,
+        fixtureSourceElementAvailable: true,
+      },
+    },
+    {
+      label: "fixture用Elementが0件",
+      preview: {
+        maxGameSessions: 0,
+        maxGameAnswers: 0,
+        staleSyntheticFixtureUsers: 0,
+        fixtureSourceElementAvailable: false,
+      },
+    },
+  ])("$labelならfixture作成前に拒否する", async ({ preview }) => {
+    const dependencies = createDependencies({
+      preview: vi.fn().mockResolvedValue(preview),
+    });
+
+    await expect(
+      runStagingAccountDeletionPerformance(
+        { ...validInput, sessionCount: 1, answerCount: 0 },
+        dependencies,
+      ),
     ).rejects.toThrow("性能測定fixtureの件数が不正です");
     expect(dependencies.createFixture).not.toHaveBeenCalled();
   });

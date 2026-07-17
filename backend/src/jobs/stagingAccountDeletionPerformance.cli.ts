@@ -6,6 +6,7 @@ import { validateStagingDatabaseTarget } from "../lib/staging-database-target.js
 import {
   MAX_STAGING_PERFORMANCE_ANSWER_COUNT,
   MAX_STAGING_PERFORMANCE_SESSION_COUNT,
+  StagingAccountDeletionPerformanceFailure,
   cleanupStagingAccountDeletionFixture,
   createStagingAccountDeletionFixture,
   getStagingAccountDeletionPreview,
@@ -39,9 +40,11 @@ type PerformanceRuntime = Readonly<{
   execute: (
     input: StagingAccountDeletionPerformanceInput,
   ) => Promise<StagingAccountDeletionPerformanceResult>;
-  probeMigrationWrites?: (
-    durationMs: number,
-  ) => Promise<{ probeCount: number; writeProbeMaxDurationMs: number }>;
+  probeMigrationWrites?: (durationMs: number) => Promise<{
+    probeCount: number;
+    writeProbeMaxDurationMs: number;
+    fixtureCleanupStatus: "completed";
+  }>;
   disconnect: () => Promise<void>;
 }>;
 
@@ -172,7 +175,9 @@ async function loadRuntime(): Promise<PerformanceRuntime> {
     getStagingAccountDeletionPreview({
       user: {
         findMany: (options) => prisma.user.findMany(options),
+        count: (options) => prisma.user.count(options),
       },
+      element: { count: () => prisma.element.count() },
     });
 
   return {
@@ -268,8 +273,19 @@ export async function runStagingAccountDeletionPerformanceCli({
       throw new Error(EXECUTION_FAILED_MESSAGE);
     }
     dependencies.info({ event: COMPLETED_EVENT, mode: mode.mode, ...result });
-  } catch {
-    dependencies.error({ event: FAILED_EVENT, message: EXECUTION_FAILED_MESSAGE });
+  } catch (error) {
+    const cleanupDetails =
+      error instanceof StagingAccountDeletionPerformanceFailure
+        ? {
+            mode: mode.mode,
+            fixtureCleanupStatus: error.fixtureCleanupStatus,
+          }
+        : {};
+    dependencies.error({
+      event: FAILED_EVENT,
+      ...cleanupDetails,
+      message: EXECUTION_FAILED_MESSAGE,
+    });
     exitCode = 1;
   }
 

@@ -14,13 +14,30 @@ const GENERIC_FAILURE_MESSAGE = "staging account deletion性能測定に失敗�
 const INVALID_FIXTURE_MESSAGE = "性能測定fixtureの件数が不正です";
 const THRESHOLD_EXCEEDED_MESSAGE = "同期削除の性能基準を超過しました";
 const CREATE_BATCH_SIZE = 500;
+const SYNTHETIC_USER_ID_PREFIX = "staging-account-deletion-performance-";
+const SYNTHETIC_USERNAME_PREFIX = "staging_perf_";
+const SYNTHETIC_EMAIL_SUFFIX = "@example.invalid";
 
 type PrismaClient = typeof prismaClient;
 
 export type StagingAccountDeletionPreview = Readonly<{
   maxGameSessions: number;
   maxGameAnswers: number;
+  staleSyntheticFixtureUsers: number;
+  fixtureSourceElementAvailable: boolean;
 }>;
+
+export type StagingFixtureCleanupStatus = "completed" | "failed" | "not-required";
+
+export class StagingAccountDeletionPerformanceFailure extends Error {
+  constructor(
+    public readonly fixtureCleanupStatus: StagingFixtureCleanupStatus,
+    message = GENERIC_FAILURE_MESSAGE,
+  ) {
+    super(message);
+    this.name = "StagingAccountDeletionPerformanceFailure";
+  }
+}
 
 export type StagingAccountDeletionPerformanceInput = Readonly<{
   sessionCount: number;
@@ -35,6 +52,7 @@ export type StagingAccountDeletionPerformanceResult = StagingAccountDeletionPrev
     durationMs: number;
     thresholdMs: number;
     passed: true;
+    fixtureCleanupStatus: "completed";
   }>;
 
 export type StagingAccountDeletionPreviewClient = Readonly<{
@@ -50,7 +68,15 @@ export type StagingAccountDeletionPreviewClient = Readonly<{
         };
       };
     }) => Promise<Array<{ gameSessions: Array<{ _count: { answers: number } }> }>>;
+    count: (options: {
+      where: {
+        id: { startsWith: string };
+        username: { startsWith: string };
+        email: { endsWith: string };
+      };
+    }) => Promise<number>;
   };
+  element: { count: () => Promise<number> };
 }>;
 
 type SyntheticFixture = Readonly<{
@@ -73,17 +99,27 @@ export type StagingAccountDeletionPerformanceDependencies = Readonly<{
 export async function getStagingAccountDeletionPreview(
   client: StagingAccountDeletionPreviewClient,
 ): Promise<StagingAccountDeletionPreview> {
-  const users = await client.user.findMany({
-    select: {
-      gameSessions: {
-        select: {
-          _count: {
-            select: { answers: true },
+  const [users, staleSyntheticFixtureUsers, elementCount] = await Promise.all([
+    client.user.findMany({
+      select: {
+        gameSessions: {
+          select: {
+            _count: {
+              select: { answers: true },
+            },
           },
         },
       },
-    },
-  });
+    }),
+    client.user.count({
+      where: {
+        id: { startsWith: SYNTHETIC_USER_ID_PREFIX },
+        username: { startsWith: SYNTHETIC_USERNAME_PREFIX },
+        email: { endsWith: SYNTHETIC_EMAIL_SUFFIX },
+      },
+    }),
+    client.element.count(),
+  ]);
 
   let maxGameSessions = 0;
   let maxGameAnswers = 0;
@@ -93,7 +129,12 @@ export async function getStagingAccountDeletionPreview(
     maxGameAnswers = Math.max(maxGameAnswers, answerCount);
   }
 
-  return { maxGameSessions, maxGameAnswers };
+  return {
+    maxGameSessions,
+    maxGameAnswers,
+    staleSyntheticFixtureUsers,
+    fixtureSourceElementAvailable: elementCount > 0,
+  };
 }
 
 export function calculateAccountDeletionPerformanceThresholdMs(
@@ -122,9 +163,11 @@ function validateFixtureCounts(
     input.answerCount < 0 ||
     input.answerCount > MAX_STAGING_PERFORMANCE_ANSWER_COUNT ||
     input.sessionCount < preview.maxGameSessions ||
-    input.answerCount < preview.maxGameAnswers
+    input.answerCount < preview.maxGameAnswers ||
+    preview.staleSyntheticFixtureUsers !== 0 ||
+    !preview.fixtureSourceElementAvailable
   ) {
-    throw new Error(INVALID_FIXTURE_MESSAGE);
+    throw new StagingAccountDeletionPerformanceFailure("not-required", INVALID_FIXTURE_MESSAGE);
   }
 }
 
@@ -136,13 +179,14 @@ export async function runStagingAccountDeletionPerformance(
   try {
     preview = await dependencies.preview();
   } catch {
-    throw new Error(GENERIC_FAILURE_MESSAGE);
+    throw new StagingAccountDeletionPerformanceFailure("not-required");
   }
   validateFixtureCounts(input, preview);
 
   let fixture: SyntheticFixture | undefined;
-  let result: StagingAccountDeletionPerformanceResult | undefined;
-  let failure: Error | undefined;
+  let result: Omit<StagingAccountDeletionPerformanceResult, "fixtureCleanupStatus"> | undefined;
+  let failureMessage: string | undefined;
+  let fixtureCleanupStatus: StagingFixtureCleanupStatus = "not-required";
 
   try {
     fixture = await dependencies.createFixture({
@@ -161,7 +205,7 @@ export async function runStagingAccountDeletionPerformance(
     );
 
     if (durationMs > thresholdMs) {
-      failure = new Error(THRESHOLD_EXCEEDED_MESSAGE);
+      failureMessage = THRESHOLD_EXCEEDED_MESSAGE;
     } else {
       result = {
         ...preview,
@@ -172,25 +216,33 @@ export async function runStagingAccountDeletionPerformance(
         passed: true,
       };
     }
-  } catch {
-    failure = new Error(GENERIC_FAILURE_MESSAGE);
+  } catch (error) {
+    failureMessage =
+      error instanceof StagingAccountDeletionPerformanceFailure
+        ? error.message
+        : GENERIC_FAILURE_MESSAGE;
+    if (error instanceof StagingAccountDeletionPerformanceFailure) {
+      fixtureCleanupStatus = error.fixtureCleanupStatus;
+    }
   } finally {
     if (fixture) {
       try {
         await dependencies.cleanupFixture(fixture.userId);
+        fixtureCleanupStatus = "completed";
       } catch {
-        failure = new Error(GENERIC_FAILURE_MESSAGE);
+        fixtureCleanupStatus = "failed";
+        failureMessage = GENERIC_FAILURE_MESSAGE;
       }
     }
   }
 
-  if (failure) {
-    throw failure;
+  if (failureMessage) {
+    throw new StagingAccountDeletionPerformanceFailure(fixtureCleanupStatus, failureMessage);
   }
   if (!result) {
-    throw new Error(GENERIC_FAILURE_MESSAGE);
+    throw new StagingAccountDeletionPerformanceFailure(fixtureCleanupStatus);
   }
-  return result;
+  return { ...result, fixtureCleanupStatus: "completed" };
 }
 
 function createBatches<T>(values: readonly T[], batchSize: number): T[][] {
@@ -226,13 +278,13 @@ export async function createStagingAccountDeletionFixture(
     select: { id: true },
   });
   if (!element) {
-    throw new Error(GENERIC_FAILURE_MESSAGE);
+    throw new StagingAccountDeletionPerformanceFailure("not-required");
   }
 
   const uniquePart = randomUUID().replaceAll("-", "");
-  const userId = "staging-account-deletion-performance-" + uniquePart;
-  const username = "staging_perf_" + uniquePart.slice(0, 16);
-  const email = "staging-perf-" + uniquePart + "@example.invalid";
+  const userId = SYNTHETIC_USER_ID_PREFIX + uniquePart;
+  const username = SYNTHETIC_USERNAME_PREFIX + uniquePart.slice(0, 16);
+  const email = "staging-perf-" + uniquePart + SYNTHETIC_EMAIL_SUFFIX;
   const passwordHash = await hashPassword(SYNTHETIC_PASSWORD);
   const expiresAt = new Date("2099-01-01T00:00:00.000Z");
 
@@ -291,12 +343,14 @@ export async function createStagingAccountDeletionFixture(
       await client.gameAnswer.createMany({ data: batch });
     }
   } catch {
+    let fixtureCleanupStatus: StagingFixtureCleanupStatus = "failed";
     try {
       await cleanupStagingAccountDeletionFixture(client, userId);
+      fixtureCleanupStatus = "completed";
     } catch {
       // 呼び出し側でgeneric errorへ正規化する。
     }
-    throw new Error(GENERIC_FAILURE_MESSAGE);
+    throw new StagingAccountDeletionPerformanceFailure(fixtureCleanupStatus);
   }
 
   return { userId, currentPassword: SYNTHETIC_PASSWORD };
@@ -349,13 +403,18 @@ export async function runStagingAccountDeletionMigrationWriteProbe(
     getMonotonicTime: () => number;
     wait: (durationMs: number) => Promise<void>;
   }>,
-): Promise<{ probeCount: number; writeProbeMaxDurationMs: number }> {
+): Promise<{
+  probeCount: number;
+  writeProbeMaxDurationMs: number;
+  fixtureCleanupStatus: "completed";
+}> {
   if (!Number.isInteger(durationMs) || durationMs < 5_000 || durationMs > 120_000) {
     throw new Error(INVALID_FIXTURE_MESSAGE);
   }
 
   let fixture: SyntheticFixture | undefined;
-  let failure: Error | undefined;
+  let failureMessage: string | undefined;
+  let fixtureCleanupStatus: StagingFixtureCleanupStatus = "not-required";
   let probeCount = 0;
   let writeProbeMaxDurationMs = 0;
 
@@ -372,20 +431,28 @@ export async function runStagingAccountDeletionMigrationWriteProbe(
       probeCount += 1;
       await dependencies.wait(250);
     } while (dependencies.getMonotonicTime() - probeStartedAt < durationMs);
-  } catch {
-    failure = new Error(GENERIC_FAILURE_MESSAGE);
+  } catch (error) {
+    failureMessage =
+      error instanceof StagingAccountDeletionPerformanceFailure
+        ? error.message
+        : GENERIC_FAILURE_MESSAGE;
+    if (error instanceof StagingAccountDeletionPerformanceFailure) {
+      fixtureCleanupStatus = error.fixtureCleanupStatus;
+    }
   } finally {
     if (fixture) {
       try {
         await dependencies.cleanupFixture(fixture.userId);
+        fixtureCleanupStatus = "completed";
       } catch {
-        failure = new Error(GENERIC_FAILURE_MESSAGE);
+        fixtureCleanupStatus = "failed";
+        failureMessage = GENERIC_FAILURE_MESSAGE;
       }
     }
   }
 
-  if (failure) {
-    throw failure;
+  if (failureMessage) {
+    throw new StagingAccountDeletionPerformanceFailure(fixtureCleanupStatus, failureMessage);
   }
-  return { probeCount, writeProbeMaxDurationMs };
+  return { probeCount, writeProbeMaxDurationMs, fixtureCleanupStatus: "completed" };
 }
