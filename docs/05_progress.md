@@ -205,7 +205,7 @@
   - [x] T30: backend品質check完了（ESLint・Prettier・TypeScript build・Prisma validate成功、通常全test 793件成功・専用DB 7件skip）
   - [x] T31: frontend品質check完了（Prettier・ESLint・Svelte/TypeScript check・production build成功、通常全test 490件成功）
   - [x] T32: 専用Docker PostgreSQL integration 5件成功（15 migrations適用済み・pending 0、終了後fixture 0件）
-  - [-] T33: 修正版previewは既存最大GameSession 0件・GameAnswer 0件で成功。expand index migrationはstagingへ適用済みだが、write probe失敗時に`bash -e`で診断・最終status確認が中断したため性能確認は継続中。flagは`false`へ復旧済み。失敗時もcleanup状態・安全な集計・最終migration確認を残す修正と、残存synthetic fixture件数・Element利用可否を返すread-only previewをTDD実装（対象40件・backend全850件成功）。修正merge後のpreview・明示承認前にcascade executeを行わない
+  - [-] T33: PR #102 merge後のread-only previewは最大GameSession 0件・GameAnswer 0件・残存synthetic fixture 0件だったが、fixture元Element 0件を検出して安全停止。flagは実行前後とも`false`でexecuteはskip。staging固定・確認文字列・接続先完全検証・対象外pending migration拒否を持つ118元素のPrisma upsert操作をTDD追加（対象8件・backend全852件成功）。seed実装のmerge・実行後にpreviewを再実行し、明示承認前にcascade executeを行わない
   - [ ] Phase 5: `deletedAt` 非参照codeへの移行、v1 deprecated互換値の維持、deploy・soak
   - [ ] Phase 6: cleanup後backup、旧Artifactの7日失効、isolated restore drill・削除replay
   - [ ] Phase 7: guard付きcontract migrationをstaging・productionへ適用
