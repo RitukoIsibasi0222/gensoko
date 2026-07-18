@@ -206,7 +206,7 @@ export function createWorkerHandler({
   };
 }
 
-// SD7（Durable Object）とSD8（fetch mail）が揃うまでは誤配備を503で閉じる。
+// SD9でWranglerのproduction graphと実bindingを接続するまでは誤配備を503で閉じる。
 export default createWorkerHandler({
   expectedTarget: "staging",
   createRequestAdapters: async () => null,

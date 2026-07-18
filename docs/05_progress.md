@@ -242,7 +242,7 @@
 - [x] Supabase staging・production project作成、東京region・Session pooler接続設定
 - [-] 本番DBバックアップ・Prismaマイグレーション運用（Free plan暗号化backup・容量監視workflow実装中） — 計画書: [`docs/plans/audit-log-production-operations/plan.md`](plans/audit-log-production-operations/plan.md)
 - [ ] 本番DBバックアップ耐障害性強化（日次化・最大3回再試行・36時間鮮度監視・最大7世代・四半期隔離復元訓練） — 計画書: [`docs/plans/backup-resilience/plan.md`](plans/backup-resilience/plan.md)
-- [-] staging frontend/API配備基盤（Workers専用entrypoint・Prisma/mail runtime境界・Wrangler・Vercel Preview・T34実機確認） — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md) — SD1〜SD7完了。SQLite-backed Durable Objectはlocal Workers runtimeでGreen、SD8 mail adapter以降と外部配備は未実施
+- [-] staging frontend/API配備基盤（Workers専用entrypoint・Prisma/mail runtime境界・Wrangler・Vercel Preview・T34実機確認） — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md) — SD1〜SD8完了。SQLite-backed Durable ObjectとMailSender/Workers fetch mail adapterはlocal test・厳格review改善でGreen。SD9以降と外部配備は未実施
 - [ ] Cloudflare Workers Wrangler + Prisma `@prisma/adapter-pg`/接続binding 設定・デプロイ（採用接続方式はstaging計測後に確定）
 - [-] APIレート制限の本番適用継続（Workers専用entrypoint・SQLite-backed Durable Object・WAF・staging/production実機確認） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md) — T13/T14のDO test・store adapterは完了。実namespace/binding、WAF、staging/production実機確認は未実施
 - [ ] Vercel SvelteKit `develop` Previewデプロイ・branch scoped環境変数設定 — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md)

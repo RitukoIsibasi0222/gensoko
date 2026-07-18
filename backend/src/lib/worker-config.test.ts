@@ -93,6 +93,7 @@ describe("getWorkerRuntimeConfig", () => {
         apiKey: "staging-mail-api-key",
         from: "noreply@staging.gensoko.example",
         allowedRecipients: ["synthetic-user@example.invalid"],
+        timeoutMs: 5_000,
       },
     });
   });
@@ -124,6 +125,31 @@ describe("getWorkerRuntimeConfig", () => {
     expect(config.target).toBe("production");
     expect(config.databaseTarget).toBe("production");
     expect(config.mail.allowedRecipients).toBeNull();
+  });
+
+  it("mail timeoutを型付きconfigへ明示注入する", () => {
+    const config = getWorkerRuntimeConfig({
+      expectedTarget: "staging",
+      environment: createEnvironment({ MAIL_TIMEOUT_MS: "2500" }),
+    });
+
+    expect(config.mail.timeoutMs).toBe(2_500);
+  });
+
+  it("mail送信元とallowlistを検証して正規化済みconfigへ格納する", () => {
+    const config = getWorkerRuntimeConfig({
+      expectedTarget: "staging",
+      environment: createEnvironment({
+        MAIL_FROM: " NoReply@Staging.Gensoko.Example ",
+        MAIL_ALLOWED_RECIPIENTS: " Synthetic-User@Example.Invalid , Another-User@Example.Invalid ",
+      }),
+    });
+
+    expect(config.mail.from).toBe("noreply@staging.gensoko.example");
+    expect(config.mail.allowedRecipients).toEqual([
+      "synthetic-user@example.invalid",
+      "another-user@example.invalid",
+    ]);
   });
 
   it.each(REQUIRED_STRING_BINDING_NAMES)("%sの欠落をgeneric errorで拒否する", (name) => {
@@ -181,6 +207,11 @@ describe("getWorkerRuntimeConfig", () => {
         MAIL_ALLOWED_RECIPIENTS: "synthetic-user@example.invalid, ,another-user@example.invalid",
       },
     ],
+    ["不正なmail送信元", { MAIL_FROM: "invalid-mail-from" }],
+    [
+      "不正な宛先を含むmail allowlist",
+      { MAIL_ALLOWED_RECIPIENTS: "synthetic-user@example.invalid,invalid-recipient" },
+    ],
   ])("%sをgeneric errorで拒否する", (_caseName, overrides) => {
     expect(() =>
       getWorkerRuntimeConfig({
@@ -189,6 +220,18 @@ describe("getWorkerRuntimeConfig", () => {
       }),
     ).toThrow(INVALID_WORKER_RUNTIME_CONFIG_MESSAGE);
   });
+
+  it.each(["0", "-1", "1.5", "30001", "not-a-number"])(
+    "不正なmail timeout %sをgeneric errorで拒否する",
+    (timeoutMs) => {
+      expect(() =>
+        getWorkerRuntimeConfig({
+          expectedTarget: "staging",
+          environment: createEnvironment({ MAIL_TIMEOUT_MS: timeoutMs }),
+        }),
+      ).toThrow(INVALID_WORKER_RUNTIME_CONFIG_MESSAGE);
+    },
+  );
 
   it("connectionStringを持たないHyperdrive bindingを拒否する", () => {
     expect(() =>
