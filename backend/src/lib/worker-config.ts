@@ -1,4 +1,5 @@
 import { getFrontendUrl, getRateLimitConfig } from "./config.js";
+import { normalizeMailAddress, parseSafeHttpsUrl } from "./mail-runtime-validation.js";
 
 const INVALID_WORKER_RUNTIME_CONFIG_MESSAGE = "Workers runtime設定が不正です";
 const MIN_PRODUCTION_JWT_SECRET_LENGTH = 64;
@@ -73,18 +74,21 @@ function requireString(value: string | undefined): string {
 }
 
 function parseMailApiUrl(value: string | undefined): string {
-  const apiUrl = new URL(requireString(value));
-
-  if (
-    apiUrl.protocol !== "https:" ||
-    apiUrl.username !== "" ||
-    apiUrl.password !== "" ||
-    apiUrl.hash !== ""
-  ) {
+  const apiUrl = parseSafeHttpsUrl(requireString(value));
+  if (apiUrl === null) {
     rejectInvalidWorkerRuntimeConfig();
   }
 
-  return apiUrl.toString();
+  return apiUrl;
+}
+
+function parseMailAddress(value: string | undefined): string {
+  const address = normalizeMailAddress(requireString(value));
+  if (address === null) {
+    rejectInvalidWorkerRuntimeConfig();
+  }
+
+  return address;
 }
 
 function parseAllowedRecipients(
@@ -95,12 +99,13 @@ function parseAllowedRecipients(
     return null;
   }
 
-  const recipients = requireString(value)
-    .split(",")
-    .map((recipient) => recipient.trim());
-
-  if (recipients.some((recipient) => recipient === "")) {
-    rejectInvalidWorkerRuntimeConfig();
+  const recipients: string[] = [];
+  for (const valuePart of requireString(value).split(",")) {
+    const recipient = normalizeMailAddress(valuePart);
+    if (recipient === null) {
+      rejectInvalidWorkerRuntimeConfig();
+    }
+    recipients.push(recipient);
   }
 
   return recipients;
@@ -199,7 +204,7 @@ export function getWorkerRuntimeConfig({
       mail: {
         apiUrl: parseMailApiUrl(environment.MAIL_API_URL),
         apiKey: requireString(environment.MAIL_API_KEY),
-        from: requireString(environment.MAIL_FROM),
+        from: parseMailAddress(environment.MAIL_FROM),
         allowedRecipients: parseAllowedRecipients(
           environment.MAIL_ALLOWED_RECIPIENTS,
           expectedTarget,

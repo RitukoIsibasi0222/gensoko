@@ -135,6 +135,45 @@ describe("createFetchMailSender", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
+  it("productionでもallowlist設定時はallowlist外をprovider呼出し前に拒否する", async () => {
+    const fetchMock = vi.fn();
+    const outsideRecipient = "outside@example.invalid";
+    const config = createConfig();
+    const sender = createFetchMailSender(
+      {
+        ...config,
+        target: "production",
+      },
+      {
+        fetch: fetchMock as typeof fetch,
+      },
+    );
+
+    await expectSafeFailure(sender.send(createMessage({ to: outsideRecipient })), [
+      outsideRecipient,
+      API_KEY,
+      MAIL_BODY,
+    ]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("productionでもallowlist設定時はallowlist内だけを送信する", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: "provider-message-id" }));
+    const config = createConfig();
+    const sender = createFetchMailSender(
+      {
+        ...config,
+        target: "production",
+      },
+      {
+        fetch: fetchMock as typeof fetch,
+      },
+    );
+
+    await expect(sender.send(createMessage())).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it("設定済み送信元とmessageの送信元が異なる場合はproviderを呼ばない", async () => {
     const fetchMock = vi.fn();
     const sender = createFetchMailSender(createConfig(), {
@@ -170,10 +209,12 @@ describe("createFetchMailSender", () => {
     const json = vi.fn().mockResolvedValue({
       error: "raw provider error with sensitive-mail-api-key",
     });
+    const cancel = vi.fn().mockResolvedValue(undefined);
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       status: 500,
       json,
+      body: { cancel },
     });
     const sender = createFetchMailSender(createConfig(), {
       fetch: fetchMock as typeof fetch,
@@ -181,11 +222,13 @@ describe("createFetchMailSender", () => {
 
     await expectSafeFailure(sender.send(createMessage()), [API_KEY, MAIL_BODY, RECIPIENT]);
     expect(json).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it.each([
     ["非JSON", () => Promise.reject(new SyntaxError("invalid JSON"))],
     ["不正schema", () => Promise.resolve({ message: "missing id" })],
+    ["空白ID", () => Promise.resolve({ id: " " })],
   ])("provider 2xxの%s responseを固定errorへ変換する", async (_caseName, json) => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -226,6 +269,31 @@ describe("createFetchMailSender", () => {
     await failureExpectation;
     const fetchSignal = (fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.signal;
     expect(fetchSignal).toBeInstanceOf(AbortSignal);
+    expect(fetchSignal?.aborted).toBe(true);
+  });
+
+  it("response body待機中のtimeoutでもAbortSignalをabortして固定errorへ変換する", async () => {
+    vi.useFakeTimers();
+    const json = vi.fn(() => new Promise<unknown>(() => undefined));
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json,
+    });
+    const sender = createFetchMailSender(createConfig({ timeoutMs: 25 }), {
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const failureExpectation = expectSafeFailure(sender.send(createMessage()), [
+      API_KEY,
+      MAIL_BODY,
+      RECIPIENT,
+    ]);
+    await vi.advanceTimersByTimeAsync(25);
+
+    await failureExpectation;
+    const fetchSignal = (fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.signal;
+    expect(json).toHaveBeenCalledOnce();
     expect(fetchSignal?.aborted).toBe(true);
   });
 

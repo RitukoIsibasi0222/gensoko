@@ -136,6 +136,22 @@ describe("getWorkerRuntimeConfig", () => {
     expect(config.mail.timeoutMs).toBe(2_500);
   });
 
+  it("mail送信元とallowlistを検証して正規化済みconfigへ格納する", () => {
+    const config = getWorkerRuntimeConfig({
+      expectedTarget: "staging",
+      environment: createEnvironment({
+        MAIL_FROM: " NoReply@Staging.Gensoko.Example ",
+        MAIL_ALLOWED_RECIPIENTS: " Synthetic-User@Example.Invalid , Another-User@Example.Invalid ",
+      }),
+    });
+
+    expect(config.mail.from).toBe("noreply@staging.gensoko.example");
+    expect(config.mail.allowedRecipients).toEqual([
+      "synthetic-user@example.invalid",
+      "another-user@example.invalid",
+    ]);
+  });
+
   it.each(REQUIRED_STRING_BINDING_NAMES)("%sの欠落をgeneric errorで拒否する", (name) => {
     expect(() =>
       getWorkerRuntimeConfig({
@@ -190,6 +206,11 @@ describe("getWorkerRuntimeConfig", () => {
       {
         MAIL_ALLOWED_RECIPIENTS: "synthetic-user@example.invalid, ,another-user@example.invalid",
       },
+    ],
+    ["不正なmail送信元", { MAIL_FROM: "invalid-mail-from" }],
+    [
+      "不正な宛先を含むmail allowlist",
+      { MAIL_ALLOWED_RECIPIENTS: "synthetic-user@example.invalid,invalid-recipient" },
     ],
   ])("%sをgeneric errorで拒否する", (_caseName, overrides) => {
     expect(() =>
