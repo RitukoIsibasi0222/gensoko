@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import { vi } from "vitest";
+import type { RankingService } from "../../services/ranking.service.js";
 import type { AppVariables } from "../../types/index.js";
 import { createRankingRouter } from "./index.js";
 
@@ -20,8 +21,10 @@ const optionalAuthMiddleware: MiddlewareHandler<{ Variables: AppVariables }> = a
 };
 
 export function createRankingTestRouter() {
+  const service = { getAllTimeRanking, getWeeklyRanking } satisfies RankingService;
+
   return createRankingRouter({
     optionalAuthMiddleware,
-    service: { getAllTimeRanking, getWeeklyRanking } as never,
+    service,
   });
 }

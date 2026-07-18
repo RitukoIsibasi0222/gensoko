@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import type { AppDependencies } from "./lib/app-dependencies.js";
 import { adminMiddleware } from "./middleware/admin/index.js";
+import { createCorsMiddleware } from "./middleware/cors/index.js";
 import { createIpBucketResolver, getRateLimitStore } from "./middleware/rateLimit/buckets.js";
 import { rateLimit } from "./middleware/rateLimit/index.js";
 import type { RateLimitDependencies } from "./middleware/rateLimit/store.js";
@@ -44,15 +44,7 @@ export const createApp = ({
   // CORSのpreflight早期応答にも付与するため、securityはCORSより外側に置く。
   app.use("*", logger());
   app.use("*", createSecurityHeadersMiddleware({ isProduction }));
-  app.use(
-    "*",
-    cors({
-      origin: frontendUrl,
-      allowHeaders: ["Content-Type", "Authorization"],
-      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      credentials: true,
-    }),
-  );
+  app.use("*", createCorsMiddleware(frontendUrl));
 
   // store・秘密鍵・信頼済みIP取得方法はapp単位で注入し、route間で共有する。
   app.use("*", async (c, next) => {

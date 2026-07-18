@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import { vi } from "vitest";
+import type { UserService } from "../../services/user.service.js";
 import type { AppVariables } from "../../types/index.js";
 import { createUsersRouter } from "./index.js";
 
@@ -18,14 +19,16 @@ const authMiddleware: MiddlewareHandler<{ Variables: AppVariables }> = async (c,
 };
 
 export function createUsersTestRouter() {
+  const service = {
+    changeCurrentPassword,
+    deleteCurrentUser,
+    getCurrentUserProfile,
+    getCurrentUserStats,
+    updateCurrentUsername,
+  } satisfies UserService;
+
   return createUsersRouter({
     authMiddleware,
-    service: {
-      changeCurrentPassword,
-      deleteCurrentUser,
-      getCurrentUserProfile,
-      getCurrentUserStats,
-      updateCurrentUsername,
-    } as never,
+    service,
   });
 }

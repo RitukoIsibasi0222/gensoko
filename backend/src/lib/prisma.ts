@@ -1,3 +1,4 @@
+import { getDatabaseUrl } from "./config.js";
 import { createPrismaClient } from "./prisma-client.js";
 
-export const prisma = createPrismaClient(process.env.DATABASE_URL!);
+export const prisma = createPrismaClient(getDatabaseUrl());

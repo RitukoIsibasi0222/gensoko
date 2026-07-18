@@ -1,4 +1,5 @@
 const DEVELOPMENT_FRONTEND_URL = "http://localhost:5174";
+const DATABASE_URL_REQUIRED_MESSAGE = "DATABASE_URLの設定が必要です";
 const FRONTEND_URL_REQUIRED_MESSAGE = "production環境ではFRONTEND_URLの設定が必要です";
 const FRONTEND_URL_INVALID_MESSAGE = "FRONTEND_URLはHTTP(S)のオリジン形式で設定してください";
 const RATE_LIMIT_STORE_PRODUCTION_REQUIRED_MESSAGE =
@@ -28,6 +29,12 @@ const MIN_ACCOUNT_DATA_DELETION_BATCH_SIZE = 1;
 const MAX_ACCOUNT_DATA_DELETION_BATCH_SIZE = 100;
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const DECIMAL_INTEGER_PATTERN = /^\d+$/;
+
+export type DatabaseUrlOptions = Readonly<{
+  environment?: Readonly<{
+    DATABASE_URL?: string;
+  }>;
+}>;
 
 export type FrontendUrlOptions = {
   isProduction?: boolean;
@@ -84,6 +91,20 @@ export type StagingAccountDeletionPerformanceConfigOptions = Readonly<{
 export type StagingAccountDeletionPerformanceConfig = Readonly<{
   executeEnabled: boolean;
 }>;
+
+/**
+ * Node.js用Prisma singletonへ渡す接続URLを検証して返す。
+ * Workersはrequest bindingから別途接続URLを注入する。
+ */
+export function getDatabaseUrl({ environment = process.env }: DatabaseUrlOptions = {}): string {
+  const databaseUrl = environment.DATABASE_URL?.trim();
+
+  if (!databaseUrl) {
+    throw new Error(DATABASE_URL_REQUIRED_MESSAGE);
+  }
+
+  return databaseUrl;
+}
 
 function parseFrontendOrigin(value: string): string {
   let url: URL;

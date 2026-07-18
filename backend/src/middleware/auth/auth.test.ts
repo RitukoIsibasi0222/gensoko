@@ -4,7 +4,7 @@
  * TDD: このファイルを先に書いて「何をテストするか」を明確にする
  * 実装（auth.ts）がないと最初は全テスト失敗する → それが正常（Red フェーズ）
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { sign } from "hono/jwt";
 import type { AppVariables } from "../../types/index.js";
@@ -35,9 +35,6 @@ const { authMiddleware, optionalAuthMiddleware } = createAuthMiddlewares({
   prisma: prisma as never,
   jwtSecret: TEST_SECRET,
 });
-
-// テスト環境で JWT_SECRET を設定（vi.stubEnv の前に確実に設定）
-process.env.JWT_SECRET = TEST_SECRET;
 
 /** テスト用トークンを生成するヘルパー */
 const createToken = async (overrides: Record<string, unknown> = {}) => {
@@ -96,13 +93,6 @@ describe("authMiddleware", () => {
   beforeEach(() => {
     // 各テスト前にモックをリセット（前のテストの影響を受けないように）
     vi.clearAllMocks();
-    // 環境変数をテスト用に設定
-    vi.stubEnv("JWT_SECRET", TEST_SECRET);
-  });
-
-  afterEach(() => {
-    // 環境変数を元に戻す
-    vi.unstubAllEnvs();
   });
 
   // -------------------------------------------------------------------
@@ -241,11 +231,6 @@ describe("authMiddleware", () => {
 describe("optionalAuthMiddleware", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv("JWT_SECRET", TEST_SECRET);
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
   });
 
   it("トークンなしでも 200 を返す（user は null）", async () => {

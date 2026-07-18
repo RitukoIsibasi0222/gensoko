@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import { vi } from "vitest";
+import type { AdminService } from "../../services/admin.service.js";
 import type { AppVariables } from "../../types/index.js";
 import { createAdminRouter } from "./index.js";
 
@@ -40,16 +41,18 @@ const adminMiddleware: MiddlewareHandler<{ Variables: AppVariables }> = async (c
 };
 
 export function createAdminTestRouter() {
+  const service = {
+    forceDeleteAdminUser,
+    getAdminStats,
+    getAdminUserDetail,
+    getAdminUsers,
+    updateAdminUserRole,
+    updateAdminUserStatus,
+  } satisfies AdminService;
+
   return createAdminRouter({
     authMiddleware,
     adminMiddleware,
-    service: {
-      forceDeleteAdminUser,
-      getAdminStats,
-      getAdminUserDetail,
-      getAdminUsers,
-      updateAdminUserRole,
-      updateAdminUserStatus,
-    } as never,
+    service,
   });
 }

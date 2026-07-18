@@ -3,7 +3,7 @@ import { verify } from "hono/jwt";
 import type { AppPrismaClient } from "../../lib/prisma-client.js";
 import type { AppVariables, JwtPayload } from "../../types/index.js";
 
-/** JWT_SECRET を取得（未設定は起動時にエラー） */
+/** 認証middlewareへ渡す明示依存。 */
 export type AuthMiddlewareDependencies = Readonly<{
   prisma: Pick<AppPrismaClient, "user">;
   jwtSecret: string;
