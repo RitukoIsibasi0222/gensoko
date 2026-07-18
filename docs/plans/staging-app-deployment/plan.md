@@ -246,6 +246,29 @@ Red実行結果:
 - Green結果: 2 files / 102 tests成功（Workers contract 40件、既存config回帰62件）。
 - SD5との境界: 型付きconfig parserだけを先行実装した。Worker entrypoint、Cloudflare生成型、request dependency配線、resource binding実体は未実装であり、SD5は未完了のままとする。
 
+## SD3〜SD5 request dependency境界・共通factory・Workers entrypoint実装記録
+
+SD3のRedでは、requestごとのadapter生成、別request間でのPrisma非共有、request終了時に`$disconnect()`しない契約、adapter未実装時のfail-closed、設定不正時のsecret非露出を`backend/src/worker.test.ts`へ先行追加した。
+
+- Redコマンド: `npm run test -- --run src/worker.test.ts`
+- Red結果: 1 file失敗、test収集前に`./worker.js`が存在しないため失敗。
+- Greenコマンド: `npm run test -- --run src/worker.test.ts`
+- Green結果: 1 file / 3 tests成功。
+
+SD4では、Prisma client生成、`MailSender`、Serializable transaction runner、認証middleware、route、serviceを明示依存factoryへ分離した。Node entrypointだけがNode用Prisma singleton、Nodemailer adapter、memory rate limitを組み立て、共有app・route・service graphは`process.env`やNode singletonを直接参照しない。CLI専用の`admin-create.service.ts`はWorkers graphから参照されないNode専用実装として維持する。
+
+SD5では、型付き`WorkerRuntimeEnvironment`を受け取る`backend/src/worker.ts`を追加した。Worker handlerはrequestごとにadapter factoryを呼び、同じrequestのPrisma・mail・rate limitを共通app factoryへ渡す。Prisma client/poolはmodule-globalへ保存せず、request終了時の`$disconnect()`も行わない。
+
+DO store adapterとfetch mail adapterはSD7/SD8の責務であるため、既定のstaging Worker entrypointは現時点ではmemory/SMTPへfallbackせず503で閉じる。SD7/SD8完了時に`createRequestAdapters`の実体を接続する。
+
+最終ローカル品質確認:
+
+- `npm run build`: 成功。
+- `npm run lint`: 成功。
+- `npm run format:check`: 成功。
+- `npm run test -- --run`: 86 files / 930 tests成功、外部DBを必要とする4 files / 10 testsは既定どおりskip。
+- 外部接続、deploy、設定・secret変更、migration、実データ参照は未実施。
+
 ## 対象ファイル一覧
 
 実装時に実態へ合わせて更新する。
@@ -253,11 +276,17 @@ Red実行結果:
 | ファイル                                                   | 変更種別       | 内容                                                               |
 | ---------------------------------------------------------- | -------------- | ------------------------------------------------------------------ |
 | `backend/src/worker.ts`                                    | 新規           | Workers module entrypoint、env/binding注入                         |
+| `backend/src/worker.test.ts`                               | 新規           | request scope、fail-closed、secret非露出のcontract test            |
 | `backend/src/app.ts`                                       | 修正           | runtime共通app factoryとrequest dependency境界                     |
+| `backend/src/lib/app-dependencies.ts`                      | 新規           | middleware・serviceを同一request依存へ束ねる共通factory            |
+| `backend/src/lib/prisma-client.ts`                         | 新規           | Node/Workers共通Prisma client factory                              |
 | `backend/src/lib/prisma.ts`                                | 修正           | Node client factory/singletonとWorkers client生成契約の分離        |
+| `backend/src/lib/serializable-transaction-core.ts`         | 新規           | Prisma注入型Serializable transaction runner                        |
 | `backend/src/lib/config.ts`                                | 修正           | Workers bindingを明示入力できる設定検証                            |
 | `backend/src/lib/worker-config.ts` / `.test.ts`            | 新規           | Workers env・binding・targetの型付き契約とunit test                |
-| `backend/src/lib/mail.ts`                                  | 修正           | `MailSender`契約、Node SMTP adapter                                |
+| `backend/src/lib/mail-sender.ts`                           | 新規           | runtime共通`MailSender`契約                                        |
+| `backend/src/lib/mail.ts`                                  | 修正           | Node SMTP adapter                                                  |
+| `backend/src/middleware/auth/index.ts`                     | 修正           | Prisma・JWT secret注入型middleware factory                         |
 | `backend/src/services/*.ts`                                | 必要範囲で修正 | Prisma/mail依存の明示注入。業務ロジックは変更しない                |
 | `backend/src/routes/**/*.ts`                               | 必要範囲で修正 | service dependencyを受けるrouter factory。API契約は変更しない      |
 | `backend/src/cloudflare/rate-limit-counter.ts`             | 既存計画で新規 | SQLite-backed Durable Object。仕様正本はrate limit計画             |
@@ -406,9 +435,9 @@ SD17	結果を記録しT34と本計画の完了可否を判定	plan/progress/dep
 
 - [x] SD1: Workers/Prisma/mail互換性spikeと採用方式を記録する
 - [x] SD2: Workers env・binding・staging target contractをRed化する
-- [ ] SD3: request-scoped Prisma dependency境界をRed化する
-- [ ] SD4: Node/Workers共通dependency factoryを実装する
-- [ ] SD5: Workers専用entrypointと型付きenvを実装する
+- [x] SD3: request-scoped Prisma dependency境界をRed化する
+- [x] SD4: Node/Workers共通dependency factoryを実装する
+- [x] SD5: Workers専用entrypointと型付きenvを実装する
 - [ ] SD6: DO Workers testをRed化する（rate limit計画T13）
 - [ ] SD7: SQLite-backed DO/store adapterを実装する（rate limit計画T14）
 - [ ] SD8: `MailSender`契約とNode/Workers adapterをTDD実装する
