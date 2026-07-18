@@ -46,6 +46,17 @@ describe("getFrontendUrl", () => {
     expect(() => getFrontendUrl()).toThrow("production環境ではFRONTEND_URLの設定が必要です");
   });
 
+  it("明示environmentをprocess.envより優先する", () => {
+    vi.stubEnv("FRONTEND_URL", "https://process-env.example");
+
+    expect(
+      getFrontendUrl({
+        isProduction: true,
+        environment: { FRONTEND_URL: PRODUCTION_FRONTEND_URL },
+      }),
+    ).toBe(PRODUCTION_FRONTEND_URL);
+  });
+
   it("末尾slashだけを含むURLはoriginへ正規化する", () => {
     vi.stubEnv("FRONTEND_URL", `${PRODUCTION_FRONTEND_URL}/`);
 

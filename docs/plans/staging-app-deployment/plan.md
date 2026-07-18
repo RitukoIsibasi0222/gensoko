@@ -223,6 +223,29 @@ PR #107で完全削除API/UI、staging synthetic fixture、cleanup安全契約�
 - SD9: Wrangler、Workers types/test toolをdependencyへ明示追加し、`nodejs_compat`、workerd/WASM bundle、`pg`、Worker graphのNodemailer不在をdry-run/runtime testで証明する。
 - SD13/SD14: 承認後だけcache無効Hyperdrive resourceを作成し、staging synthetic fixtureで`Serializable` transaction、P2034、接続上限、read-after-write、latencyを確認する。失敗時はdeployせず接続方式を再レビューする。
 
+## SD2 Workers env / binding / staging target契約のRed記録
+
+実施日: 2026-07-18。外部環境、DB、mail provider、Cloudflare resourceへ接続せず、pure unit testだけで確認した。
+
+- `getWorkerRuntimeConfig({ expectedTarget, environment })`を公開契約とし、Workersでは`process.env`ではなくrequest境界から渡す明示environmentだけを参照する。
+- stagingでは`DEPLOYMENT_ENVIRONMENT=staging`、`DATABASE_TARGET=staging`、`NODE_ENV=production`、`RATE_LIMIT_STORE=durable-object`の同時一致を必須とし、production binding混同とmemory fallbackを拒否する。
+- 必須文字列は`FRONTEND_URL`、`JWT_SECRET`、`RATE_LIMIT_KEY_SECRET`、HTTPS mail API設定、送信元、staging宛先制限とする。resource bindingは`HYPERDRIVE.connectionString`と`RATE_LIMIT_COUNTER`のDurable Object APIを必須とする。
+- config errorは`Workers runtime設定が不正です`へ固定し、secret、接続URL、host、binding内部値を含めない。
+- Hyperdrive bindingからorigin DBを判別できないため、`DATABASE_TARGET`はruntimeの非secret環境識別子として使う。実際のSupabase originは既存`validateStagingDatabaseTarget`をSD13のHyperdrive resource作成直前に実行して照合し、runtime markerだけで外部採用を承認しない。
+
+Red実行結果:
+
+- コマンド: `npm run test -- --run src/lib/worker-config.test.ts`
+- 結果: 1 file / 24 testsがすべて失敗。
+- 失敗理由: `getWorkerRuntimeConfig`は型付きskeletonのみで、検証実装が未実装。
+- Green担当: SD4/SD5。SD2ではWorker entrypoint、Prisma接続、DO store、mail送信を実装しない。
+
+マージ可能な増分にするため、Red確認後にcontract parserだけをGreenへ進めた。既存`getFrontendUrl`は明示environmentを受けられるようにし、Node呼び出しの`process.env`既定値は維持した。Workers parserは設定値を正規化し、production相当のtarget、HTTPS、secret長、rate limit設定、binding形状、staging allowlistを検証してから固定型を返す。
+
+- Greenコマンド: `npm run test -- --run src/lib/worker-config.test.ts src/lib/config.test.ts`
+- Green結果: 2 files / 102 tests成功（Workers contract 40件、既存config回帰62件）。
+- SD5との境界: 型付きconfig parserだけを先行実装した。Worker entrypoint、Cloudflare生成型、request dependency配線、resource binding実体は未実装であり、SD5は未完了のままとする。
+
 ## 対象ファイル一覧
 
 実装時に実態へ合わせて更新する。
@@ -233,6 +256,7 @@ PR #107で完全削除API/UI、staging synthetic fixture、cleanup安全契約�
 | `backend/src/app.ts`                                       | 修正           | runtime共通app factoryとrequest dependency境界                     |
 | `backend/src/lib/prisma.ts`                                | 修正           | Node client factory/singletonとWorkers client生成契約の分離        |
 | `backend/src/lib/config.ts`                                | 修正           | Workers bindingを明示入力できる設定検証                            |
+| `backend/src/lib/worker-config.ts` / `.test.ts`            | 新規           | Workers env・binding・targetの型付き契約とunit test                |
 | `backend/src/lib/mail.ts`                                  | 修正           | `MailSender`契約、Node SMTP adapter                                |
 | `backend/src/services/*.ts`                                | 必要範囲で修正 | Prisma/mail依存の明示注入。業務ロジックは変更しない                |
 | `backend/src/routes/**/*.ts`                               | 必要範囲で修正 | service dependencyを受けるrouter factory。API契約は変更しない      |
@@ -381,7 +405,7 @@ SD17	結果を記録しT34と本計画の完了可否を判定	plan/progress/dep
 ```
 
 - [x] SD1: Workers/Prisma/mail互換性spikeと採用方式を記録する
-- [ ] SD2: Workers env・binding・staging target contractをRed化する
+- [x] SD2: Workers env・binding・staging target contractをRed化する
 - [ ] SD3: request-scoped Prisma dependency境界をRed化する
 - [ ] SD4: Node/Workers共通dependency factoryを実装する
 - [ ] SD5: Workers専用entrypointと型付きenvを実装する
