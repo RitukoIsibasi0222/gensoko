@@ -240,6 +240,12 @@ Red実行結果:
 - 失敗理由: `getWorkerRuntimeConfig`は型付きskeletonのみで、検証実装が未実装。
 - Green担当: SD4/SD5。SD2ではWorker entrypoint、Prisma接続、DO store、mail送信を実装しない。
 
+マージ可能な増分にするため、Red確認後にcontract parserだけをGreenへ進めた。既存`getFrontendUrl`は明示environmentを受けられるようにし、Node呼び出しの`process.env`既定値は維持した。Workers parserは設定値を正規化し、production相当のtarget、HTTPS、secret長、rate limit設定、binding形状、staging allowlistを検証してから固定型を返す。
+
+- Greenコマンド: `npm run test -- --run src/lib/worker-config.test.ts src/lib/config.test.ts`
+- Green結果: 2 files / 102 tests成功（Workers contract 40件、既存config回帰62件）。
+- SD5との境界: 型付きconfig parserだけを先行実装した。Worker entrypoint、Cloudflare生成型、request dependency配線、resource binding実体は未実装であり、SD5は未完了のままとする。
+
 ## 対象ファイル一覧
 
 実装時に実態へ合わせて更新する。
