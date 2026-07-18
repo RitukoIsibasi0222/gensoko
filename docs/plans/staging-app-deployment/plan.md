@@ -88,13 +88,13 @@ PR #107で完全削除API/UI、staging synthetic fixture、cleanup安全契約�
 
 ### 外部判断が必要な前提
 
-| 判断                                                                                 | 必要時点                              | 未決時の扱い                                               |
-| ------------------------------------------------------------------------------------ | ------------------------------------- | ---------------------------------------------------------- |
-| Cloudflare account/plan、staging Worker名、route/domain                              | `wrangler deploy --env staging`前     | deployしない                                               |
-| Supabase stagingへのWorkers接続方式（Hyperdrive推奨を第一候補、direct poolerを比較） | Prisma実装確定前                      | Serializable transactionと接続上限を実測するまで採用しない |
-| Workers対応メール配送方式・staging宛先制限                                           | Workers bundleのGreen後、外部deploy前 | 登録・forgot-passwordを本番公開可能と扱わない              |
-| Vercel project、production branch、`develop` Preview branch URL                      | frontend外部deploy前                  | CORS originを推測で設定しない                              |
-| staging synthetic account/fixture実行承認                                            | T34直前                               | 実データを参照・変更しない                                 |
+| 判断                                                            | 必要時点                              | 未決時の扱い                                                                                                       |
+| --------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Cloudflare account/plan、staging Worker名、route/domain         | `wrangler deploy --env staging`前     | deployしない                                                                                                       |
+| Supabase stagingをHyperdriveへ接続するorigin endpoint・接続上限 | SD13のresource作成前                  | codeはcache無効Hyperdrive bindingを採用し、外部採用はSerializable transactionと接続上限のstaging実測まで確定しない |
+| Workers対応メール配送方式・staging宛先制限                      | Workers bundleのGreen後、外部deploy前 | 登録・forgot-passwordを本番公開可能と扱わない                                                                      |
+| Vercel project、production branch、`develop` Preview branch URL | frontend外部deploy前                  | CORS originを推測で設定しない                                                                                      |
+| staging synthetic account/fixture実行承認                       | T34直前                               | 実データを参照・変更しない                                                                                         |
 
 ## 重要な設計判断
 
@@ -120,10 +120,11 @@ PR #107で完全削除API/UI、staging synthetic fixture、cleanup安全契約�
 
 ### 4. Prismaはrequest単位のlifecycleを採用する
 
-- Prisma公式のWorkers向け推奨に従い、Workerの`fetch`で`env.DATABASE_URL`または承認済みHyperdrive bindingからadapter/Clientを生成する。
+- Prisma公式のWorkers向け推奨に従い、Workerの`fetch`でcacheを無効にした`env.HYPERDRIVE.connectionString`からadapter/Clientを生成する。Hyperdrive resource・origin endpointはSD13で承認後に作成する。
 - 現在のservice/middlewareがmodule-global `prisma`をimportする構造はWorkers request境界と整合しないため、route/serviceへ明示的にPrisma dependencyを渡すfactory方式へ段階的に移す。
 - Node entrypointは既存singletonを利用できるが、同じservice公開契約を通し、runtimeごとに業務ロジックを複製しない。
 - account deletionの`Serializable` transaction、interactive transaction、cascade、明示`select`がWorkers接続方式でも同じ結果になることを専用integrationで確認する。
+- HyperdriveではrequestごとにClientを生成し、invocation終了時の自動cleanupへ委ねる。requestごとの`$disconnect()`は行わず、Client/driver poolをmodule-globalへ保持しない。
 - Prisma schema/migrationはこの基盤のために変更しない。Client generator/runtime変更が必要な場合はNode/CLI/Workersを同一schemaから生成できる最小構成を別コミットで検証する。
 
 ### 5. Durable Object実装は既存rate limit計画を正本にする
@@ -137,7 +138,8 @@ PR #107で完全削除API/UI、staging synthetic fixture、cleanup安全契約�
 
 - `auth.service.ts`が直接module-global `nodemailer` transportを参照する構造を、`MailSender`相当の小さいinterface注入へ変更する。
 - Node localでは既存Mailpit/SMTP adapterを維持する。
-- Workersでは採用を承認したHTTPS API型mail providerを第一候補とし、秘密鍵をbindingから渡す。SMTPを採用する場合も、Workers TCP/port制約とNodemailer bundle互換性をruntime test・staging送信で証明するまで有効化しない。
+- Workersではprovider SDKを前提にせず、native `fetch`を使うHTTPS API adapterを採用し、endpoint・秘密鍵をbindingから渡す。provider固有payloadはadapter内へ閉じ込める。
+- Nodemailer/SMTPはWorkers import graphへ含めない。Node `net`/`tls`互換やSMTP port差をrelease契約にせず、provider選定・sandbox送信は外部deploy前の別承認とする。
 - stagingは許可済みtest宛先以外へ送信しない。宛先allowlistまたはprovider sandboxをrelease gateにする。
 - メール送信失敗時の登録補償削除、再登録token無効化、forgot-passwordの列挙耐性を既存testのまま維持する。
 
@@ -147,6 +149,79 @@ PR #107で完全削除API/UI、staging synthetic fixture、cleanup安全契約�
 - 初回stagingでは自動deploy workflowを先に作らず、review済みcommitを手動で配備し、target/secret/binding/rollbackを確認する。
 - staging安定後にCI/CDを別タスクで設計し、production migration→API→frontendの順序・backup gateを統合する。
 - T34成功はT35 cleanup execute、production rollout、contract migrationの承認を意味しない。
+
+## SD1 Workers / Prisma / mail互換性spike・採用記録
+
+実施日: 2026-07-18。外部環境、DB、SMTP、mail providerへ接続せず、repository内の依存と一時bundle entryだけで確認した。一時entryとbundle成果物はGit差分へ残していない。
+
+### 確認したversionと現行graph
+
+| 対象                 | 確認値                                          | 結果                                                                                                              |
+| -------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Hono                 | `4.12.17`                                       | 最小Worker target bundle成功                                                                                      |
+| Prisma               | `@prisma/client` / `@prisma/adapter-pg` `7.8.0` | 生成Clientは`workerd` exportとWASM loaderを持つ。現行appはNode builtin/WASMを処理しない素のbrowser bundleでは失敗 |
+| PostgreSQL driver    | `pg 8.20.0`                                     | CloudflareのHyperdrive要件`pg >= 8.13.0`を満たす。Workersでは`nodejs_compat`が必要                                |
+| Nodemailer           | `8.0.7`                                         | Worker target bundleは`events`、`http`、`https`、`net`、`tls`、`child_process`等のNode依存で失敗                  |
+| HTTPS mail prototype | native `fetch`のみ                              | Worker target bundle成功                                                                                          |
+
+現行`backend/src/app.ts`のWorker target bundleは、serviceからmodule-global`prisma` / `mailer`を辿るため失敗した。加えて`crypto` / `node:crypto`も含むが、Prisma/`pg`と共通で`nodejs_compat`を有効にするため、暗号処理だけを理由に業務ロジックを複製しない。
+
+### ローカルbundle spike結果
+
+| entry                    | target             | 結果                                               | 判断                                                               |
+| ------------------------ | ------------------ | -------------------------------------------------- | ------------------------------------------------------------------ |
+| 最小Hono app             | browser/worker条件 | 成功、58.4 KB                                      | Hono app factoryは共有可能                                         |
+| 現行Prisma + `PrismaPg`  | browser/worker条件 | 失敗。`pg`のNode builtinとPrisma WASM loaderを検出 | Wrangler + `nodejs_compat` + workerd/WASM処理をSD9の必須gateにする |
+| 現行Prisma + `PrismaPg`  | Node               | 成功、5.3 MB                                       | Node entrypoint/CLIは現行adapterで維持可能                         |
+| Nodemailer SMTP          | browser/worker条件 | 53件の解決不能Node builtinを検出して失敗           | Worker graphから除外                                               |
+| Nodemailer SMTP          | Node               | 成功、413.7 KB                                     | local Mailpit/SMTP専用adapterとして維持                            |
+| provider非依存HTTPS mail | browser/worker条件 | 成功、548 B                                        | Workers mail方式に採用                                             |
+
+素のesbuildはWranglerのNode polyfill、Workers runtime、Prisma WASM asset処理を再現しない。そのためPrismaの失敗は`nodejs_compat`が不要という反証ではなく、Wrangler dry-run/runtime testを省略できないという結果として扱う。
+
+### 採用方式
+
+1. **Workers runtime**
+   - `nodejs_compat`を必須とし、`compatibility_date`はCloudflareの`pg`要件を満たす`2024-09-23`以降でSD9実装日の固定値にする。
+   - `process.env`自動populateへ依存せず、Worker bindingをrequest境界から明示注入する。
+
+2. **Prisma / PostgreSQL**
+   - `@prisma/adapter-pg`と`pg`を維持し、Workersはcache無効Hyperdrive bindingを第一経路にする。
+   - 初期staging APIは認証、権限、token rotation、ゲーム状態、削除直後確認を同じClient graphで扱うため、Hyperdrive query cacheを全面無効にする。cache有効/無効Clientの二重化は、cache許容queryを別計画で分類するまで行わない。
+   - Workerの`fetch`ごとに`env.HYPERDRIVE.connectionString`から`PrismaPg` / `PrismaClient`を作り、request-scoped dependencyとしてapp/service/middlewareへ渡す。module import時に接続文字列を読まず、module-global Client/Poolを作らない。
+   - Hyperdrive invocation終了時のcleanupへ委ね、Worker requestの`finally`で`$disconnect()`しない。Node CLI/batchは従来どおり明示`$disconnect()`する。
+   - 現行`prisma-client-js`は生成済みClientに`workerd` exportを持つためSD2〜SD8では維持し、SD9のWrangler dry-run・Workers runtime testを採用gateにする。失敗した場合だけ`prisma-client` + `runtime = "cloudflare"` + 明示`output`へ隔離変更し、Node/CLI/Workersを同一schemaから生成・buildできることを同じコミットで証明する。
+   - Hyperdriveはtransaction poolingかつtransaction中は同じorigin connectionを保持する。既存`Serializable` / P2034 retryを維持し、bcryptやmail等の外部I/Oをtransactionへ入れない。
+
+3. **Supabase origin / fallback**
+   - CloudflareがSupabaseをHyperdrive対応providerとして明記しているため、app codeはHyperdriveだけを見る。
+   - Hyperdrive resourceが接続するSupabaseのdirect endpoint / Session pooler / Transaction poolerは、SD13直前にprojectのIP到達性、prepared statement、接続上限、費用を確認して決める。codeやrunbookへhost、project ref、credentialを記録しない。
+   - WorkersからSupabaseへ直接`DATABASE_URL`で接続する経路は初期採用しない。Hyperdriveが`Serializable` transaction、接続上限、latencyのstaging gateを満たさない場合だけfallbackとして再レビューする。
+
+4. **mail**
+   - 業務層は小さい`MailSender.send(message): Promise<void>`だけへ依存させる。
+   - Node adapterはNodemailer + Mailpit/SMTPを維持し、Workers adapterはnative`fetch`のHTTPS API方式にする。provider SDKとNodemailerをWorker entrypointからimportしない。
+   - provider名、endpoint、credential、sandbox/allowlist方式は外部deploy前の承認事項として未確定を維持する。secret未設定、宛先allowlist外、非2xx、非JSON/不正JSON、timeout時はPII・provider body・raw errorを返さない固定日本語errorへ変換する。
+   - 登録送信失敗時の新規User補償削除、再登録token無効化、forgot-passwordの列挙耐性はadapter外の既存契約として維持する。
+
+### 不採用・保留
+
+| 方式                                  | 扱い                 | 理由                                                                                 |
+| ------------------------------------- | -------------------- | ------------------------------------------------------------------------------------ |
+| Hyperdrive query cache有効            | 不採用               | writeでcache invalidationされず、認証・権限・削除後readへstale結果を返し得る         |
+| module-global Prisma Client/`pg.Pool` | 不採用               | Workersのrequest間I/O共有とlifecycleに不整合                                         |
+| requestごとの`$disconnect()`          | Hyperdriveでは不採用 | invocation終了時にedge connectionがcleanupされ、origin poolはHyperdriveが維持する    |
+| Workers direct`DATABASE_URL`          | fallback保留         | connection setup・上限を各isolateへ負わせ、採用済みpooling境界を失う                 |
+| Workers Nodemailer/SMTP               | 不採用               | Worker bundleへ広いNode/SMTP依存を持ち込み、provider/API方式より検証・運用面が大きい |
+| `@prisma/ppg`                         | 不採用               | Prisma Postgres専用かつEarly Accessで、既存Supabase PostgreSQLの要件に合わない       |
+
+### SD2以降の検証gate
+
+- SD2: `HYPERDRIVE`、mail binding、rate limit DO等の欠落・環境混同をsecret値なしでRed化する。
+- SD3/SD4: requestごとに別Prisma/Mail dependencyが渡り、別requestへ漏れないことをunit testで固定する。
+- SD8: Node/Workers adapterの同一`MailSender`契約、allowlist、timeout、safe error、登録補償をTDD実装する。
+- SD9: Wrangler、Workers types/test toolをdependencyへ明示追加し、`nodejs_compat`、workerd/WASM bundle、`pg`、Worker graphのNodemailer不在をdry-run/runtime testで証明する。
+- SD13/SD14: 承認後だけcache無効Hyperdrive resourceを作成し、staging synthetic fixtureで`Serializable` transaction、P2034、接続上限、read-after-write、latencyを確認する。失敗時はdeployせず接続方式を再レビューする。
 
 ## 対象ファイル一覧
 
@@ -305,7 +380,7 @@ SD16	T34 synthetic API/UI/Playwrightを承認後に実行	staging	高
 SD17	結果を記録しT34と本計画の完了可否を判定	plan/progress/deployment	中
 ```
 
-- [ ] SD1: Workers/Prisma/mail互換性spikeと採用方式を記録する
+- [x] SD1: Workers/Prisma/mail互換性spikeと採用方式を記録する
 - [ ] SD2: Workers env・binding・staging target contractをRed化する
 - [ ] SD3: request-scoped Prisma dependency境界をRed化する
 - [ ] SD4: Node/Workers共通dependency factoryを実装する
@@ -328,8 +403,15 @@ SD17	結果を記録しT34と本計画の完了可否を判定	plan/progress/dep
 - [Hono: Cloudflare Workers](https://hono.dev/docs/getting-started/cloudflare-workers)
 - [Prisma ORM: Cloudflare Workers](https://docs.prisma.io/docs/guides/deployment/cloudflare-workers)
 - [Cloudflare Workers: database connections](https://developers.cloudflare.com/workers/databases/connecting-to-databases/)
+- [Cloudflare Workers: Node.js compatibility](https://developers.cloudflare.com/workers/runtime-apis/nodejs/)
 - [Cloudflare Workers: TCP sockets](https://developers.cloudflare.com/workers/runtime-apis/tcp-sockets/)
+- [Cloudflare Hyperdrive: PostgreSQL drivers](https://developers.cloudflare.com/hyperdrive/examples/connect-to-postgres/)
+- [Cloudflare Hyperdrive: query caching](https://developers.cloudflare.com/hyperdrive/concepts/query-caching/)
+- [Cloudflare Hyperdrive: connection lifecycle](https://developers.cloudflare.com/hyperdrive/concepts/connection-lifecycle/)
+- [Cloudflare Hyperdrive: supported databases and providers](https://developers.cloudflare.com/hyperdrive/reference/supported-databases-and-features/)
 - [Cloudflare Durable Objects migrations](https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/)
+- [Prisma ORM: generators](https://www.prisma.io/docs/orm/prisma-schema/overview/generators)
+- [Supabase: database connection modes](https://supabase.com/docs/guides/database/connecting-to-postgres)
 - [SvelteKit: adapter-vercel](https://svelte.dev/docs/kit/adapter-vercel)
 - [Vercel: environments](https://vercel.com/docs/deployments/environments)
 - [Vercel: generated branch URLs](https://vercel.com/docs/deployments/generated-urls)
