@@ -110,6 +110,20 @@ describe("既存soft-deleted user cleanup", () => {
     vi.restoreAllMocks();
   });
 
+  it("deleteOnlyUserIdsの空配列はDB集計前に引数エラーとして拒否する", async () => {
+    await expect(
+      deleteLegacySoftDeletedUsers({
+        mode: "execute",
+        batchSize: 25,
+        deleteOnlyUserIds: [],
+      }),
+    ).rejects.toThrow("削除対象User IDを1件以上指定してください");
+
+    expect(prisma.user.count).not.toHaveBeenCalled();
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
+    expect(runSerializableTransaction).not.toHaveBeenCalled();
+  });
+
   it("dry-runはUserと全所有tableを固定本数で集計し、削除しない", async () => {
     mockTableCounts();
 

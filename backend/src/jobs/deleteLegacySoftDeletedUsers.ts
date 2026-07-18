@@ -6,6 +6,7 @@ const CLEANUP_BATCH_COMPLETED_EVENT = "account_data_deletion.legacy_cleanup.batc
 const CLEANUP_COMPLETED_EVENT = "account_data_deletion.legacy_cleanup.completed";
 const CLEANUP_FAILED_EVENT = "account_data_deletion.legacy_cleanup.failed";
 const CLEANUP_FAILED_MESSAGE = "既存退会済みユーザーの完全削除に失敗しました";
+const EMPTY_DELETE_ONLY_USER_IDS_MESSAGE = "削除対象User IDを1件以上指定してください";
 const LEGACY_USER_WHERE = { deletedAt: { not: null } } as const;
 const LEGACY_CHILD_WHERE = { user: LEGACY_USER_WHERE } as const;
 const LEGACY_ANSWER_WHERE = { session: { user: LEGACY_USER_WHERE } } as const;
@@ -99,6 +100,10 @@ export async function deleteLegacySoftDeletedUsers({
   batchSize,
   deleteOnlyUserIds,
 }: DeleteLegacySoftDeletedUsersInput): Promise<DeleteLegacySoftDeletedUsersResult> {
+  if (deleteOnlyUserIds !== undefined && deleteOnlyUserIds.length === 0) {
+    throw new TypeError(EMPTY_DELETE_ONLY_USER_IDS_MESSAGE);
+  }
+
   const startedAt = performance.now();
   let tableCounts: LegacySoftDeletedUserTableCounts | undefined;
   let deletedUsers = 0;

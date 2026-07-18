@@ -211,7 +211,7 @@
   - [-] Phase 5: T39の`deletedAt`非参照code・test、Prisma User writeの明示`select`契約、v1 deprecated互換値を実装済み。staging/production deploy・soakとT44のPrisma Client再生成は未実施
   - [ ] Phase 6: cleanup後backup、旧Artifactの7日失効、isolated restore drill・削除replay
   - [-] Phase 7: T43のtable lock付き隔離guard SQL・contract test・ローカル専用DB fail/success/並行insert/drop後Prisma writeを完了。staging/production適用はT44として未実施
-  - [x] 2026-07-18 PR #107 review follow-up品質check: backend 885件成功・10件skip、ESLint・Prettier・TypeScript build・Prisma validate成功。専用cascade 5件とcontract migration 5件も成功
+  - [x] 2026-07-18 PR #107 review follow-up品質check: backend 887件成功・10件skip、ESLint・Prettier・TypeScript build・Prisma validate成功。deleteOnlyUserIds空配列拒否とshorthand select許容を含み、専用cascade 5件とcontract migration 5件も成功
   - [ ] Release gate: privacy policy、監査保持承認、全損時replay方針、本番cleanup体制、integration・Playwright・smoke testを完了
 
 ### 完全削除から切り出した関連タスクの着手タイミング
