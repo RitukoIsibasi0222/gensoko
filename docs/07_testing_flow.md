@@ -247,6 +247,40 @@ npm run test -- --coverage
 
 ---
 
+## テスト実行範囲の方針
+
+開発中はフィードバックを速く保つため、TDD の各フェーズに応じて実行範囲を絞る。
+外部 DB を使わない全体確認は、実装・再レビュー・文書同期が終わった後の最終品質ゲートにまとめる。
+
+| タイミング | 実行対象 |
+| ---------- | -------- |
+| Red / Green | 変更対象の test file のみ |
+| Refactor | 変更対象の test file と、直接影響する関連 test のみ |
+| 最終品質ゲート | 外部 DB 不要の backend 全テスト、Workers test、build、lint、format:check |
+
+- 軽微な修正のたびに backend 全テストを繰り返さない。
+- 最終品質ゲートは、実装・再レビュー・文書同期が完了してから原則 1 回だけ実行する。
+- 最終全テストで失敗した場合は、原因に関係する test file へ絞って修正・確認する。その後、影響範囲に応じて必要な全体確認を最後に再実行する。
+
+```bash
+# Red / Green: 変更対象の test file のみ
+npm run test -- --run src/path/to/target.test.ts
+
+# Refactor: 対象 test と直接影響する関連 test のみ
+npm run test -- --run src/path/to/target.test.ts src/path/to/related.test.ts
+
+# 最終品質ゲート（backend/ で原則 1 回）
+npm run test -- --run
+npm run test:workers
+npm run build
+npm run lint
+npm run format:check
+```
+
+専用 DB を使うインテグレーションテストはこの最終品質ゲートに含めず、変更内容と各専用テストの実行条件に応じて別途実行する。
+
+---
+
 ## DB構造変更時の追加確認（必須）
 
 `schema.prisma` や `prisma/migrations/` を変更したときは、ユニットテストだけで完了にしない。
