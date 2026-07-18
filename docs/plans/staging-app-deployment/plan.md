@@ -272,12 +272,30 @@ review対応のRedでは、Node用`DATABASE_URL`の未設定・空値、Worker c
 
 `DATABASE_URL`はNode用config境界で空白を正規化してfail-fastし、Worker bindingやHyperdrive接続経路とは分離した。Workerの早期エラーは共通CORS/security middlewareを再利用し、検証済みfrontend originだけを許可する。ログは固定日本語eventのみとし、raw例外、secret、接続URLを記録しない。adapter未実装を表す`null`は意図的fail-closedのためerror logを出さない。
 
+### PR #112 再review・追加改善記録
+
+再reviewで、早期error responseごとに`new Hono()`とmiddleware登録を繰り返す点が指摘された。既定WorkerはSD7/SD8完了まで全requestを意図的に503へ閉じるため、この処理は稀な例外経路ではなくstagingのhot pathになる。不要なallocationとroute/middleware再登録を避けるため、同じstatus・固定message・検証済みfrontend originのerror appをWorker handler単位で再利用する。
+
+cacheはRequest、ExecutionContext、env object、Prisma、mail、rate limit adapterを保持しない。保存するのはsecretを含まない固定error定義と検証済みfrontend originだけであり、Honoのrequest contextは`fetch`ごとに新規生成される。Cloudflare bindingは同一deployment中に不変であるため、request間のdependency漏洩を起こさずfail-closedの継続コストだけを削減できる。
+
+- Redコマンド: `npm run test -- --run src/worker.test.ts src/lib/prisma.test.ts`
+- Red結果: 2 files / 11 tests中、cache未実装を示す1 test失敗。Prisma wiring 2 testsは成功。
+- Green結果: 2 files / 11 tests成功。
+
+`backend/src/lib/prisma.test.ts`は、validator単体では検出できないmodule wiringの回帰を防ぐため追加した。`prisma.ts`が必ず`getDatabaseUrl()`の検証済み値を`createPrismaClient()`へ渡すこと、検証失敗時はclient factoryを呼ばないことをmodule isolationで固定する。これにより、将来`process.env.DATABASE_URL!`の直接参照へ戻してもtestで検出できる。
+
+今回意図的に残す改善:
+
+- Worker logのreason code・相関ID・samplingは、Cloudflare上の観測基盤とログ保持方針を決めてから実装する。raw例外を出さない固定log契約は維持する。
+- 既存test suite全体の`as never`除去は、今回追加・変更したroute helperの範囲を超えるため、独立したtest infrastructure refactorとして扱う。
+- Wrangler/workerd bundle・runtime検証とCloudflare生成型は、正本task順どおりSD9の採用gateで実施する。
+
 最終ローカル品質確認:
 
 - `npm run build`: 成功。
 - `npm run lint`: 成功。
 - `npm run format:check`: 成功。
-- `npm run test -- --run`: 86 files / 940 tests成功、外部DBを必要とする4 files / 10 testsは既定どおりskip。
+- `npm run test -- --run`: 87 files / 943 tests成功、外部DBを必要とする4 files / 10 testsは既定どおりskip。
 - 外部接続、deploy、設定・secret変更、migration、実データ参照は未実施。
 
 ## 対象ファイル一覧
@@ -292,6 +310,7 @@ review対応のRedでは、Node用`DATABASE_URL`の未設定・空値、Worker c
 | `backend/src/lib/app-dependencies.ts`                      | 新規           | middleware・serviceを同一request依存へ束ねる共通factory            |
 | `backend/src/lib/prisma-client.ts`                         | 新規           | Node/Workers共通Prisma client factory                              |
 | `backend/src/lib/prisma.ts`                                | 修正           | Node client factory/singletonとWorkers client生成契約の分離        |
+| `backend/src/lib/prisma.test.ts`                           | 新規           | Node singletonが検証済みDATABASE_URLだけを使うmodule wiring test   |
 | `backend/src/lib/serializable-transaction-core.ts`         | 新規           | Prisma注入型Serializable transaction runner                        |
 | `backend/src/lib/config.ts` / `.test.ts`                   | 修正           | Workers binding明示入力とNode DATABASE_URLのfail-fast              |
 | `backend/src/lib/worker-config.ts` / `.test.ts`            | 新規           | Workers env・binding・targetの型付き契約とunit test                |
