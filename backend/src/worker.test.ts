@@ -128,6 +128,27 @@ describe("createWorkerHandler", () => {
     });
   });
 
+  it("同じfail-closed応答ではerror appを再構築しない", async () => {
+    const createErrorApplication = vi.fn(
+      ({ message, status }: { message: string; status: 500 | 503 }) => ({
+        fetch: async () => Response.json({ error: message }, { status }),
+      }),
+    );
+    const worker = createWorkerHandler({
+      expectedTarget: "staging",
+      createRequestAdapters: async () => null,
+      createErrorApplication,
+    });
+    const environment = createValidEnvironment();
+
+    const firstResponse = await worker.fetch(createWorkerRequest("/first"), environment);
+    const secondResponse = await worker.fetch(createWorkerRequest("/second"), environment);
+
+    expect(firstResponse.status).toBe(503);
+    expect(secondResponse.status).toBe(503);
+    expect(createErrorApplication).toHaveBeenCalledOnce();
+  });
+
   it("設定不正の詳細やsecretを応答・ログへ含めない", async () => {
     const worker = createWorkerHandler({
       expectedTarget: "staging",

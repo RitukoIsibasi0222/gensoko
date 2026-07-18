@@ -48,19 +48,28 @@ export type CreateWorkerHandlerOptions = Readonly<{
   createRequestAdapters: CreateWorkerRequestAdapters;
   createDependencies?: typeof createAppDependencies;
   createApplication?: typeof createApp;
+  createErrorApplication?: CreateWorkerErrorApplication;
 }>;
 
-async function jsonError({
-  request,
-  message,
-  status,
-  frontendUrl,
-}: Readonly<{
-  request: Request;
+export type WorkerErrorApplicationOptions = Readonly<{
   message: string;
   status: 500 | 503;
   frontendUrl?: string;
-}>): Promise<Response> {
+}>;
+
+export type WorkerErrorApplication = Readonly<{
+  fetch(request: Request): Response | Promise<Response>;
+}>;
+
+export type CreateWorkerErrorApplication = (
+  options: WorkerErrorApplicationOptions,
+) => WorkerErrorApplication;
+
+function createWorkerErrorApplication({
+  message,
+  status,
+  frontendUrl,
+}: WorkerErrorApplicationOptions): WorkerErrorApplication {
   const errorApp = new Hono();
 
   errorApp.use("*", createSecurityHeadersMiddleware({ isProduction: true }));
@@ -74,7 +83,7 @@ async function jsonError({
   }
 
   errorApp.all("*", (context) => context.json({ error: message }, status));
-  return errorApp.fetch(request);
+  return errorApp;
 }
 
 export function createWorkerHandler({
@@ -82,7 +91,29 @@ export function createWorkerHandler({
   createRequestAdapters,
   createDependencies = createAppDependencies,
   createApplication = createApp,
+  createErrorApplication = createWorkerErrorApplication,
 }: CreateWorkerHandlerOptions) {
+  // 既定WorkerはSD7/SD8まで全requestを503で閉じるため、error appの再構築を避ける。
+  // 固定status/messageと検証済みoriginだけをcacheし、request・env・adapterは保持しない。
+  const errorApplications = new Map<string, WorkerErrorApplication>();
+
+  const jsonError = async ({
+    request,
+    message,
+    status,
+    frontendUrl,
+  }: WorkerErrorApplicationOptions & Readonly<{ request: Request }>): Promise<Response> => {
+    const cacheKey = JSON.stringify([status, message, frontendUrl ?? null]);
+    let errorApplication = errorApplications.get(cacheKey);
+
+    if (!errorApplication) {
+      errorApplication = createErrorApplication({ message, status, frontendUrl });
+      errorApplications.set(cacheKey, errorApplication);
+    }
+
+    return errorApplication.fetch(request);
+  };
+
   return {
     async fetch(
       request: Request,
