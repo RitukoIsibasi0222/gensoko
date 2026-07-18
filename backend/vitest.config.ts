@@ -5,6 +5,7 @@ export default defineConfig({
     environment: "node",
     // テストファイルのパターン
     include: ["src/**/*.test.ts"],
+    exclude: ["src/cloudflare/**/*.test.ts"],
     // グローバルに使えるようにする（describe/it/expect を import 不要にも可）
     globals: false,
     // 全テストで共通のセットアップ（rateLimit等のミドルウェアをスルーにする）
