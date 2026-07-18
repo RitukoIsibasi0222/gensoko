@@ -8,7 +8,7 @@ import {
 } from "./worker.js";
 
 const VALID_JWT_SECRET = "j".repeat(64);
-const VALID_RATE_LIMIT_SECRET = btoa("r".repeat(32));
+const VALID_RATE_LIMIT_SECRET = Buffer.from("r".repeat(32)).toString("base64");
 const ALLOWED_ORIGIN = "https://staging.gensoko.example";
 
 function createRateLimitDependencies() {
@@ -165,12 +165,68 @@ describe("createWorkerHandler", () => {
       const body = await response.text();
 
       expect(response.status).toBe(500);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe(ALLOWED_ORIGIN);
+      expect(response.headers.get("Access-Control-Allow-Credentials")).toBe("true");
       expect(response.headers.get("Cache-Control")).toBe("no-store");
       expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
       expect(body).toContain("Workers runtime設定が不正です");
       expect(body).not.toContain("sensitive-but-invalid");
       expect(consoleErrorSpy).toHaveBeenCalledWith("Workers runtime設定の検証に失敗しました");
       expect(JSON.stringify(consoleErrorSpy.mock.calls)).not.toContain("sensitive-but-invalid");
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  it("他の設定が不正でも検証済みoriginのpreflightを処理する", async () => {
+    const worker = createWorkerHandler({
+      expectedTarget: "staging",
+      createRequestAdapters: vi.fn(),
+    });
+    const environment = {
+      ...createValidEnvironment(),
+      JWT_SECRET: "invalid",
+    };
+    const request = new Request("https://api.example.test/api/v1/auth/login", {
+      method: "OPTIONS",
+      headers: {
+        Origin: ALLOWED_ORIGIN,
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "Content-Type,Authorization",
+      },
+    });
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const response = await worker.fetch(request, environment);
+
+      expect(response.status).toBe(204);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe(ALLOWED_ORIGIN);
+      expect(response.headers.get("Access-Control-Allow-Credentials")).toBe("true");
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  it("本設定で不正なFRONTEND_URLは設定エラーresponseへCORS originを付けない", async () => {
+    const worker = createWorkerHandler({
+      expectedTarget: "staging",
+      createRequestAdapters: vi.fn(),
+    });
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      for (const frontendUrl of ["https://evil.example/path", "http://staging.gensoko.example"]) {
+        const response = await worker.fetch(createWorkerRequest("/", new URL(frontendUrl).origin), {
+          ...createValidEnvironment(),
+          FRONTEND_URL: frontendUrl,
+        });
+
+        expect(response.status).toBe(500);
+        expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
+        expect(response.headers.get("Access-Control-Allow-Credentials")).toBeNull();
+      }
     } finally {
       consoleErrorSpy.mockRestore();
     }

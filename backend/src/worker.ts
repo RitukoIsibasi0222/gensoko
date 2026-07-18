@@ -4,6 +4,7 @@ import {
   createAppDependencies,
   type CreateAppDependenciesOptions,
 } from "./lib/app-dependencies.js";
+import { getFrontendUrl } from "./lib/config.js";
 import type { MailSender } from "./lib/mail-sender.js";
 import type { AppPrismaClient } from "./lib/prisma-client.js";
 import {
@@ -86,6 +87,20 @@ function createWorkerErrorApplication({
   return errorApp;
 }
 
+function getSafeWorkerErrorFrontendUrl(environment: WorkerRuntimeEnvironment): string | undefined {
+  try {
+    const frontendUrl = getFrontendUrl({
+      isProduction: true,
+      environment,
+    });
+
+    // 通常のWorkers設定と同様、error pathでも検証済みHTTPS originだけをCORSへ渡す。
+    return frontendUrl.startsWith("https://") ? frontendUrl : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function createWorkerHandler({
   expectedTarget,
   createRequestAdapters,
@@ -124,11 +139,13 @@ export function createWorkerHandler({
       try {
         config = getWorkerRuntimeConfig({ expectedTarget, environment });
       } catch {
+        const frontendUrl = getSafeWorkerErrorFrontendUrl(environment);
         console.error(INVALID_RUNTIME_CONFIG_LOG_MESSAGE);
         return jsonError({
           request,
           message: INVALID_RUNTIME_CONFIG_MESSAGE,
           status: 500,
+          frontendUrl,
         });
       }
 
