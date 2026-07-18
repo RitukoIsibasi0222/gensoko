@@ -362,16 +362,20 @@ Prisma schema/migrationと公開APIは変更していない。Cloudflare/Vercel/
 - Red: `fetch-mail-sender.test.ts`、`mail.test.ts`、`worker-config.test.ts`を先行追加・更新し、未実装module、Node factory欠落、timeout契約不一致により3 files / 47 tests中8 tests失敗・39 tests成功を確認した。
 - Green: provider request/response schema、HTTPS fetch、staging allowlist、AbortController timeout、固定safe error、Node factory、型付きtimeout configを実装し、3 files / 57 testsが成功した。
 - Refactor: register、未認証再登録、forgot-password、Worker fail-closedを含む直接影響6 files / 86 testsが成功した。追加review後のfetch adapter・Worker testは2 files / 22 testsが成功した。
+- 厳格review Red（2026-07-19）: productionで明示したallowlistが無視される問題、mail configの形式未検証、非2xx body未cleanup、空白provider ID受理、response body待機timeout未完了をtest先行で固定し、3 files / 66 tests中7 tests失敗・59 tests成功を確認した。Node Nodemailer reject伝播testは追加時点からGreenだった。
+- 厳格review Green/Refactor: productionの明示allowlist適用、config境界のメール形式検証・正規化、共通HTTPS/mail validation、response body cancel、fetchとresponse body全体のtimeout、空白provider ID拒否を実装し、対象3 files / 66 tests、直接影響6 files / 95 testsが成功した。
 
 ### 実装判断
 
 1. 共通業務層は既存の`MailSender.send(message): Promise<void>`だけへ依存し、provider APIのrequest `{ from, to, subject, text, html? }`とresponse `{ id: string }`はfetch adapter内のZod境界へ閉じ込める。
 2. Workers adapterは型付き`WorkerRuntimeConfig`のtargetとmail設定だけを明示注入し、Bearer credential付きHTTPS POSTをnative `fetch`で実行する。request、env、secret、message、AbortControllerをmodule-global mutable stateへ保存しない。
-3. timeoutはconfigで既定5,000ms、上限30,000msの正整数とし、送信ごとの`AbortController`をfetchへ渡す。timeout、network error、非2xx、非JSON、不正responseはすべて「メールを送信できませんでした」へ変換し、raw provider error、API key、本文、宛先、tokenをerrorやlogへ含めない。
-4. stagingは空でないallowlistをWorker configで必須化し、adapterでも正規化した完全一致をprovider呼出し前に確認する。productionはallowlist未設定を区別して許容する。
+3. timeoutはconfigで既定5,000ms、上限30,000msの正整数とし、送信ごとの`AbortController`と固定errorの`Promise.race`でfetch・response body検証全体へ適用する。timeout、network error、非2xx、非JSON、不正responseはすべて「メールを送信できませんでした」へ変換し、raw provider error、API key、本文、宛先、tokenをerrorやlogへ含めない。
+4. stagingは空でないallowlistをWorker configで必須化する。productionはallowlist未設定の`null`だけを制限なしとして許容し、配列が設定された場合はtargetを問わず正規化した完全一致をprovider呼出し前に強制する。
 5. messageの送信元は型付きconfigの`MAIL_FROM`と一致する場合だけ送信し、provider payloadにはconfig値を使う。Nodeは既存Nodemailer transportを`createNodeMailSender`経由で維持する。
 6. 登録送信失敗時の新規User補償削除、未認証再登録時の最新確認token無効化、forgot-password失敗時のreset token削除と常時200の列挙耐性は既存service/route契約のまま維持する。
 7. SD9のWrangler staging/production graphと実binding接続は先取りしない。既定WorkerはSD9まで503 fail-closedを維持し、SMTP、memory、module-global adapterへfallbackしない。
+8. HTTPS endpointとメールアドレスのruntime validationは共通pure helperへ集約する。Worker configは送信元とallowlistを検証・正規化して保持し、adapterは防御的に再検証しつつ境界ごとの固定errorへ変換する。
+9. provider非2xx bodyは内容を解析せずcancelし、2xx responseの`id`は空白だけの値を拒否する。Bearer認証とprovider payload/response schemaはprovider固有境界としてadapter内だけに閉じ込める。
 
 ### SD8の実際の変更ファイル
 
@@ -379,6 +383,7 @@ Prisma schema/migrationと公開APIは変更していない。Cloudflare/Vercel/
 | ----------------------------------------------- | ---------- | ------------------------------------------------------------------------ |
 | `backend/src/lib/fetch-mail-sender.ts`          | 新規       | HTTPS fetch adapter、provider schema、allowlist、timeout、固定safe error |
 | `backend/src/lib/fetch-mail-sender.test.ts`     | 新規       | request/response、allowlist、network/非2xx/JSON、timeout、秘密非露出test |
+| `backend/src/lib/mail-runtime-validation.ts`    | 新規       | HTTPS endpointとメールアドレスの共通runtime validation                   |
 | `backend/src/lib/mail.ts` / `mail.test.ts`      | 修正・新規 | 既存Nodemailer transportのMailSender factoryと契約test                   |
 | `backend/src/lib/worker-config.ts` / `.test.ts` | 修正       | 型付きmail timeoutの既定値・範囲検証・明示注入                           |
 | `backend/src/worker.ts`                         | 修正       | SD9まで503 fail-closedを維持する境界コメントを実態へ同期                 |
@@ -393,6 +398,7 @@ Prisma schema/migrationと公開APIは変更していない。Cloudflare/Vercel/
 - Node全test: `npm run test -- --run --maxWorkers=1`で89 files / 963 tests成功。外部DB専用4 files / 10 testsは既定どおりskipした。
 - Workers test: `npm run test:workers`で1 file / 12 tests成功した。
 - 既定並列のNode全testは2回ともSD8外の既存`deleteLegacySoftDeletedUsers.cli.test.ts` 1件だけが、固定1秒の`vi.waitFor`に対して1,016ms / 1,025msかかり失敗した。同file単体は29 testsすべて成功し、単一workerの全suiteでも成功したため、SD8で既存test timeoutは変更していない。
+- 厳格review改善後の最終gate（2026-07-19）: `npm run build`、`npm run lint`、`npm run format:check`、更新docsのPrettier check、`git diff --check`が成功した。Node全testは単一workerで89 files / 971 tests成功、外部DB専用4 files / 10 testsはskip、Workers testは1 file / 12 tests成功した。
 
 公開API、Prisma schema/migration、SD7 Durable Object実装は変更していない。実mail provider、SMTP、DB、Cloudflare/Vercel/Supabaseへ接続せず、secret操作、resource作成、deploy、migration、実データ参照も実施していない。
 
@@ -415,6 +421,7 @@ Prisma schema/migrationと公開APIは変更していない。Cloudflare/Vercel/
 | `backend/src/lib/mail-sender.ts`                           | 新規           | runtime共通`MailSender`契約                                        |
 | `backend/src/lib/mail.ts` / `mail.test.ts`                 | 修正・新規     | Node Nodemailer adapter factoryと共通契約test                      |
 | `backend/src/lib/fetch-mail-sender.ts` / `.test.ts`        | 新規           | Workers HTTPS mail adapterとprovider境界・allowlist・timeout test  |
+| `backend/src/lib/mail-runtime-validation.ts`               | 新規           | HTTPS endpointとメールアドレスの共通runtime validation             |
 | `backend/src/middleware/auth/index.ts`                     | 修正           | Prisma・JWT secret注入型middleware factory                         |
 | `backend/src/middleware/cors/index.ts`                     | 新規           | appとWorker早期エラーで共有する単一origin CORS設定                 |
 | `backend/src/services/*.ts`                                | 必要範囲で修正 | Prisma/mail依存の明示注入。業務ロジックは変更しない                |
