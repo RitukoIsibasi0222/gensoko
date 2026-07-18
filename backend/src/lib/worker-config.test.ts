@@ -12,6 +12,19 @@ const VALID_JWT_SECRET = "j".repeat(64);
 const VALID_RATE_LIMIT_KEY_SECRET = Buffer.from("0123456789abcdef0123456789abcdef").toString(
   "base64",
 );
+const REQUIRED_STRING_BINDING_NAMES = [
+  "DEPLOYMENT_ENVIRONMENT",
+  "DATABASE_TARGET",
+  "NODE_ENV",
+  "FRONTEND_URL",
+  "JWT_SECRET",
+  "RATE_LIMIT_STORE",
+  "RATE_LIMIT_KEY_SECRET",
+  "MAIL_API_URL",
+  "MAIL_API_KEY",
+  "MAIL_FROM",
+  "MAIL_ALLOWED_RECIPIENTS",
+] as const;
 
 const HYPERDRIVE_BINDING: HyperdriveBinding = {
   connectionString:
@@ -97,23 +110,36 @@ describe("getWorkerRuntimeConfig", () => {
     ).toBe("staging");
   });
 
-  it.each([
-    "DEPLOYMENT_ENVIRONMENT",
-    "DATABASE_TARGET",
-    "NODE_ENV",
-    "FRONTEND_URL",
-    "JWT_SECRET",
-    "RATE_LIMIT_STORE",
-    "RATE_LIMIT_KEY_SECRET",
-    "MAIL_API_URL",
-    "MAIL_API_KEY",
-    "MAIL_FROM",
-    "MAIL_ALLOWED_RECIPIENTS",
-  ] as const)("%sの欠落をgeneric errorで拒否する", (name) => {
+  it("productionはproduction専用targetを受理しmail allowlist未設定を区別する", () => {
+    const config = getWorkerRuntimeConfig({
+      expectedTarget: "production",
+      environment: createEnvironment({
+        DEPLOYMENT_ENVIRONMENT: "production",
+        DATABASE_TARGET: "production",
+        FRONTEND_URL: "https://gensoko.example",
+        MAIL_ALLOWED_RECIPIENTS: undefined,
+      }),
+    });
+
+    expect(config.target).toBe("production");
+    expect(config.databaseTarget).toBe("production");
+    expect(config.mail.allowedRecipients).toBeNull();
+  });
+
+  it.each(REQUIRED_STRING_BINDING_NAMES)("%sの欠落をgeneric errorで拒否する", (name) => {
     expect(() =>
       getWorkerRuntimeConfig({
         expectedTarget: "staging",
         environment: createEnvironment({ [name]: undefined }),
+      }),
+    ).toThrow(INVALID_WORKER_RUNTIME_CONFIG_MESSAGE);
+  });
+
+  it.each(REQUIRED_STRING_BINDING_NAMES)("%sの空白値をgeneric errorで拒否する", (name) => {
+    expect(() =>
+      getWorkerRuntimeConfig({
+        expectedTarget: "staging",
+        environment: createEnvironment({ [name]: " " }),
       }),
     ).toThrow(INVALID_WORKER_RUNTIME_CONFIG_MESSAGE);
   });
@@ -146,12 +172,43 @@ describe("getWorkerRuntimeConfig", () => {
     ).toThrow(INVALID_WORKER_RUNTIME_CONFIG_MESSAGE);
   });
 
+  it.each([
+    ["64文字未満のJWT secret", { JWT_SECRET: "short-secret" }],
+    ["不正なrate limit secret", { RATE_LIMIT_KEY_SECRET: "not-base64!" }],
+    [
+      "空要素を含むmail allowlist",
+      {
+        MAIL_ALLOWED_RECIPIENTS: "synthetic-user@example.invalid, ,another-user@example.invalid",
+      },
+    ],
+  ])("%sをgeneric errorで拒否する", (_caseName, overrides) => {
+    expect(() =>
+      getWorkerRuntimeConfig({
+        expectedTarget: "staging",
+        environment: createEnvironment(overrides),
+      }),
+    ).toThrow(INVALID_WORKER_RUNTIME_CONFIG_MESSAGE);
+  });
+
   it("connectionStringを持たないHyperdrive bindingを拒否する", () => {
     expect(() =>
       getWorkerRuntimeConfig({
         expectedTarget: "staging",
         environment: createEnvironment({
           HYPERDRIVE: {} as HyperdriveBinding,
+        }),
+      }),
+    ).toThrow(INVALID_WORKER_RUNTIME_CONFIG_MESSAGE);
+  });
+
+  it("前後空白付きのHyperdrive connectionStringを拒否する", () => {
+    expect(() =>
+      getWorkerRuntimeConfig({
+        expectedTarget: "staging",
+        environment: createEnvironment({
+          HYPERDRIVE: {
+            connectionString: " postgresql://worker.example.invalid/database ",
+          },
         }),
       }),
     ).toThrow(INVALID_WORKER_RUNTIME_CONFIG_MESSAGE);

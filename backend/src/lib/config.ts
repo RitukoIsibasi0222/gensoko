@@ -31,6 +31,9 @@ const DECIMAL_INTEGER_PATTERN = /^\d+$/;
 
 export type FrontendUrlOptions = {
   isProduction?: boolean;
+  environment?: Readonly<{
+    FRONTEND_URL?: string;
+  }>;
 };
 
 export type RateLimitRuntime = "development" | "test" | "production";
@@ -112,8 +115,9 @@ function parseFrontendOrigin(value: string): string {
  */
 export function getFrontendUrl({
   isProduction = process.env.NODE_ENV === "production",
+  environment = process.env,
 }: FrontendUrlOptions = {}): string {
-  const frontendUrl = process.env.FRONTEND_URL?.trim();
+  const frontendUrl = environment.FRONTEND_URL?.trim();
 
   if (frontendUrl) {
     return parseFrontendOrigin(frontendUrl);
