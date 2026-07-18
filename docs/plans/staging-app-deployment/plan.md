@@ -355,7 +355,7 @@ Prisma schema/migrationと公開APIは変更していない。Cloudflare/Vercel/
 
 - 記録日: 2026-07-18
 - 実装ブランチ: `feature/staging-app-deployment-sd8`
-- PR: 未作成（ユーザー指示によりlocal commitまで）
+- PR: #115（作成済み）
 
 ### TDD記録
 
