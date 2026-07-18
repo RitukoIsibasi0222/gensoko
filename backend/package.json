@@ -12,6 +12,7 @@
     "test:integration:audit": "vitest --run src/services/audit-rollback.integration.test.ts",
     "test:integration:audit-cleanup": "vitest --run src/jobs/cleanupAuditLogs.integration.test.ts",
     "test:integration:account-deletion": "vitest --run src/jobs/accountDeletion.integration.test.ts",
+    "test:integration:account-deletion-contract": "vitest --run src/jobs/accountDeletionContractMigration.integration.test.ts",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write src",
