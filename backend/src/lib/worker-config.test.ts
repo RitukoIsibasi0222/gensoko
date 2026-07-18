@@ -93,6 +93,7 @@ describe("getWorkerRuntimeConfig", () => {
         apiKey: "staging-mail-api-key",
         from: "noreply@staging.gensoko.example",
         allowedRecipients: ["synthetic-user@example.invalid"],
+        timeoutMs: 5_000,
       },
     });
   });
@@ -124,6 +125,15 @@ describe("getWorkerRuntimeConfig", () => {
     expect(config.target).toBe("production");
     expect(config.databaseTarget).toBe("production");
     expect(config.mail.allowedRecipients).toBeNull();
+  });
+
+  it("mail timeoutを型付きconfigへ明示注入する", () => {
+    const config = getWorkerRuntimeConfig({
+      expectedTarget: "staging",
+      environment: createEnvironment({ MAIL_TIMEOUT_MS: "2500" }),
+    });
+
+    expect(config.mail.timeoutMs).toBe(2_500);
   });
 
   it.each(REQUIRED_STRING_BINDING_NAMES)("%sの欠落をgeneric errorで拒否する", (name) => {
@@ -189,6 +199,18 @@ describe("getWorkerRuntimeConfig", () => {
       }),
     ).toThrow(INVALID_WORKER_RUNTIME_CONFIG_MESSAGE);
   });
+
+  it.each(["0", "-1", "1.5", "30001", "not-a-number"])(
+    "不正なmail timeout %sをgeneric errorで拒否する",
+    (timeoutMs) => {
+      expect(() =>
+        getWorkerRuntimeConfig({
+          expectedTarget: "staging",
+          environment: createEnvironment({ MAIL_TIMEOUT_MS: timeoutMs }),
+        }),
+      ).toThrow(INVALID_WORKER_RUNTIME_CONFIG_MESSAGE);
+    },
+  );
 
   it("connectionStringを持たないHyperdrive bindingを拒否する", () => {
     expect(() =>

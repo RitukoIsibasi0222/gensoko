@@ -2,6 +2,8 @@ import { getFrontendUrl, getRateLimitConfig } from "./config.js";
 
 const INVALID_WORKER_RUNTIME_CONFIG_MESSAGE = "Workers runtime設定が不正です";
 const MIN_PRODUCTION_JWT_SECRET_LENGTH = 64;
+const DEFAULT_MAIL_TIMEOUT_MS = 5_000;
+const MAX_MAIL_TIMEOUT_MS = 30_000;
 
 export type WorkerDeploymentTarget = "staging" | "production";
 
@@ -26,6 +28,7 @@ export type WorkerRuntimeEnvironment = Readonly<{
   MAIL_API_KEY?: string;
   MAIL_FROM?: string;
   MAIL_ALLOWED_RECIPIENTS?: string;
+  MAIL_TIMEOUT_MS?: string;
   HYPERDRIVE?: HyperdriveBinding;
   RATE_LIMIT_COUNTER?: DurableObjectNamespaceBinding;
 }>;
@@ -51,6 +54,7 @@ export type WorkerRuntimeConfig = Readonly<{
     apiKey: string;
     from: string;
     allowedRecipients: readonly string[] | null;
+    timeoutMs: number;
   }>;
 }>;
 
@@ -100,6 +104,19 @@ function parseAllowedRecipients(
   }
 
   return recipients;
+}
+
+function parseMailTimeoutMs(value: string | undefined): number {
+  if (value === undefined) {
+    return DEFAULT_MAIL_TIMEOUT_MS;
+  }
+
+  const timeoutMs = Number(requireString(value));
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_MAIL_TIMEOUT_MS) {
+    rejectInvalidWorkerRuntimeConfig();
+  }
+
+  return timeoutMs;
 }
 
 function validateHyperdriveBinding(binding: HyperdriveBinding | undefined): HyperdriveBinding {
@@ -187,6 +204,7 @@ export function getWorkerRuntimeConfig({
           environment.MAIL_ALLOWED_RECIPIENTS,
           expectedTarget,
         ),
+        timeoutMs: parseMailTimeoutMs(environment.MAIL_TIMEOUT_MS),
       },
     };
   } catch {
