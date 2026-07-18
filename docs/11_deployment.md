@@ -291,6 +291,28 @@ T33はT35のlegacy cleanupと分離する。PR mergeと明示承認前にworkflo
 10. 実`deleteCurrentUser` service経路の`durationMs`が`min(timeout * 0.5, 5,000)`以内であることを確認する。超過時はproduction公開をblockして非同期方式を再設計する。
 11. 成功・失敗にかかわらずsynthetic User・所有row・synthetic成功監査が残っていないことを確認し、flagを`false`へ戻す。
 
+#### T33 managed DB判定基準
+
+ローカルDockerの初回migration再現値は測定手段のbaselineであり、managed DBの合格証拠には使わない。PostgreSQL公式仕様では通常の`CREATE INDEX`は対象tableのwriteを完了までblockし、Supabaseもcompute classごとにI/O性能が異なるため、PostgreSQL versionだけの一致では同等と判断しない（[PostgreSQL CREATE INDEX](https://www.postgresql.org/docs/17/sql-createindex.html)、[Supabase compute別I/O](https://supabase.com/docs/guides/troubleshooting/interpreting-supabase-grafana-io-charts-MUynDR)）。将来の再計測環境は、次をすべて満たす場合だけstaging/production相当の候補とする。
+
+- Supabaseのcompute classとPostgreSQL major versionがproduction予定値と一致する
+- 東京region、Session pooler、port 5432、path `/postgres`を使用する
+- 対象の`20260716112500_add_account_deletion_indexes`だけがpendingである
+- `refresh_tokens`、`email_verifications`、`game_question_sets`、`users`のrow数が、PII・内部IDを出さずに取得したproduction集計値以上である
+- synthetic fixtureだけへwriteし、実在User・legacy Userを変更しない
+
+正式なmaintenance windowが未決定である間は、次を暫定gate候補とする。
+
+| 項目                      | 暫定条件                                                             | 根拠・扱い                                               |
+| ------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------- |
+| write probe継続時間       | 30,000ms以上                                                         | migration前後のwriteを継続して観測する                   |
+| `migrationDurationMs`     | 5,000ms以下                                                          | 10,000msのplatform request timeoutの半分を上限候補とする |
+| `writeProbeMaxDurationMs` | 1,000ms以下                                                          | 同timeoutの10%を単一write待ち上限候補とする              |
+| `probeCount`              | 20回以上                                                             | 短時間成功だけを合格にしない最低回数                     |
+| 終了状態                  | migration/probe成功、cleanup `completed`、migration status `current` | いずれか欠落時は不合格                                   |
+
+これらはGensoko固有の保守的な候補であり、SupabaseのSLOや正式な運用承認値ではない。環境同等性を確認できない、1項目でも超過・欠落する、またはmaintenance windowが未承認の場合はT33を未完了のままとし、T36へ進まない。production migrationを初回性能試験に使わない。通常`CREATE INDEX`では許容できない場合は、`CREATE INDEX CONCURRENTLY`のinvalid index検出・除去・再試行を含む別runbookを設計してから計画を更新する。
+
 workflowは`gensoko-batch-jobs`でmigration、性能確認、監査fixture、legacy cleanupを直列化する。既存User・legacy soft-deleted Userを削除せず、Prismaとprobeの生ログを表示せず、ログへ内部ID・PII・接続情報・生Errorを出さない。run URL、件数、時間、cleanup状態、合否だけを計画書へ記録する。
 
 `Staging Database Setup`の既定`apply`は通常・将来migration用で、性能測定flagや確認文字列を要求しない。ただし対象account deletion index migrationがpendingの間は初回計測を迂回しないよう拒否する。対象以外も同時にpendingなら`measure-account-deletion-indexes`と`seed-elements`を拒否し、対象1件だけをpendingにできる適用順序またはisolated staging相当環境での再現計画を作る。
