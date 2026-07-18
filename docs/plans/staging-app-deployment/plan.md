@@ -284,6 +284,19 @@ cacheはRequest、ExecutionContext、env object、Prisma、mail、rate limit ada
 
 `backend/src/lib/prisma.test.ts`は、validator単体では検出できないmodule wiringの回帰を防ぐため追加した。`prisma.ts`が必ず`getDatabaseUrl()`の検証済み値を`createPrismaClient()`へ渡すこと、検証失敗時はclient factoryを呼ばないことをmodule isolationで固定する。これにより、将来`process.env.DATABASE_URL!`の直接参照へ戻してもtestで検出できる。
 
+### PR #112 追加review対応記録
+
+review 4728144581で、Workers runtime設定全体の検証に失敗した場合、別項目だけが不正でも有効な`FRONTEND_URL`を早期500へ渡しておらず、browserからerror bodyを読めない点が指摘された。`FRONTEND_URL`だけを既存`getFrontendUrl()`で独立検証し、通常のWorkers contractと同じHTTPS origin条件を満たす場合に限って早期error appへ渡す。path付き、不正URL、HTTP originは反映せず、他のenv値やsecretを部分的に取り出さない。
+
+- Redコマンド: `npm run test -- --run src/worker.test.ts`
+- Red結果: 1 file / 11 tests中2 tests失敗。有効originのCORS header欠落とpreflightの500を再現。
+- Greenコマンド: `npm run test -- --run src/worker.test.ts src/lib/config.test.ts src/app.test.ts`
+- Green結果: 3 files / 88 tests成功。
+
+test fixtureのbase64生成は、backend testの実行runtimeを明示するため`btoa()`から`Buffer.from(...).toString("base64")`へ変更した。これはtest環境のNode version差による収集時失敗を避ける互換性修正であり、Workers production codeへ`Buffer`依存を追加する変更ではない。
+
+`backend/src/services/game.service.ts`の`node:crypto` `randomInt()`は意図的に維持する。SD1で`pg`/PrismaをWorkers上で動かすため`nodejs_compat`採用を決定済みであり、SD9でWrangler config、workerd/WASM、bundle/runtimeを採用gateとして検証する。`Math.random()`への変更は`pg`/Prisma側の`nodejs_compat`要件を解消せず、偏りを避ける既存の整数乱数契約だけを弱めるため行わない。SD9のgateを通るまでWorkerを配備可能とは扱わない。
+
 今回意図的に残す改善:
 
 - Worker logのreason code・相関ID・samplingは、Cloudflare上の観測基盤とログ保持方針を決めてから実装する。raw例外を出さない固定log契約は維持する。
@@ -295,7 +308,7 @@ cacheはRequest、ExecutionContext、env object、Prisma、mail、rate limit ada
 - `npm run build`: 成功。
 - `npm run lint`: 成功。
 - `npm run format:check`: 成功。
-- `npm run test -- --run`: 87 files / 943 tests成功、外部DBを必要とする4 files / 10 testsは既定どおりskip。
+- `npm run test -- --run`: 87 files / 945 tests成功、外部DBを必要とする4 files / 10 testsは既定どおりskip。
 - 外部接続、deploy、設定・secret変更、migration、実データ参照は未実施。
 
 ## 対象ファイル一覧
