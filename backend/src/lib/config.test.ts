@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getAccountDataDeletionConfig,
-  getStagingAccountDeletionPerformanceConfig,
   getAuditLogRetentionConfig,
+  getDatabaseUrl,
   getFrontendUrl,
   getRateLimitConfig,
+  getStagingAccountDeletionPerformanceConfig,
 } from "./config.js";
 
 const DEVELOPMENT_FRONTEND_URL = "http://localhost:5174";
@@ -13,6 +14,38 @@ const VALID_RATE_LIMIT_KEY_SECRET = Buffer.from("0123456789abcdef0123456789abcde
   "base64",
 );
 const SHORT_RATE_LIMIT_KEY_SECRET = Buffer.from("short-secret").toString("base64");
+
+describe("getDatabaseUrl", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it.each([
+    ["未設定", undefined],
+    ["空文字", ""],
+    ["空白のみ", "   "],
+  ])("DATABASE_URLが%sの場合はfail-fastする", (_caseName, databaseUrl) => {
+    expect(() =>
+      getDatabaseUrl({
+        environment: { DATABASE_URL: databaseUrl },
+      }),
+    ).toThrow("DATABASE_URLの設定が必要です");
+  });
+
+  it("前後空白を除去したDATABASE_URLを返す", () => {
+    expect(
+      getDatabaseUrl({
+        environment: { DATABASE_URL: "  postgresql://localhost:5432/gensoko  " },
+      }),
+    ).toBe("postgresql://localhost:5432/gensoko");
+  });
+
+  it("environment未指定時はprocess.envのDATABASE_URLを使う", () => {
+    vi.stubEnv("DATABASE_URL", "postgresql://localhost:5432/gensoko");
+
+    expect(getDatabaseUrl()).toBe("postgresql://localhost:5432/gensoko");
+  });
+});
 
 describe("getFrontendUrl", () => {
   afterEach(() => {

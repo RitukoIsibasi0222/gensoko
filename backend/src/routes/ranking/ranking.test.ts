@@ -33,10 +33,10 @@ vi.mock("../../services/ranking.service.js", () => ({
   getAllTimeRanking: vi.fn(),
 }));
 
-import { getAllTimeRanking, getWeeklyRanking } from "../../services/ranking.service.js";
-import { rankingRouter } from "./index.js";
+import { createRankingTestRouter, getAllTimeRanking, getWeeklyRanking } from "./test-helpers.js";
 
 const app = new Hono<{ Variables: AppVariables }>();
+const rankingRouter = createRankingTestRouter();
 app.route("/ranking", rankingRouter);
 
 describe("rankingRouter", () => {

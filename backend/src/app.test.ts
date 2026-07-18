@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
 import type { RateLimitDependencies } from "./middleware/rateLimit/store.js";
+import { createTestAppDependencies } from "./test/app-dependencies.js";
 
 const ALLOWED_ORIGIN = "http://localhost:5174";
 const DISALLOWED_ORIGIN = "https://evil.example";
@@ -22,8 +23,12 @@ const TEST_RATE_LIMIT_DEPENDENCIES: RateLimitDependencies = {
 };
 
 const createConfiguredApp = (isProduction: boolean) => {
-  vi.stubEnv("FRONTEND_URL", ALLOWED_ORIGIN);
-  return createApp({ isProduction, rateLimit: TEST_RATE_LIMIT_DEPENDENCIES });
+  return createApp({
+    isProduction,
+    frontendUrl: ALLOWED_ORIGIN,
+    rateLimit: TEST_RATE_LIMIT_DEPENDENCIES,
+    dependencies: createTestAppDependencies(),
+  });
 };
 
 const createPreflightRequest = (origin: string) => ({
@@ -137,19 +142,13 @@ describe("createApp", () => {
     expect(developmentResponse.headers.has("Strict-Transport-Security")).toBe(false);
   });
 
-  it("productionでFRONTEND_URLが未設定ならapp構築時にfail-fastする", () => {
-    vi.stubEnv("FRONTEND_URL", "");
-
-    expect(() =>
-      createApp({ isProduction: true, rateLimit: TEST_RATE_LIMIT_DEPENDENCIES }),
-    ).toThrow("production環境ではFRONTEND_URLの設定が必要です");
-  });
-
-  it("developmentではFRONTEND_URL未設定時にlocalhostを許可する", async () => {
-    vi.stubEnv("FRONTEND_URL", "");
+  it("process.envではなく明示注入したfrontend URLをCORSへ使う", async () => {
+    vi.stubEnv("FRONTEND_URL", DISALLOWED_ORIGIN);
     const response = await createApp({
       isProduction: false,
+      frontendUrl: ALLOWED_ORIGIN,
       rateLimit: TEST_RATE_LIMIT_DEPENDENCIES,
+      dependencies: createTestAppDependencies(),
     }).request("/api/v1/auth/login", createPreflightRequest(ALLOWED_ORIGIN));
 
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe(ALLOWED_ORIGIN);

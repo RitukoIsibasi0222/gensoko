@@ -38,20 +38,20 @@ vi.mock("../lib/prisma.js", () => ({
 
 import { prisma } from "../lib/prisma.js";
 import {
-  createGameQuestionSet,
+  createGameService,
   GAME_SESSION_DURATION_LIMIT_SEC,
   GameSessionHistoryCursorError,
   GameSessionNotFoundError,
   GameSessionValidationError,
-  getGameSessionHistory,
-  getGameSessionResult,
   InsufficientWeakElementsError,
   QUESTION_TIME_LIMIT_SEC,
   QuestionSetAlreadySubmittedError,
   QuestionSetExpiredError,
   QuestionSetNotFoundError,
-  submitGameSession,
 } from "./game.service.js";
+
+const { createGameQuestionSet, getGameSessionHistory, getGameSessionResult, submitGameSession } =
+  createGameService(prisma as never);
 
 const ELEMENTS = [
   {

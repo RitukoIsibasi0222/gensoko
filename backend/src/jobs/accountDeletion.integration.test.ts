@@ -21,10 +21,14 @@ describe.skipIf(!runIntegrationTest)("account deletionの実DB cascade・監査�
   let verificationPrisma: PrismaClientInstance | undefined;
   let servicePrisma: (typeof import("../lib/prisma.js"))["prisma"] | undefined;
   let deleteCurrentUser:
-    | (typeof import("../services/user.service.js"))["deleteCurrentUser"]
+    | ReturnType<
+        (typeof import("../services/user.service.js"))["createUserService"]
+      >["deleteCurrentUser"]
     | undefined;
   let forceDeleteAdminUser:
-    | (typeof import("../services/admin.service.js"))["forceDeleteAdminUser"]
+    | ReturnType<
+        (typeof import("../services/admin.service.js"))["createAdminService"]
+      >["forceDeleteAdminUser"]
     | undefined;
 
   beforeAll(async () => {
@@ -44,14 +48,32 @@ describe.skipIf(!runIntegrationTest)("account deletionの実DB cascade・監査�
       adapter: new PrismaPg({ connectionString: connectionString! }),
     });
 
-    const [userServiceModule, adminServiceModule, prismaModule] = await Promise.all([
+    const [
+      userServiceModule,
+      adminServiceModule,
+      auditServiceModule,
+      transactionModule,
+      prismaModule,
+    ] = await Promise.all([
       import("../services/user.service.js"),
       import("../services/admin.service.js"),
+      import("../services/audit.service.js"),
+      import("../lib/serializable-transaction-core.js"),
       import("../lib/prisma.js"),
     ]);
-    deleteCurrentUser = userServiceModule.deleteCurrentUser;
-    forceDeleteAdminUser = adminServiceModule.forceDeleteAdminUser;
     servicePrisma = prismaModule.prisma;
+    const runSerializableTransaction =
+      transactionModule.createSerializableTransactionRunner(servicePrisma);
+    const auditService = auditServiceModule.createAuditService(servicePrisma);
+    deleteCurrentUser = userServiceModule.createUserService({
+      prisma: servicePrisma,
+      runSerializableTransaction,
+    }).deleteCurrentUser;
+    forceDeleteAdminUser = adminServiceModule.createAdminService({
+      prisma: servicePrisma,
+      runSerializableTransaction,
+      auditService,
+    }).forceDeleteAdminUser;
 
     await verificationPrisma.auditLog.deleteMany();
     await verificationPrisma.user.deleteMany();

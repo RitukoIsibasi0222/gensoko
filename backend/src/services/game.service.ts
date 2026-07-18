@@ -1,8 +1,8 @@
 import { randomInt } from "node:crypto";
 import type { Element as PrismaElement, GameMode, Prisma } from "@prisma/client";
-import { prisma } from "../lib/prisma.js";
+import type { AppPrismaClient } from "../lib/prisma-client.js";
 import { getWeeklyScoreWeekStart, isSameWeeklyScoreWeek } from "../lib/weekly-score.js";
-import { getElementMasteryStatusMap } from "./element-mastery.service.js";
+import { createElementMasteryService } from "./element-mastery.service.js";
 
 const GAME_QUESTION_COUNT = 10;
 const GAME_CHOICE_COUNT = 4;
@@ -194,7 +194,11 @@ function getNormalModeWhere(mode: GameMode): Prisma.ElementWhereInput {
   return { id: { gte: 21, lte: ELEMENT_ID_MAX } };
 }
 
-async function getCandidateElements(userId: string, mode: GameMode): Promise<PrismaElement[]> {
+async function getCandidateElements(
+  prisma: AppPrismaClient,
+  userId: string,
+  mode: GameMode,
+): Promise<PrismaElement[]> {
   if (!isWeakGameMode(mode)) {
     return prisma.element.findMany({
       where: getNormalModeWhere(mode),
@@ -711,7 +715,10 @@ async function countMasteredElements({
   userId: string;
   elementIds: readonly number[];
 }): Promise<number> {
-  const masteryStatusMap = await getElementMasteryStatusMap(userId, elementIds, tx);
+  const masteryStatusMap = await createElementMasteryService(tx).getElementMasteryStatusMap(
+    userId,
+    elementIds,
+  );
 
   return [...masteryStatusMap.values()].filter((status) => status === "mastered").length;
 }
@@ -784,14 +791,17 @@ function buildStoredQuestions(
   });
 }
 
-export async function createGameQuestionSet({
-  userId,
-  mode,
-  now = new Date(),
-  choiceIndexGenerator = () => randomInt(0, GAME_CHOICE_COUNT),
-  questionElementIndexGenerator = getRandomIndex,
-}: CreateGameQuestionSetParams): Promise<CreateGameQuestionSetResult> {
-  const candidates = await getCandidateElements(userId, mode);
+async function createGameQuestionSet(
+  prisma: AppPrismaClient,
+  {
+    userId,
+    mode,
+    now = new Date(),
+    choiceIndexGenerator = () => randomInt(0, GAME_CHOICE_COUNT),
+    questionElementIndexGenerator = getRandomIndex,
+  }: CreateGameQuestionSetParams,
+): Promise<CreateGameQuestionSetResult> {
+  const candidates = await getCandidateElements(prisma, userId, mode);
   const questions = buildStoredQuestions(
     mode,
     candidates,
@@ -817,14 +827,10 @@ export async function createGameQuestionSet({
   };
 }
 
-export async function submitGameSession({
-  userId,
-  questionSetId,
-  mode,
-  answers,
-  durationSec,
-  now = new Date(),
-}: SubmitGameSessionParams): Promise<SubmitGameSessionResult> {
+async function submitGameSession(
+  prisma: AppPrismaClient,
+  { userId, questionSetId, mode, answers, durationSec, now = new Date() }: SubmitGameSessionParams,
+): Promise<SubmitGameSessionResult> {
   validateSubmitGameSessionParams({ questionSetId, answers, durationSec });
 
   return prisma.$transaction(async (tx) => {
@@ -932,10 +938,10 @@ export async function submitGameSession({
   });
 }
 
-export async function getGameSessionResult({
-  userId,
-  sessionId,
-}: GetGameSessionResultParams): Promise<SubmitGameSessionResult> {
+async function getGameSessionResult(
+  prisma: AppPrismaClient,
+  { userId, sessionId }: GetGameSessionResultParams,
+): Promise<SubmitGameSessionResult> {
   const session = (await prisma.gameSession.findFirst({
     where: { id: sessionId, userId },
     include: {
@@ -1026,10 +1032,12 @@ function toGameSessionHistoryItem(row: GameSessionHistoryRow): GameSessionHistor
 }
 
 async function getGameSessionHistoryCursorWhere({
+  prisma,
   userId,
   cursor,
   mode,
 }: {
+  prisma: AppPrismaClient;
   userId: string;
   cursor: string;
   mode?: GameMode;
@@ -1051,14 +1059,12 @@ async function getGameSessionHistoryCursorWhere({
   };
 }
 
-export async function getGameSessionHistory({
-  userId,
-  limit,
-  cursor,
-  mode,
-}: GetGameSessionHistoryParams): Promise<GetGameSessionHistoryResult> {
+async function getGameSessionHistory(
+  prisma: AppPrismaClient,
+  { userId, limit, cursor, mode }: GetGameSessionHistoryParams,
+): Promise<GetGameSessionHistoryResult> {
   const cursorWhere = cursor
-    ? await getGameSessionHistoryCursorWhere({ userId, cursor, mode })
+    ? await getGameSessionHistoryCursorWhere({ prisma, userId, cursor, mode })
     : undefined;
   const where: Prisma.GameSessionWhereInput = {
     userId,
@@ -1079,3 +1085,17 @@ export async function getGameSessionHistory({
     nextCursor: rows.length > limit ? (visibleRows[visibleRows.length - 1]?.id ?? null) : null,
   };
 }
+
+export function createGameService(prisma: AppPrismaClient) {
+  return {
+    createGameQuestionSet: (input: CreateGameQuestionSetParams) =>
+      createGameQuestionSet(prisma, input),
+    submitGameSession: (input: SubmitGameSessionParams) => submitGameSession(prisma, input),
+    getGameSessionResult: (input: GetGameSessionResultParams) =>
+      getGameSessionResult(prisma, input),
+    getGameSessionHistory: (input: GetGameSessionHistoryParams) =>
+      getGameSessionHistory(prisma, input),
+  };
+}
+
+export type GameService = ReturnType<typeof createGameService>;

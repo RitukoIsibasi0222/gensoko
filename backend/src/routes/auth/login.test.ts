@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { authRouter } from "./index.js";
+import { createAuthTestRouter } from "./test-helpers.js";
 
 // Prisma モック
 vi.mock("../../lib/prisma.js", () => ({
@@ -40,6 +40,7 @@ vi.mock("hono/jwt", () => ({
 
 import bcrypt from "bcryptjs";
 import { prisma } from "../../lib/prisma.js";
+const authRouter = createAuthTestRouter(prisma as never);
 import { STRONG_PASSWORD_73_BYTES } from "../../test/password-byte-boundary-fixtures.js";
 
 const app = new Hono();

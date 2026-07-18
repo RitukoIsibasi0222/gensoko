@@ -2,13 +2,12 @@ import { AuditResult, type Prisma, type Role } from "@prisma/client";
 import { createHash, randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { sign } from "hono/jwt";
-import { getFrontendUrl } from "../lib/config.js";
-import { mailer } from "../lib/mail.js";
+import type { MailSender } from "../lib/mail-sender.js";
 import { normalizePassword } from "../lib/normalize.js";
 import { hashPassword } from "../lib/password.js";
-import { prisma } from "../lib/prisma.js";
+import type { AppPrismaClient } from "../lib/prisma-client.js";
 import { AUDIT_ACTIONS, AUDIT_FAILURE_REASONS, AUDIT_TARGET_TYPES } from "./audit-events.js";
-import { recordAuditEvent, recordAuditEventBestEffort } from "./audit.service.js";
+import { recordAuditEvent, type AuditService } from "./audit.service.js";
 
 export class AuthError extends Error {
   constructor(
@@ -20,11 +19,23 @@ export class AuthError extends Error {
   }
 }
 
-export async function register(input: {
-  username: string;
-  email: string;
-  password: string;
-}): Promise<void> {
+type AuthServiceDependencies = Readonly<{
+  prisma: AppPrismaClient;
+  mailSender: MailSender;
+  jwtSecret: string;
+  frontendUrl: string;
+  mailFrom: string;
+  auditService: AuditService;
+}>;
+
+async function register(
+  { prisma, mailSender, frontendUrl, mailFrom }: AuthServiceDependencies,
+  input: {
+    username: string;
+    email: string;
+    password: string;
+  },
+): Promise<void> {
   const { username, email, password: rawPassword } = input;
   const password = normalizePassword(rawPassword);
 
@@ -96,10 +107,10 @@ export async function register(input: {
 
   // 5. メール送信（DB 確定後に実行。DB トランザクション内で外部 I/O を待たないよう分離）
   // 送信失敗時はユーザーを補償的に削除する（EmailVerification は onDelete: Cascade で自動削除）
-  const verifyUrl = `${getFrontendUrl()}/verify-email?token=${token}`;
+  const verifyUrl = `${frontendUrl}/verify-email?token=${token}`;
   try {
-    await mailer.sendMail({
-      from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
+    await mailSender.send({
+      from: mailFrom,
       to: email,
       subject: "【元素庫】メールアドレスの確認",
       text: `以下のURLをクリックしてメールアドレスを確認してください（有効期限: 24時間）\n\n${verifyUrl}`,
@@ -152,20 +163,26 @@ async function saveRefreshToken(
   });
 }
 
-export async function issueRefreshToken(userId: string): Promise<string> {
+async function issueRefreshToken(
+  { prisma }: AuthServiceDependencies,
+  userId: string,
+): Promise<string> {
   const values = createRefreshTokenValues();
   await saveRefreshToken(prisma, userId, values);
 
   return values.rawToken;
 }
 
-export async function logout(rawToken: string): Promise<void> {
+async function logout({ prisma }: AuthServiceDependencies, rawToken: string): Promise<void> {
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
   // deleteMany で P2025 を回避（存在しないトークンでも正常終了）
   await prisma.refreshToken.deleteMany({ where: { tokenHash } });
 }
 
-export async function refreshAccessToken(rawToken: string): Promise<{
+async function refreshAccessToken(
+  { prisma, jwtSecret }: AuthServiceDependencies,
+  rawToken: string,
+): Promise<{
   accessToken: string;
   newRefreshToken: string;
   user: { id: string; role: Role };
@@ -208,13 +225,10 @@ export async function refreshAccessToken(rawToken: string): Promise<{
     });
   });
 
-  const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error("JWT_SECRET is not set");
-
   const now = Math.floor(Date.now() / 1000);
   const accessToken = await sign(
     { sub: record.user.id, role: record.user.role, iat: now, exp: now + ACCESS_TOKEN_TTL_SEC },
-    secret,
+    jwtSecret,
     "HS256",
   );
 
@@ -254,12 +268,15 @@ function assertLoginAccountIsUsable(user: LoginAccountState, now = new Date()): 
   }
 }
 
-export async function login(input: { email: string; password: string }): Promise<LoginResult> {
+async function login(
+  dependencies: AuthServiceDependencies,
+  input: { email: string; password: string },
+): Promise<LoginResult> {
   try {
-    return await loginWithRequiredAudit(input);
+    return await loginWithRequiredAudit(dependencies, input);
   } catch (error) {
     if (error instanceof AuthError) {
-      await recordAuditEventBestEffort({
+      await dependencies.auditService.recordAuditEventBestEffort({
         action: AUDIT_ACTIONS.LOGIN,
         result: AuditResult.FAILURE,
         actorId: null,
@@ -274,10 +291,13 @@ export async function login(input: { email: string; password: string }): Promise
   }
 }
 
-async function loginWithRequiredAudit(input: {
-  email: string;
-  password: string;
-}): Promise<LoginResult> {
+async function loginWithRequiredAudit(
+  { prisma, jwtSecret }: AuthServiceDependencies,
+  input: {
+    email: string;
+    password: string;
+  },
+): Promise<LoginResult> {
   const { email, password: rawPassword } = input;
   const password = normalizePassword(rawPassword);
 
@@ -334,13 +354,10 @@ async function loginWithRequiredAudit(input: {
   }
 
   // 6. JWT署名とrefresh token生成はtransaction開始前に完了する
-  const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error("JWT_SECRET is not set");
-
   const now = Math.floor(Date.now() / 1000);
   const accessToken = await sign(
     { sub: user.id, role: user.role, iat: now, exp: now + ACCESS_TOKEN_TTL_SEC },
-    secret,
+    jwtSecret,
     "HS256",
   );
 
@@ -441,7 +458,10 @@ async function updateLoginStreak(client: LoginStreakClient, userId: string): Pro
   });
 }
 
-export async function verifyEmail(input: { token: string }): Promise<void> {
+async function verifyEmail(
+  { prisma }: AuthServiceDependencies,
+  input: { token: string },
+): Promise<void> {
   const { token } = input;
 
   // 1. tokenをsha256ハッシュ化してDBと照合
@@ -485,7 +505,10 @@ export async function verifyEmail(input: { token: string }): Promise<void> {
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1時間
 
-export async function forgotPassword(input: { email: string }): Promise<void> {
+async function forgotPassword(
+  { prisma, mailSender, frontendUrl, mailFrom }: AuthServiceDependencies,
+  input: { email: string },
+): Promise<void> {
   const { email } = input;
 
   // 1. ユーザー検索
@@ -506,7 +529,7 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
   const token = randomBytes(32).toString("hex");
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
-  const resetUrl = `${getFrontendUrl()}/reset-password?token=${token}`;
+  const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
 
   // 4. トークンをDBに確定（upsert で原子的に置き換え）
   await prisma.passwordResetToken.upsert({
@@ -518,8 +541,8 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
   // 5. メール送信（失敗時はトークンを削除して無効化する）
   // ※ DB トランザクション内で外部 I/O（SMTP）を待たないよう分離する
   try {
-    await mailer.sendMail({
-      from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
+    await mailSender.send({
+      from: mailFrom,
       to: email,
       subject: "【元素庫】パスワードリセット",
       text: `以下のURLをクリックしてパスワードをリセットしてください（有効期限: 1時間）\n\n${resetUrl}`,
@@ -532,7 +555,10 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
   }
 }
 
-export async function resetPassword(input: { token: string; password: string }): Promise<void> {
+async function resetPassword(
+  { prisma }: AuthServiceDependencies,
+  input: { token: string; password: string },
+): Promise<void> {
   const { token, password: rawPassword } = input;
   const password = normalizePassword(rawPassword);
 
@@ -587,3 +613,20 @@ export async function resetPassword(input: { token: string; password: string }):
     });
   });
 }
+
+export function createAuthService(dependencies: AuthServiceDependencies) {
+  return {
+    register: (input: Parameters<typeof register>[1]) => register(dependencies, input),
+    issueRefreshToken: (userId: string) => issueRefreshToken(dependencies, userId),
+    logout: (rawToken: string) => logout(dependencies, rawToken),
+    refreshAccessToken: (rawToken: string) => refreshAccessToken(dependencies, rawToken),
+    login: (input: Parameters<typeof login>[1]) => login(dependencies, input),
+    verifyEmail: (input: Parameters<typeof verifyEmail>[1]) => verifyEmail(dependencies, input),
+    forgotPassword: (input: Parameters<typeof forgotPassword>[1]) =>
+      forgotPassword(dependencies, input),
+    resetPassword: (input: Parameters<typeof resetPassword>[1]) =>
+      resetPassword(dependencies, input),
+  };
+}
+
+export type AuthService = ReturnType<typeof createAuthService>;

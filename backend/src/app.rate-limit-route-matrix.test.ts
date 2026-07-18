@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { RateLimitPolicyId } from "./middleware/rateLimit/policies.js";
 import type { RateLimitConsumeInput, RateLimitResult } from "./middleware/rateLimit/store.js";
+import { createTestAppDependencies } from "./test/app-dependencies.js";
 
 const KEY_SECRET = Buffer.from("0123456789abcdef0123456789abcdef").toString("base64");
 
@@ -29,11 +30,13 @@ function createPolicyApp(blockedPolicyId: RateLimitPolicyId) {
   );
   const app = createApp({
     isProduction: false,
+    frontendUrl: "http://localhost:5174",
     rateLimit: {
       getStore: () => ({ consume }),
       keySecret: KEY_SECRET,
       resolveIp: () => "203.0.113.7",
     },
+    dependencies: createTestAppDependencies(),
   });
   return { app, consume };
 }

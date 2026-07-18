@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { RateLimitPolicyId } from "./middleware/rateLimit/policies.js";
 import type { RateLimitConsumeInput, RateLimitResult } from "./middleware/rateLimit/store.js";
 import type { AppVariables } from "./types/index.js";
+import { createTestAppDependencies } from "./test/app-dependencies.js";
 
 const CLIENT_IP = "203.0.113.7";
 const ALLOWED_ORIGIN = "http://localhost:5174";
@@ -70,12 +71,30 @@ function createDecision(allowed: boolean): RateLimitResult {
 
 function createAppWithConsume(consume: (input: RateLimitConsumeInput) => Promise<RateLimitResult>) {
   const consumeMock = vi.fn(consume);
+  const testDependencies = createTestAppDependencies();
   const app = createApp({
     isProduction: false,
+    frontendUrl: ALLOWED_ORIGIN,
     rateLimit: {
       getStore: () => ({ consume: consumeMock }),
       keySecret: KEY_SECRET,
       resolveIp: () => CLIENT_IP,
+    },
+    dependencies: {
+      ...testDependencies,
+      auth: {
+        authMiddleware: authenticatedUserMiddleware,
+        optionalAuthMiddleware: authenticatedUserMiddleware,
+      },
+      services: {
+        ...testDependencies.services,
+        users: {
+          ...testDependencies.services.users,
+          updateCurrentUsername: vi.fn().mockResolvedValue({
+            user: { id: "user-1", username: "new_name", role: "USER" },
+          }),
+        },
+      },
     },
   });
 

@@ -1,8 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import type { GameMode } from "@prisma/client";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { authMiddleware } from "../../middleware/auth/index.js";
 import {
   createIpBucketResolver,
   createUserBucketResolver,
@@ -10,13 +9,11 @@ import {
 } from "../../middleware/rateLimit/buckets.js";
 import { rateLimit } from "../../middleware/rateLimit/index.js";
 import {
-  createGameQuestionSet,
   GAME_SESSION_DURATION_LIMIT_SEC,
   GameSessionHistoryCursorError,
   GameSessionNotFoundError,
   GameSessionValidationError,
-  getGameSessionHistory,
-  getGameSessionResult,
+  type GameService,
   InsufficientWeakElementsError,
   type PublicGameQuestion,
   QUESTION_TIME_LIMIT_SEC,
@@ -24,7 +21,6 @@ import {
   QuestionSetExpiredError,
   QuestionSetModeMismatchError,
   QuestionSetNotFoundError,
-  submitGameSession,
 } from "../../services/game.service.js";
 import type { AppVariables } from "../../types/index.js";
 
@@ -112,132 +108,6 @@ export const gameSessionParamsSchema = z
   })
   .strip();
 
-export const gameRouter = new Hono<{ Variables: AppVariables }>();
-
-gameRouter.get(
-  "/questions",
-  gameQuestionsRateLimit,
-  authMiddleware,
-  zValidator("query", gameQuestionsQuerySchema, (result, c) => {
-    if (!result.success) {
-      return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
-    }
-  }),
-  async (c) => {
-    const { mode } = c.req.valid("query");
-    const user = c.get("user")!;
-
-    try {
-      const questionSet = await createGameQuestionSet({
-        userId: user.id,
-        mode,
-      });
-
-      return c.json(
-        {
-          questionSetId: questionSet.questionSetId,
-          expiresAt: questionSet.expiresAt.toISOString(),
-          questions: questionSet.questions.map(toPublicGameQuestionResponse),
-        },
-        200,
-      );
-    } catch (error) {
-      if (error instanceof InsufficientWeakElementsError) {
-        return c.json({ error: error.message }, 409);
-      }
-
-      return c.json({ error: "サーバーエラーが発生しました" }, 500);
-    }
-  },
-);
-
-gameRouter.get(
-  "/sessions/:sessionId",
-  authMiddleware,
-  zValidator("param", gameSessionParamsSchema, (result, c) => {
-    if (!result.success) {
-      return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
-    }
-  }),
-  async (c) => {
-    const { sessionId } = c.req.valid("param");
-    const user = c.get("user")!;
-
-    try {
-      const session = await getGameSessionResult({
-        userId: user.id,
-        sessionId,
-      });
-
-      return c.json(
-        {
-          ...session,
-          playedAt: session.playedAt.toISOString(),
-        },
-        200,
-      );
-    } catch (error) {
-      if (error instanceof GameSessionNotFoundError) {
-        return c.json({ error: error.message }, 404);
-      }
-
-      return c.json({ error: "サーバーエラーが発生しました" }, 500);
-    }
-  },
-);
-
-gameRouter.post(
-  "/sessions",
-  gameSubmitIpRateLimit,
-  authMiddleware,
-  gameSubmitUserRateLimit,
-  zValidator("json", gameSessionBodySchema, (result, c) => {
-    if (!result.success) {
-      return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
-    }
-  }),
-  async (c) => {
-    const body = c.req.valid("json");
-    const user = c.get("user")!;
-
-    try {
-      const session = await submitGameSession({
-        userId: user.id,
-        questionSetId: body.questionSetId,
-        mode: body.mode,
-        answers: body.answers,
-        durationSec: body.durationSec,
-      });
-
-      return c.json(
-        {
-          ...session,
-          playedAt: session.playedAt.toISOString(),
-        },
-        201,
-      );
-    } catch (error) {
-      if (error instanceof GameSessionValidationError) {
-        return c.json({ error: error.message }, 400);
-      }
-
-      if (error instanceof QuestionSetNotFoundError) {
-        return c.json({ error: error.message }, 404);
-      }
-
-      if (
-        error instanceof QuestionSetAlreadySubmittedError ||
-        error instanceof QuestionSetExpiredError ||
-        error instanceof QuestionSetModeMismatchError
-      ) {
-        return c.json({ error: error.message }, 409);
-      }
-
-      return c.json({ error: "サーバーエラーが発生しました" }, 500);
-    }
-  },
-);
-
 const SESSION_HISTORY_DEFAULT_LIMIT = 20;
 const SESSION_HISTORY_MAX_LIMIT = 50;
 const SESSION_HISTORY_LIMIT_ERROR_MESSAGE = "取得件数が正しくありません";
@@ -286,48 +156,183 @@ export const gameSessionHistoryQuerySchema = z
   })
   .strip();
 
-gameRouter.get(
-  "/sessions",
-  authMiddleware,
-  zValidator("query", gameSessionHistoryQuerySchema, (result, c) => {
-    if (!result.success) {
-      return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
-    }
-  }),
-  async (c) => {
-    const query = c.req.valid("query");
-    const user = c.get("user")!;
+export type GameRouterDependencies = Readonly<{
+  authMiddleware: MiddlewareHandler<{ Variables: AppVariables }>;
+  service: GameService;
+}>;
 
-    try {
-      const history = await getGameSessionHistory({
-        userId: user.id,
-        limit: query.limit,
-        cursor: query.cursor,
-        mode: query.mode,
-      });
+export function createGameRouter({ authMiddleware, service }: GameRouterDependencies) {
+  const gameRouter = new Hono<{ Variables: AppVariables }>();
 
-      return c.json(
-        {
-          sessions: history.sessions.map((session) => ({
-            ...session,
-            playedAt: session.playedAt.toISOString(),
-          })),
-          nextCursor: history.nextCursor,
-        },
-        200,
-      );
-    } catch (error) {
-      if (error instanceof GameSessionHistoryCursorError) {
+  gameRouter.get(
+    "/questions",
+    gameQuestionsRateLimit,
+    authMiddleware,
+    zValidator("query", gameQuestionsQuerySchema, (result, c) => {
+      if (!result.success) {
+        return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
+      }
+    }),
+    async (c) => {
+      const { mode } = c.req.valid("query");
+      const user = c.get("user")!;
+
+      try {
+        const questionSet = await service.createGameQuestionSet({
+          userId: user.id,
+          mode,
+        });
+
         return c.json(
           {
-            error: "バリデーションエラー",
-            details: [{ message: error.message }],
+            questionSetId: questionSet.questionSetId,
+            expiresAt: questionSet.expiresAt.toISOString(),
+            questions: questionSet.questions.map(toPublicGameQuestionResponse),
           },
-          400,
+          200,
         );
-      }
+      } catch (error) {
+        if (error instanceof InsufficientWeakElementsError) {
+          return c.json({ error: error.message }, 409);
+        }
 
-      return c.json({ error: "サーバーエラーが発生しました" }, 500);
-    }
-  },
-);
+        return c.json({ error: "サーバーエラーが発生しました" }, 500);
+      }
+    },
+  );
+
+  gameRouter.get(
+    "/sessions/:sessionId",
+    authMiddleware,
+    zValidator("param", gameSessionParamsSchema, (result, c) => {
+      if (!result.success) {
+        return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
+      }
+    }),
+    async (c) => {
+      const { sessionId } = c.req.valid("param");
+      const user = c.get("user")!;
+
+      try {
+        const session = await service.getGameSessionResult({
+          userId: user.id,
+          sessionId,
+        });
+
+        return c.json(
+          {
+            ...session,
+            playedAt: session.playedAt.toISOString(),
+          },
+          200,
+        );
+      } catch (error) {
+        if (error instanceof GameSessionNotFoundError) {
+          return c.json({ error: error.message }, 404);
+        }
+
+        return c.json({ error: "サーバーエラーが発生しました" }, 500);
+      }
+    },
+  );
+
+  gameRouter.post(
+    "/sessions",
+    gameSubmitIpRateLimit,
+    authMiddleware,
+    gameSubmitUserRateLimit,
+    zValidator("json", gameSessionBodySchema, (result, c) => {
+      if (!result.success) {
+        return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
+      }
+    }),
+    async (c) => {
+      const body = c.req.valid("json");
+      const user = c.get("user")!;
+
+      try {
+        const session = await service.submitGameSession({
+          userId: user.id,
+          questionSetId: body.questionSetId,
+          mode: body.mode,
+          answers: body.answers,
+          durationSec: body.durationSec,
+        });
+
+        return c.json(
+          {
+            ...session,
+            playedAt: session.playedAt.toISOString(),
+          },
+          201,
+        );
+      } catch (error) {
+        if (error instanceof GameSessionValidationError) {
+          return c.json({ error: error.message }, 400);
+        }
+
+        if (error instanceof QuestionSetNotFoundError) {
+          return c.json({ error: error.message }, 404);
+        }
+
+        if (
+          error instanceof QuestionSetAlreadySubmittedError ||
+          error instanceof QuestionSetExpiredError ||
+          error instanceof QuestionSetModeMismatchError
+        ) {
+          return c.json({ error: error.message }, 409);
+        }
+
+        return c.json({ error: "サーバーエラーが発生しました" }, 500);
+      }
+    },
+  );
+
+  gameRouter.get(
+    "/sessions",
+    authMiddleware,
+    zValidator("query", gameSessionHistoryQuerySchema, (result, c) => {
+      if (!result.success) {
+        return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
+      }
+    }),
+    async (c) => {
+      const query = c.req.valid("query");
+      const user = c.get("user")!;
+
+      try {
+        const history = await service.getGameSessionHistory({
+          userId: user.id,
+          limit: query.limit,
+          cursor: query.cursor,
+          mode: query.mode,
+        });
+
+        return c.json(
+          {
+            sessions: history.sessions.map((session) => ({
+              ...session,
+              playedAt: session.playedAt.toISOString(),
+            })),
+            nextCursor: history.nextCursor,
+          },
+          200,
+        );
+      } catch (error) {
+        if (error instanceof GameSessionHistoryCursorError) {
+          return c.json(
+            {
+              error: "バリデーションエラー",
+              details: [{ message: error.message }],
+            },
+            400,
+          );
+        }
+
+        return c.json({ error: "サーバーエラーが発生しました" }, 500);
+      }
+    },
+  );
+
+  return gameRouter;
+}

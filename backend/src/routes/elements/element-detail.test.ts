@@ -18,10 +18,10 @@ vi.mock("../../lib/prisma.js", () => ({
 }));
 
 import { prisma } from "../../lib/prisma.js";
-import { elementsRouter } from "./index.js";
+import { createElementsTestRouter } from "./test-helpers.js";
 
 const app = new Hono<{ Variables: AppVariables }>();
-app.route("/elements", elementsRouter);
+app.route("/elements", createElementsTestRouter(prisma as never, "test-secret"));
 
 const VALID_ELEMENT = {
   id: 1,

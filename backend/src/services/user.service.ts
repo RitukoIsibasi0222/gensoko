@@ -8,11 +8,11 @@ import {
   normalizeNonNegativeCount,
 } from "../lib/stats.js";
 import { isUniqueConstraintViolation } from "../lib/prisma-errors.js";
-import { prisma } from "../lib/prisma.js";
+import type { AppPrismaClient } from "../lib/prisma-client.js";
 import {
   SerializationRetryExhaustedError,
-  runSerializableTransaction,
-} from "../lib/serializable-transaction.js";
+  type SerializableTransactionRunner,
+} from "../lib/serializable-transaction-core.js";
 import { getUsableAdminWhere, isUsableAccount, isUsableAdmin } from "../lib/usable-admin.js";
 import { getWeeklyScoreWeekStart, isSameWeeklyScoreWeek } from "../lib/weekly-score.js";
 import { AUDIT_ACTIONS, AUDIT_TARGET_TYPES } from "./audit-events.js";
@@ -36,7 +36,15 @@ export type CurrentUserProfile = {
   createdAt: Date;
 };
 
-export async function getCurrentUserProfile(userId: string): Promise<CurrentUserProfile> {
+type UserServiceDependencies = Readonly<{
+  prisma: AppPrismaClient;
+  runSerializableTransaction: SerializableTransactionRunner;
+}>;
+
+async function getCurrentUserProfile(
+  { prisma }: UserServiceDependencies,
+  userId: string,
+): Promise<CurrentUserProfile> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -55,7 +63,10 @@ export async function getCurrentUserProfile(userId: string): Promise<CurrentUser
   return user;
 }
 
-export async function updateCurrentUsername(input: { userId: string; username: string }): Promise<{
+async function updateCurrentUsername(
+  { prisma }: UserServiceDependencies,
+  input: { userId: string; username: string },
+): Promise<{
   user: { id: string; username: string; role: Role };
 }> {
   const normalizedUsername = input.username.trim();
@@ -108,11 +119,14 @@ export async function updateCurrentUsername(input: { userId: string; username: s
   return { user: updatedUser };
 }
 
-export async function changeCurrentPassword(input: {
-  userId: string;
-  currentPassword: string;
-  newPassword: string;
-}): Promise<void> {
+async function changeCurrentPassword(
+  { prisma }: UserServiceDependencies,
+  input: {
+    userId: string;
+    currentPassword: string;
+    newPassword: string;
+  },
+): Promise<void> {
   const normalizedCurrentPassword = normalizePassword(input.currentPassword);
   const normalizedNewPassword = normalizePassword(input.newPassword);
 
@@ -161,10 +175,13 @@ export async function changeCurrentPassword(input: {
   });
 }
 
-export async function deleteCurrentUser(input: {
-  userId: string;
-  currentPassword: string;
-}): Promise<void> {
+async function deleteCurrentUser(
+  { prisma, runSerializableTransaction }: UserServiceDependencies,
+  input: {
+    userId: string;
+    currentPassword: string;
+  },
+): Promise<void> {
   const stateConflictMessage = "アカウントの状態が変更されています。再ログインしてください";
   const normalizedCurrentPassword = normalizePassword(input.currentPassword);
 
@@ -276,7 +293,10 @@ function getEmptyCurrentUserStatsSummary(): CurrentUserStatsSummary {
   };
 }
 
-export async function getCurrentUserStats(userId: string): Promise<CurrentUserStats> {
+async function getCurrentUserStats(
+  { prisma }: UserServiceDependencies,
+  userId: string,
+): Promise<CurrentUserStats> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true },
@@ -354,3 +374,21 @@ export async function getCurrentUserStats(userId: string): Promise<CurrentUserSt
     }),
   };
 }
+
+export function createUserService(dependencies: UserServiceDependencies) {
+  return {
+    getCurrentUserProfile: (userId: string) => getCurrentUserProfile(dependencies, userId),
+    updateCurrentUsername: (input: { userId: string; username: string }) =>
+      updateCurrentUsername(dependencies, input),
+    changeCurrentPassword: (input: {
+      userId: string;
+      currentPassword: string;
+      newPassword: string;
+    }) => changeCurrentPassword(dependencies, input),
+    deleteCurrentUser: (input: { userId: string; currentPassword: string }) =>
+      deleteCurrentUser(dependencies, input),
+    getCurrentUserStats: (userId: string) => getCurrentUserStats(dependencies, userId),
+  };
+}
+
+export type UserService = ReturnType<typeof createUserService>;
