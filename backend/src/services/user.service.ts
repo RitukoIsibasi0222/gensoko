@@ -193,7 +193,6 @@ export async function deleteCurrentUser(input: {
           isActive: true,
           emailVerified: true,
           lockedUntil: true,
-          deletedAt: true,
         },
       });
 

@@ -47,14 +47,14 @@ type RankingTargetStats = {
   weeklyScoreWeekStart: Date | null;
   allTimeScore: number;
   totalGames: number;
-  user: { isActive: boolean; deletedAt: Date | null };
+  user: { isActive: boolean };
 };
 
 type RankingScoreField = "weeklyScore" | "allTimeScore";
 
 const activeRankingTargetWhere = {
   totalGames: { gt: 0 },
-  user: { isActive: true, deletedAt: null },
+  user: { isActive: true },
 } as const;
 
 const rankingSelect = {
@@ -72,7 +72,7 @@ const myRankSelect = {
   weeklyScoreWeekStart: true,
   allTimeScore: true,
   totalGames: true,
-  user: { select: { isActive: true, deletedAt: true } },
+  user: { select: { isActive: true } },
 } as const;
 
 function getScoreField(period: RankingPeriod): RankingScoreField {
@@ -86,9 +86,7 @@ function getRankingOrderBy(period: RankingPeriod) {
 }
 
 function isActiveRankingTarget(stats: RankingTargetStats | null): stats is RankingTargetStats {
-  return (
-    stats !== null && stats.totalGames > 0 && stats.user.isActive && stats.user.deletedAt === null
-  );
+  return stats !== null && stats.totalGames > 0 && stats.user.isActive;
 }
 
 function getNormalizedScore(row: Pick<RankingRow, RankingScoreField>, field: RankingScoreField) {

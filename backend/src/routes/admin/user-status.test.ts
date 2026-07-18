@@ -96,7 +96,6 @@ describe("PATCH /admin/users/:id/status", () => {
         role: "USER",
         emailVerified: true,
         isActive: false,
-        deletedAt: new Date("2026-06-01T00:00:00.000Z"),
         lockedUntil: null,
         lastLoginAt: null,
         createdAt: new Date("2026-05-01T00:00:00.000Z"),

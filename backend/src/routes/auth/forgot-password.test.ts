@@ -110,11 +110,10 @@ describe("POST /auth/forgot-password", () => {
     expect(mailer.sendMail).not.toHaveBeenCalled();
   });
 
-  it("移行中: legacy soft-deleted rowでも200を返しトークン作成・メール送信をしない", async () => {
+  it("停止中のrowでも200を返しトークン作成・メール送信をしない", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
-      id: "legacy-deleted-user",
+      id: "suspended-user",
       isActive: false,
-      deletedAt: new Date("2026-05-29T00:00:00.000Z"),
     } as never);
 
     const res = await app.request("/auth/forgot-password", {

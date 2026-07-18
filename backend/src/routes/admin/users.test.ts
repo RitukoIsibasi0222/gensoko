@@ -114,7 +114,6 @@ describe("GET /admin/users", () => {
           role: "USER",
           emailVerified: true,
           isActive: true,
-          deletedAt: new Date("2026-06-01T00:00:00.000Z"),
           lockedUntil: null,
           lastLoginAt: new Date("2026-06-20T12:00:00.000Z"),
           createdAt: new Date("2026-05-01T00:00:00.000Z"),

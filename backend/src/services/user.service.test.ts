@@ -70,7 +70,6 @@ describe("deleteCurrentUser", () => {
     isActive: true,
     emailVerified: true,
     lockedUntil: null,
-    deletedAt: null,
   };
 
   function createSerializationConflictError(): Prisma.PrismaClientKnownRequestError {
@@ -114,7 +113,6 @@ describe("deleteCurrentUser", () => {
         isActive: true,
         emailVerified: true,
         lockedUntil: true,
-        deletedAt: true,
       },
     });
     expect(txUserCount).not.toHaveBeenCalled();
@@ -256,7 +254,6 @@ describe("deleteCurrentUser", () => {
     ["停止済み", { isActive: false }],
     ["メール未確認", { emailVerified: false }],
     ["lock中", { lockedUntil: new Date("2099-01-01T00:00:00.000Z") }],
-    ["legacy削除済み", { deletedAt: new Date("2026-07-01T00:00:00.000Z") }],
   ])("異常系: transaction内で%sなら409で削除しない", async (_label, override) => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "user-1",

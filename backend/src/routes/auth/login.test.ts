@@ -52,7 +52,6 @@ const ACTIVE_USER = {
   passwordHash: "$2b$12$hashedpassword",
   emailVerified: true,
   isActive: true,
-  deletedAt: null,
   loginFailCount: 0,
   lockedUntil: null,
 };
@@ -322,24 +321,6 @@ describe("POST /auth/login", () => {
     expect(body.error).toBeDefined();
   });
 
-  it("移行中: legacy soft-deleted rowも削除済み専用情報を出さず汎用401を返す", async () => {
-    const deletedUser = { ...ACTIVE_USER, deletedAt: new Date("2026-05-29T00:00:00.000Z") };
-    vi.mocked(prisma.user.findUnique).mockResolvedValue(deletedUser as never);
-
-    const res = await app.request("/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "taro@example.com", password: "Pass1234!" }),
-    });
-
-    expect(res.status).toBe(401);
-    const body = await res.json();
-    expect(body.error).toBe("メールアドレスまたはパスワードが正しくありません");
-    expect(bcrypt.compare).not.toHaveBeenCalled();
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
-  });
-
   it("streak: 昨日ログイン済みの場合は currentStreak が +1 になる", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue(ACTIVE_USER as never);
     vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
@@ -482,7 +463,6 @@ describe("POST /auth/login", () => {
         role: "USER",
         emailVerified: true,
         isActive: true,
-        deletedAt: null,
         OR: [{ lockedUntil: null }, { lockedUntil: { lte: expect.any(Date) } }],
       },
       data: {
@@ -516,7 +496,6 @@ describe("POST /auth/login", () => {
       role: "USER",
       emailVerified: true,
       isActive: false,
-      deletedAt: null,
       lockedUntil: null,
     });
     const txUserUpdate = vi.fn().mockResolvedValue({});
@@ -603,7 +582,6 @@ describe("POST /auth/login", () => {
         role: "USER",
         emailVerified: true,
         isActive: true,
-        deletedAt: null,
         lockedUntil: null,
       } as never);
     vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
@@ -702,11 +680,6 @@ describe("POST /auth/login", () => {
   });
 
   it.each([
-    {
-      name: "legacy削除済み",
-      user: { ...ACTIVE_USER, deletedAt: new Date("2026-05-29T00:00:00.000Z") },
-      status: 401,
-    },
     {
       name: "停止中",
       user: { ...ACTIVE_USER, isActive: false },
