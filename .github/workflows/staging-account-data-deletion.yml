@@ -30,7 +30,9 @@ jobs:
     env:
       BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
       ACCOUNT_DATA_DELETION_EXECUTE_ENABLED: ${{ vars.ACCOUNT_DATA_DELETION_EXECUTE_ENABLED }}
+      ACCOUNT_DATA_DELETION_STAGING_FIXTURES_ENABLED: ${{ vars.ACCOUNT_DATA_DELETION_STAGING_FIXTURES_ENABLED }}
       ACCOUNT_DATA_DELETION_BATCH_SIZE: ${{ vars.ACCOUNT_DATA_DELETION_BATCH_SIZE || '25' }}
+      STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
 
     steps:
       - name: Validate staging operation
@@ -102,6 +104,18 @@ jobs:
         working-directory: backend
         run: npm ci
 
+      - name: Generate Prisma Client
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma generate
+
+      - name: Verify isolated synthetic fixtures
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run staging:account-deletion-cleanup-fixtures -- --operation verify-isolated
+
       - name: Preview legacy soft-deleted users
         if: env.OPERATION == 'dry-run'
         working-directory: backend
@@ -119,3 +133,10 @@ jobs:
           npm run delete:legacy-soft-deleted-users -- \
             --execute \
             --confirm=DELETE_LEGACY_SOFT_DELETED_USERS
+
+      - name: Verify synthetic fixtures were cleaned
+        if: env.OPERATION == 'execute'
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run staging:account-deletion-cleanup-fixtures -- --operation verify-cleaned

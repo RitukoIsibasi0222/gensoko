@@ -20,6 +20,7 @@
     "cleanup:audit-logs": "tsx src/jobs/cleanupAuditLogs.cli.ts",
     "delete:legacy-soft-deleted-users": "tsx src/jobs/deleteLegacySoftDeletedUsers.cli.ts",
     "staging:audit-cleanup-fixtures": "tsx src/jobs/stagingAuditCleanupFixtures.cli.ts",
+    "staging:account-deletion-cleanup-fixtures": "tsx src/jobs/stagingAccountDeletionCleanupFixtures.cli.ts",
     "staging:validate-database-target": "tsx src/jobs/validateStagingDatabaseTarget.cli.ts",
     "staging:account-deletion-performance": "tsx src/jobs/stagingAccountDeletionPerformance.cli.ts",
     "cleanup:game-question-sets": "tsx src/jobs/cleanupGameQuestionSets.cli.ts",
