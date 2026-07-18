@@ -1272,9 +1272,11 @@ application rollbackは削除済み個人データを復元する権限を意味
 >
 > この値は初回migrationと現行probeの組合せを安全に再現できることを示すローカルbaselineであり、Supabase stagingと同じcompute・network・実データ量のisolated環境による合否ではない。また、現行runbookはcascadeに`min(timeout * 0.5, 5,000ms)`を定義している一方、migration write待ちは「maintenance windowを超えないこと」だけで具体的な数値上限が未定義である。環境同等性の承認とmigration write待ち上限の決定、または別のisolated Supabase相当環境での再計測が完了するまで、T33は進行中を維持する。
 
+> T33 managed DB判定基準案（2026-07-18）: 追加のSupabase project・追加費用・共有DBへの再適用を行わず、ローカルbaselineをmanaged DB合格証拠へ昇格させない方針を確定した。将来のisolated managed DB再計測では、Supabaseのcompute class、PostgreSQL major version、東京region、Session pooler port 5432、対象migrationだけがpendingであること、4つのindex対象tableのrow数がproduction集計値以上であることをすべて満たした場合だけ環境同等候補とする。暫定数値gateは、30,000ms以上のprobe、`migrationDurationMs <= 5,000`、`writeProbeMaxDurationMs <= 1,000`、`probeCount >= 20`、migration/probe成功、fixture cleanup完了、最終migration status currentの全条件とする。5,000msは10,000msのplatform request timeoutの半分、1,000msは同timeoutの10%を上限候補としたproject固有の保守値であり、SupabaseのSLOや正式なmaintenance承認値ではない。いずれかを満たさない、環境同等性を確認できない、または正式なmaintenance windowが未決定の場合はT36をblockし、production適用を初回性能試験に使わない。通常`CREATE INDEX`を維持できない場合は、invalid indexの検出・除去・再試行を含む`CREATE INDEX CONCURRENTLY` runbookを別設計する。この基準案だけではT33を完了扱いにせず、managed DB証拠または正式な残余リスク承認を待つ。
+
 > T34 ローカル参考検証記録（2026-07-18）: staging frontend/APIの配備先が未実装のため、ローカルDockerだけでsynthetic accountを使ったbrowser回帰を行った。本人退会ではpassword・同意の個別errorとfocus、同一tab・別tabの認証clear、同一email/usernameの再登録、新しいUserとして学習data 0件を確認した。管理者強制退会では不可逆な完全削除警告、削除後の一覧・focus、同一識別情報の再登録、target所有row 0件と共有Element保持を確認した。console errorはなく、synthetic User・メールfixtureは終了時0件にcleanupした。実在User、staging、productionには接続していないためT34自体は未完了とする。
 
-> T35 safety preflight TDD記録（2026-07-18）: staging cleanup前に完全一致するsynthetic legacy target 1件とactive/suspended sentinelを検証し、未知のlegacy row、fixture識別子衝突、所有row不整合、Element欠落があれば削除前に停止するfixture module・CLI・manual workflowを追加した。cleanup workflowはproject ref照合、Prisma Client生成、dry-run/execute前の`verify-isolated`、execute後の`verify-cleaned`を必須化した。cleanup済み0件かつ所有row 0件は冪等再実行として許可する。Redではmodule/workflow未実装と再実行不許可を確認し、Greenはmodule/workflow 13件とTypeScript buildが成功した。staging workflowのdry-run/execute/再実行は変更merge後のBタスクとして未実施であり、T35全体は未完了とする。
+> T35 safety preflight TDD記録（2026-07-18）: staging cleanup前に完全一致するsynthetic legacy target 1件とactive/suspended sentinelを検証し、未知のlegacy row、fixture識別子衝突、所有row不整合、Element欠落があれば削除前に停止するfixture module・CLI・manual workflowを追加した。cleanup workflowはproject ref照合、Prisma Client生成、dry-run/execute前の`verify-isolated`、execute後の`verify-cleaned`を必須化した。cleanup済み0件かつ所有row 0件は冪等再実行として許可する。Redではmodule/workflow未実装と再実行不許可を確認し、Greenはmodule/workflow 13件とTypeScript buildが成功した。変更はPR #107で`develop`へmerge済みだが、staging workflowのdry-run/execute/再実行はBタスクとして未実施であり、T35全体は未完了とする。
 
 > T39 Red/Green記録（2026-07-18）: `usable-admin`、auth、admin、ranking、admin-create、user serviceに旧DB列名が残れば失敗し、admin v1 route境界のdeprecated `deletedAt: null`合成は維持するsource contract testを先行追加した。Redは6 service fileの参照を検出し、route互換だけGreenだった。Greenではserviceの型・select・where・状態判定から旧列依存を除去し、現存Userだけを扱うcontract後の集計へ切り替えた。`status=deleted`の200空一覧と公開responseの`deletedAt: null`は維持した。関連151件、追加contract 7件、TypeScript buildが成功した。staging/production deployとsoakはT38完了後のBタスクとして残す。
 
@@ -1290,7 +1292,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 
 ### A: 現在の環境で実施する
 
-- T33は、stagingへのexpand migration適用、staging cascade性能、ローカルisolated初回migration baselineまでを実施済み証拠として維持する。managed DB固有の初回write待ち上限と環境同等性は満たしていないため、T33全体は進行中のままとする。新しいSupabase projectや追加費用は発生させない。
+- T33は、stagingへのexpand migration適用、staging cascade性能、ローカルisolated初回migration baselineまでを実施済み証拠として維持する。managed DB再計測用の環境同等性条件、暫定数値gate、停止条件だけを文書化し、ローカル値をmanaged DB合格証拠へ昇格させない。managed DB固有の証拠または正式な残余リスク承認がないため、T33全体は進行中のままとし、新しいSupabase projectや追加費用は発生させない。
 - T34は、ローカルDockerでsynthetic accountを使うAPI/UI/Playwright回帰だけを参考検証として実施できる。Cloudflare WorkersとVercelのstagingアプリ基盤は未実装であり、staging API/UI検証そのものはBへ残す。
 - T35は、staging cleanupの対象が完全一致するsynthetic fixtureだけであることをID・識別field・対象件数で事前検証し、execute自体もfixture IDだけに限定する仕組みをTDD実装する。preflight後に未知のlegacy rowが発生しても削除せず、残件として失敗させる。
 - T39は、DB列非参照codeとtestを実装できる。Userを返すPrisma writeへ明示`select`を要求するsource contractで旧列の暗黙取得も防ぐ。v1のdeprecated `deletedAt: null`はroute境界の互換値として維持する。staging/productionへdeployする前に各環境のlegacy cleanup 0件を必須とし、元のT38依存はproduction deploy gateとして維持する。
@@ -1298,7 +1300,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 
 ### B: 実環境・前提が整った時点で実施する
 
-- T33のmanaged DB固有write待ち検証と数値gate確定。
+- T33のmanaged DB固有write待ち検証と、正式なmaintenance windowに基づく数値gate承認。暫定候補だけでは完了扱いにしない。
 - T34のstaging API/UI/Playwright。staging frontend/APIのdeploy先、synthetic account、browserから到達できるURLが必要である。
 - T35のstaging dry-run/execute/再実行0件。fixture preflightを含む変更が`develop`へmergeされ、staging固定workflowから実行できることを前提とする。
 - T36〜T38、T39の実環境deploy、T40〜T42、T44、production smoke test、production release gate。
@@ -1315,6 +1317,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 ### 依存関係の扱い
 
 - T33の未解決部分はproduction expand migrationの判断材料であり、ローカル参考検証を妨げない。ただしT34 staging完了の前提を満たしたとは扱わない。
+- T33のmanaged DB証拠がない状態でproduction migrationを初回性能試験に使わない。暫定gateを満たせる同等環境が用意できない場合はT36をblockし、通常`CREATE INDEX`以外の移行方式を別設計する。
 - T39/T43は「code・test・専用DB検証」と「共有環境deploy・適用」を分離する。前者を先に準備しても、元のT38/T41/T42依存とrelease gateを完了扱いにしない。
 - 共有環境へ適用され得るmigrationを安全に隔離できない場合は、T43の実migration作成を開始せずBへ残す。
 
