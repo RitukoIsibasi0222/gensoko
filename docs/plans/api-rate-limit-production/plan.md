@@ -490,14 +490,14 @@ export const RATE_LIMIT_POLICIES: Readonly<
 
 ## 設定・環境変数案
 
-| 設定                             | development      | test                           | production                       | 管理場所                                                          |
-| -------------------------------- | ---------------- | ------------------------------ | -------------------------------- | ----------------------------------------------------------------- |
-| policy limit/window/failure mode | 本番と同じ定数   | test fixtureを明示注入         | 本番定数                         | `policies.ts`のみ。route/envへ数値を重複させない                  |
-| store                            | in-memory        | fake/in-memory/Workers runtime | SQLite-backed Durable Object必須 | store factoryとWorkers binding                                    |
-| `RATE_LIMIT_KEY_SECRET`          | `backend/.env`の開発用値 | testから固定fixture注入        | Wrangler Secret必須              | localはbackend直接起動とComposeで一元利用。値は記録しない          |
-| `RATE_LIMIT_STORE`               | `memory`         | 原則注入                       | `durable-object`以外を拒否       | `config.ts`。productionの暗黙memory fallback禁止                  |
-| DO binding名候補                 | なし             | Workers fixture                | `RATE_LIMIT_COUNTER`             | Wrangler設定。フェーズ12の命名規則確認後に確定                    |
-| `TRUST_PROXY`                    | 廃止予定         | 使用しない                     | 使用しない                       | rate limitのIP取得には使わず、関連文書・Composeから除去可否を確認 |
+| 設定                             | development              | test                           | production                       | 管理場所                                                          |
+| -------------------------------- | ------------------------ | ------------------------------ | -------------------------------- | ----------------------------------------------------------------- |
+| policy limit/window/failure mode | 本番と同じ定数           | test fixtureを明示注入         | 本番定数                         | `policies.ts`のみ。route/envへ数値を重複させない                  |
+| store                            | in-memory                | fake/in-memory/Workers runtime | SQLite-backed Durable Object必須 | store factoryとWorkers binding                                    |
+| `RATE_LIMIT_KEY_SECRET`          | `backend/.env`の開発用値 | testから固定fixture注入        | Wrangler Secret必須              | localはbackend直接起動とComposeで一元利用。値は記録しない         |
+| `RATE_LIMIT_STORE`               | `memory`                 | 原則注入                       | `durable-object`以外を拒否       | `config.ts`。productionの暗黙memory fallback禁止                  |
+| DO binding名候補                 | なし                     | Workers fixture                | `RATE_LIMIT_COUNTER`             | Wrangler設定。フェーズ12の命名規則確認後に確定                    |
+| `TRUST_PROXY`                    | 廃止予定                 | 使用しない                     | 使用しない                       | rate limitのIP取得には使わず、関連文書・Composeから除去可否を確認 |
 
 - productionでrate limit全体を無効化する環境変数は設けない。
 - limit/windowを個別環境変数化しない。値変更はcode review、policy test、security/API/deployment文書更新を伴うversioned changeとする。
@@ -512,46 +512,50 @@ export const RATE_LIMIT_POLICIES: Readonly<
 
 ### 変更予定ファイル
 
-| ファイル                                                   | 変更種別                   | 内容                                                         |
-| ---------------------------------------------------------- | -------------------------- | ------------------------------------------------------------ |
-| `backend/src/lib/config.ts`                                | 修正                       | production secret/runtime要件のfail-fast validation          |
-| `backend/src/lib/config.test.ts`                           | 修正                       | rate limit設定の環境差・未設定test                           |
-| `backend/src/types/index.ts`                               | 修正                       | Hono Bindings/Variablesのrate limit型                        |
-| `backend/src/middleware/rateLimit/policies.ts`             | 新規                       | policy値・failure modeの一元管理                             |
-| `backend/src/middleware/rateLimit/key.ts`                  | 新規                       | IP/email/user keyのcanonicalize/HMAC                         |
-| `backend/src/middleware/rateLimit/store.ts`                | 新規                       | store契約とdecision型                                        |
-| `backend/src/middleware/rateLimit/in-memory-store.ts`      | 新規                       | development/test用fixed-window store                         |
-| `backend/src/middleware/rateLimit/durable-object-store.ts` | 新規                       | DO binding adapter                                           |
-| `backend/src/middleware/rateLimit/index.ts`                | 修正                       | 共通middleware、429/503、Retry-After                         |
-| `backend/src/middleware/rateLimit/*.test.ts`               | 新規/修正                  | policy/key/store/middleware unit test                        |
-| `backend/src/cloudflare/rate-limit-counter.ts`             | 新規（フェーズ12依存）     | SQLite-backed DO counter/RPC/alarm                           |
-| `backend/src/cloudflare/rate-limit-counter.test.ts`        | 新規（フェーズ12依存）     | Workers poolで原子性・永続化・alarm test                     |
-| `backend/src/app.ts`                                       | 修正                       | general limiterの配置、runtime依存注入                       |
-| `backend/src/app.test.ts`                                  | 修正                       | health/OPTIONS除外、security/CORS/429順序                    |
-| `backend/src/routes/auth/index.ts`                         | 修正                       | auth IP/email policyとmiddleware順序                         |
-| `backend/src/routes/auth/*test.ts`                         | 修正                       | 429/503/validation順序integration                            |
-| `backend/src/routes/users/index.ts`                        | 修正                       | password/deleteの条件付きIP/user policy                      |
-| `backend/src/routes/users/*test.ts`                        | 修正                       | username非消費、password/delete制限                          |
-| `backend/src/routes/game/index.ts`                         | 修正                       | questions、submit、GET bucket分離                            |
-| `backend/src/routes/game/*test.ts`                         | 修正                       | IP/user独立bucket、GET非干渉                                 |
-| `backend/src/test-setup.ts`                                | 修正                       | 全体mock依存を縮小し、専用integrationを可能にする            |
-| `backend/vitest.config.ts`                                 | 必要時修正                 | Workers testとの分離                                         |
-| `backend/wrangler.toml`または`backend/wrangler.jsonc`      | 新規候補（フェーズ12依存） | 現在は未作成。採用形式確定後にDO namespace/binding/migration |
-| `backend/package.json`                                     | 必要時修正                 | Wrangler/Workers test依存とscript                            |
-| `backend/package-lock.json`                                | 必要時修正                 | dependency追加時のみlock更新                                 |
-| `backend/.env.example`                                     | 修正                       | store種別・HMAC secret名のplaceholder                        |
-| `docker-compose.yml`                                       | 修正                       | local memory store設定、不要になった`TRUST_PROXY`の整理      |
-| `frontend/src/lib/api/errors.test.ts`                      | 確認/必要時修正            | JSON/非JSON 429/503の保持                                    |
-| `frontend/src/lib/api/game.test.ts`                        | 修正                       | submit 429/503/非JSON回帰                                    |
-| `frontend/src/routes/login/+page.svelte`                   | 確認/必要時修正            | 429/503/network errorのalert表示                             |
-| `frontend/src/routes/(app)/game/play/+page.svelte`         | 確認/必要時修正            | 再送信、aria-live、disabled回帰                              |
-| `docs/02_security.md`                                      | 修正                       | 二層責務、policy/key、正式値                                 |
-| `docs/04_api.md`                                           | 修正                       | 全対象の429/503/Retry-After                                  |
-| `docs/10_dev_setup.md`                                     | 修正                       | local memory storeとsecret/runtime設定                       |
-| `docs/11_deployment.md`                                    | 修正                       | WAF/DO/runbook/rollback/監視                                 |
-| `docs/09_startup_commands.md`                              | 修正                       | Workers test、wrangler dev、手動rate limit確認コマンド       |
-| `docs/05_progress.md`                                      | 修正                       | 実装中/完了と計画書リンク                                    |
-| `docs/plans/api-rate-limit-production/plan.md`             | 修正                       | checkboxと実装完了記録                                       |
+| ファイル                                                   | 変更種別        | 内容                                                    |
+| ---------------------------------------------------------- | --------------- | ------------------------------------------------------- |
+| `backend/src/lib/config.ts`                                | 修正            | production secret/runtime要件のfail-fast validation     |
+| `backend/src/lib/config.test.ts`                           | 修正            | rate limit設定の環境差・未設定test                      |
+| `backend/src/types/index.ts`                               | 修正            | Hono Bindings/Variablesのrate limit型                   |
+| `backend/src/middleware/rateLimit/policies.ts`             | 新規            | policy値・failure modeの一元管理                        |
+| `backend/src/middleware/rateLimit/key.ts`                  | 新規            | IP/email/user keyのcanonicalize/HMAC                    |
+| `backend/src/middleware/rateLimit/store.ts`                | 新規            | store契約とdecision型                                   |
+| `backend/src/middleware/rateLimit/in-memory-store.ts`      | 新規            | development/test用fixed-window store                    |
+| `backend/src/middleware/rateLimit/durable-object-store.ts` | 新規            | DO binding adapter                                      |
+| `backend/src/middleware/rateLimit/index.ts`                | 修正            | 共通middleware、429/503、Retry-After                    |
+| `backend/src/middleware/rateLimit/*.test.ts`               | 新規/修正       | policy/key/store/middleware unit test                   |
+| `backend/src/cloudflare/rate-limit-counter.ts`             | 新規            | SQLite-backed DO counter/RPC/alarm                      |
+| `backend/src/cloudflare/rate-limit-counter.test.ts`        | 新規            | Workers poolで原子性・永続化・eviction・alarm test      |
+| `backend/src/cloudflare/rate-limit-worker.test-entry.ts`   | 新規            | local Workers test専用entrypoint                        |
+| `backend/src/app.ts`                                       | 修正            | general limiterの配置、runtime依存注入                  |
+| `backend/src/app.test.ts`                                  | 修正            | health/OPTIONS除外、security/CORS/429順序               |
+| `backend/src/routes/auth/index.ts`                         | 修正            | auth IP/email policyとmiddleware順序                    |
+| `backend/src/routes/auth/*test.ts`                         | 修正            | 429/503/validation順序integration                       |
+| `backend/src/routes/users/index.ts`                        | 修正            | password/deleteの条件付きIP/user policy                 |
+| `backend/src/routes/users/*test.ts`                        | 修正            | username非消費、password/delete制限                     |
+| `backend/src/routes/game/index.ts`                         | 修正            | questions、submit、GET bucket分離                       |
+| `backend/src/routes/game/*test.ts`                         | 修正            | IP/user独立bucket、GET非干渉                            |
+| `backend/src/test-setup.ts`                                | 修正            | 全体mock依存を縮小し、専用integrationを可能にする       |
+| `backend/vitest.config.ts`                                 | 修正            | Node testからWorkers runtime testを分離                 |
+| `backend/vitest.config.workers.ts`                         | 新規            | local Workers runtime test設定                          |
+| `backend/wrangler.test.jsonc`                              | 新規            | local SQLite DO namespace/binding/migration             |
+| `backend/tsconfig.json` / `tsconfig.workers.json`          | 修正・新規      | Node/Workers型check境界                                 |
+| `backend/package.json`                                     | 修正            | Wrangler/Workers test依存とtest/build script            |
+| `backend/package-lock.json`                                | 修正            | Workers test依存のlock更新                              |
+| `.github/workflows/backend-pr-quality.yml`                 | 修正            | PRでWorkers runtime testを実行                          |
+| `backend/.env.example`                                     | 修正            | store種別・HMAC secret名のplaceholder                   |
+| `docker-compose.yml`                                       | 修正            | local memory store設定、不要になった`TRUST_PROXY`の整理 |
+| `frontend/src/lib/api/errors.test.ts`                      | 確認/必要時修正 | JSON/非JSON 429/503の保持                               |
+| `frontend/src/lib/api/game.test.ts`                        | 修正            | submit 429/503/非JSON回帰                               |
+| `frontend/src/routes/login/+page.svelte`                   | 確認/必要時修正 | 429/503/network errorのalert表示                        |
+| `frontend/src/routes/(app)/game/play/+page.svelte`         | 確認/必要時修正 | 再送信、aria-live、disabled回帰                         |
+| `docs/02_security.md`                                      | 修正            | 二層責務、policy/key、正式値                            |
+| `docs/04_api.md`                                           | 修正            | 全対象の429/503/Retry-After                             |
+| `docs/10_dev_setup.md`                                     | 修正            | local memory storeとsecret/runtime設定                  |
+| `docs/11_deployment.md`                                    | 修正            | WAF/DO/runbook/rollback/監視                            |
+| `docs/09_startup_commands.md`                              | 修正            | Workers test、wrangler dev、手動rate limit確認コマンド  |
+| `docs/05_progress.md`                                      | 修正            | 実装中/完了と計画書リンク                               |
+| `docs/plans/api-rate-limit-production/plan.md`             | 修正            | checkboxと実装完了記録                                  |
 
 ### 確認のみのファイル
 
@@ -793,8 +797,8 @@ DOはschemaを`new_sqlite_classes` migrationとして追加し、stagingとprodu
 - [x] T10: app/route integrationをRed化する
 - [x] T11: app/auth/users/gameへ配線する
 - [x] T12: frontend回帰testを追加する
-- [ ] T13: Durable Object testをRed化する
-- [ ] T14: SQLite-backed Durable Object/store adapterを実装する
+- [x] T13: Durable Object testをRed化する
+- [x] T14: SQLite-backed Durable Object/store adapterを実装する
 - [ ] T15: staging WAF/DOを適用する
 - [x] T16: format/lint/test/buildを通す
 - [ ] T17: 手動A11Y・主要導線を確認する
@@ -811,6 +815,7 @@ npm run format
 npm run lint
 npm run format:check
 npm run test -- --run
+npm run test:workers
 npm run build
 
 cd ../frontend
@@ -857,28 +862,28 @@ Workers test scriptと`wrangler dev`確認コマンドは、フェーズ12で採
 
 ### 実際の変更ファイル
 
-| ファイル | 変更種別 | 内容 |
-| --- | --- | --- |
-| `backend/package.json`, `backend/package-lock.json` | 修正 | `ipaddr.js`依存を追加し、直接起動時に`backend/.env`を明示読込 |
-| `backend/.env.example`, `docker-compose.yml` | 修正 | development用rate limit設定を追加し`TRUST_PROXY`を廃止 |
-| `backend/src/lib/config.ts`, `config.test.ts` | 修正 | store・HMAC secretの環境別検証 |
-| `backend/src/middleware/rateLimit/policies.ts`, `policies.test.ts` | 新規 | policyのsingle sourceと契約test |
-| `backend/src/middleware/rateLimit/key.ts`, `key.test.ts` | 新規 | actor正規化、IP信頼境界、HMAC key |
-| `backend/src/middleware/rateLimit/store.ts` | 新規 | store・bucket・依存注入契約 |
-| `backend/src/middleware/rateLimit/in-memory-store.ts`, `in-memory-store.test.ts` | 新規 | development/test用fixed-window store |
-| `backend/src/middleware/rateLimit/buckets.ts`, `buckets.test.ts` | 新規・修正 | IP/email/user bucket resolverとキー解決障害時のfailure mode test |
-| `backend/src/middleware/rateLimit/index.ts`, `rateLimit.test.ts` | 修正 | 複数bucket・429/503・failure mode |
-| `backend/src/app.ts`, `app.test.ts`, `app.rate-limit.test.ts`, `app.rate-limit-route-matrix.test.ts` | 修正・新規 | app依存注入、general policy、実middleware統合・route分類test |
-| `backend/src/index.ts`, `backend/src/types/index.ts` | 修正 | Node store/IP resolverとHono context型 |
-| `backend/src/routes/auth/index.ts` | 修正 | IP・操作別email policyを配線 |
-| `backend/src/routes/game/index.ts` | 修正 | questionsとsubmit IP/user policyを配線 |
-| `backend/src/routes/users/index.ts` | 修正 | password変更・退会のIP/user policyを配線 |
-| `frontend/src/lib/api/errors.test.ts`, `game.test.ts` | 修正 | JSON・非JSON・network回帰test |
-| `frontend/src/routes/login/login-page.test.ts` | 修正 | 429/networkの`role=alert`表示test |
-| `frontend/src/routes/(app)/game/play/game-play-rate-limit.test.ts` | 新規 | 問題取得・結果送信429の`role=alert`と再試行導線test |
-| `docs/02_security.md`, `04_api.md`, `05_progress.md` | 修正 | security/API/進捗契約を更新 |
-| `docs/10_dev_setup.md`, `11_deployment.md` | 修正 | local設定、本番二層防御、フェーズ12引き継ぎ |
-| `docs/plans/api-rate-limit-production/plan.md` | 修正 | task実績と先行実装記録を更新 |
+| ファイル                                                                                             | 変更種別   | 内容                                                             |
+| ---------------------------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------- |
+| `backend/package.json`, `backend/package-lock.json`                                                  | 修正       | `ipaddr.js`依存を追加し、直接起動時に`backend/.env`を明示読込    |
+| `backend/.env.example`, `docker-compose.yml`                                                         | 修正       | development用rate limit設定を追加し`TRUST_PROXY`を廃止           |
+| `backend/src/lib/config.ts`, `config.test.ts`                                                        | 修正       | store・HMAC secretの環境別検証                                   |
+| `backend/src/middleware/rateLimit/policies.ts`, `policies.test.ts`                                   | 新規       | policyのsingle sourceと契約test                                  |
+| `backend/src/middleware/rateLimit/key.ts`, `key.test.ts`                                             | 新規       | actor正規化、IP信頼境界、HMAC key                                |
+| `backend/src/middleware/rateLimit/store.ts`                                                          | 新規       | store・bucket・依存注入契約                                      |
+| `backend/src/middleware/rateLimit/in-memory-store.ts`, `in-memory-store.test.ts`                     | 新規       | development/test用fixed-window store                             |
+| `backend/src/middleware/rateLimit/buckets.ts`, `buckets.test.ts`                                     | 新規・修正 | IP/email/user bucket resolverとキー解決障害時のfailure mode test |
+| `backend/src/middleware/rateLimit/index.ts`, `rateLimit.test.ts`                                     | 修正       | 複数bucket・429/503・failure mode                                |
+| `backend/src/app.ts`, `app.test.ts`, `app.rate-limit.test.ts`, `app.rate-limit-route-matrix.test.ts` | 修正・新規 | app依存注入、general policy、実middleware統合・route分類test     |
+| `backend/src/index.ts`, `backend/src/types/index.ts`                                                 | 修正       | Node store/IP resolverとHono context型                           |
+| `backend/src/routes/auth/index.ts`                                                                   | 修正       | IP・操作別email policyを配線                                     |
+| `backend/src/routes/game/index.ts`                                                                   | 修正       | questionsとsubmit IP/user policyを配線                           |
+| `backend/src/routes/users/index.ts`                                                                  | 修正       | password変更・退会のIP/user policyを配線                         |
+| `frontend/src/lib/api/errors.test.ts`, `game.test.ts`                                                | 修正       | JSON・非JSON・network回帰test                                    |
+| `frontend/src/routes/login/login-page.test.ts`                                                       | 修正       | 429/networkの`role=alert`表示test                                |
+| `frontend/src/routes/(app)/game/play/game-play-rate-limit.test.ts`                                   | 新規       | 問題取得・結果送信429の`role=alert`と再試行導線test              |
+| `docs/02_security.md`, `04_api.md`, `05_progress.md`                                                 | 修正       | security/API/進捗契約を更新                                      |
+| `docs/10_dev_setup.md`, `11_deployment.md`                                                           | 修正       | local設定、本番二層防御、フェーズ12引き継ぎ                      |
+| `docs/plans/api-rate-limit-production/plan.md`                                                       | 修正       | task実績と先行実装記録を更新                                     |
 
 ### 検証結果
 
@@ -906,6 +911,34 @@ Workers test scriptと`wrangler dev`確認コマンドは、フェーズ12で採
 3. staging/productionでnamespace、migration、binding、secretを分離する。
 4. 実公開hostnameとCloudflare planを確認し、WAF ruleをstagingの高閾値から段階適用する。
 5. 実HTTP、A11Y、監視、rollback確認後にT1・T13〜T19を完了し、`docs/05_progress.md`を`[x]`へ更新する。
+
+## T13〜T14 SQLite-backed Durable Object実装記録
+
+- 記録日: 2026-07-18
+- 実装ブランチ: `feature/staging-app-deployment-sd6-sd7`
+- PR: #113
+- 全体ステータス: T13/T14完了。T15の実Cloudflare適用、WAF、実HTTP、監視、production確認は未実施のため、本計画全体は実装中のままとする。
+
+### TDD結果
+
+- Red: `backend/src/cloudflare/rate-limit-counter.test.ts`を先行追加し、counter/store adapterの未実装例外により1 file / 8 testsすべての失敗を明示確認した。
+- Green: SQLite-backed DO counterとnamespace adapter実装後、並行consume、SQLite永続化、instance eviction、request内期限reset、期限後alarm cleanup、早期alarm再設定、policy/key分離、入力・RPC結果検証の1 file / 12 testsが成功した。
+- Node回帰: Workers testは専用Vitest configへ分離し、Node testのruntime/global型を変えない。PR CIはNode testとWorkers testを別stepで実行する。
+
+### 実装判断と境界
+
+- 同一`policyId + keyDigest` object内のread/reset/incrementをSQLite `transactionSync`で原子的に更新する。limit/window/時刻は共通policyとDO clockから解決し、RPC inputでは指定できない。
+- stateに保存するactor由来情報はなく、`count`と`resetAtMs`だけをrowへ保持する。期限後alarmがrowを削除し、alarm遅延中は次のrequestがwindowをresetする。
+- adapterはpolicy IDと64文字lowercase HMAC-SHA-256 hexをobject選択前に検証し、RPC結果も構造・policy limit・remaining・Retry-After契約を検証する。raw actor/digestはlogへ出さない。
+- `wrangler.test.jsonc`はlocal test専用で、外部namespace ID、secret、deploy targetを持たない。production/staging namespaceとmigration履歴の設定はT15ではなく、staging配備計画SD9以降の承認境界で扱う。
+- production Workerへのstore接続はmail adapter未実装のSD8とproduction graph未確定のSD9より前には行わず、既定503 fail-closedを維持する。memory fallbackは追加しない。
+- Prisma schema/migrationは変更していない。業務PostgreSQL、外部Cloudflare resource、secret、実データには接続していない。
+
+### 最終ローカル品質確認
+
+- `npm run lint`、`npm run format:check`、変更config/docsを含むPrettier check、`npm run build`、`git diff --check`: 成功。
+- Node: 87 files / 945 tests成功。外部DBを必要とする4 files / 10 testsは既定どおりskip。
+- Workers: 1 file / 12 tests成功。
 
 ## 手動確認項目
 
