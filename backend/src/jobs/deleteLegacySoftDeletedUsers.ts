@@ -6,6 +6,7 @@ const CLEANUP_BATCH_COMPLETED_EVENT = "account_data_deletion.legacy_cleanup.batc
 const CLEANUP_COMPLETED_EVENT = "account_data_deletion.legacy_cleanup.completed";
 const CLEANUP_FAILED_EVENT = "account_data_deletion.legacy_cleanup.failed";
 const CLEANUP_FAILED_MESSAGE = "既存退会済みユーザーの完全削除に失敗しました";
+const EMPTY_DELETE_ONLY_USER_IDS_MESSAGE = "削除対象User IDを1件以上指定してください";
 const LEGACY_USER_WHERE = { deletedAt: { not: null } } as const;
 const LEGACY_CHILD_WHERE = { user: LEGACY_USER_WHERE } as const;
 const LEGACY_ANSWER_WHERE = { session: { user: LEGACY_USER_WHERE } } as const;
@@ -35,6 +36,7 @@ export type LegacySoftDeletedUserTableCounts = Readonly<{
 export type DeleteLegacySoftDeletedUsersInput = Readonly<{
   mode: DeleteLegacySoftDeletedUsersMode;
   batchSize: number;
+  deleteOnlyUserIds?: readonly string[];
 }>;
 
 async function inspectLegacySoftDeletedUserTableCounts(): Promise<LegacySoftDeletedUserTableCounts> {
@@ -96,7 +98,12 @@ function createResult(
 export async function deleteLegacySoftDeletedUsers({
   mode,
   batchSize,
+  deleteOnlyUserIds,
 }: DeleteLegacySoftDeletedUsersInput): Promise<DeleteLegacySoftDeletedUsersResult> {
+  if (deleteOnlyUserIds !== undefined && deleteOnlyUserIds.length === 0) {
+    throw new TypeError(EMPTY_DELETE_ONLY_USER_IDS_MESSAGE);
+  }
+
   const startedAt = performance.now();
   let tableCounts: LegacySoftDeletedUserTableCounts | undefined;
   let deletedUsers = 0;
@@ -124,9 +131,16 @@ export async function deleteLegacySoftDeletedUsers({
     }
 
     if (matchedUsers > 0) {
+      const deletionWhere =
+        deleteOnlyUserIds === undefined
+          ? LEGACY_USER_WHERE
+          : {
+              ...LEGACY_USER_WHERE,
+              id: { in: [...deleteOnlyUserIds] },
+            };
       while (true) {
         const rows = await prisma.user.findMany({
-          where: LEGACY_USER_WHERE,
+          where: deletionWhere,
           orderBy: [{ deletedAt: "asc" }, { id: "asc" }],
           take: batchSize,
           select: { id: true },

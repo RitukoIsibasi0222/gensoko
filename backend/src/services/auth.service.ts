@@ -39,14 +39,9 @@ export async function register(input: {
         username: true,
         emailVerified: true,
         isActive: true,
-        deletedAt: true,
       },
     });
     if (existing) {
-      if (existing.deletedAt) {
-        throw new AuthError(403, "このアカウントは削除済みのため再登録できません");
-      }
-
       if (existing.isActive === false) {
         throw new AuthError(403, "このアカウントは利用停止されています");
       }
@@ -113,7 +108,7 @@ export async function register(input: {
   } catch (err) {
     if (createdNewUser) {
       // 送信失敗時は作成済みユーザーを削除して再登録可能な状態に戻す
-      await prisma.user.delete({ where: { id: userId } });
+      await prisma.user.delete({ where: { id: userId }, select: { id: true } });
     } else {
       // 未認証ユーザーの再登録時はアカウントを残し、今回発行した確認トークンだけ無効化する
       await prisma.emailVerification.deleteMany({ where: { userId } });
@@ -242,15 +237,10 @@ type LoginAccountState = {
   role: Role;
   emailVerified: boolean;
   isActive: boolean;
-  deletedAt: Date | null;
   lockedUntil: Date | null;
 };
 
 function assertLoginAccountIsUsable(user: LoginAccountState, now = new Date()): void {
-  if (user.deletedAt) {
-    throw new AuthError(401, INVALID_LOGIN_CREDENTIALS_MESSAGE);
-  }
-
   if (!user.isActive) {
     throw new AuthError(403, "アカウントが停止されています");
   }
@@ -301,7 +291,6 @@ async function loginWithRequiredAudit(input: {
       passwordHash: true,
       emailVerified: true,
       isActive: true,
-      deletedAt: true,
       loginFailCount: true,
       lockedUntil: true,
     },
@@ -320,6 +309,7 @@ async function loginWithRequiredAudit(input: {
     await prisma.user.update({
       where: { id: user.id },
       data: { loginFailCount: 0, lockedUntil: null },
+      select: { id: true },
     });
     currentFailCount = 0;
   }
@@ -335,7 +325,11 @@ async function loginWithRequiredAudit(input: {
     if (newFailCount >= MAX_LOGIN_FAIL) {
       updateData.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
     }
-    await prisma.user.update({ where: { id: user.id }, data: updateData });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: updateData,
+      select: { id: true },
+    });
     throw new AuthError(401, INVALID_LOGIN_CREDENTIALS_MESSAGE);
   }
 
@@ -361,7 +355,6 @@ async function loginWithRequiredAudit(input: {
         role: true,
         emailVerified: true,
         isActive: true,
-        deletedAt: true,
         lockedUntil: true,
       },
     });
@@ -382,7 +375,6 @@ async function loginWithRequiredAudit(input: {
         role: user.role,
         emailVerified: true,
         isActive: true,
-        deletedAt: null,
         OR: [{ lockedUntil: null }, { lockedUntil: { lte: stateCheckedAt } }],
       },
       data: { loginFailCount: 0, lockedUntil: null, lastLoginAt: new Date() },
@@ -486,6 +478,7 @@ export async function verifyEmail(input: { token: string }): Promise<void> {
     await tx.user.update({
       where: { id: record.userId },
       data: { emailVerified: true },
+      select: { id: true },
     });
   });
 }
@@ -498,13 +491,13 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
   // 1. ユーザー検索
   const user = await prisma.user.findUnique({
     where: { email },
-    select: { id: true, isActive: true, deletedAt: true },
+    select: { id: true, isActive: true },
   });
 
   // 2. ユーザーが存在しない場合は何もしない（列挙攻撃対策: エラーを返さない）
   // タイミング攻撃対策: ダミーのハッシュ計算で存在するユーザーとの処理時間差を縮める
   // cost=4 にして CPU 負荷を抑える（cost=12 は DoS の踏み台になり得る）
-  if (!user || user.isActive === false || user.deletedAt) {
+  if (!user || user.isActive === false) {
     await bcrypt.hash("timing-safe-dummy", 4);
     return;
   }
@@ -578,6 +571,7 @@ export async function resetPassword(input: { token: string; password: string }):
     await tx.user.update({
       where: { id: record.userId },
       data: { passwordHash },
+      select: { id: true },
     });
     // 3. 全リフレッシュトークン削除（全デバイスからログアウト）
     await tx.refreshToken.deleteMany({ where: { userId: record.userId } });

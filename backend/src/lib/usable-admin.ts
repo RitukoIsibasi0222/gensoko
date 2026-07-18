@@ -5,14 +5,12 @@ export type AccountAvailability = {
   isActive: boolean;
   emailVerified: boolean;
   lockedUntil: Date | null;
-  deletedAt: Date | null;
 };
 
 export function getUsableAdminWhere(now: Date): Prisma.UserWhereInput {
   return {
     role: Role.ADMIN,
     isActive: true,
-    deletedAt: null,
     emailVerified: true,
     OR: [{ lockedUntil: null }, { lockedUntil: { lte: now } }],
   };
@@ -20,10 +18,7 @@ export function getUsableAdminWhere(now: Date): Prisma.UserWhereInput {
 
 export function isUsableAccount(user: AccountAvailability, now: Date): boolean {
   return (
-    user.isActive &&
-    user.deletedAt === null &&
-    user.emailVerified &&
-    (user.lockedUntil === null || user.lockedUntil <= now)
+    user.isActive && user.emailVerified && (user.lockedUntil === null || user.lockedUntil <= now)
   );
 }
 

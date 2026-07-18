@@ -70,7 +70,6 @@ describe("deleteCurrentUser", () => {
     isActive: true,
     emailVerified: true,
     lockedUntil: null,
-    deletedAt: null,
   };
 
   function createSerializationConflictError(): Prisma.PrismaClientKnownRequestError {
@@ -114,11 +113,13 @@ describe("deleteCurrentUser", () => {
         isActive: true,
         emailVerified: true,
         lockedUntil: true,
-        deletedAt: true,
       },
     });
     expect(txUserCount).not.toHaveBeenCalled();
-    expect(txUserDelete).toHaveBeenCalledWith({ where: { id: "user-1" } });
+    expect(txUserDelete).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: { id: true },
+    });
     expect(txAuditLogCreate).toHaveBeenCalledWith({
       data: {
         action: "USER_ACCOUNT_DELETE",
@@ -159,7 +160,10 @@ describe("deleteCurrentUser", () => {
     await deleteCurrentUser({ userId: "user-1", currentPassword: "Pass1234!" });
 
     expect(txUserCount).toHaveBeenCalledOnce();
-    expect(txUserDelete).toHaveBeenCalledWith({ where: { id: "user-1" } });
+    expect(txUserDelete).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: { id: true },
+    });
   });
 
   it("異常系: 初回取得時にユーザーが存在しなければ409でtransactionを開始しない", async () => {
@@ -256,7 +260,6 @@ describe("deleteCurrentUser", () => {
     ["停止済み", { isActive: false }],
     ["メール未確認", { emailVerified: false }],
     ["lock中", { lockedUntil: new Date("2099-01-01T00:00:00.000Z") }],
-    ["legacy削除済み", { deletedAt: new Date("2026-07-01T00:00:00.000Z") }],
   ])("異常系: transaction内で%sなら409で削除しない", async (_label, override) => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "user-1",

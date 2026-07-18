@@ -110,6 +110,20 @@ describe("既存soft-deleted user cleanup", () => {
     vi.restoreAllMocks();
   });
 
+  it("deleteOnlyUserIdsの空配列はDB集計前に引数エラーとして拒否する", async () => {
+    await expect(
+      deleteLegacySoftDeletedUsers({
+        mode: "execute",
+        batchSize: 25,
+        deleteOnlyUserIds: [],
+      }),
+    ).rejects.toThrow("削除対象User IDを1件以上指定してください");
+
+    expect(prisma.user.count).not.toHaveBeenCalled();
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
+    expect(runSerializableTransaction).not.toHaveBeenCalled();
+  });
+
   it("dry-runはUserと全所有tableを固定本数で集計し、削除しない", async () => {
     mockTableCounts();
 
@@ -243,6 +257,45 @@ describe("既存soft-deleted user cleanup", () => {
     const logs = JSON.stringify(vi.mocked(console.info).mock.calls);
     expect(logs).not.toContain("legacy-user-1");
     expect(logs).not.toContain("legacy-user-2");
+  });
+
+  it("staging synthetic限定executeは未知のlegacy Userを選択・削除せず残件にする", async () => {
+    mockTableCounts({
+      ...TABLE_COUNTS,
+      users: 2,
+    });
+    vi.mocked(prisma.user.findMany).mockResolvedValueOnce([
+      { id: "staging-account-deletion-legacy-fixture" },
+    ] as never);
+    transactionClient.user.deleteMany.mockResolvedValueOnce({ count: 1 } as never);
+    vi.mocked(prisma.user.count).mockResolvedValueOnce(1);
+
+    await expect(
+      deleteLegacySoftDeletedUsers({
+        mode: "execute",
+        batchSize: 25,
+        deleteOnlyUserIds: ["staging-account-deletion-legacy-fixture"],
+      }),
+    ).resolves.toMatchObject({
+      matchedUsers: 2,
+      deletedUsers: 1,
+      remainingUsers: 1,
+    });
+    expect(prisma.user.findMany).toHaveBeenCalledWith({
+      where: {
+        deletedAt: { not: null },
+        id: { in: ["staging-account-deletion-legacy-fixture"] },
+      },
+      orderBy: [{ deletedAt: "asc" }, { id: "asc" }],
+      take: 25,
+      select: { id: true },
+    });
+    expect(transactionClient.user.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ["staging-account-deletion-legacy-fixture"] },
+        deletedAt: { not: null },
+      },
+    });
   });
 
   it("executeはbatchごとにcommitし、実削除件数とbatch数を集計する", async () => {

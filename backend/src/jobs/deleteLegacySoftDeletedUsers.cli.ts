@@ -3,6 +3,10 @@ import type {
   DeleteLegacySoftDeletedUsersInput,
   DeleteLegacySoftDeletedUsersResult,
 } from "./deleteLegacySoftDeletedUsers.js";
+import {
+  STAGING_ACCOUNT_DELETION_LEGACY_FIXTURE,
+  validateStagingAccountDeletionCleanupFixtureEnvironment,
+} from "./stagingAccountDeletionCleanupFixtures.js";
 
 const CONFIRMATION = "DELETE_LEGACY_SOFT_DELETED_USERS";
 const CLI_FAILED_EVENT = "account_data_deletion.legacy_cleanup.cli.failed";
@@ -21,6 +25,7 @@ type CleanupCliExitCode = 0 | 1 | 2;
 type ParsedArguments = Readonly<{
   execute: boolean;
   confirmation?: string;
+  stagingSyntheticOnly: boolean;
 }>;
 
 type CleanupRuntimeDependencies = Readonly<{
@@ -33,6 +38,7 @@ type CleanupRuntimeDependencies = Readonly<{
 function parseArguments(argv: readonly string[]): ParsedArguments {
   let execute = false;
   let confirmation: string | undefined;
+  let stagingSyntheticOnly = false;
 
   for (const argument of argv) {
     if (argument === "--execute") {
@@ -51,15 +57,23 @@ function parseArguments(argv: readonly string[]): ParsedArguments {
       continue;
     }
 
+    if (argument === "--staging-synthetic-only") {
+      if (stagingSyntheticOnly) {
+        throw new Error(ARGUMENT_ERROR_MESSAGE);
+      }
+      stagingSyntheticOnly = true;
+      continue;
+    }
+
     throw new Error(ARGUMENT_ERROR_MESSAGE);
   }
 
-  return { execute, confirmation };
+  return { execute, confirmation, stagingSyntheticOnly };
 }
 
 function validateExecuteGate(arguments_: ParsedArguments, config: AccountDataDeletionConfig): void {
   if (!arguments_.execute) {
-    if (arguments_.confirmation !== undefined) {
+    if (arguments_.confirmation !== undefined || arguments_.stagingSyntheticOnly) {
       throw new Error(EXECUTE_GATE_ERROR_MESSAGE);
     }
     return;
@@ -67,6 +81,10 @@ function validateExecuteGate(arguments_: ParsedArguments, config: AccountDataDel
 
   if (!config.executeEnabled || arguments_.confirmation !== CONFIRMATION) {
     throw new Error(EXECUTE_GATE_ERROR_MESSAGE);
+  }
+
+  if (arguments_.stagingSyntheticOnly) {
+    validateStagingAccountDeletionCleanupFixtureEnvironment(process.env);
   }
 }
 
@@ -148,6 +166,9 @@ export async function main(): Promise<void> {
       const executeResult = await dependencies.deleteLegacySoftDeletedUsers({
         mode: "execute",
         batchSize: config.batchSize,
+        ...(arguments_.stagingSyntheticOnly
+          ? { deleteOnlyUserIds: [STAGING_ACCOUNT_DELETION_LEGACY_FIXTURE.id] }
+          : {}),
       });
       const verificationResult = await dependencies.deleteLegacySoftDeletedUsers({
         mode: "dry-run",

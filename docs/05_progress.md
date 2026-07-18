@@ -206,9 +206,12 @@
   - [x] T31: frontend品質check完了（Prettier・ESLint・Svelte/TypeScript check・production build成功、通常全test 490件成功）
   - [x] T32: 専用Docker PostgreSQL integration 5件成功（15 migrations適用済み・pending 0、終了後fixture 0件）
   - [-] T33: stagingのGameSession 5,000件・GameAnswer 50,000件cascadeは1,446.32msで基準5,000ms以内、cleanup・事後preview・flag `false`復旧まで成功。ローカル専用PostgreSQL 16.13で対象migrationだけpendingを再構築した30秒baselineも、migration 1,427ms・probe 115回・最大write待ち 22.14ms・cleanup成功・残存fixture 0件だった。ただしSupabase staging相当のcompute・network・実データ量ではなく、migration write待ちの数値上限も未定義のため、環境同等性とgateを決定するまで進行中
-  - [ ] Phase 5: `deletedAt` 非参照codeへの移行、v1 deprecated互換値の維持、deploy・soak
+  - [-] 2026-07-18残作業区分: T33のmanaged DB固有検証、stagingアプリ未配備のT34、fixture完全一致preflight merge前のT35、production・backup・restore・shared contract適用は実環境条件付きで継続。現在はローカルPlaywright参考検証、T35安全preflight、T39非参照code/test、T43 guard test・専用DB検証を実施対象とし、共有環境deploy・migration適用とは分離する
+  - [-] T34/T35ローカル・安全preflight: synthetic browser回帰とfixture完全一致preflightを実装し、executeもsynthetic fixture IDだけへ限定。preflight後の未知legacy rowは削除せず残件として失敗させる。staging API/UI、cleanup dry-run/execute/再実行は未実施
+  - [-] Phase 5: T39の`deletedAt`非参照code・test、Prisma User writeの明示`select`契約、v1 deprecated互換値を実装済み。staging/production deploy・soakとT44のPrisma Client再生成は未実施
   - [ ] Phase 6: cleanup後backup、旧Artifactの7日失効、isolated restore drill・削除replay
-  - [ ] Phase 7: guard付きcontract migrationをstaging・productionへ適用
+  - [-] Phase 7: T43のtable lock付き隔離guard SQL・contract test・ローカル専用DB fail/success/並行insert/drop後Prisma writeを完了。staging/production適用はT44として未実施
+  - [x] 2026-07-18 PR #107 review follow-up品質check: backend 887件成功・10件skip、ESLint・Prettier・TypeScript build・Prisma validate成功。deleteOnlyUserIds空配列拒否とshorthand select許容を含み、専用cascade 5件とcontract migration 5件も成功
   - [ ] Release gate: privacy policy、監査保持承認、全損時replay方針、本番cleanup体制、integration・Playwright・smoke testを完了
 
 ### 完全削除から切り出した関連タスクの着手タイミング

@@ -31,7 +31,6 @@ export async function createAdmin(input: AdminCreateInput): Promise<void> {
         role: "ADMIN",
         emailVerified: true,
         isActive: true,
-        deletedAt: null,
       },
       select: { id: true },
     });

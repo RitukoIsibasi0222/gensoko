@@ -63,7 +63,6 @@ describe("createAdmin", () => {
         role: "ADMIN",
         emailVerified: true,
         isActive: true,
-        deletedAt: null,
       },
       select: { id: true },
     });

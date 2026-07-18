@@ -5,6 +5,7 @@ const runtimeMocks = vi.hoisted(() => ({
   disconnect: vi.fn(),
   cleanupModuleLoaded: vi.fn(),
   prismaModuleLoaded: vi.fn(),
+  validateStagingFixtureEnvironment: vi.fn(),
 }));
 
 vi.mock("./deleteLegacySoftDeletedUsers.js", () => {
@@ -14,11 +15,23 @@ vi.mock("./deleteLegacySoftDeletedUsers.js", () => {
   };
 });
 
+vi.mock("./stagingAccountDeletionCleanupFixtures.js", () => ({
+  STAGING_ACCOUNT_DELETION_LEGACY_FIXTURE: {
+    id: "staging-account-deletion-legacy-fixture",
+  },
+  validateStagingAccountDeletionCleanupFixtureEnvironment:
+    runtimeMocks.validateStagingFixtureEnvironment,
+}));
+
 const CONFIRMATION = "DELETE_LEGACY_SOFT_DELETED_USERS";
 const ORIGINAL_ARGV = [...process.argv];
 const ENVIRONMENT_KEYS = [
   "ACCOUNT_DATA_DELETION_EXECUTE_ENABLED",
   "ACCOUNT_DATA_DELETION_BATCH_SIZE",
+  "ACCOUNT_DATA_DELETION_STAGING_FIXTURES_ENABLED",
+  "BATCH_ENVIRONMENT",
+  "STAGING_SUPABASE_PROJECT_REF",
+  "DATABASE_URL",
 ] as const;
 const ORIGINAL_ENVIRONMENT = Object.fromEntries(
   ENVIRONMENT_KEYS.map((key) => [key, process.env[key]]),
@@ -82,8 +95,9 @@ describe("deleteLegacySoftDeletedUsers CLI", () => {
         },
       };
     });
-    runtimeMocks.deleteLegacySoftDeletedUsers.mockResolvedValue(DRY_RUN_RESULT);
-    runtimeMocks.disconnect.mockResolvedValue(undefined);
+    runtimeMocks.deleteLegacySoftDeletedUsers.mockReset().mockResolvedValue(DRY_RUN_RESULT);
+    runtimeMocks.disconnect.mockReset().mockResolvedValue(undefined);
+    runtimeMocks.validateStagingFixtureEnvironment.mockReset().mockImplementation(() => undefined);
     process.argv = [process.execPath, "/app/src/jobs/deleteLegacySoftDeletedUsers.cli.ts"];
     process.exitCode = undefined;
     setDefaultEnvironment();
@@ -136,6 +150,33 @@ describe("deleteLegacySoftDeletedUsers CLI", () => {
       batchSize: 25,
     });
     expect(runtimeMocks.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("staging synthetic限定executeは接続先を検証し、削除対象IDをfixtureへ固定する", async () => {
+    process.env.ACCOUNT_DATA_DELETION_EXECUTE_ENABLED = "true";
+    process.env.ACCOUNT_DATA_DELETION_STAGING_FIXTURES_ENABLED = "true";
+    process.env.BATCH_ENVIRONMENT = "staging";
+    process.env.STAGING_SUPABASE_PROJECT_REF = "abcdefghijklmnopqrst";
+    process.env.DATABASE_URL =
+      "postgresql://postgres.abcdefghijklmnopqrst:secret@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres";
+    process.argv.push("--execute", `--confirm=${CONFIRMATION}`, "--staging-synthetic-only");
+    runtimeMocks.deleteLegacySoftDeletedUsers
+      .mockResolvedValueOnce({ ...EXECUTE_RESULT, matchedUsers: 1, deletedUsers: 1 })
+      .mockResolvedValueOnce(EMPTY_DRY_RUN_RESULT);
+
+    await importCli();
+
+    await vi.waitFor(() => expect(process.exitCode).toBe(0));
+    expect(runtimeMocks.validateStagingFixtureEnvironment).toHaveBeenCalledWith(process.env);
+    expect(runtimeMocks.deleteLegacySoftDeletedUsers).toHaveBeenNthCalledWith(1, {
+      mode: "execute",
+      batchSize: 25,
+      deleteOnlyUserIds: ["staging-account-deletion-legacy-fixture"],
+    });
+    expect(runtimeMocks.deleteLegacySoftDeletedUsers).toHaveBeenNthCalledWith(2, {
+      mode: "dry-run",
+      batchSize: 25,
+    });
   });
 
   it.each([

@@ -44,7 +44,6 @@ export type AdminUserSummary = {
   role: Role;
   emailVerified: boolean;
   isActive: boolean;
-  deletedAt: Date | null;
   lockedUntil: Date | null;
   lastLoginAt: Date | null;
   createdAt: Date;
@@ -99,8 +98,6 @@ export type AdminStats = {
 export const ADMIN_USERS_DEFAULT_LIMIT = 20;
 export const ADMIN_USERS_MAX_LIMIT = 100;
 const ADMIN_MUTATION_CONFLICT_MESSAGE = "同時操作により処理できませんでした。再試行してください";
-const currentUserWhere = { deletedAt: null } satisfies Prisma.UserWhereInput;
-
 type AdminAuditDescriptor = {
   action: AdminAuditAction;
   adminUserId: string;
@@ -114,7 +111,6 @@ const adminUserSummarySelect = {
   role: true,
   emailVerified: true,
   isActive: true,
-  deletedAt: true,
   lockedUntil: true,
   lastLoginAt: true,
   createdAt: true,
@@ -186,7 +182,7 @@ function buildAdminUsersWhere(input: {
   status?: AdminUserStatusFilter;
   cursor?: { id: string; createdAt: Date };
 }): Prisma.UserWhereInput {
-  const where: Prisma.UserWhereInput = { ...currentUserWhere };
+  const where: Prisma.UserWhereInput = {};
   const andConditions: Prisma.UserWhereInput[] = [];
   const normalizedQuery = input.q?.trim();
 
@@ -233,7 +229,6 @@ function toAdminUserSummary(user: AdminUserSummaryRow): AdminUserSummary {
     role: user.role,
     emailVerified: user.emailVerified,
     isActive: user.isActive,
-    deletedAt: user.deletedAt,
     lockedUntil: user.lockedUntil,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,
@@ -399,7 +394,7 @@ export async function getAdminUserDetail(input: {
     select: adminUserDetailSelect,
   });
 
-  if (!user || user.deletedAt) {
+  if (!user) {
     throw new AdminServiceError(404, "ユーザーが見つかりません");
   }
 
@@ -440,15 +435,6 @@ export async function updateAdminUserStatus(input: {
           404,
           "ユーザーが見つかりません",
           AUDIT_FAILURE_REASONS.TARGET_NOT_FOUND,
-        );
-      }
-
-      if (targetUser.deletedAt) {
-        throw new AdminServiceError(
-          409,
-          "削除済みユーザーは変更できません",
-          AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
-          targetUser.id,
         );
       }
 
@@ -520,10 +506,10 @@ export async function updateAdminUserRole(input: {
         );
       }
 
-      if (!targetUser.isActive || targetUser.deletedAt) {
+      if (!targetUser.isActive) {
         throw new AdminServiceError(
           409,
-          "停止中または削除済みのユーザーは変更できません",
+          "停止中のユーザーは変更できません",
           AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
           targetUser.id,
         );
@@ -596,7 +582,6 @@ export async function forceDeleteAdminUser(input: {
           isActive: true,
           emailVerified: true,
           lockedUntil: true,
-          deletedAt: true,
         },
       });
       const now = new Date();
@@ -621,15 +606,6 @@ export async function forceDeleteAdminUser(input: {
         );
       }
 
-      if (targetUser.deletedAt) {
-        throw new AdminServiceError(
-          409,
-          "ユーザーは既に削除されています",
-          AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
-          targetUser.id,
-        );
-      }
-
       if (isUsableAdmin(targetUser, now)) {
         const usableAdminCount = await tx.user.count({ where: getUsableAdminWhere(now) });
         if (usableAdminCount <= 1) {
@@ -642,7 +618,7 @@ export async function forceDeleteAdminUser(input: {
         }
       }
 
-      await tx.user.delete({ where: { id: targetUserId } });
+      await tx.user.delete({ where: { id: targetUserId }, select: { id: true } });
 
       return { message: "ユーザーを強制退会しました" };
     });
@@ -660,15 +636,14 @@ export async function getAdminStats(): Promise<AdminStats> {
     totalWeakElements,
     statsAggregate,
   ] = await Promise.all([
-    prisma.user.count({ where: currentUserWhere }),
-    prisma.user.count({ where: { ...currentUserWhere, isActive: true } }),
-    prisma.user.count({ where: { ...currentUserWhere, isActive: false } }),
-    prisma.user.count({ where: { ...currentUserWhere, role: "ADMIN" } }),
-    prisma.user.count({ where: { ...currentUserWhere, emailVerified: true } }),
-    prisma.gameSession.count({ where: { user: currentUserWhere } }),
-    prisma.weakElement.count({ where: { user: currentUserWhere } }),
+    prisma.user.count(),
+    prisma.user.count({ where: { isActive: true } }),
+    prisma.user.count({ where: { isActive: false } }),
+    prisma.user.count({ where: { role: "ADMIN" } }),
+    prisma.user.count({ where: { emailVerified: true } }),
+    prisma.gameSession.count(),
+    prisma.weakElement.count(),
     prisma.userStats.aggregate({
-      where: { user: currentUserWhere },
       _sum: { totalAnswered: true, totalCorrect: true, masteredCount: true },
     }),
   ]);

@@ -292,39 +292,6 @@ describe("POST /auth/register", () => {
     expect(create).toHaveBeenCalled();
   });
 
-  it("移行中: cleanup前のlegacy soft-deleted rowは再登録できず403を返す", async () => {
-    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
-      return fn({
-        user: {
-          findFirst: vi.fn().mockResolvedValue({
-            id: "deleted-user",
-            email: "taro@example.com",
-            username: "taro123",
-            emailVerified: true,
-            isActive: false,
-            deletedAt: new Date("2026-05-29T00:00:00.000Z"),
-          }),
-          create: vi.fn(),
-        },
-        emailVerification: { create: vi.fn() },
-      } as never);
-    });
-
-    const res = await app.request("/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: "taro123",
-        email: "taro@example.com",
-        password: "Pass1234!",
-      }),
-    });
-
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toBe("このアカウントは削除済みのため再登録できません");
-  });
-
   it("メール送信失敗: sendMail が throw した場合は user を削除して 500 を返す", async () => {
     vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
       return fn({
@@ -349,7 +316,10 @@ describe("POST /auth/register", () => {
     });
 
     expect(res.status).toBe(500);
-    expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: "user-1" } });
+    expect(prisma.user.delete).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: { id: true },
+    });
   });
 
   it("バリデーション: パスワードにスペースを含む場合は 400 を返す", async () => {
