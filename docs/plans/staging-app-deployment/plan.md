@@ -261,12 +261,23 @@ SD5では、型付き`WorkerRuntimeEnvironment`を受け取る`backend/src/worke
 
 DO store adapterとfetch mail adapterはSD7/SD8の責務であるため、既定のstaging Worker entrypointは現時点ではmemory/SMTPへfallbackせず503で閉じる。SD7/SD8完了時に`createRequestAdapters`の実体を接続する。
 
+### PR #112 review対応記録
+
+review対応のRedでは、Node用`DATABASE_URL`の未設定・空値、Worker config/adapter/application構築例外のsafe log、早期500/503のsecurity header・no-store・単一origin CORS、adapter障害中のpreflight、実app graphへ渡るrequest-scoped Prismaを追加確認した。
+
+- Redコマンド: `npm run test -- --run src/lib/config.test.ts src/worker.test.ts`
+- Red結果: 2 files / 74 tests中9 tests失敗。未実装のconfig validator、CORS/header、safe log、application構築例外境界で失敗。
+- Greenコマンド: `npm run test -- --run src/lib/config.test.ts src/worker.test.ts src/app.test.ts`
+- Green結果: 3 files / 85 tests成功。
+
+`DATABASE_URL`はNode用config境界で空白を正規化してfail-fastし、Worker bindingやHyperdrive接続経路とは分離した。Workerの早期エラーは共通CORS/security middlewareを再利用し、検証済みfrontend originだけを許可する。ログは固定日本語eventのみとし、raw例外、secret、接続URLを記録しない。adapter未実装を表す`null`は意図的fail-closedのためerror logを出さない。
+
 最終ローカル品質確認:
 
 - `npm run build`: 成功。
 - `npm run lint`: 成功。
 - `npm run format:check`: 成功。
-- `npm run test -- --run`: 86 files / 930 tests成功、外部DBを必要とする4 files / 10 testsは既定どおりskip。
+- `npm run test -- --run`: 86 files / 940 tests成功、外部DBを必要とする4 files / 10 testsは既定どおりskip。
 - 外部接続、deploy、設定・secret変更、migration、実データ参照は未実施。
 
 ## 対象ファイル一覧
@@ -276,17 +287,18 @@ DO store adapterとfetch mail adapterはSD7/SD8の責務であるため、既定
 | ファイル                                                   | 変更種別       | 内容                                                               |
 | ---------------------------------------------------------- | -------------- | ------------------------------------------------------------------ |
 | `backend/src/worker.ts`                                    | 新規           | Workers module entrypoint、env/binding注入                         |
-| `backend/src/worker.test.ts`                               | 新規           | request scope、fail-closed、secret非露出のcontract test            |
+| `backend/src/worker.test.ts`                               | 新規           | 実app graphのrequest scope、fail-closed、CORS、secret非露出test    |
 | `backend/src/app.ts`                                       | 修正           | runtime共通app factoryとrequest dependency境界                     |
 | `backend/src/lib/app-dependencies.ts`                      | 新規           | middleware・serviceを同一request依存へ束ねる共通factory            |
 | `backend/src/lib/prisma-client.ts`                         | 新規           | Node/Workers共通Prisma client factory                              |
 | `backend/src/lib/prisma.ts`                                | 修正           | Node client factory/singletonとWorkers client生成契約の分離        |
 | `backend/src/lib/serializable-transaction-core.ts`         | 新規           | Prisma注入型Serializable transaction runner                        |
-| `backend/src/lib/config.ts`                                | 修正           | Workers bindingを明示入力できる設定検証                            |
+| `backend/src/lib/config.ts` / `.test.ts`                   | 修正           | Workers binding明示入力とNode DATABASE_URLのfail-fast              |
 | `backend/src/lib/worker-config.ts` / `.test.ts`            | 新規           | Workers env・binding・targetの型付き契約とunit test                |
 | `backend/src/lib/mail-sender.ts`                           | 新規           | runtime共通`MailSender`契約                                        |
 | `backend/src/lib/mail.ts`                                  | 修正           | Node SMTP adapter                                                  |
 | `backend/src/middleware/auth/index.ts`                     | 修正           | Prisma・JWT secret注入型middleware factory                         |
+| `backend/src/middleware/cors/index.ts`                     | 新規           | appとWorker早期エラーで共有する単一origin CORS設定                 |
 | `backend/src/services/*.ts`                                | 必要範囲で修正 | Prisma/mail依存の明示注入。業務ロジックは変更しない                |
 | `backend/src/routes/**/*.ts`                               | 必要範囲で修正 | service dependencyを受けるrouter factory。API契約は変更しない      |
 | `backend/src/cloudflare/rate-limit-counter.ts`             | 既存計画で新規 | SQLite-backed Durable Object。仕様正本はrate limit計画             |
