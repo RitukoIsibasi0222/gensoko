@@ -11,7 +11,9 @@ vi.mock("../lib/prisma.js", () => ({
 }));
 
 import { prisma } from "../lib/prisma.js";
-import { getAllTimeRanking, getWeeklyRanking } from "./ranking.service.js";
+import { createRankingService } from "./ranking.service.js";
+
+const { getAllTimeRanking, getWeeklyRanking } = createRankingService(prisma as never);
 
 const NOW = new Date("2026-06-20T12:00:00.000Z");
 const WEEK_START = new Date("2026-06-14T15:00:00.000Z");

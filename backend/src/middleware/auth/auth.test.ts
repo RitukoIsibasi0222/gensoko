@@ -22,7 +22,7 @@ vi.mock("../../lib/prisma.js", () => ({
 }));
 
 // モック化した後にインポート（順序が重要）
-import { authMiddleware, optionalAuthMiddleware } from "./index.js";
+import { createAuthMiddlewares } from "./index.js";
 import { prisma } from "../../lib/prisma.js";
 
 // -----------------------------------------------------------------
@@ -31,6 +31,10 @@ import { prisma } from "../../lib/prisma.js";
 
 /** テスト専用の JWT_SECRET（本番とは別） */
 const TEST_SECRET = "test-secret-key-for-vitest";
+const { authMiddleware, optionalAuthMiddleware } = createAuthMiddlewares({
+  prisma: prisma as never,
+  jwtSecret: TEST_SECRET,
+});
 
 // テスト環境で JWT_SECRET を設定（vi.stubEnv の前に確実に設定）
 process.env.JWT_SECRET = TEST_SECRET;

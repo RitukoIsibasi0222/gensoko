@@ -1,6 +1,10 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { usersRouter } from "./index.js";
+import {
+  changeCurrentPassword,
+  createUsersTestRouter,
+  updateCurrentUsername,
+} from "./test-helpers.js";
 
 vi.mock("../../middleware/auth/index.js", () => ({
   authMiddleware: vi.fn(
@@ -46,11 +50,7 @@ vi.mock("../../services/user.service.js", () => {
   };
 });
 
-import {
-  changeCurrentPassword,
-  updateCurrentUsername,
-  UserError,
-} from "../../services/user.service.js";
+import { UserError } from "../../services/user.service.js";
 import { PASSWORD_TOO_LONG_MESSAGE } from "../../lib/password.js";
 import {
   STRONG_PASSWORD_72_BYTES,
@@ -58,6 +58,7 @@ import {
 } from "../../test/password-byte-boundary-fixtures.js";
 
 const app = new Hono();
+const usersRouter = createUsersTestRouter();
 app.route("/users", usersRouter);
 
 describe("PATCH /users/me", () => {
@@ -136,7 +137,7 @@ describe("PATCH /users/me", () => {
   });
 
   it("パスワード変更成功時は200を返し、refreshToken削除ヘッダーを付ける", async () => {
-    vi.mocked(changeCurrentPassword).mockResolvedValue();
+    vi.mocked(changeCurrentPassword).mockResolvedValue(undefined);
 
     const res = await app.request("/users/me", {
       method: "PATCH",
@@ -194,7 +195,7 @@ describe("PATCH /users/me", () => {
   });
 
   it("73バイトのcurrentPasswordは上限拒否せず完全な値をサービス層へ渡す", async () => {
-    vi.mocked(changeCurrentPassword).mockResolvedValue();
+    vi.mocked(changeCurrentPassword).mockResolvedValue(undefined);
 
     const res = await app.request("/users/me", {
       method: "PATCH",

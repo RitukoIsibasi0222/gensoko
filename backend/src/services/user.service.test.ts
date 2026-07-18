@@ -43,17 +43,23 @@ vi.mock("bcryptjs", async (importOriginal) => {
 
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma.js";
+import { createSerializableTransactionRunner } from "../lib/serializable-transaction-core.js";
 import {
   STRONG_PASSWORD_72_BYTES,
   STRONG_PASSWORD_73_BYTES,
 } from "../test/password-byte-boundary-fixtures.js";
-import {
+import { createUserService } from "./user.service.js";
+
+const {
   changeCurrentPassword,
   deleteCurrentUser,
   getCurrentUserProfile,
   getCurrentUserStats,
   updateCurrentUsername,
-} from "./user.service.js";
+} = createUserService({
+  prisma: prisma as never,
+  runSerializableTransaction: createSerializableTransactionRunner(prisma as never),
+});
 
 const NOW = new Date("2026-06-20T12:00:00.000Z");
 const WEEK_START = new Date("2026-06-14T15:00:00.000Z");

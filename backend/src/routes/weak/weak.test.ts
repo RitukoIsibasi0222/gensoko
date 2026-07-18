@@ -23,17 +23,12 @@ vi.mock("../../services/weak.service.js", () => ({
 }));
 
 import { prisma } from "../../lib/prisma.js";
-import {
-  deleteWeakElement,
-  getWeakElements,
-  WeakElementNotFoundError,
-} from "../../services/weak.service.js";
-import { weakRouter } from "./index.js";
-
-const app = new Hono<{ Variables: AppVariables }>();
-app.route("/weak", weakRouter);
+import { WeakElementNotFoundError } from "../../services/weak.service.js";
+import { createWeakTestRouter, deleteWeakElement, getWeakElements } from "./test-helpers.js";
 
 const TEST_SECRET = "test-secret-key-for-vitest";
+const app = new Hono<{ Variables: AppVariables }>();
+app.route("/weak", createWeakTestRouter(prisma as never, TEST_SECRET));
 
 const createToken = async () => {
   return sign(

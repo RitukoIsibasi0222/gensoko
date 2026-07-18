@@ -10,7 +10,9 @@ vi.mock("../lib/prisma.js", () => ({
 }));
 
 import { prisma } from "../lib/prisma.js";
-import { deleteWeakElement, getWeakElements, WeakElementNotFoundError } from "./weak.service.js";
+import { createWeakService, WeakElementNotFoundError } from "./weak.service.js";
+
+const { deleteWeakElement, getWeakElements } = createWeakService(prisma as never);
 
 const WEAK_ELEMENT_ROWS = [
   {

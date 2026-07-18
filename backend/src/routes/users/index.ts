@@ -1,7 +1,6 @@
 import { zValidator } from "@hono/zod-validator";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { authMiddleware } from "../../middleware/auth/index.js";
 import {
   createIpAndUserBucketResolver,
   getValidatedRateLimitJson,
@@ -10,14 +9,7 @@ import {
 import { clearRefreshTokenCookies } from "../../lib/refresh-token-cookie.js";
 import { rateLimit } from "../../middleware/rateLimit/index.js";
 import { strongPasswordSchema, usernameSchema } from "../../lib/validation/auth.js";
-import {
-  UserError,
-  changeCurrentPassword,
-  deleteCurrentUser,
-  getCurrentUserProfile,
-  getCurrentUserStats,
-  updateCurrentUsername,
-} from "../../services/user.service.js";
+import { UserError, type UserService } from "../../services/user.service.js";
 import type { AppVariables } from "../../types/index.js";
 
 const accountRateLimit = rateLimit({
@@ -56,110 +48,119 @@ function handleUserError(err: unknown, c: { json: (body: unknown, status: number
   return c.json({ error: "サーバーエラーが発生しました" }, 500);
 }
 
-export const usersRouter = new Hono<{ Variables: AppVariables }>();
+export type UsersRouterDependencies = Readonly<{
+  authMiddleware: MiddlewareHandler<{ Variables: AppVariables }>;
+  service: UserService;
+}>;
 
-usersRouter.get("/me/stats", authMiddleware, async (c) => {
-  const authUser = c.get("user");
-  if (!authUser) {
-    return c.json({ error: "認証が必要です" }, 401);
-  }
+export function createUsersRouter({ authMiddleware, service }: UsersRouterDependencies) {
+  const usersRouter = new Hono<{ Variables: AppVariables }>();
 
-  try {
-    const stats = await getCurrentUserStats(authUser.id);
-    return c.json(stats, 200);
-  } catch (err) {
-    return handleUserError(err, c);
-  }
-});
-
-usersRouter.get("/me", authMiddleware, async (c) => {
-  const authUser = c.get("user");
-  if (!authUser) {
-    return c.json({ error: "認証が必要です" }, 401);
-  }
-
-  try {
-    const user = await getCurrentUserProfile(authUser.id);
-    return c.json({ user }, 200);
-  } catch (err) {
-    return handleUserError(err, c);
-  }
-});
-
-usersRouter.patch(
-  "/me",
-  authMiddleware,
-  zValidator("json", updateMeSchema, (result, c) => {
-    if (!result.success) {
-      return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
-    }
-  }),
-  rateLimit({
-    getStore: getRateLimitStore,
-    resolveBuckets: createIpAndUserBucketResolver({
-      ipPolicyId: "ACCOUNT_IP",
-      userPolicyId: "ACCOUNT_USER",
-    }),
-    when: (c) => !("username" in getValidatedRateLimitJson<z.infer<typeof updateMeSchema>>(c)),
-  }),
-  async (c) => {
+  usersRouter.get("/me/stats", authMiddleware, async (c) => {
     const authUser = c.get("user");
     if (!authUser) {
       return c.json({ error: "認証が必要です" }, 401);
     }
 
-    const payload = c.req.valid("json");
+    try {
+      const stats = await service.getCurrentUserStats(authUser.id);
+      return c.json(stats, 200);
+    } catch (err) {
+      return handleUserError(err, c);
+    }
+  });
+
+  usersRouter.get("/me", authMiddleware, async (c) => {
+    const authUser = c.get("user");
+    if (!authUser) {
+      return c.json({ error: "認証が必要です" }, 401);
+    }
 
     try {
-      if ("username" in payload) {
-        const updated = await updateCurrentUsername({
-          userId: authUser.id,
-          username: payload.username,
-        });
-        return c.json({ message: "ユーザー名を変更しました", user: updated.user }, 200);
+      const user = await service.getCurrentUserProfile(authUser.id);
+      return c.json({ user }, 200);
+    } catch (err) {
+      return handleUserError(err, c);
+    }
+  });
+
+  usersRouter.patch(
+    "/me",
+    authMiddleware,
+    zValidator("json", updateMeSchema, (result, c) => {
+      if (!result.success) {
+        return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
+      }
+    }),
+    rateLimit({
+      getStore: getRateLimitStore,
+      resolveBuckets: createIpAndUserBucketResolver({
+        ipPolicyId: "ACCOUNT_IP",
+        userPolicyId: "ACCOUNT_USER",
+      }),
+      when: (c) => !("username" in getValidatedRateLimitJson<z.infer<typeof updateMeSchema>>(c)),
+    }),
+    async (c) => {
+      const authUser = c.get("user");
+      if (!authUser) {
+        return c.json({ error: "認証が必要です" }, 401);
       }
 
-      await changeCurrentPassword({
-        userId: authUser.id,
-        currentPassword: payload.currentPassword,
-        newPassword: payload.newPassword,
-      });
+      const payload = c.req.valid("json");
 
-      clearRefreshTokenCookies(c, c.req.path);
-      return c.json({ message: "パスワードを変更しました" }, 200);
-    } catch (err) {
-      return handleUserError(err, c);
-    }
-  },
-);
+      try {
+        if ("username" in payload) {
+          const updated = await service.updateCurrentUsername({
+            userId: authUser.id,
+            username: payload.username,
+          });
+          return c.json({ message: "ユーザー名を変更しました", user: updated.user }, 200);
+        }
 
-usersRouter.delete(
-  "/me",
-  authMiddleware,
-  accountRateLimit,
-  zValidator("json", deleteMeSchema, (result, c) => {
-    if (!result.success) {
-      return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
-    }
-  }),
-  async (c) => {
-    const authUser = c.get("user");
-    if (!authUser) {
-      return c.json({ error: "認証が必要です" }, 401);
-    }
+        await service.changeCurrentPassword({
+          userId: authUser.id,
+          currentPassword: payload.currentPassword,
+          newPassword: payload.newPassword,
+        });
 
-    const { currentPassword } = c.req.valid("json");
+        clearRefreshTokenCookies(c, c.req.path);
+        return c.json({ message: "パスワードを変更しました" }, 200);
+      } catch (err) {
+        return handleUserError(err, c);
+      }
+    },
+  );
 
-    try {
-      await deleteCurrentUser({
-        userId: authUser.id,
-        currentPassword,
-      });
+  usersRouter.delete(
+    "/me",
+    authMiddleware,
+    accountRateLimit,
+    zValidator("json", deleteMeSchema, (result, c) => {
+      if (!result.success) {
+        return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
+      }
+    }),
+    async (c) => {
+      const authUser = c.get("user");
+      if (!authUser) {
+        return c.json({ error: "認証が必要です" }, 401);
+      }
 
-      clearRefreshTokenCookies(c, c.req.path);
-      return c.json({ message: "アカウントを削除しました" }, 200);
-    } catch (err) {
-      return handleUserError(err, c);
-    }
-  },
-);
+      const { currentPassword } = c.req.valid("json");
+
+      try {
+        await service.deleteCurrentUser({
+          userId: authUser.id,
+          currentPassword,
+        });
+
+        clearRefreshTokenCookies(c, c.req.path);
+        return c.json({ message: "アカウントを削除しました" }, 200);
+      } catch (err) {
+        return handleUserError(err, c);
+      }
+    },
+  );
+
+  return usersRouter;
+}

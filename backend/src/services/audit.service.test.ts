@@ -11,7 +11,9 @@ vi.mock("../lib/prisma.js", () => ({
 
 import { prisma } from "../lib/prisma.js";
 import { AUDIT_ACTIONS, AUDIT_FAILURE_REASONS, AUDIT_TARGET_TYPES } from "./audit-events.js";
-import { recordAuditEvent, recordAuditEventBestEffort } from "./audit.service.js";
+import { createAuditService, recordAuditEvent } from "./audit.service.js";
+
+const { recordAuditEventBestEffort } = createAuditService(prisma as never);
 
 const successEvent = {
   action: AUDIT_ACTIONS.LOGIN,

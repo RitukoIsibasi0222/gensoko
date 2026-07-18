@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Hono } from "hono";
-import { authRouter } from "./index.js";
+import { createAuthTestRouter } from "./test-helpers.js";
 
 // Prisma のモック
 vi.mock("../../lib/prisma.js", () => ({
@@ -33,6 +33,7 @@ vi.mock("bcryptjs", () => ({
 import bcrypt from "bcryptjs";
 import { mailer } from "../../lib/mail.js";
 import { prisma } from "../../lib/prisma.js";
+const authRouter = createAuthTestRouter(prisma as never);
 
 const app = new Hono().route("/auth", authRouter);
 

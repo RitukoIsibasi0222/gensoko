@@ -1,10 +1,10 @@
 import { AuditResult, Prisma, type Role } from "@prisma/client";
+import type { AppPrismaClient } from "../lib/prisma-client.js";
 import { calculateAccuracyRate, normalizeNonNegativeCount } from "../lib/stats.js";
-import { prisma } from "../lib/prisma.js";
 import {
   SerializationRetryExhaustedError,
-  runSerializableTransaction,
-} from "../lib/serializable-transaction.js";
+  type SerializableTransactionRunner,
+} from "../lib/serializable-transaction-core.js";
 import { getUsableAdminWhere, isUsableAdmin } from "../lib/usable-admin.js";
 import {
   AUDIT_ACTIONS,
@@ -13,7 +13,7 @@ import {
   type AdminAuditAction,
   type AdminAuditFailureReason,
 } from "./audit-events.js";
-import { recordAuditEvent, recordAuditEventBestEffort } from "./audit.service.js";
+import { recordAuditEvent, type AuditService } from "./audit.service.js";
 
 export class AdminServiceError extends Error {
   constructor(
@@ -103,6 +103,12 @@ type AdminAuditDescriptor = {
   adminUserId: string;
   targetUserId: string;
 };
+
+type AdminServiceDependencies = Readonly<{
+  prisma: AppPrismaClient;
+  runSerializableTransaction: SerializableTransactionRunner;
+  auditService: AuditService;
+}>;
 
 const adminUserSummarySelect = {
   id: true,
@@ -283,6 +289,7 @@ async function deleteUserTokens(tx: TokenCleanupClient, userId: string): Promise
 
 // 最後の管理者保護は count -> update なので、write skew を DB 側で検出する。
 async function runAdminMutationTransaction<T>(
+  { runSerializableTransaction }: AdminServiceDependencies,
   audit: AdminAuditDescriptor,
   callback: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
@@ -313,6 +320,7 @@ async function runAdminMutationTransaction<T>(
 }
 
 async function runAuditedAdminMutation<T>(
+  { auditService }: AdminServiceDependencies,
   audit: AdminAuditDescriptor,
   operation: () => Promise<T>,
 ): Promise<T> {
@@ -320,7 +328,7 @@ async function runAuditedAdminMutation<T>(
     return await operation();
   } catch (error) {
     if (error instanceof AdminServiceError && error.auditFailureReason) {
-      await recordAuditEventBestEffort({
+      await auditService.recordAuditEventBestEffort({
         action: audit.action,
         result: AuditResult.FAILURE,
         actorId: audit.adminUserId,
@@ -335,7 +343,10 @@ async function runAuditedAdminMutation<T>(
   }
 }
 
-export async function getAdminUsers(input: AdminUserListQuery = {}): Promise<{
+async function getAdminUsers(
+  { prisma }: AdminServiceDependencies,
+  input: AdminUserListQuery = {},
+): Promise<{
   users: AdminUserListItem[];
   nextCursor: string | null;
 }> {
@@ -385,9 +396,12 @@ export async function getAdminUsers(input: AdminUserListQuery = {}): Promise<{
   };
 }
 
-export async function getAdminUserDetail(input: {
-  userId: string;
-}): Promise<{ user: AdminUserDetail }> {
+async function getAdminUserDetail(
+  { prisma }: AdminServiceDependencies,
+  input: {
+    userId: string;
+  },
+): Promise<{ user: AdminUserDetail }> {
   const userId = normalizeId(input.userId);
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -401,11 +415,14 @@ export async function getAdminUserDetail(input: {
   return { user: toAdminUserDetail(user) };
 }
 
-export async function updateAdminUserStatus(input: {
-  adminUserId: string;
-  targetUserId: string;
-  isActive: boolean;
-}): Promise<{ message: string; user: AdminUserSummary }> {
+async function updateAdminUserStatus(
+  dependencies: AdminServiceDependencies,
+  input: {
+    adminUserId: string;
+    targetUserId: string;
+    isActive: boolean;
+  },
+): Promise<{ message: string; user: AdminUserSummary }> {
   const adminUserId = normalizeId(input.adminUserId);
   const targetUserId = normalizeId(input.targetUserId);
   const audit: AdminAuditDescriptor = {
@@ -414,7 +431,7 @@ export async function updateAdminUserStatus(input: {
     targetUserId,
   };
 
-  return await runAuditedAdminMutation(audit, async () => {
+  return await runAuditedAdminMutation(dependencies, audit, async () => {
     if (adminUserId === targetUserId) {
       throw new AdminServiceError(
         409,
@@ -424,7 +441,7 @@ export async function updateAdminUserStatus(input: {
       );
     }
 
-    return await runAdminMutationTransaction(audit, async (tx) => {
+    return await runAdminMutationTransaction(dependencies, audit, async (tx) => {
       const targetUser = await tx.user.findUnique({
         where: { id: targetUserId },
         select: adminUserSummarySelect,
@@ -469,11 +486,14 @@ export async function updateAdminUserStatus(input: {
   });
 }
 
-export async function updateAdminUserRole(input: {
-  adminUserId: string;
-  targetUserId: string;
-  role: Role;
-}): Promise<{ message: string; user: AdminUserSummary }> {
+async function updateAdminUserRole(
+  dependencies: AdminServiceDependencies,
+  input: {
+    adminUserId: string;
+    targetUserId: string;
+    role: Role;
+  },
+): Promise<{ message: string; user: AdminUserSummary }> {
   const adminUserId = normalizeId(input.adminUserId);
   const targetUserId = normalizeId(input.targetUserId);
   const audit: AdminAuditDescriptor = {
@@ -482,7 +502,7 @@ export async function updateAdminUserRole(input: {
     targetUserId,
   };
 
-  return await runAuditedAdminMutation(audit, async () => {
+  return await runAuditedAdminMutation(dependencies, audit, async () => {
     if (adminUserId === targetUserId) {
       throw new AdminServiceError(
         409,
@@ -492,7 +512,7 @@ export async function updateAdminUserRole(input: {
       );
     }
 
-    return await runAdminMutationTransaction(audit, async (tx) => {
+    return await runAdminMutationTransaction(dependencies, audit, async (tx) => {
       const targetUser = await tx.user.findUnique({
         where: { id: targetUserId },
         select: adminUserSummarySelect,
@@ -551,10 +571,13 @@ export async function updateAdminUserRole(input: {
   });
 }
 
-export async function forceDeleteAdminUser(input: {
-  adminUserId: string;
-  targetUserId: string;
-}): Promise<{ message: string }> {
+async function forceDeleteAdminUser(
+  dependencies: AdminServiceDependencies,
+  input: {
+    adminUserId: string;
+    targetUserId: string;
+  },
+): Promise<{ message: string }> {
   const adminUserId = normalizeId(input.adminUserId);
   const targetUserId = normalizeId(input.targetUserId);
   const audit: AdminAuditDescriptor = {
@@ -563,7 +586,7 @@ export async function forceDeleteAdminUser(input: {
     targetUserId,
   };
 
-  return await runAuditedAdminMutation(audit, async () => {
+  return await runAuditedAdminMutation(dependencies, audit, async () => {
     if (adminUserId === targetUserId) {
       throw new AdminServiceError(
         409,
@@ -573,7 +596,7 @@ export async function forceDeleteAdminUser(input: {
       );
     }
 
-    return await runAdminMutationTransaction(audit, async (tx) => {
+    return await runAdminMutationTransaction(dependencies, audit, async (tx) => {
       const actor = await tx.user.findUnique({
         where: { id: adminUserId },
         select: {
@@ -625,7 +648,7 @@ export async function forceDeleteAdminUser(input: {
   });
 }
 
-export async function getAdminStats(): Promise<AdminStats> {
+async function getAdminStats({ prisma }: AdminServiceDependencies): Promise<AdminStats> {
   const [
     totalUsers,
     activeUsers,
@@ -671,3 +694,20 @@ export async function getAdminStats(): Promise<AdminStats> {
     },
   };
 }
+
+export function createAdminService(dependencies: AdminServiceDependencies) {
+  return {
+    getAdminUsers: (input: AdminUserListQuery = {}) => getAdminUsers(dependencies, input),
+    getAdminUserDetail: (input: Parameters<typeof getAdminUserDetail>[1]) =>
+      getAdminUserDetail(dependencies, input),
+    updateAdminUserStatus: (input: Parameters<typeof updateAdminUserStatus>[1]) =>
+      updateAdminUserStatus(dependencies, input),
+    updateAdminUserRole: (input: Parameters<typeof updateAdminUserRole>[1]) =>
+      updateAdminUserRole(dependencies, input),
+    forceDeleteAdminUser: (input: Parameters<typeof forceDeleteAdminUser>[1]) =>
+      forceDeleteAdminUser(dependencies, input),
+    getAdminStats: () => getAdminStats(dependencies),
+  };
+}
+
+export type AdminService = ReturnType<typeof createAdminService>;

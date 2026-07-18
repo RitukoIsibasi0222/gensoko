@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { authRouter } from "./index.js";
+import { createAuthTestRouter } from "./test-helpers.js";
 
 // Prisma モック
 vi.mock("../../lib/prisma.js", () => ({
@@ -37,6 +37,7 @@ vi.mock("crypto", async (importOriginal) => {
 import { mailer } from "../../lib/mail.js";
 import { PASSWORD_TOO_LONG_MESSAGE } from "../../lib/password.js";
 import { prisma } from "../../lib/prisma.js";
+const authRouter = createAuthTestRouter(prisma as never);
 import {
   STRONG_PASSWORD_72_BYTES,
   STRONG_PASSWORD_73_BYTES,

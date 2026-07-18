@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { usersRouter } from "./index.js";
+import { createUsersTestRouter, deleteCurrentUser } from "./test-helpers.js";
 
 vi.mock("../../middleware/auth/index.js", () => ({
   authMiddleware: vi.fn(
@@ -46,10 +46,11 @@ vi.mock("../../services/user.service.js", () => {
   };
 });
 
-import { deleteCurrentUser, UserError } from "../../services/user.service.js";
+import { UserError } from "../../services/user.service.js";
 import { STRONG_PASSWORD_73_BYTES } from "../../test/password-byte-boundary-fixtures.js";
 
 const app = new Hono();
+const usersRouter = createUsersTestRouter();
 app.route("/users", usersRouter);
 
 describe("DELETE /users/me", () => {
@@ -89,7 +90,7 @@ describe("DELETE /users/me", () => {
   });
 
   it("アカウント削除成功時は200を返し、refreshToken削除ヘッダーを付ける", async () => {
-    vi.mocked(deleteCurrentUser).mockResolvedValue();
+    vi.mocked(deleteCurrentUser).mockResolvedValue(undefined);
 
     const res = await app.request("/users/me", {
       method: "DELETE",
@@ -118,7 +119,7 @@ describe("DELETE /users/me", () => {
   });
 
   it("73バイトのcurrentPasswordは上限拒否せず完全な値をサービス層へ渡す", async () => {
-    vi.mocked(deleteCurrentUser).mockResolvedValue();
+    vi.mocked(deleteCurrentUser).mockResolvedValue(undefined);
 
     const res = await app.request("/users/me", {
       method: "DELETE",

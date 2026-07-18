@@ -62,13 +62,12 @@ vi.mock("../../services/game.service.js", () => ({
 }));
 
 import { prisma } from "../../lib/prisma.js";
-import { GameSessionNotFoundError, getGameSessionResult } from "../../services/game.service.js";
-import { gameRouter } from "./index.js";
-
-const app = new Hono<{ Variables: AppVariables }>();
-app.route("/game", gameRouter);
+import { GameSessionNotFoundError } from "../../services/game.service.js";
+import { createGameTestRouter, getGameSessionResult } from "./test-helpers.js";
 
 const TEST_SECRET = "test-secret-key-for-vitest";
+const app = new Hono<{ Variables: AppVariables }>();
+app.route("/game", createGameTestRouter(prisma as never, TEST_SECRET));
 
 const createToken = async () => {
   return sign(

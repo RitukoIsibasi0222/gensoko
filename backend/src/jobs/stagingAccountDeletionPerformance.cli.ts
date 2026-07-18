@@ -166,10 +166,16 @@ function parseCliMode(argv: readonly string[], executeEnabled: boolean): CliMode
 }
 
 async function loadRuntime(): Promise<PerformanceRuntime> {
-  const [{ prisma }, { deleteCurrentUser }] = await Promise.all([
-    import("../lib/prisma.js"),
-    import("../services/user.service.js"),
-  ]);
+  const [{ prisma }, { createUserService }, { createSerializableTransactionRunner }] =
+    await Promise.all([
+      import("../lib/prisma.js"),
+      import("../services/user.service.js"),
+      import("../lib/serializable-transaction-core.js"),
+    ]);
+  const { deleteCurrentUser } = createUserService({
+    prisma,
+    runSerializableTransaction: createSerializableTransactionRunner(prisma),
+  });
 
   const preview = () =>
     getStagingAccountDeletionPreview({

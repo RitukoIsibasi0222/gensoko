@@ -35,17 +35,27 @@ vi.mock("../lib/prisma.js", () => ({
 }));
 
 import { prisma } from "../lib/prisma.js";
+import { createSerializableTransactionRunner } from "../lib/serializable-transaction-core.js";
 import {
   AdminServiceError,
   ADMIN_USERS_DEFAULT_LIMIT,
   ADMIN_USERS_MAX_LIMIT,
+  createAdminService,
+} from "./admin.service.js";
+import { createAuditService } from "./audit.service.js";
+
+const {
   forceDeleteAdminUser,
   getAdminStats,
   getAdminUserDetail,
   getAdminUsers,
   updateAdminUserRole,
   updateAdminUserStatus,
-} from "./admin.service.js";
+} = createAdminService({
+  prisma: prisma as never,
+  runSerializableTransaction: createSerializableTransactionRunner(prisma as never),
+  auditService: createAuditService(prisma as never),
+});
 
 const NOW = new Date("2026-07-09T12:00:00.000Z");
 const BASE_DATE = new Date("2026-06-20T12:00:00.000Z");

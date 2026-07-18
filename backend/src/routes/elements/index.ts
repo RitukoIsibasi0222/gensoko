@@ -1,78 +1,91 @@
 import { zValidator } from "@hono/zod-validator";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { elementIdParamSchema } from "../../lib/elements/detail.js";
 import { buildElementWhereInput, elementSearchQuerySchema } from "../../lib/elements/search.js";
-import { prisma } from "../../lib/prisma.js";
-import { optionalAuthMiddleware } from "../../middleware/auth/index.js";
-import { getElementMasteryStatusMap } from "../../services/element-mastery.service.js";
+import type { AppPrismaClient } from "../../lib/prisma-client.js";
+import type { ElementMasteryService } from "../../services/element-mastery.service.js";
 import type { AppVariables } from "../../types/index.js";
 
-export const elementsRouter = new Hono<{ Variables: AppVariables }>();
+export type ElementsRouterDependencies = Readonly<{
+  prisma: Pick<AppPrismaClient, "element">;
+  optionalAuthMiddleware: MiddlewareHandler<{ Variables: AppVariables }>;
+  masteryService: ElementMasteryService;
+}>;
 
-elementsRouter.get(
-  "/",
-  zValidator("query", elementSearchQuerySchema, (result, c) => {
-    if (!result.success) {
-      return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
-    }
-  }),
+export function createElementsRouter({
+  prisma,
   optionalAuthMiddleware,
-  async (c) => {
-    const query = c.req.valid("query");
-    const where = buildElementWhereInput(query);
+  masteryService,
+}: ElementsRouterDependencies) {
+  const elementsRouter = new Hono<{ Variables: AppVariables }>();
 
-    try {
-      const elements = await prisma.element.findMany({
-        ...(where === undefined ? {} : { where }),
-        orderBy: { id: "asc" },
-      });
-
-      const user = c.get("user");
-      if (user) {
-        const masteryStatusMap = await getElementMasteryStatusMap(
-          user.id,
-          elements.map((element) => element.id),
-        );
-        return c.json(
-          {
-            elements: elements.map((element) => ({
-              ...element,
-              masteryStatus: masteryStatusMap.get(element.id) ?? "unlearned",
-            })),
-          },
-          200,
-        );
+  elementsRouter.get(
+    "/",
+    zValidator("query", elementSearchQuerySchema, (result, c) => {
+      if (!result.success) {
+        return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
       }
+    }),
+    optionalAuthMiddleware,
+    async (c) => {
+      const query = c.req.valid("query");
+      const where = buildElementWhereInput(query);
 
-      return c.json({ elements }, 200);
-    } catch {
-      return c.json({ error: "サーバーエラーが発生しました" }, 500);
-    }
-  },
-);
+      try {
+        const elements = await prisma.element.findMany({
+          ...(where === undefined ? {} : { where }),
+          orderBy: { id: "asc" },
+        });
 
-elementsRouter.get(
-  "/:id",
-  zValidator("param", elementIdParamSchema, (result, c) => {
-    if (!result.success) {
-      return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
-    }
-  }),
-  async (c) => {
-    const { id } = c.req.valid("param");
+        const user = c.get("user");
+        if (user) {
+          const masteryStatusMap = await masteryService.getElementMasteryStatusMap(
+            user.id,
+            elements.map((element) => element.id),
+          );
+          return c.json(
+            {
+              elements: elements.map((element) => ({
+                ...element,
+                masteryStatus: masteryStatusMap.get(element.id) ?? "unlearned",
+              })),
+            },
+            200,
+          );
+        }
 
-    try {
-      const element = await prisma.element.findUnique({
-        where: { id },
-      });
-
-      if (element === null) {
-        return c.json({ error: "元素が見つかりません" }, 404);
+        return c.json({ elements }, 200);
+      } catch {
+        return c.json({ error: "サーバーエラーが発生しました" }, 500);
       }
+    },
+  );
 
-      return c.json({ element }, 200);
-    } catch {
-      return c.json({ error: "サーバーエラーが発生しました" }, 500);
-    }
-  },
-);
+  elementsRouter.get(
+    "/:id",
+    zValidator("param", elementIdParamSchema, (result, c) => {
+      if (!result.success) {
+        return c.json({ error: "バリデーションエラー", details: result.error.issues }, 400);
+      }
+    }),
+    async (c) => {
+      const { id } = c.req.valid("param");
+
+      try {
+        const element = await prisma.element.findUnique({
+          where: { id },
+        });
+
+        if (element === null) {
+          return c.json({ error: "元素が見つかりません" }, 404);
+        }
+
+        return c.json({ element }, 200);
+      } catch {
+        return c.json({ error: "サーバーエラーが発生しました" }, 500);
+      }
+    },
+  );
+
+  return elementsRouter;
+}
