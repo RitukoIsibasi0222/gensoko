@@ -916,7 +916,7 @@ Workers test scriptと`wrangler dev`確認コマンドは、フェーズ12で採
 
 - 記録日: 2026-07-18
 - 実装ブランチ: `feature/staging-app-deployment-sd6-sd7`
-- PR: 本PR
+- PR: #113
 - 全体ステータス: T13/T14完了。T15の実Cloudflare適用、WAF、実HTTP、監視、production確認は未実施のため、本計画全体は実装中のままとする。
 
 ### TDD結果

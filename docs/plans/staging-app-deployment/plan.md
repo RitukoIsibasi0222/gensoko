@@ -315,7 +315,7 @@ test fixtureのbase64生成は、backend testの実行runtimeを明示するた�
 
 - 記録日: 2026-07-18
 - 実装ブランチ: `feature/staging-app-deployment-sd6-sd7`
-- PR: 本PR
+- PR: #113
 - 仕様正本: [`api-rate-limit-production`](../api-rate-limit-production/plan.md) T13/T14
 
 ### TDD記録
