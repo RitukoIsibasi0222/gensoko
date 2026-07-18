@@ -249,7 +249,7 @@ DBを即時に巻き戻す前提にはしない。まず直前のアプリケー
 
 ## アカウント完全削除のrollout・legacy cleanup
 
-> 2026-07-16時点: 物理削除backend、legacy cleanup CLI、staging/production manual workflowは実装済み。staging/productionのworkflowは未実行であり、本番適用済みとは扱わない。
+> 2026-07-18時点: 物理削除backend、legacy cleanup CLI、synthetic fixture preflight、staging/production manual workflow、DB列非参照code、隔離contract SQLは実装済み。staging/productionのcleanup・contract workflowは未実行であり、本番適用済みとは扱わない。
 
 ### release gate
 
@@ -264,13 +264,14 @@ DBを即時に巻き戻す前提にはしない。まず直前のアプリケー
 
 ### Environment設定
 
-| Environment | 種別     | 名前                                           | 値・扱い                                                               |
-| ----------- | -------- | ---------------------------------------------- | ---------------------------------------------------------------------- |
-| staging     | Variable | `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED`        | 通常`false`。T35の承認済みexecute中だけ`true`                          |
-| staging     | Variable | `ACCOUNT_DATA_DELETION_BATCH_SIZE`             | 1〜100。既定25                                                         |
-| staging     | Variable | `STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED` | 通常`false`。T33の承認済みmigration probe・cascade execute中だけ`true` |
-| production  | Variable | `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED`        | 通常`false`。T38の承認済みexecute中だけ`true`                          |
-| production  | Variable | `ACCOUNT_DATA_DELETION_BATCH_SIZE`             | 1〜100。既定25                                                         |
+| Environment | 種別     | 名前                                             | 値・扱い                                                               |
+| ----------- | -------- | ------------------------------------------------ | ---------------------------------------------------------------------- |
+| staging     | Variable | `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED`          | 通常`false`。T35の承認済みexecute中だけ`true`                          |
+| staging     | Variable | `ACCOUNT_DATA_DELETION_STAGING_FIXTURES_ENABLED` | 通常`false`。T35のsynthetic fixture準備・検証・cleanup中だけ`true`     |
+| staging     | Variable | `ACCOUNT_DATA_DELETION_BATCH_SIZE`               | 1〜100。既定25                                                         |
+| staging     | Variable | `STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED`   | 通常`false`。T33の承認済みmigration probe・cascade execute中だけ`true` |
+| production  | Variable | `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED`          | 通常`false`。T38の承認済みexecute中だけ`true`                          |
+| production  | Variable | `ACCOUNT_DATA_DELETION_BATCH_SIZE`               | 1〜100。既定25                                                         |
 
 `DATABASE_URL`、`STAGING_SUPABASE_PROJECT_REF`、`BATCH_ENVIRONMENT`は既存のEnvironment単位設定を使い、repository共通値やローカルshellへ複製しない。project refは接続先照合用の値だが、Actionsのenv一覧への表示を防ぐためEnvironment Secretで管理する。staging/productionで同じ接続文字列を共用しない。
 
@@ -296,14 +297,16 @@ workflowは`gensoko-batch-jobs`でmigration、性能確認、監査fixture、leg
 
 ### staging runbook（T35）
 
-Actionsの`Staging Account Data Deletion`を`develop` branchから実行する。T35のタスク境界で明示承認を得るまで実行せず、承認後も次の順序を変更しない。
+Actionsの`Staging Account Deletion Cleanup Fixtures`と`Staging Account Data Deletion`を`develop` branchから実行する。fixture preflightを含む変更がmergeされ、T35のタスク境界で明示承認を得るまで実行せず、承認後も次の順序を変更しない。
 
-1. `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED=false`で`dry-run`を実行し、User件数、所有row件数、必要batch数、終了codeを記録する。
-2. 旧API instanceのdrain、staging backup、承認記録を確認する。
-3. flagを`true`へ変更し、operation `execute`と確認文字列`DELETE_LEGACY_SOFT_DELETED_USERS`を指定する。
-4. CLI内の実行後dry-runが残件0件で成功したことを確認する。
-5. 同じexecuteを再実行し、削除0件で成功する冪等性を確認する。
-6. flagを`false`へ戻し、run URL、件数、所要時間、API/UI確認結果を計画書へ記録する。
+1. `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED=false`と`ACCOUNT_DATA_DELETION_STAGING_FIXTURES_ENABLED=false`を確認する。
+2. fixture flagだけを`true`へ変更し、fixture workflowの`prepare`を実行する。legacy target 1件、所有row 2件、active/suspended sentinel各1件、Element有り以外なら停止する。
+3. cleanup workflowの`dry-run`を実行する。workflow内の`verify-isolated`が未知のlegacy row 0件と完全一致fixtureを確認してから、User件数、所有row件数、必要batch数、終了codeを記録する。
+4. 旧API instanceのdrain、staging backup、承認記録を確認する。
+5. execute flagを`true`へ変更し、operation `execute`と確認文字列`DELETE_LEGACY_SOFT_DELETED_USERS`を指定する。実行後の`verify-cleaned`でtarget・所有row 0件、sentinel・Element保持を確認する。
+6. 同じexecuteを再実行し、preflightがcleanup済み0件を受理して削除0件で成功する冪等性を確認する。
+7. fixture workflowの`remove`でsentinelを削除し、両flagを`false`へ戻す。
+8. run URL、件数、所要時間、API/UI確認結果を計画書へ記録する。
 
 失敗時は最初にflagを`false`へ戻す。処理済みbatchはcommit済みであり、再実行は残件から継続する。raw DB error、User ID、email、usernameをIssue・PR・チャットへ転載しない。
 
@@ -318,6 +321,12 @@ Actionsの`Production Database Operations`を`develop` branchから実行する�
 5. workflow内の実行後dry-runが残件0件で成功し、step summaryへ承認記録が残ったことを確認する。
 6. flagを直ちに`false`へ戻し、再度`account-deletion-dry-run`を実行して0件を確認する。
 7. run URL、件数、所要時間、backup run ID、dry-run run ID、承認者、change recordを安全な運用記録へ残す。
+
+### contract migration runbook（T43/T44）
+
+guard SQLは`backend/prisma/contract-migrations`へ隔離され、通常の`prisma migrate deploy`では適用されない。T41のcleanup後backup・旧Artifact 7日失効とT42のisolated restore drill、各環境のlegacy dry-run 0件、T39非参照codeのdeploy・soakがすべて完了するまで、staging/productionへ手動適用しない。
+
+適用手段と承認記録はT44で別途確定する。SQLを通常migration directoryへ移動してgateを迂回しない。guard失敗時はgeneric errorだけを記録し、件数、User ID、接続情報、生Errorを転載しない。drop後のrollback候補はT39非参照版だけとし、旧列参照版を再配備しない。
 
 ### rollback・restore制約
 

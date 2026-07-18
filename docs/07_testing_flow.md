@@ -134,6 +134,32 @@ docker compose exec -T \
 - account deletion suiteは5件で、通常suiteでは専用環境変数がないためskipされる。通常suiteで表示される専用DB test 7件は、監査rollback 1件・監査cleanup 1件との合計である。T32で上記commandを明示実行し、account deletion 5件すべての成功を記録する
 - この手順はローカルDocker PostgreSQL専用である。staging/productionの接続URLを渡さず、実環境確認はT33以降の承認付き手順へ分離する
 
+#### account deletion contract migration test
+
+`deletedAt` dropは通常の`prisma migrate deploy`へ含めず、専用DB
+`gensoko_account_deletion_contract_test`だけでguard失敗・成功を確認する。初回だけ専用DBを作成して通常migrationを適用する。
+
+```bash
+docker compose exec -T postgres createdb -U gensoko gensoko_account_deletion_contract_test
+docker compose exec -T \
+  -e DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_account_deletion_contract_test \
+  hono npx prisma migrate deploy
+```
+
+integration testを実行する。
+
+```bash
+docker compose exec -T \
+  -e ACCOUNT_DELETION_CONTRACT_DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_account_deletion_contract_test \
+  hono npm run test:integration:account-deletion-contract
+```
+
+- 接続先hostは`localhost`、`127.0.0.1`、`postgres`だけを許可し、DB名完全一致前にDDL・fixture操作を行わない
+- legacy rowありではguardがdrop前に失敗し、列と一時indexが残ることを確認する
+- legacy row 0件では列と一時indexがdropされることを確認する
+- test終了時に列・indexを復元し、synthetic fixtureを0件に戻す
+- `backend/prisma/contract-migrations`は通常migration directoryではない。T41/T42とrelease gate完了前に共有環境へ手動適用しない
+
 ---
 
 ## Hono のテスト方法

@@ -85,6 +85,11 @@ docker compose exec -T \
   -e ACCOUNT_DELETION_INTEGRATION_DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_account_deletion_test \
   hono npm run test:integration:account-deletion
 
+# account deletion contract migrationの実DB test（専用DBの作成・migration手順はdocs/07_testing_flow.mdを参照）
+docker compose exec -T \
+  -e ACCOUNT_DELETION_CONTRACT_DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_account_deletion_contract_test \
+  hono npm run test:integration:account-deletion-contract
+
 # Lint チェック
 npm run lint
 
