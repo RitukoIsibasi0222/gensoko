@@ -311,6 +311,46 @@ test fixtureのbase64生成は、backend testの実行runtimeを明示するた�
 - `npm run test -- --run`: 87 files / 945 tests成功、外部DBを必要とする4 files / 10 testsは既定どおりskip。
 - 外部接続、deploy、設定・secret変更、migration、実データ参照は未実施。
 
+## SD6〜SD7 Durable Object rate limit実装記録
+
+- 記録日: 2026-07-18
+- 実装ブランチ: `feature/staging-app-deployment-sd6-sd7`
+- PR: 本PR
+- 仕様正本: [`api-rate-limit-production`](../api-rate-limit-production/plan.md) T13/T14
+
+### TDD記録
+
+- Red: Workers runtime testを先行追加し、未実装counter/store adapterの明示的な例外により1 file / 8 testsすべての失敗を確認した。
+- Green: SQLite-backed `RateLimitCounter`と`RateLimitStore` adapterを実装し、並行consume、SQLite永続化、instance eviction、期限切れrequest内reset、alarm cleanup、早期alarm、policy/key分離、入力・RPC結果検証の1 file / 12 testsが成功した。
+- Refactor/review: HMAC-SHA-256 digestとpolicy IDのvalidatorを既存rate limit契約へ共通化し、RPCのnon-object結果、不正な`remaining`、拒否時の非正`retryAfterSec`を固定日本語エラーで拒否する。Workers testをbackend PR CIへ追加した。
+
+### 実装判断
+
+1. count更新はSQLite storageの`transactionSync`内でread/reset/incrementを完結させ、clientからlimit/window/時刻を受け取らない。stateは内部primary keyを除き`count`と`resetAtMs`だけを保持する。
+2. object名は`[policyId, keyDigest]`の曖昧性のないJSON tupleとし、raw IP/email/user IDやdigestをlogへ出さない。
+3. alarmが期限前に起動した場合は現在の`resetAtMs`へ再設定し、遅延時は期限到達rowだけを削除する。alarm遅延中も次の`consume`が新windowへ切り替える。
+4. SD7ではDO class/store adapterとlocal Workers test contractまでを実装する。production `worker.ts`のadapter graphはSD8のfetch mail adapterとSD9のWrangler production graphが揃うまで接続せず、memory/SMTPへfallbackしない503 fail-closedを維持する。
+5. SD8はmail provider、宛先allowlist、timeout、送信失敗時の補償境界を持ち、rate limit counterとは独立してrollbackできるため別PR候補のままとする。
+6. `wrangler.test.jsonc`はlocal test用class migration/bindingだけを持ち、外部resource ID、secret、Hyperdrive、deploy設定を含めない。dotenv自動読込もtest scriptで無効化する。
+
+### SD6〜SD7の実際の変更ファイル
+
+| ファイル                                                             | 変更種別   | 内容                                                              |
+| -------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------- |
+| `backend/src/cloudflare/rate-limit-counter.ts`                       | 新規       | SQLite-backed fixed-window counterとalarm cleanup                 |
+| `backend/src/cloudflare/rate-limit-counter.test.ts`                  | 新規       | Workers runtimeの並行性・永続化・eviction・alarm・adapter境界test |
+| `backend/src/cloudflare/rate-limit-worker.test-entry.ts`             | 新規       | local Workers test専用entrypoint                                  |
+| `backend/src/middleware/rateLimit/durable-object-store.ts`           | 新規       | typed DO namespace/RPC adapterと入力・結果検証                    |
+| `backend/src/middleware/rateLimit/policies.ts`、`store.ts`           | 修正       | policy IDとHMAC digest validatorの共通化                          |
+| `backend/wrangler.test.jsonc`、`vitest.config.workers.ts`            | 新規       | 外部resource不要のSQLite DO Workers test設定                      |
+| `backend/vitest.config.ts`、`tsconfig.json`、`tsconfig.workers.json` | 修正・新規 | Node/Workers test・型check境界                                    |
+| `backend/package.json`、`package-lock.json`                          | 修正       | Workers test/build scriptと公式test runtime依存                   |
+| `.github/workflows/backend-pr-quality.yml`                           | 修正       | PRでNode testに加えてWorkers runtime testを実行                   |
+
+最終確認は`npm run lint`、`npm run format:check`、変更config/docsを含むPrettier check、`npm run build`、`git diff --check`が成功した。Node testは87 files / 945 tests成功、外部DBを必要とする4 files / 10 testsは既定どおりskip、Workers runtime testは1 file / 12 tests成功した。
+
+Prisma schema/migrationと公開APIは変更していない。Cloudflare/Vercel/Supabaseへの接続、resource作成、secret参照、deploy、migration適用、実データ参照は実施していない。
+
 ## 対象ファイル一覧
 
 実装時に実態へ合わせて更新する。
@@ -333,12 +373,17 @@ test fixtureのbase64生成は、backend testの実行runtimeを明示するた�
 | `backend/src/middleware/cors/index.ts`                     | 新規           | appとWorker早期エラーで共有する単一origin CORS設定                 |
 | `backend/src/services/*.ts`                                | 必要範囲で修正 | Prisma/mail依存の明示注入。業務ロジックは変更しない                |
 | `backend/src/routes/**/*.ts`                               | 必要範囲で修正 | service dependencyを受けるrouter factory。API契約は変更しない      |
-| `backend/src/cloudflare/rate-limit-counter.ts`             | 既存計画で新規 | SQLite-backed Durable Object。仕様正本はrate limit計画             |
-| `backend/src/middleware/rateLimit/durable-object-store.ts` | 既存計画で新規 | DO binding adapter。仕様正本はrate limit計画                       |
+| `backend/src/cloudflare/rate-limit-counter.ts`             | 新規           | SQLite-backed Durable Object。仕様正本はrate limit計画             |
+| `backend/src/cloudflare/rate-limit-counter.test.ts`        | 新規           | Workers runtimeで並行性・永続化・eviction・alarmを検証             |
+| `backend/src/cloudflare/rate-limit-worker.test-entry.ts`   | 新規           | local Workers test専用entrypoint                                   |
+| `backend/src/middleware/rateLimit/durable-object-store.ts` | 新規           | DO binding adapter。仕様正本はrate limit計画                       |
 | `backend/wrangler.jsonc`                                   | 新規候補       | main、compatibility、staging env、DO/Hyperdrive binding、migration |
 | `backend/worker-configuration.d.ts`                        | 生成           | `wrangler types`によるbinding型。手編集しない                      |
-| `backend/vitest.config.workers.ts`                         | 新規候補       | Workers runtime test分離                                           |
-| `backend/package.json` / `package-lock.json`               | 修正           | Wrangler、Workers test、types/build/dev/deploy scripts             |
+| `backend/wrangler.test.jsonc`                              | 新規           | local SQLite DO binding/migration。外部resourceは含めない          |
+| `backend/vitest.config.workers.ts`                         | 新規           | Workers runtime test分離とdotenv読込拒否                           |
+| `backend/tsconfig.json` / `tsconfig.workers.json`          | 修正・新規     | Node/Workers型check境界                                            |
+| `backend/package.json` / `package-lock.json`               | 修正           | Wrangler、Workers test、types/build/test scripts                   |
+| `.github/workflows/backend-pr-quality.yml`                 | 修正           | PRでWorkers runtime testを実行                                     |
 | `backend/.dev.vars.example`                                | 新規候補       | local Workers placeholderのみ。secret値は禁止                      |
 | `backend/.env.example`                                     | 修正           | Node/Workers/mail接続責務の説明                                    |
 | `frontend/svelte.config.js`                                | 修正           | `@sveltejs/adapter-vercel`固定                                     |
@@ -482,8 +527,8 @@ SD17	結果を記録しT34と本計画の完了可否を判定	plan/progress/dep
 - [x] SD3: request-scoped Prisma dependency境界をRed化する
 - [x] SD4: Node/Workers共通dependency factoryを実装する
 - [x] SD5: Workers専用entrypointと型付きenvを実装する
-- [ ] SD6: DO Workers testをRed化する（rate limit計画T13）
-- [ ] SD7: SQLite-backed DO/store adapterを実装する（rate limit計画T14）
+- [x] SD6: DO Workers testをRed化する（rate limit計画T13）
+- [x] SD7: SQLite-backed DO/store adapterを実装する（rate limit計画T14）
 - [ ] SD8: `MailSender`契約とNode/Workers adapterをTDD実装する
 - [ ] SD9: Wrangler staging config・types・build scriptsを実装する
 - [ ] SD10: adapter-vercelとPreview build契約を実装する
