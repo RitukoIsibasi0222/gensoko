@@ -28,6 +28,9 @@ describe("staging account deletion cleanup fixture workflows", () => {
     );
     expect(workflow).toContain("npx prisma generate");
     expect(workflow).toContain("npm run staging:account-deletion-cleanup-fixtures");
+    expect(workflow).toContain("FIXTURE_OPERATION: ${{ inputs.operation }}");
+    expect(workflow).toContain('--operation "$FIXTURE_OPERATION"');
+    expect(workflow).not.toContain('--operation "${{ inputs.operation }}"');
   });
 
   it("cleanup workflowはdry-runとexecute前に完全一致preflightを通しexecute後を検証する", () => {
@@ -39,6 +42,7 @@ describe("staging account deletion cleanup fixture workflows", () => {
     expect(workflow).toContain("npx prisma generate");
     expect(workflow).toContain("--operation verify-isolated");
     expect(workflow).toContain("--operation verify-cleaned");
+    expect(workflow).toContain("--staging-synthetic-only");
     expect(workflow.indexOf("--operation verify-isolated")).toBeLessThan(
       workflow.indexOf("npm run delete:legacy-soft-deleted-users"),
     );

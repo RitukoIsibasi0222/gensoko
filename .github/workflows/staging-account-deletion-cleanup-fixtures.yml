@@ -75,4 +75,5 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: npm run staging:account-deletion-cleanup-fixtures -- --operation "${{ inputs.operation }}"
+          FIXTURE_OPERATION: ${{ inputs.operation }}
+        run: npm run staging:account-deletion-cleanup-fixtures -- --operation "$FIXTURE_OPERATION"

@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { PrismaPg } from "@prisma/adapter-pg";
+import prismaClientModule from "@prisma/client";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -14,6 +16,26 @@ const migrationSql = readFileSync(
   ),
   "utf8",
 );
+const { PrismaClient } = prismaClientModule;
+
+async function waitForContractLock(pool: Pool): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const result = await pool.query<{ waiting: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM pg_locks locks
+         JOIN pg_class relations ON relations.oid = locks.relation
+         WHERE relations.relname = 'users'
+           AND locks.mode = 'AccessExclusiveLock'
+           AND NOT locks.granted
+       ) AS waiting`,
+    );
+    if (result.rows[0]?.waiting) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("contract migration lock wait was not observed");
+}
 
 describe.skipIf(!runIntegrationTest)("account deletion contract migration dedicated DB", () => {
   let pool: Pool;
@@ -62,6 +84,37 @@ describe.skipIf(!runIntegrationTest)("account deletion contract migration dedica
     await pool.query('DELETE FROM "users" WHERE "id" = \'contract-guard-fixture\'');
   });
 
+  it("rechecks the guard after a concurrent legacy insert commits", async () => {
+    await pool.query('DELETE FROM "users"');
+    const blocker = await pool.connect();
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        `INSERT INTO "users" ("id", "username", "email", "passwordHash", "role", "emailVerified", "isActive", "deletedAt", "updatedAt")
+         VALUES ('contract-race-fixture', 'contract_race_fixture', 'contract-race-fixture@example.test', 'hash', 'USER', true, false, NOW(), NOW())`,
+      );
+      const migrationResult = pool.query(migrationSql).then(
+        () => ({ succeeded: true }),
+        () => ({ succeeded: false }),
+      );
+
+      await waitForContractLock(pool);
+      await blocker.query("COMMIT");
+
+      await expect(migrationResult).resolves.toEqual({ succeeded: false });
+      const state = await pool.query<{ column_exists: boolean; index_exists: boolean }>(
+        `SELECT
+           EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'deletedAt') AS column_exists,
+           to_regclass('public."users_deletedAt_id_idx"') IS NOT NULL AS index_exists`,
+      );
+      expect(state.rows[0]).toEqual({ column_exists: true, index_exists: true });
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      blocker.release();
+      await pool.query('DELETE FROM "users" WHERE "id" = \'contract-race-fixture\'');
+    }
+  });
+
   it("drops the column and temporary index when no legacy row exists", async () => {
     await pool.query('DELETE FROM "users"');
     await pool.query(migrationSql);
@@ -72,5 +125,31 @@ describe.skipIf(!runIntegrationTest)("account deletion contract migration dedica
          to_regclass('public."users_deletedAt_id_idx"') IS NOT NULL AS index_exists`,
     );
     expect(state.rows[0]).toEqual({ column_exists: false, index_exists: false });
+
+    await pool.query(
+      `INSERT INTO "users" ("id", "username", "email", "passwordHash", "role", "emailVerified", "isActive", "updatedAt")
+       VALUES ('contract-runtime-fixture', 'contract_runtime_fixture', 'contract-runtime-fixture@example.test', 'hash', 'USER', true, false, NOW())`,
+    );
+    const contractPrisma = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: connectionString! }),
+    });
+    try {
+      await expect(
+        contractPrisma.user.update({
+          where: { id: "contract-runtime-fixture" },
+          data: { isActive: true },
+          select: { id: true },
+        }),
+      ).resolves.toEqual({ id: "contract-runtime-fixture" });
+      await expect(
+        contractPrisma.user.delete({
+          where: { id: "contract-runtime-fixture" },
+          select: { id: true },
+        }),
+      ).resolves.toEqual({ id: "contract-runtime-fixture" });
+    } finally {
+      await contractPrisma.$disconnect();
+      await pool.query('DELETE FROM "users" WHERE "id" = \'contract-runtime-fixture\'');
+    }
   });
 });

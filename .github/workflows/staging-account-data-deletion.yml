@@ -132,7 +132,8 @@ jobs:
         run: |
           npm run delete:legacy-soft-deleted-users -- \
             --execute \
-            --confirm=DELETE_LEGACY_SOFT_DELETED_USERS
+            --confirm=DELETE_LEGACY_SOFT_DELETED_USERS \
+            --staging-synthetic-only
 
       - name: Verify synthetic fixtures were cleaned
         if: env.OPERATION == 'execute'

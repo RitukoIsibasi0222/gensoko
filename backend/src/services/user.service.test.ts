@@ -116,7 +116,10 @@ describe("deleteCurrentUser", () => {
       },
     });
     expect(txUserCount).not.toHaveBeenCalled();
-    expect(txUserDelete).toHaveBeenCalledWith({ where: { id: "user-1" } });
+    expect(txUserDelete).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: { id: true },
+    });
     expect(txAuditLogCreate).toHaveBeenCalledWith({
       data: {
         action: "USER_ACCOUNT_DELETE",
@@ -157,7 +160,10 @@ describe("deleteCurrentUser", () => {
     await deleteCurrentUser({ userId: "user-1", currentPassword: "Pass1234!" });
 
     expect(txUserCount).toHaveBeenCalledOnce();
-    expect(txUserDelete).toHaveBeenCalledWith({ where: { id: "user-1" } });
+    expect(txUserDelete).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: { id: true },
+    });
   });
 
   it("異常系: 初回取得時にユーザーが存在しなければ409でtransactionを開始しない", async () => {

@@ -1041,7 +1041,7 @@ Error:
 
 - `UserStats.totalGames > 0`
 - `User.isActive = true`
-- `User.deletedAt = null`
+- Phase 5のDB列非参照版を公開する前に、legacy soft-deleted Userが0件であることを確認する。公開後はDBに現存するUserだけを対象とする
 - 同点は同順位。次順位はスキップする（例: 1位、1位、3位）
 
 ### GET `/ranking/weekly`
@@ -1116,7 +1116,7 @@ account data完全削除への移行中も、旧frontendとのv1互換を次の�
 - 一覧・詳細・status/role mutationのdeprecated `deletedAt` は、DB値を公開せず常に `null` を返す。
 - deprecated `status=deleted` は入力として受理するが、200で `users: []`, `nextCursor: null` を返す。
 - statsのdeprecated `users.deleted` は常に `0` を返し、`users.total` とgame/learning statsは現在保持中のUserとその所有dataだけを集計する。
-- legacy soft-deleted userは一覧へ含めず、詳細は物理削除済みUserと同じ404を返す。mutationの移行用409判定はcontract migrationまで維持する。
+- DB列非参照版の公開前提として、対象環境のlegacy soft-deleted Userを0件にする。公開後に旧instanceのrollbackなどでlegacy rowが再発した場合は、旧列を状態判定へ戻さず、Phase 2版の再配備・cleanup再実行で解消する。
 
 共通エラー:
 
@@ -1132,7 +1132,6 @@ account data完全削除への移行中も、旧frontendとのv1互換を次の�
 
 - `role = ADMIN`
 - `isActive = true`
-- `deletedAt = null`
 - `emailVerified = true`
 - `lockedUntil = null` または現在時刻以前
 
@@ -1190,9 +1189,9 @@ Response 200:
 
 Status filter:
 
-- `active`: `isActive = true` かつ `deletedAt = null`
-- `suspended`: `isActive = false` かつ `deletedAt = null`
-- 未指定: legacy soft-deleted userを除く現在保持中のUser
+- `active`: DBに現存し、`isActive = true`のUser
+- `suspended`: DBに現存し、`isActive = false`のUser
+- 未指定: DBに現存するUser
 - `deleted`: deprecated互換として200の空一覧、`nextCursor = null`
 
 Sort:
@@ -1293,7 +1292,7 @@ Rules:
 
 - 自分自身は停止/解除できない。
 - 利用可能な管理者が0人になる停止は409。
-- 削除済みユーザーの停止/解除は409。
+- 物理削除済みユーザーは404。
 - 停止時は `isActive=false`, `lockedUntil=null` にし、refresh token / password reset token / email verification token を削除する。
 - 解除時は `isActive=true`, `lockedUntil=null` にする。token は再発行しない。
 
@@ -1301,7 +1300,7 @@ Error:
 
 ```text
 404 error: ユーザーが見つかりません
-409 error: 自分自身には実行できません / 最後の管理者は変更できません / 削除済みユーザーは変更できません / 同時操作により処理できませんでした。再試行してください
+409 error: 自分自身には実行できません / 最後の管理者は変更できません / 同時操作により処理できませんでした。再試行してください
 ```
 
 ### PATCH `/admin/users/:id/role`
@@ -1345,8 +1344,8 @@ Rules:
 
 - 自分自身の role は変更できない。
 - 利用可能な管理者が0人になる降格は409。
-- 停止済み・削除済みユーザーの role は変更できない。
-- `ADMIN` に昇格できるのは `emailVerified=true`, `isActive=true`, `deletedAt=null` のユーザーのみ。
+- 停止済みユーザーの role は変更できない。物理削除済みユーザーは404を返す。
+- `ADMIN` に昇格できるのは `emailVerified=true`, `isActive=true` の現存ユーザーのみ。
 - 認可は DB の最新 role を参照するため、ロール変更は次リクエストから反映される。
 - ロール変更時に refresh token は削除しない。
 
@@ -1354,7 +1353,7 @@ Error:
 
 ```text
 404 error: ユーザーが見つかりません
-409 error: 自分自身には実行できません / 最後の管理者は変更できません / 停止中または削除済みのユーザーは変更できません / メール認証済みで有効なユーザーのみ管理者にできます / 同時操作により処理できませんでした。再試行してください
+409 error: 自分自身には実行できません / 最後の管理者は変更できません / 停止中のユーザーは変更できません / メール認証済みで有効なユーザーのみ管理者にできます / 同時操作により処理できませんでした。再試行してください
 ```
 
 ### DELETE `/admin/users/:id`
@@ -1376,12 +1375,12 @@ Response 200:
 Rules:
 
 - Serializable transaction内でactorを再取得し、現在も利用可能なADMINであることを確認する。
-- actorが降格・停止・メール未確認・lock・削除済みの場合は、target取得前に409で中止する。
+- actorが不存在・降格・停止・メール未確認・lockの場合は、target取得前に409で中止する。
 - Userを物理削除し、認証・学習データなどの所有rowはDB cascadeで削除する。
 - User削除と`ADMIN_USER_FORCE_DELETE / SUCCESS`監査を同じtransactionへ保存する。
 - 自分自身は強制退会できない。
 - 利用可能な管理者が0人になる強制退会は409。
-- 物理削除済みまたはcleanup済みのユーザーは404。移行中に残るlegacy soft-deleted userは409。
+- 物理削除済みまたはcleanup済みのユーザーは404。
 - actor状態競合の失敗監査には、未確認のtarget IDを保存しない。
 
 Error:
@@ -1391,7 +1390,7 @@ Error:
 401 error: 認証が必要です / トークンが無効です
 403 error: 管理者権限が必要です
 404 error: ユーザーが見つかりません
-409 error: 自分自身には実行できません / 最後の管理者は変更できません / 管理者の状態が変更されています。再ログインしてください / ユーザーは既に削除されています / 同時操作により処理できませんでした。再試行してください
+409 error: 自分自身には実行できません / 最後の管理者は変更できません / 管理者の状態が変更されています。再ログインしてください / 同時操作により処理できませんでした。再試行してください
 429 error: リクエストが多すぎます。しばらく待ってから再試行してください
 500 error: サーバーエラーが発生しました
 ```
@@ -1424,7 +1423,7 @@ Response 200:
 
 Aggregation:
 
-- `users.total` はlegacy soft-deleted userを除く現在保持中のUserを `user.count` で数える。
+- `users.total` はDBに現存するUserを `user.count` で数える。
 - `users.deleted` はdeprecated v1互換値として常に `0` を返す。
 - `active` / `suspended` / `admins` / `emailVerified` も現在保持中のUserだけを数える。`admins` は利用可能な管理者数ではなく、表示用の `role=ADMIN` 件数。
 - `games.totalSessions` は現在保持中のUserに属する `gameSession.count` を使う。

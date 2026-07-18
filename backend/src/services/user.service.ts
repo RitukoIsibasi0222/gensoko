@@ -214,7 +214,7 @@ export async function deleteCurrentUser(input: {
 
       const deletedUserId = currentUser.id;
       const deletedUserRole = currentUser.role;
-      await tx.user.delete({ where: { id: deletedUserId } });
+      await tx.user.delete({ where: { id: deletedUserId }, select: { id: true } });
       await recordAuditEvent(tx, {
         action: AUDIT_ACTIONS.USER_ACCOUNT_DELETE,
         result: AuditResult.SUCCESS,

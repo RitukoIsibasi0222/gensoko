@@ -156,7 +156,9 @@ docker compose exec -T \
 
 - 接続先hostは`localhost`、`127.0.0.1`、`postgres`だけを許可し、DB名完全一致前にDDL・fixture操作を行わない
 - legacy rowありではguardがdrop前に失敗し、列と一時indexが残ることを確認する
+- 未commitの並行legacy insertがある場合はcontract SQLがtable lockを待ち、insert commit後のguardで中止して列とindexを保持することを確認する
 - legacy row 0件では列と一時indexがdropされることを確認する
+- drop後は現行Prisma Clientで明示`select`付きのUser update/deleteが成功し、旧列を暗黙取得しないことを確認する
 - test終了時に列・indexを復元し、synthetic fixtureを0件に戻す
 - `backend/prisma/contract-migrations`は通常migration directoryではない。T41/T42とrelease gate完了前に共有環境へ手動適用しない
 

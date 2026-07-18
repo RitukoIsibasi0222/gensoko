@@ -569,7 +569,10 @@ describe("forceDeleteAdminUser", () => {
         lockedUntil: true,
       },
     });
-    expect(tx.user.delete).toHaveBeenCalledWith({ where: { id: "user-1" } });
+    expect(tx.user.delete).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: { id: true },
+    });
     expect(tx.user.update).not.toHaveBeenCalled();
     expect(tx.refreshToken.deleteMany).not.toHaveBeenCalled();
     expect(tx.passwordResetToken.deleteMany).not.toHaveBeenCalled();

@@ -1034,7 +1034,7 @@ Phase 2の実装後、stagingでdry-run→execute→dry-run 0→execute 0→Play
 
 ### Phase 5: `deletedAt` 非参照code
 
-auth、admin、ranking、admin-create、testからDB列依存を除去する。v1互換値はroute境界で合成する。columnを残したままdeployし最低1release cycle soakする。旧版rollbackでsoft rowが増えた場合は再cleanupする。
+auth、admin、ranking、admin-create、testからDB列依存を除去する。Userを返すPrisma writeは明示`select`を必須とし、現行schemaに残る旧列を暗黙`RETURNING`へ含めない。v1互換値はroute境界で合成する。columnを残したままdeployし最低1release cycle soakする。旧版rollbackでsoft rowが増えた場合は再cleanupする。T44ではschemaから旧列を除去してPrisma Clientを再生成し、再度deploy・soakしてからcontract SQLを適用する。
 
 ### Phase 6: backup世代更新
 
@@ -1042,7 +1042,7 @@ legacy 0件・非参照code稼働中に新backupを作り、旧Artifactの7日�
 
 ### Phase 7: contract migration
 
-legacy rowが1件でもあればIDを出さず中止するguardをTDD実装する。staging確認後、24時間以内backup付きproductionでdropする。drop後はPhase 5以降の非参照版だけをrollback候補とし、orphan checkとsmoke testを行う。
+transaction開始直後に`users` tableをlockし、guard確認からDDLまでの競合を閉じる。legacy rowが1件でもあればIDを出さず中止するguardをTDD実装する。専用DBでは、並行legacy insertがlock解放後に確定した場合もguardが中止することと、drop後に再生成済みPrisma ClientのUser writeが成功することを確認する。staging確認後、24時間以内backup付きproductionでdropする。drop後はT44で再生成した非参照版だけをrollback候補とし、orphan checkとsmoke testを行う。
 
 ## ロールバック方針
 
@@ -1282,6 +1282,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 
 > 2026-07-18 follow-up品質記録: backend通常suiteは82 files・867件成功、専用DB 4 files・9件skipだった。ESLint、Prettier check、TypeScript build、Prisma schema validateが成功した。T39後のローカル専用account deletion cascade・rollback 5件と、T43専用contract migration unit/integration 4件も明示実行して成功した。性能測定は既存の合格証拠を再利用し、再実行していない。staging/production cleanup、共有環境deploy、contract適用は実施していない。
 
+> PR #107 厳格レビューfollow-up（2026-07-18）: Userを返すPrisma write 9箇所へ明示`select`を追加し、対象serviceの`user.create/update/delete`にselect漏れがあれば失敗するAST source contractを追加した。staging cleanup executeは完全一致synthetic fixture IDだけへ限定し、preflight後に未知legacy rowが発生しても削除せず残件として失敗させる。fixture prepare/removeは識別field完全一致と削除件数を再検証し、CLIの利用者向け文言・切断失敗を日本語の安全な一般化messageへ統一した。contract SQLはguard前に`ACCESS EXCLUSIVE` lockを取得し、専用DBで並行legacy insert確定後の中止とdrop後Prisma writeを確認した。backend変更を含む`develop`向けPRには通常品質check workflowを追加した。Redでは新規workflow不存在、synthetic限定execute未実装、lock未実装などを確認し、Greenでは通常suite 84 files・885件成功、専用DB 4 files・10件skip、account deletion 5件、contract migration unit/integration 5件、ESLint、Prettier check、TypeScript build、Prisma schema validateが成功した。staging/production cleanup、共有環境deploy、contract適用、既存性能測定の再実行は行っていない。
+
 ## 残作業の実施区分（2026-07-18）
 
 元のタスクとrelease gateは削除せず、現在の個人開発環境で実施できる範囲と、実環境・組織判断を要する範囲を次のように区分する。下記の補助区分は元タスクの完了条件を変更せず、実施済み部分と未実施部分を区別するための記録である。
@@ -1290,9 +1292,9 @@ application rollbackは削除済み個人データを復元する権限を意味
 
 - T33は、stagingへのexpand migration適用、staging cascade性能、ローカルisolated初回migration baselineまでを実施済み証拠として維持する。managed DB固有の初回write待ち上限と環境同等性は満たしていないため、T33全体は進行中のままとする。新しいSupabase projectや追加費用は発生させない。
 - T34は、ローカルDockerでsynthetic accountを使うAPI/UI/Playwright回帰だけを参考検証として実施できる。Cloudflare WorkersとVercelのstagingアプリ基盤は未実装であり、staging API/UI検証そのものはBへ残す。
-- T35は、staging cleanupの対象が完全一致するsynthetic fixtureだけであることをID・識別field・対象件数で事前検証できる仕組みをTDD実装する。現行workflowは`deletedAt IS NOT NULL`の全Userを対象にするため、このpreflightなしでexecuteしない。
-- T39は、DB列非参照codeとtestを実装できる。v1のdeprecated `deletedAt: null`はroute境界の互換値として維持する。staging/productionへdeployする前に各環境のlegacy cleanup 0件を必須とし、元のT38依存はproduction deploy gateとして維持する。
-- T43は、guard SQLのcontract testとローカル専用DBでのfail/success確認を準備できる。ただし通常の`prisma migrate deploy`へ混入して共有環境へ早期適用される構成にはしない。安全に分離できない場合はmigration追加をBへ戻す。
+- T35は、staging cleanupの対象が完全一致するsynthetic fixtureだけであることをID・識別field・対象件数で事前検証し、execute自体もfixture IDだけに限定する仕組みをTDD実装する。preflight後に未知のlegacy rowが発生しても削除せず、残件として失敗させる。
+- T39は、DB列非参照codeとtestを実装できる。Userを返すPrisma writeへ明示`select`を要求するsource contractで旧列の暗黙取得も防ぐ。v1のdeprecated `deletedAt: null`はroute境界の互換値として維持する。staging/productionへdeployする前に各環境のlegacy cleanup 0件を必須とし、元のT38依存はproduction deploy gateとして維持する。
+- T43は、table lock付きguard SQLのcontract testとローカル専用DBでのfail/success・並行insert確認を準備できる。ただし通常の`prisma migrate deploy`へ混入して共有環境へ早期適用される構成にはしない。安全に分離できない場合はmigration追加をBへ戻す。
 
 ### B: 実環境・前提が整った時点で実施する
 

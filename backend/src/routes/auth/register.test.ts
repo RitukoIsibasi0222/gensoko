@@ -316,7 +316,10 @@ describe("POST /auth/register", () => {
     });
 
     expect(res.status).toBe(500);
-    expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: "user-1" } });
+    expect(prisma.user.delete).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: { id: true },
+    });
   });
 
   it("バリデーション: パスワードにスペースを含む場合は 400 を返す", async () => {

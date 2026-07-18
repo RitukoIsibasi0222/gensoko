@@ -35,6 +35,7 @@ export type LegacySoftDeletedUserTableCounts = Readonly<{
 export type DeleteLegacySoftDeletedUsersInput = Readonly<{
   mode: DeleteLegacySoftDeletedUsersMode;
   batchSize: number;
+  deleteOnlyUserIds?: readonly string[];
 }>;
 
 async function inspectLegacySoftDeletedUserTableCounts(): Promise<LegacySoftDeletedUserTableCounts> {
@@ -96,6 +97,7 @@ function createResult(
 export async function deleteLegacySoftDeletedUsers({
   mode,
   batchSize,
+  deleteOnlyUserIds,
 }: DeleteLegacySoftDeletedUsersInput): Promise<DeleteLegacySoftDeletedUsersResult> {
   const startedAt = performance.now();
   let tableCounts: LegacySoftDeletedUserTableCounts | undefined;
@@ -124,9 +126,16 @@ export async function deleteLegacySoftDeletedUsers({
     }
 
     if (matchedUsers > 0) {
+      const deletionWhere =
+        deleteOnlyUserIds === undefined
+          ? LEGACY_USER_WHERE
+          : {
+              ...LEGACY_USER_WHERE,
+              id: { in: [...deleteOnlyUserIds] },
+            };
       while (true) {
         const rows = await prisma.user.findMany({
-          where: LEGACY_USER_WHERE,
+          where: deletionWhere,
           orderBy: [{ deletedAt: "asc" }, { id: "asc" }],
           take: batchSize,
           select: { id: true },

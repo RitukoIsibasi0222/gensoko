@@ -1,17 +1,15 @@
 import { randomBytes } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 
 import { validateStagingDatabaseTarget } from "../lib/staging-database-target.js";
 import { hashPassword } from "../lib/password.js";
 
-const INVALID_ENVIRONMENT_MESSAGE =
-  "staging account deletion fixture\u8a2d\u5b9a\u304c\u4e0d\u6b63\u3067\u3059";
-const INVALID_FIXTURE_IDENTITY_MESSAGE =
-  "staging account deletion fixture\u306e\u8b58\u5225\u306b\u5931\u6557\u3057\u307e\u3057\u305f";
-const ISOLATION_FAILED_MESSAGE =
-  "staging cleanup\u5bfe\u8c61\u3092synthetic fixture\u3078\u5206\u96e2\u3067\u304d\u307e\u305b\u3093";
-const PREPARATION_FAILED_MESSAGE = "staging account deletion fixture preparation failed";
+const INVALID_ENVIRONMENT_MESSAGE = "staging account deletion fixture設定が不正です";
+const INVALID_FIXTURE_IDENTITY_MESSAGE = "staging account deletion fixtureの識別に失敗しました";
+const ISOLATION_FAILED_MESSAGE = "staging cleanup対象をsynthetic fixtureへ分離できません";
+const PREPARATION_FAILED_MESSAGE = "staging account deletion fixtureの作成に失敗しました";
 const CLEANUP_VERIFICATION_FAILED_MESSAGE =
-  "staging account deletion fixture cleanup verification failed";
+  "staging account deletion fixtureのcleanup結果が不正です";
 
 type StagingAccountDeletionCleanupFixture = Readonly<{
   id: string;
@@ -51,8 +49,6 @@ const FIXTURES = [
   STAGING_ACCOUNT_DELETION_SUSPENDED_FIXTURE,
 ];
 
-const FIXTURE_IDS = FIXTURES.map(({ id }) => id);
-
 export type StagingAccountDeletionCleanupFixtureEnvironment = Readonly<{
   BATCH_ENVIRONMENT?: string;
   ACCOUNT_DATA_DELETION_STAGING_FIXTURES_ENABLED?: string;
@@ -72,20 +68,22 @@ export type StagingAccountDeletionCleanupFixtureUser = Readonly<{
 
 type FixtureTransactionClient = Readonly<{
   user: {
-    findMany: (options: object) => Promise<StagingAccountDeletionCleanupFixtureUser[]>;
-    deleteMany: (options: object) => Promise<{ count: number }>;
-    createMany: (options: { data: Array<Record<string, unknown>> }) => Promise<{ count: number }>;
+    findMany: (
+      options: Prisma.UserFindManyArgs,
+    ) => Promise<StagingAccountDeletionCleanupFixtureUser[]>;
+    deleteMany: (options: Prisma.UserDeleteManyArgs) => Promise<{ count: number }>;
+    createMany: (options: Prisma.UserCreateManyArgs) => Promise<{ count: number }>;
   };
   userStats: {
-    create: (options: object) => Promise<unknown>;
-    count: (options: object) => Promise<number>;
+    create: (options: Prisma.UserStatsCreateArgs) => Promise<unknown>;
+    count: (options: Prisma.UserStatsCountArgs) => Promise<number>;
   };
   refreshToken: {
-    create: (options: object) => Promise<unknown>;
-    count: (options: object) => Promise<number>;
+    create: (options: Prisma.RefreshTokenCreateArgs) => Promise<unknown>;
+    count: (options: Prisma.RefreshTokenCountArgs) => Promise<number>;
   };
   element: {
-    count: (options?: object) => Promise<number>;
+    count: (options?: Prisma.ElementCountArgs) => Promise<number>;
   };
 }>;
 
@@ -102,14 +100,24 @@ export type StagingAccountDeletionCleanupFixtureState = Readonly<{
   fixtureSourceElementsAvailable: boolean;
 }>;
 
-function createIdentifierWhere(): object {
+function createIdentifierWhere(): Prisma.UserWhereInput {
   return {
     OR: FIXTURES.flatMap(({ id, username, email }) => [{ id }, { username }, { email }]),
   };
 }
 
-function createFixtureIdWhere(): object {
-  return { id: { in: [...FIXTURE_IDS] } };
+function createExactFixtureWhere(): Prisma.UserWhereInput {
+  return {
+    OR: FIXTURES.map((fixture) => ({
+      id: fixture.id,
+      username: fixture.username,
+      email: fixture.email,
+      role: "USER",
+      emailVerified: true,
+      isActive: fixture.isActive,
+      deletedAt: fixture.deletedAt,
+    })),
+  };
 }
 
 function datesEqual(left: Date | null, right: Date | null): boolean {
@@ -193,7 +201,10 @@ export async function prepareStagingAccountDeletionCleanupFixtures({
       throw new Error(PREPARATION_FAILED_MESSAGE);
     }
 
-    await transactionClient.user.deleteMany({ where: createFixtureIdWhere() });
+    const deleted = await transactionClient.user.deleteMany({ where: createExactFixtureWhere() });
+    if (deleted.count !== identifierRows.length) {
+      throw new Error(INVALID_FIXTURE_IDENTITY_MESSAGE);
+    }
     const created = await transactionClient.user.createMany({
       data: FIXTURES.map((fixture) => ({
         ...fixture,
@@ -321,7 +332,10 @@ export async function removeStagingAccountDeletionCleanupFixtures({
   return await client.$transaction(async (transactionClient) => {
     const identifierRows = await findIdentifierRows(transactionClient);
     assertRowsAreExactFixtures(identifierRows);
-    const result = await transactionClient.user.deleteMany({ where: createFixtureIdWhere() });
+    const result = await transactionClient.user.deleteMany({ where: createExactFixtureWhere() });
+    if (result.count !== identifierRows.length) {
+      throw new Error(INVALID_FIXTURE_IDENTITY_MESSAGE);
+    }
     return { deletedUsers: result.count };
   });
 }

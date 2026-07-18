@@ -303,7 +303,7 @@ Actionsの`Staging Account Deletion Cleanup Fixtures`と`Staging Account Data De
 2. fixture flagだけを`true`へ変更し、fixture workflowの`prepare`を実行する。legacy target 1件、所有row 2件、active/suspended sentinel各1件、Element有り以外なら停止する。
 3. cleanup workflowの`dry-run`を実行する。workflow内の`verify-isolated`が未知のlegacy row 0件と完全一致fixtureを確認してから、User件数、所有row件数、必要batch数、終了codeを記録する。
 4. 旧API instanceのdrain、staging backup、承認記録を確認する。
-5. execute flagを`true`へ変更し、operation `execute`と確認文字列`DELETE_LEGACY_SOFT_DELETED_USERS`を指定する。実行後の`verify-cleaned`でtarget・所有row 0件、sentinel・Element保持を確認する。
+5. execute flagを`true`へ変更し、operation `execute`と確認文字列`DELETE_LEGACY_SOFT_DELETED_USERS`を指定する。workflowは`--staging-synthetic-only`で完全一致fixture IDだけを削除候補に限定する。preflight後に未知のlegacy rowが発生した場合、そのrowは削除せず残件として失敗させる。実行後の`verify-cleaned`でtarget・所有row 0件、sentinel・Element保持を確認する。
 6. 同じexecuteを再実行し、preflightがcleanup済み0件を受理して削除0件で成功する冪等性を確認する。
 7. fixture workflowの`remove`でsentinelを削除し、両flagを`false`へ戻す。
 8. run URL、件数、所要時間、API/UI確認結果を計画書へ記録する。
@@ -326,7 +326,7 @@ Actionsの`Production Database Operations`を`develop` branchから実行する�
 
 guard SQLは`backend/prisma/contract-migrations`へ隔離され、通常の`prisma migrate deploy`では適用されない。T41のcleanup後backup・旧Artifact 7日失効とT42のisolated restore drill、各環境のlegacy dry-run 0件、T39非参照codeのdeploy・soakがすべて完了するまで、staging/productionへ手動適用しない。
 
-適用手段と承認記録はT44で別途確定する。SQLを通常migration directoryへ移動してgateを迂回しない。guard失敗時はgeneric errorだけを記録し、件数、User ID、接続情報、生Errorを転載しない。drop後のrollback候補はT39非参照版だけとし、旧列参照版を再配備しない。
+適用手段と承認記録はT44で別途確定する。T44では、legacy 0件確認後にPrisma schemaから`deletedAt`を除去してClientを再生成し、そのClientを使う非参照版をdeploy・soakしてからcontract SQLを適用する。SQLはtransaction開始直後に`users` tableの`ACCESS EXCLUSIVE` lockを取得し、guard確認からDDLまでの間にlegacy rowが挿入される競合を閉じる。SQLを通常migration directoryへ移動してgateを迂回しない。guard失敗時はgeneric errorだけを記録し、件数、User ID、接続情報、生Errorを転載しない。drop後のrollback候補は再生成済みT39非参照版だけとし、旧列をPrisma Clientの暗黙`RETURNING`へ含む版を再配備しない。
 
 ### rollback・restore制約
 
@@ -340,8 +340,7 @@ guard SQLは`backend/prisma/contract-migrations`へ隔離され、通常の`pris
 
 ## GitHub Actions による自動デプロイ（CI/CD）
 
-> 現時点では `.github/workflows/` は未作成。
-> 以下はフェーズ12で追加する `.github/workflows/deploy.yml` のサンプル。
+> backend変更を含む`develop`向けPRでは、`.github/workflows/backend-pr-quality.yml`が通常test、ESLint、Prettier、TypeScript build、Prisma generate/validateを自動実行する。staging/productionのDB・batch workflowは手動gate付きで運用する。アプリケーションdeploy workflowは未実装であり、以下はフェーズ12で追加する`.github/workflows/deploy.yml`のサンプル。
 
 ```yaml
 name: Deploy

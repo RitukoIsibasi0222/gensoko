@@ -11,9 +11,11 @@ import {
 
 const COMPLETED_EVENT = "account_data_deletion.staging_fixtures.completed";
 const FAILED_EVENT = "account_data_deletion.staging_fixtures.failed";
-const ARGUMENT_ERROR_MESSAGE = "invalid staging account deletion fixture CLI arguments";
-const ENVIRONMENT_ERROR_MESSAGE = "invalid staging account deletion fixture environment";
-const EXECUTION_FAILED_MESSAGE = "staging account deletion fixture CLI failed";
+const DISCONNECT_FAILED_EVENT = "account_data_deletion.staging_fixtures.disconnect_failed";
+const ARGUMENT_ERROR_MESSAGE = "staging account deletion fixture CLIの引数が正しくありません";
+const ENVIRONMENT_ERROR_MESSAGE = "staging account deletion fixture設定が不正です";
+const EXECUTION_FAILED_MESSAGE = "staging account deletion fixture CLIの実行に失敗しました";
+const DISCONNECT_FAILED_MESSAGE = "staging account deletion fixtureのDB接続終了に失敗しました";
 
 type Operation = "prepare" | "verify-isolated" | "verify-cleaned" | "remove";
 
@@ -96,7 +98,7 @@ export async function main(): Promise<void> {
   try {
     await dependencies.disconnect();
   } catch {
-    // Preserve the operation result and never expose connection details or raw errors.
+    console.warn({ event: DISCONNECT_FAILED_EVENT, message: DISCONNECT_FAILED_MESSAGE });
   }
   process.exitCode = exitCode;
 }

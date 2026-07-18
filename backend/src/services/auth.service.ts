@@ -108,7 +108,7 @@ export async function register(input: {
   } catch (err) {
     if (createdNewUser) {
       // 送信失敗時は作成済みユーザーを削除して再登録可能な状態に戻す
-      await prisma.user.delete({ where: { id: userId } });
+      await prisma.user.delete({ where: { id: userId }, select: { id: true } });
     } else {
       // 未認証ユーザーの再登録時はアカウントを残し、今回発行した確認トークンだけ無効化する
       await prisma.emailVerification.deleteMany({ where: { userId } });
@@ -309,6 +309,7 @@ async function loginWithRequiredAudit(input: {
     await prisma.user.update({
       where: { id: user.id },
       data: { loginFailCount: 0, lockedUntil: null },
+      select: { id: true },
     });
     currentFailCount = 0;
   }
@@ -324,7 +325,11 @@ async function loginWithRequiredAudit(input: {
     if (newFailCount >= MAX_LOGIN_FAIL) {
       updateData.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
     }
-    await prisma.user.update({ where: { id: user.id }, data: updateData });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: updateData,
+      select: { id: true },
+    });
     throw new AuthError(401, INVALID_LOGIN_CREDENTIALS_MESSAGE);
   }
 
@@ -473,6 +478,7 @@ export async function verifyEmail(input: { token: string }): Promise<void> {
     await tx.user.update({
       where: { id: record.userId },
       data: { emailVerified: true },
+      select: { id: true },
     });
   });
 }
@@ -565,6 +571,7 @@ export async function resetPassword(input: { token: string; password: string }):
     await tx.user.update({
       where: { id: record.userId },
       data: { passwordHash },
+      select: { id: true },
     });
     // 3. 全リフレッシュトークン削除（全デバイスからログアウト）
     await tx.refreshToken.deleteMany({ where: { userId: record.userId } });

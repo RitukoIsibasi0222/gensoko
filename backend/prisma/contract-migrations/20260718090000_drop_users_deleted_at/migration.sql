@@ -2,6 +2,9 @@
 -- Apply only after the release gates documented in the account deletion plan are complete.
 BEGIN;
 
+-- Close the guard-to-DDL race before inspecting legacy rows.
+LOCK TABLE "users" IN ACCESS EXCLUSIVE MODE;
+
 DO $account_deletion_contract$
 BEGIN
   IF EXISTS (

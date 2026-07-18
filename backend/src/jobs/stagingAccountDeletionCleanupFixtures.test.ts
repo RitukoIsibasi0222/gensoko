@@ -40,6 +40,8 @@ function createClient(options?: {
   legacyRows?: StagingAccountDeletionCleanupFixtureUser[];
   elementCount?: number;
   ownedCounts?: number[];
+  createdCount?: number;
+  deletedCount?: number;
 }): StagingAccountDeletionCleanupFixtureClient {
   const identifierRows = options?.identifierRows ?? [];
   const legacyRows = options?.legacyRows ?? [];
@@ -48,8 +50,10 @@ function createClient(options?: {
   const transactionClient = {
     user: {
       findMany: vi.fn().mockResolvedValueOnce(identifierRows).mockResolvedValueOnce(legacyRows),
-      deleteMany: vi.fn().mockResolvedValue({ count: identifierRows.length }),
-      createMany: vi.fn().mockResolvedValue({ count: 3 }),
+      deleteMany: vi
+        .fn()
+        .mockResolvedValue({ count: options?.deletedCount ?? identifierRows.length }),
+      createMany: vi.fn().mockResolvedValue({ count: options?.createdCount ?? 3 }),
     },
     userStats: {
       create: vi.fn().mockResolvedValue({ userId: STAGING_ACCOUNT_DELETION_LEGACY_FIXTURE.id }),
@@ -143,6 +147,30 @@ describe("staging account deletion cleanup fixtures", () => {
     expect(client.user.deleteMany).not.toHaveBeenCalled();
   });
 
+  it("Elementがなければfixture作成前に停止する", async () => {
+    const client = createClient({ elementCount: 0 });
+
+    await expect(
+      prepareStagingAccountDeletionCleanupFixtures({
+        client,
+        createPasswordHash: vi.fn().mockResolvedValue("bcrypt-hash"),
+      }),
+    ).rejects.toThrow("staging account deletion fixtureの作成に失敗しました");
+    expect(client.user.deleteMany).not.toHaveBeenCalled();
+    expect(client.user.createMany).not.toHaveBeenCalled();
+  });
+
+  it("fixture作成件数が不足すればtransactionを失敗させる", async () => {
+    const client = createClient({ elementCount: 118, createdCount: 2 });
+
+    await expect(
+      prepareStagingAccountDeletionCleanupFixtures({
+        client,
+        createPasswordHash: vi.fn().mockResolvedValue("bcrypt-hash"),
+      }),
+    ).rejects.toThrow("staging account deletion fixtureの作成に失敗しました");
+  });
+
   it("legacy対象がsynthetic target 1件だけならexecute可能と判定する", async () => {
     const rows = [
       toRow(STAGING_ACCOUNT_DELETION_LEGACY_FIXTURE),
@@ -231,6 +259,23 @@ describe("staging account deletion cleanup fixtures", () => {
     });
   });
 
+  it("cleanup後に所有rowが残れば失敗する", async () => {
+    const rows = [
+      toRow(STAGING_ACCOUNT_DELETION_ACTIVE_FIXTURE),
+      toRow(STAGING_ACCOUNT_DELETION_SUSPENDED_FIXTURE),
+    ];
+    const client = createClient({
+      identifierRows: rows,
+      legacyRows: [],
+      elementCount: 118,
+      ownedCounts: [1, 0],
+    });
+
+    await expect(
+      verifyStagingAccountDeletionCleanupFixturesWereCleaned({ client }),
+    ).rejects.toThrow("staging account deletion fixtureのcleanup結果が不正です");
+  });
+
   it("removeは完全一致fixtureだけを削除する", async () => {
     const rows = [
       toRow(STAGING_ACCOUNT_DELETION_ACTIVE_FIXTURE),
@@ -241,5 +286,17 @@ describe("staging account deletion cleanup fixtures", () => {
     await expect(removeStagingAccountDeletionCleanupFixtures({ client })).resolves.toEqual({
       deletedUsers: 2,
     });
+  });
+
+  it("remove直前に完全一致しなくなったfixtureがあれば失敗する", async () => {
+    const rows = [
+      toRow(STAGING_ACCOUNT_DELETION_ACTIVE_FIXTURE),
+      toRow(STAGING_ACCOUNT_DELETION_SUSPENDED_FIXTURE),
+    ];
+    const client = createClient({ identifierRows: rows, deletedCount: 1 });
+
+    await expect(removeStagingAccountDeletionCleanupFixtures({ client })).rejects.toThrow(
+      "staging account deletion fixtureの識別に失敗しました",
+    );
   });
 });

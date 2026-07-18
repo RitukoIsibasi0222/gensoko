@@ -618,7 +618,7 @@ export async function forceDeleteAdminUser(input: {
         }
       }
 
-      await tx.user.delete({ where: { id: targetUserId } });
+      await tx.user.delete({ where: { id: targetUserId }, select: { id: true } });
 
       return { message: "ユーザーを強制退会しました" };
     });

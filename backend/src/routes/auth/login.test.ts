@@ -438,6 +438,7 @@ describe("POST /auth/login", () => {
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: ACTIVE_USER.id },
       data: { loginFailCount: 1 },
+      select: { id: true },
     });
   });
 
