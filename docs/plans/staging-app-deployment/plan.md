@@ -198,16 +198,16 @@ staging smokeで最低限確認するendpointは次のとおり。
 
 ## 環境分離とsecret契約
 
-| 値/binding                | local Node                 | local Workers         | staging                 | production        |
-| ------------------------- | -------------------------- | --------------------- | ----------------------- | ----------------- |
-| `NODE_ENV`                | development/test           | development           | production相当          | production        |
-| `DATABASE_URL`/Hyperdrive | local Docker               | local専用             | staging DBのみ          | production DBのみ |
-| `FRONTEND_URL`            | localhost                  | localhost             | `develop`固定branch URL | production origin |
-| `RATE_LIMIT_STORE`        | memory                     | durable-object test   | durable-object          | durable-object    |
-| `RATE_LIMIT_KEY_SECRET`   | local専用                  | local専用             | staging専用             | production専用    |
-| `JWT_SECRET`              | local専用                  | local専用             | staging専用             | production専用    |
-| mail credential           | Mailpit                    | provider sandbox/test | staging専用・宛先制限   | production専用    |
-| DO namespace              | memoryまたはtest namespace | local state           | staging専用             | production専用    |
+| 値/binding                | local Node                 | local Workers                    | staging                 | production        |
+| ------------------------- | -------------------------- | -------------------------------- | ----------------------- | ----------------- |
+| `NODE_ENV`                | development/test           | development                      | production相当          | production        |
+| `DATABASE_URL`/Hyperdrive | local Docker               | local専用                        | staging DBのみ          | production DBのみ |
+| `FRONTEND_URL`            | localhost                  | localhost                        | `develop`固定branch URL | production origin |
+| `RATE_LIMIT_STORE`        | memory                     | durable-object（test namespace） | durable-object          | durable-object    |
+| `RATE_LIMIT_KEY_SECRET`   | local専用                  | local専用                        | staging専用             | production専用    |
+| `JWT_SECRET`              | local専用                  | local専用                        | staging専用             | production専用    |
+| mail credential           | Mailpit                    | provider sandbox/test            | staging専用・宛先制限   | production専用    |
+| DO namespace              | memoryまたはtest namespace | local state                      | staging専用             | production専用    |
 
 - secret値は`.env.example`、Wrangler config、GitHub Actions、PR本文、Artifact、logへ記録しない。
 - `wrangler secret list`等の名前だけを確認し、値を読み戻す操作はrunbookに含めない。
@@ -285,24 +285,24 @@ T35 cleanup execute、flag変更、migration、production deployはこの手順�
 v1でWorkers/API、Vercel/frontend、外部適用に分解した。v2でDB target誤接続、secret、SMTP、DO fallbackを追加し、v3で既存rate limit計画との重複とT34/T35承認境界を除去・整理した。v4ではproduction自動化を非スコープに保ち、staging配備に必要な最小順序へ確定した。
 
 ```text
-タスクID\tタスク内容\tファイル\t優先度
-SD1\tWorkers/Prisma/mail互換性spikeと採用方式を記録\tplan・検証test\t高
-SD2\tWorkers env・binding・staging target contractをRed化\tbackend Workers/config tests\t高
-SD3\trequest-scoped Prisma dependency境界をRed化\tbackend service/route tests\t高
-SD4\tNode/Workers共通dependency factoryを実装\tbackend app/lib/services/routes\t高
-SD5\tWorkers専用entrypointと型付きenvを実装\tbackend/src/worker.ts\t高
-SD6\tDO Workers testをRed化（rate limit計画T13）\tbackend Cloudflare tests\t高
-SD7\tSQLite-backed DO/store adapterを実装（rate limit計画T14）\tbackend cloudflare/rateLimit/wrangler\t高
-SD8\tMailSender契約とNode/Workers adapterをTDD実装\tbackend lib/auth tests\t高
-SD9\tWrangler staging config・types・build scriptsを実装\tbackend config/package\t高
-SD10\tadapter-vercelとPreview build契約を実装\tfrontend config/package\t高
-SD11\t対象test・lint・format・type/buildを実行\tbackend/frontend\t高
-SD12\tstaging runbook・progress・実装記録を同期\tdocs\t中
-SD13\tCloudflare staging resource/secretを承認後に準備\t外部環境\t高
-SD14\tAPIを承認後にstaging deploy・smoke・rollback確認\t外部環境\t高
-SD15\tVercel develop Previewを承認後に配備・CORS整合\t外部環境\t高
-SD16\tT34 synthetic API/UI/Playwrightを承認後に実行\tstaging\t高
-SD17\t結果を記録しT34と本計画の完了可否を判定\tplan/progress/deployment\t中
+タスクID	タスク内容	ファイル	優先度
+SD1	Workers/Prisma/mail互換性spikeと採用方式を記録	plan・検証test	高
+SD2	Workers env・binding・staging target contractをRed化	backend Workers/config tests	高
+SD3	request-scoped Prisma dependency境界をRed化	backend service/route tests	高
+SD4	Node/Workers共通dependency factoryを実装	backend app/lib/services/routes	高
+SD5	Workers専用entrypointと型付きenvを実装	backend/src/worker.ts	高
+SD6	DO Workers testをRed化（rate limit計画T13）	backend Cloudflare tests	高
+SD7	SQLite-backed DO/store adapterを実装（rate limit計画T14）	backend cloudflare/rateLimit/wrangler	高
+SD8	MailSender契約とNode/Workers adapterをTDD実装	backend lib/auth tests	高
+SD9	Wrangler staging config・types・build scriptsを実装	backend config/package	高
+SD10	adapter-vercelとPreview build契約を実装	frontend config/package	高
+SD11	対象test・lint・format・type/buildを実行	backend/frontend	高
+SD12	staging runbook・progress・実装記録を同期	docs	中
+SD13	Cloudflare staging resource/secretを承認後に準備	外部環境	高
+SD14	APIを承認後にstaging deploy・smoke・rollback確認	外部環境	高
+SD15	Vercel develop Previewを承認後に配備・CORS整合	外部環境	高
+SD16	T34 synthetic API/UI/Playwrightを承認後に実行	staging	高
+SD17	結果を記録しT34と本計画の完了可否を判定	plan/progress/deployment	中
 ```
 
 - [ ] SD1: Workers/Prisma/mail互換性spikeと採用方式を記録する
