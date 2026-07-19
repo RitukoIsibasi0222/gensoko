@@ -5,15 +5,21 @@
  * 複数のファイルで同じ設定を重複して定義しないこと。
  */
 
+import { parseApiBaseUrl } from './base-url';
+
 /**
  * API ベース URL（環境変数から取得）
  *
  * VITE_API_BASE_URL には `/api/v1` まで含める。
  * 例: "http://localhost:3000/api/v1"
  *
- * 未設定時は空文字列にフォールバックし、開発環境では警告を表示する。
+ * 開発環境だけは未設定時に空文字列へフォールバックして警告する。
+ * production build/runtimeでは未設定・不正値を拒否する。
  */
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+export const API_BASE_URL = parseApiBaseUrl(import.meta.env.VITE_API_BASE_URL, {
+  allowMissing: import.meta.env.DEV,
+  requireHttps: false
+});
 
 /**
  * 開発環境で VITE_API_BASE_URL 未設定を早期検知する

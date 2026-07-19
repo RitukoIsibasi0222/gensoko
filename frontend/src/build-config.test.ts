@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import config from '../svelte.config.js';
 
 type PackageManifest = {
+  engines?: Record<string, string>;
+  scripts?: Record<string, string>;
   devDependencies?: Record<string, string>;
 };
 
@@ -35,6 +37,15 @@ describe('Vercel Preview build設定契約', () => {
     expect(packageLock.packages?.['']?.devDependencies?.['@sveltejs/adapter-vercel']).toBeDefined();
     expect(packageLock.packages?.['']?.devDependencies?.['@sveltejs/adapter-auto']).toBeUndefined();
     expect(packageLock.packages?.['node_modules/@sveltejs/adapter-vercel']).toBeDefined();
+  });
+
+  it('Node.js 22とPreview成果物検証scriptをbuild契約に固定する', async () => {
+    const packageManifest = JSON.parse(await readFrontendFile('package.json')) as PackageManifest;
+
+    expect(packageManifest.engines?.node).toBe('22.x');
+    expect(packageManifest.scripts?.['build:preview']).toBe(
+      'vite build && node scripts/check-vercel-build-output.mjs'
+    );
   });
 
   it('Previewの公開API URLだけを例示しsecretやproduction URLを保持しない', async () => {
