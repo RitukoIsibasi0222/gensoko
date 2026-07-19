@@ -10,6 +10,7 @@ import {
   validateFunctionConfigs,
   validateVercelOutputConfig
 } from './vercel-build-contract.mjs';
+import { loadExpectedApiUrl } from './vercel-build-env.mjs';
 
 const frontendRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const outputRoot = join(frontendRoot, '.vercel', 'output');
@@ -35,7 +36,7 @@ async function collectTextFilePaths(directory) {
 }
 
 async function checkVercelBuildOutput() {
-  const expectedApiUrl = process.env.VITE_API_BASE_URL?.trim() ?? '';
+  const expectedApiUrl = loadExpectedApiUrl(frontendRoot);
   const config = JSON.parse(await readFile(join(outputRoot, 'config.json'), 'utf8'));
   const artifactPaths = await collectTextFilePaths(outputRoot);
   const artifactContents = await Promise.all(artifactPaths.map((path) => readFile(path, 'utf8')));

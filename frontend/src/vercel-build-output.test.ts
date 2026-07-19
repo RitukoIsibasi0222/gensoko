@@ -1,7 +1,12 @@
 // @vitest-environment node
 
-import { describe, expect, it } from 'vitest';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { loadExpectedApiUrl } from '../scripts/vercel-build-env.mjs';
 import {
   assertExpectedApiUrl,
   assertNoFrontendSecrets,
@@ -10,7 +15,38 @@ import {
   validateVercelOutputConfig
 } from '../scripts/vercel-build-contract.mjs';
 
+const tempRoots: string[] = [];
+
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  await Promise.all(tempRoots.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+});
+
 describe('Vercel Build Output契約', () => {
+  it('Viteと同じproduction modeで.envの公開API URLを読み込む', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', undefined);
+    const frontendRoot = await mkdtemp(join(tmpdir(), 'gensoko-vercel-env-'));
+    tempRoots.push(frontendRoot);
+    await writeFile(
+      join(frontendRoot, '.env.production'),
+      'VITE_API_BASE_URL=https://staging-api.example.invalid/api/v1\n'
+    );
+
+    expect(loadExpectedApiUrl(frontendRoot)).toBe('https://staging-api.example.invalid/api/v1');
+  });
+
+  it('明示環境変数を.envより優先して公開API URLを読み込む', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', '  https://ci-api.example.invalid/api/v1  ');
+    const frontendRoot = await mkdtemp(join(tmpdir(), 'gensoko-vercel-env-'));
+    tempRoots.push(frontendRoot);
+    await writeFile(
+      join(frontendRoot, '.env.production'),
+      'VITE_API_BASE_URL=https://staging-api.example.invalid/api/v1\n'
+    );
+
+    expect(loadExpectedApiUrl(frontendRoot)).toBe('https://ci-api.example.invalid/api/v1');
+  });
+
   it('検証失敗時はstack traceを含めず安全なmessageだけを出力する', () => {
     const error = new Error('SSR catch-all routeが生成されていません');
 
