@@ -31,6 +31,12 @@ export default [
     }
   },
   {
+    files: ['scripts/**/*.mjs', '*.config.js', '*.config.ts'],
+    languageOptions: {
+      globals: { ...globals.node }
+    }
+  },
+  {
     files: ['**/*.svelte'],
     plugins: { svelte },
     languageOptions: {
@@ -43,6 +49,6 @@ export default [
     }
   },
   {
-    ignores: ['.svelte-kit/', 'build/', 'node_modules/']
+    ignores: ['.svelte-kit/', '.vercel/', 'build/', 'node_modules/']
   }
 ];
