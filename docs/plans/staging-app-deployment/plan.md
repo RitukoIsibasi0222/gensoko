@@ -485,6 +485,55 @@ endpointと成功responseの公開仕様、Prisma schema/migration、frontendは
 - 初回全testではPrettierがJSONCへ付与した合法な末尾カンマを新規test helperが`JSON.parse`できず1件失敗した。helperをJSONC対応後、全suiteでGreenを再確認した。
 - 初回buildではNode `tsc`がproduction entrypoint経由でCloudflare専用型を辿ったため失敗した。Node configからWorkers専用entrypoint/adapterを除外し、同filesをWorkers専用configで必須checkする契約をtestで固定後、両buildを再確認した。
 
+## SD10〜SD12 adapter-vercel・Preview build契約・runbook同期記録
+
+- 記録日: 2026-07-19
+- 実装ブランチ: `feature/staging-app-deployment-sd10`
+- PR: 未作成（ユーザー指示により保留）
+
+### TDD記録
+
+1. RedではVercel adapter、直接依存lock、Preview公開envの3契約を先行追加した。
+   - Redコマンド: `npm run test:run -- src/build-config.test.ts`
+   - Red結果: 1 file / 3 tests失敗。`adapter-auto`が選択され、`adapter-vercel`依存がなく、`.env.example`に`develop` Preview・公開値・secret禁止の契約がないため意図どおり失敗した。
+   - 初回コマンドの末尾引用符混入と、Vitest変換後の`import.meta.url`による収集失敗は仕様Redではない。対象pathを修正し、build設定testをNode環境へ限定してから上記Redを記録した。
+2. Greenでは`@sveltejs/adapter-vercel` 6.3系を直接devDependencyへ固定し、`svelte.config.js`と`.env.example`を同期した。
+   - Green結果: 1 file / 3 tests成功。
+3. RefactorではPrettier適用後、新規契約testと既存API client testを実行した。
+   - Refactor結果: 8 files / 165 tests成功。
+4. Preview相当buildでは外部接続しない`https://staging-api.example.invalid/api/v1`を使い、`.vercel/output/config.json` version 3、全route、SSR catch-all、公開API URLのclient埋め込みを確認した。
+
+### 実装判断
+
+1. `adapter-auto`のbuild時自動検出に依存せず、公式推奨どおり`adapter-vercel`を明示lockする。adapter optionは既定のNode runtimeを使い、Vercel project未確定の段階でregion・runtime・ISR等を推測設定しない。
+2. `VITE_API_BASE_URL`は既存`frontend/src/lib/api/config.ts`をsingle sourceのまま維持する。Viteの`VITE_` prefixはbrowser公開値であり、secret、token、DB接続情報を禁止する。
+3. staging API URLはVercel Previewかつ`develop` branch scopeで外部設定し、実URLをrepositoryへ保存しない。production値との共用、backend内部URL、commit固有URL、wildcard CORSを禁止する。
+4. config import、package/lock、env templateをunit契約で固定し、実buildのVercel Build OutputでSSR/SPA route graphを確認する。アプリroute・API client本体は変更しない。
+5. Cloudflare/Vercel/Supabase resource、secret、deploy、実DB、migration、実データ操作はSD13以降へ残し、費用・影響・rollbackを提示した直前承認なしに実行しない。
+
+### SD10〜SD12の実際の変更ファイル
+
+| ファイル                                      | 変更種別 | 内容                                                                           |
+| --------------------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `frontend/svelte.config.js`                   | 修正     | `adapter-vercel`を明示使用                                                     |
+| `frontend/package.json` / `package-lock.json` | 修正     | `adapter-auto`を除去し`adapter-vercel` 6.3系とBuild Output依存をlock           |
+| `frontend/src/build-config.test.ts`           | 新規     | adapter・依存lock・Preview公開env・secret非登録の契約test                      |
+| `frontend/.env.example`                       | 修正     | local値、`develop` Preview branch scope、公開値/secret分離を明記               |
+| `docs/09_startup_commands.md`                 | 修正     | frontend test/check/Vercel buildのローカルコマンドを追加                       |
+| `docs/11_deployment.md`                       | 修正     | SD9〜SD12現在地点、Preview env、外部操作の費用・影響・rollback・承認境界を同期 |
+| `docs/05_progress.md`                         | 修正     | SD10〜SD12完了、SD13以降未実施へ同期                                           |
+| `docs/plans/staging-app-deployment/plan.md`   | 修正     | 対象ファイル、判断、TDD・品質・未実施事項を同期                                |
+
+### SD11品質確認
+
+- frontend全test: 45 files / 494 tests成功。
+- `npm run lint`: 成功。
+- `npm run check`: 0 errors / 0 warnings。
+- `npm run format`: 変更対象を整形し、既存ファイルは新規test以外unchanged。
+- Preview相当`npm run build`: 成功。`@sveltejs/adapter-vercel`で`.vercel/output`を生成。
+- backend/schema/migrationは未変更のため、backend全test・Workers test・実DBtestは再実行していない。
+- read-onlyの`npm audit`は既存framework/build依存に7件（low 1 / moderate 3 / high 3）を報告した。adapter-vercel固有packageの指摘ではなく、`npm audit fix`による広範な依存更新はSD10外として実行していない。
+
 ## 対象ファイル一覧
 
 実装時に実態へ合わせて更新する。
@@ -525,6 +574,7 @@ endpointと成功responseの公開仕様、Prisma schema/migration、frontendは
 | `frontend/svelte.config.js`                                | 修正           | `@sveltejs/adapter-vercel`固定                                         |
 | `frontend/package.json` / `package-lock.json`              | 修正           | adapter-vercel追加、build/check script確認                             |
 | `frontend/.env.example`                                    | 修正           | staging Preview branch scopeとAPI URL形式                              |
+| `frontend/src/build-config.test.ts`                        | 新規           | Vercel adapter・依存lock・Preview公開envの設定契約test                 |
 | `frontend/playwright.config.ts`                            | 新規候補       | 明示BASE_URL、production誤指定拒否、staging project                    |
 | `frontend/e2e/account-deletion.spec.ts`                    | 新規候補       | synthetic本人退会・管理者強制退会・再登録回帰                          |
 | `docs/09_startup_commands.md`                              | 修正           | Workers types/test/dev/build、staging deploy前確認コマンド             |
@@ -667,9 +717,9 @@ SD17	結果を記録しT34と本計画の完了可否を判定	plan/progress/dep
 - [x] SD7: SQLite-backed DO/store adapterを実装する（rate limit計画T14）
 - [x] SD8: `MailSender`契約とNode/Workers adapterをTDD実装する
 - [x] SD9: Wrangler staging config・types・build scriptsを実装する
-- [ ] SD10: adapter-vercelとPreview build契約を実装する
-- [ ] SD11: 対象test・lint・format・type/buildを実行する
-- [ ] SD12: staging runbook・progress・実装記録を同期する
+- [x] SD10: adapter-vercelとPreview build契約を実装する
+- [x] SD11: 対象test・lint・format・type/buildを実行する
+- [x] SD12: staging runbook・progress・実装記録を同期する
 - [ ] SD13: Cloudflare staging resource/secretを承認後に準備する
 - [ ] SD14: APIを承認後にstaging deploy・smoke・rollback確認する
 - [ ] SD15: Vercel `develop` Previewを承認後に配備・CORS整合を確認する
