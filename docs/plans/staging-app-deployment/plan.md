@@ -489,7 +489,7 @@ endpointと成功responseの公開仕様、Prisma schema/migration、frontendは
 
 - 記録日: 2026-07-19
 - 実装ブランチ: `feature/staging-app-deployment-sd10`
-- PR: 未作成（ユーザー指示により保留）
+- PR: #117
 
 ### TDD記録
 
