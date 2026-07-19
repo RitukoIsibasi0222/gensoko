@@ -27,7 +27,7 @@ export const API_BASE_URL = parseApiBaseUrl(import.meta.env.VITE_API_BASE_URL, {
  * 本番ビルドでコンソールに出続けないよう import.meta.env.DEV で限定する。
  * 各ファイルで個別に警告を出すのではなく、この設定ファイル読み込み時に一度だけ警告する。
  */
-if (import.meta.env.DEV && !import.meta.env.VITE_API_BASE_URL) {
+if (import.meta.env.DEV && !API_BASE_URL) {
   console.warn(
     '[API Config] VITE_API_BASE_URL が設定されていません。\n' +
       'API リクエストが失敗する可能性があります。\n' +
