@@ -123,8 +123,9 @@ describe("createWorkerHandler", () => {
     );
 
     expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("60");
     await expect(response.json()).resolves.toEqual({
-      error: "Workers adapterはまだ利用できません",
+      error: "一時的に利用できません。しばらく待ってから再試行してください",
     });
   });
 
@@ -169,7 +170,8 @@ describe("createWorkerHandler", () => {
       expect(response.headers.get("Access-Control-Allow-Credentials")).toBe("true");
       expect(response.headers.get("Cache-Control")).toBe("no-store");
       expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
-      expect(body).toContain("Workers runtime設定が不正です");
+      expect(body).toContain("サーバーエラーが発生しました");
+      expect(body).not.toContain("Workers runtime");
       expect(body).not.toContain("sensitive-but-invalid");
       expect(consoleErrorSpy).toHaveBeenCalledWith("Workers runtime設定の検証に失敗しました");
       expect(JSON.stringify(consoleErrorSpy.mock.calls)).not.toContain("sensitive-but-invalid");
@@ -254,7 +256,9 @@ describe("createWorkerHandler", () => {
       expect(response.headers.get("Access-Control-Allow-Credentials")).toBe("true");
       expect(response.headers.get("Cache-Control")).toBe("no-store");
       expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
-      expect(body).toContain("Workers adapterはまだ利用できません");
+      expect(response.headers.get("Retry-After")).toBe("60");
+      expect(body).toContain("一時的に利用できません。しばらく待ってから再試行してください");
+      expect(body).not.toContain("Workers adapter");
       expect(body).not.toContain(sensitiveError);
       expect(consoleErrorSpy).toHaveBeenCalledWith("Workers adapterの初期化に失敗しました");
       expect(JSON.stringify(consoleErrorSpy.mock.calls)).not.toContain(sensitiveError);

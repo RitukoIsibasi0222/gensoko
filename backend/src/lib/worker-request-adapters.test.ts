@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { RateLimitCounter } from "../cloudflare/rate-limit-counter.js";
 import type { AppPrismaClient } from "./prisma-client.js";
 import type { WorkerRuntimeConfig, WorkerRuntimeEnvironment } from "./worker-config.js";
 import { createWorkerRequestAdapters } from "./worker-request-adapters.js";
@@ -6,8 +7,9 @@ import type { MailSender } from "./mail-sender.js";
 import type { RateLimitStore } from "../middleware/rateLimit/store.js";
 
 const RATE_LIMIT_SECRET = "test-rate-limit-secret";
+type WorkerRateLimitNamespace = DurableObjectNamespace<RateLimitCounter>;
 
-function createConfig(): WorkerRuntimeConfig {
+function createConfig(): WorkerRuntimeConfig<WorkerRateLimitNamespace> {
   return {
     target: "staging",
     databaseTarget: "staging",
@@ -20,7 +22,7 @@ function createConfig(): WorkerRuntimeConfig {
       namespace: {
         idFromName: vi.fn(),
         get: vi.fn(),
-      },
+      } as unknown as WorkerRateLimitNamespace,
     },
     mail: {
       apiUrl: "https://mail.example.invalid/send",
@@ -58,7 +60,7 @@ describe("createWorkerRequestAdapters", () => {
       createMailSender,
     });
     const config = createConfig();
-    const environment: WorkerRuntimeEnvironment = {};
+    const environment: WorkerRuntimeEnvironment<WorkerRateLimitNamespace> = {};
 
     const first = await createAdapters({
       request: new Request("https://api.example.invalid/", {

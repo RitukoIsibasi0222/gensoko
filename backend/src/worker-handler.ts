@@ -5,10 +5,17 @@ import {
   type CreateAppDependenciesOptions,
 } from "./lib/app-dependencies.js";
 import { getFrontendUrl } from "./lib/config.js";
+import {
+  INTERNAL_SERVER_ERROR_MESSAGE,
+  SERVICE_UNAVAILABLE_MESSAGE,
+  SERVICE_UNAVAILABLE_RETRY_AFTER_SEC,
+} from "./lib/http-error-messages.js";
 import type { MailSender } from "./lib/mail-sender.js";
 import type { AppPrismaClient } from "./lib/prisma-client.js";
 import {
   getWorkerRuntimeConfig,
+  type DurableObjectNamespaceBinding,
+  type DurableObjectNamespaceBindingConstraint,
   type WorkerDeploymentTarget,
   type WorkerRuntimeConfig,
   type WorkerRuntimeEnvironment,
@@ -17,9 +24,6 @@ import { createCorsMiddleware } from "./middleware/cors/index.js";
 import type { RateLimitDependencies } from "./middleware/rateLimit/store.js";
 import { createSecurityHeadersMiddleware } from "./middleware/security/index.js";
 
-const INVALID_RUNTIME_CONFIG_MESSAGE = "Workers runtime設定が不正です";
-const ADAPTER_UNAVAILABLE_MESSAGE = "Workers adapterはまだ利用できません";
-const INTERNAL_SERVER_ERROR_MESSAGE = "サーバーエラーが発生しました";
 const INVALID_RUNTIME_CONFIG_LOG_MESSAGE = "Workers runtime設定の検証に失敗しました";
 const ADAPTER_INITIALIZATION_LOG_MESSAGE = "Workers adapterの初期化に失敗しました";
 const APPLICATION_INITIALIZATION_LOG_MESSAGE = "Workers applicationの構築に失敗しました";
@@ -35,18 +39,24 @@ export type WorkerRequestAdapters = Readonly<{
   rateLimit: RateLimitDependencies;
 }>;
 
-export type CreateWorkerRequestAdapters = (
+export type CreateWorkerRequestAdapters<
+  TRateLimitNamespace extends DurableObjectNamespaceBindingConstraint =
+    DurableObjectNamespaceBinding,
+> = (
   input: Readonly<{
     request: Request;
-    environment: WorkerRuntimeEnvironment;
+    environment: WorkerRuntimeEnvironment<TRateLimitNamespace>;
     executionContext?: WorkerExecutionContext;
-    config: WorkerRuntimeConfig;
+    config: WorkerRuntimeConfig<TRateLimitNamespace>;
   }>,
 ) => WorkerRequestAdapters | null | Promise<WorkerRequestAdapters | null>;
 
-export type CreateWorkerHandlerOptions = Readonly<{
+export type CreateWorkerHandlerOptions<
+  TRateLimitNamespace extends DurableObjectNamespaceBindingConstraint =
+    DurableObjectNamespaceBinding,
+> = Readonly<{
   expectedTarget: WorkerDeploymentTarget;
-  createRequestAdapters: CreateWorkerRequestAdapters;
+  createRequestAdapters: CreateWorkerRequestAdapters<TRateLimitNamespace>;
   createDependencies?: typeof createAppDependencies;
   createApplication?: typeof createApp;
   createErrorApplication?: CreateWorkerErrorApplication;
@@ -83,11 +93,18 @@ function createWorkerErrorApplication({
     errorApp.use("*", createCorsMiddleware(frontendUrl));
   }
 
-  errorApp.all("*", (context) => context.json({ error: message }, status));
+  errorApp.all("*", (context) => {
+    if (status === 503) {
+      context.header("Retry-After", String(SERVICE_UNAVAILABLE_RETRY_AFTER_SEC));
+    }
+    return context.json({ error: message }, status);
+  });
   return errorApp;
 }
 
-function getSafeWorkerErrorFrontendUrl(environment: WorkerRuntimeEnvironment): string | undefined {
+function getSafeWorkerErrorFrontendUrl<
+  TRateLimitNamespace extends DurableObjectNamespaceBindingConstraint,
+>(environment: WorkerRuntimeEnvironment<TRateLimitNamespace>): string | undefined {
   try {
     const frontendUrl = getFrontendUrl({
       isProduction: true,
@@ -101,13 +118,16 @@ function getSafeWorkerErrorFrontendUrl(environment: WorkerRuntimeEnvironment): s
   }
 }
 
-export function createWorkerHandler({
+export function createWorkerHandler<
+  TRateLimitNamespace extends DurableObjectNamespaceBindingConstraint =
+    DurableObjectNamespaceBinding,
+>({
   expectedTarget,
   createRequestAdapters,
   createDependencies = createAppDependencies,
   createApplication = createApp,
   createErrorApplication = createWorkerErrorApplication,
-}: CreateWorkerHandlerOptions) {
+}: CreateWorkerHandlerOptions<TRateLimitNamespace>) {
   // 同じfail-closed応答でerror appの再構築を避ける。
   // 固定status/messageと検証済みoriginだけをcacheし、request・env・adapterは保持しない。
   const errorApplications = new Map<string, WorkerErrorApplication>();
@@ -132,10 +152,10 @@ export function createWorkerHandler({
   return {
     async fetch(
       request: Request,
-      environment: WorkerRuntimeEnvironment,
+      environment: WorkerRuntimeEnvironment<TRateLimitNamespace>,
       executionContext?: WorkerExecutionContext,
     ): Promise<Response> {
-      let config: WorkerRuntimeConfig;
+      let config: WorkerRuntimeConfig<TRateLimitNamespace>;
       try {
         config = getWorkerRuntimeConfig({ expectedTarget, environment });
       } catch {
@@ -143,7 +163,7 @@ export function createWorkerHandler({
         console.error(INVALID_RUNTIME_CONFIG_LOG_MESSAGE);
         return jsonError({
           request,
-          message: INVALID_RUNTIME_CONFIG_MESSAGE,
+          message: INTERNAL_SERVER_ERROR_MESSAGE,
           status: 500,
           frontendUrl,
         });
@@ -161,7 +181,7 @@ export function createWorkerHandler({
         console.error(ADAPTER_INITIALIZATION_LOG_MESSAGE);
         return jsonError({
           request,
-          message: ADAPTER_UNAVAILABLE_MESSAGE,
+          message: SERVICE_UNAVAILABLE_MESSAGE,
           status: 503,
           frontendUrl: config.frontendUrl,
         });
@@ -170,7 +190,7 @@ export function createWorkerHandler({
       if (!adapters) {
         return jsonError({
           request,
-          message: ADAPTER_UNAVAILABLE_MESSAGE,
+          message: SERVICE_UNAVAILABLE_MESSAGE,
           status: 503,
           frontendUrl: config.frontendUrl,
         });

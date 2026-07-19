@@ -83,6 +83,10 @@ describe("Workers staging build設定", () => {
     expect(workersTypeScriptConfig.include).toEqual(
       expect.arrayContaining(["src/worker.ts", "src/lib/worker-request-adapters.ts"]),
     );
+    expect(readFileSync("src/worker.ts", "utf8")).toMatch(/Required<\s*WorkerRuntimeEnvironment/);
+    expect(readFileSync("src/lib/worker-request-adapters.ts", "utf8")).not.toContain(
+      "as unknown as DurableObjectNamespace",
+    );
   });
 
   it("生成型へstagingの文字列設定・resource binding・secret名を含める", () => {

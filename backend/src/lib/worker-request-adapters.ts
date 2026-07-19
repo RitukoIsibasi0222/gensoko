@@ -11,6 +11,8 @@ import { createDurableObjectRateLimitStore } from "../middleware/rateLimit/durab
 import { resolveClientIp } from "../middleware/rateLimit/key.js";
 import type { RateLimitStore } from "../middleware/rateLimit/store.js";
 
+type WorkerRateLimitNamespace = DurableObjectNamespace<RateLimitCounter>;
+
 export type WorkerRequestAdapterFactories = Readonly<{
   createPrismaClient(connectionString: string): AppPrismaClient;
   createMailSender(config: Pick<WorkerRuntimeConfig, "target" | "mail">): MailSender;
@@ -24,13 +26,11 @@ export function createWorkerRequestAdapters({
   createPrismaClient = createDefaultPrismaClient,
   createMailSender = createFetchMailSender,
   createRateLimitStore = createDurableObjectRateLimitStore,
-}: Partial<WorkerRequestAdapterFactories> = {}): CreateWorkerRequestAdapters {
+}: Partial<WorkerRequestAdapterFactories> = {}): CreateWorkerRequestAdapters<WorkerRateLimitNamespace> {
   return ({ request, config }) => {
     const prisma = createPrismaClient(config.hyperdrive.connectionString);
     const mailSender = createMailSender(config);
-    const rateLimitStore = createRateLimitStore(
-      config.rateLimit.namespace as unknown as DurableObjectNamespace<RateLimitCounter>,
-    );
+    const rateLimitStore = createRateLimitStore(config.rateLimit.namespace);
 
     return {
       prisma,

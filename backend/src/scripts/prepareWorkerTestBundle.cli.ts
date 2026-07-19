@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { assertWorkerBundleInputs } from "../lib/worker-bundle-contract.js";
+import { readWorkerBundleInputPaths } from "../lib/worker-bundle-metadata.js";
 import { runWranglerDryRun, WRANGLER_LOCAL_BUILD_ERROR_MESSAGE } from "../lib/wrangler-dry-run.js";
 
 const TEST_CONFIG_PATH = "wrangler.test.jsonc";
@@ -10,8 +11,6 @@ const WORKER_TEST_PREPARATION_ERROR_MESSAGE = "Workers test bundleの準備に�
 const WORKER_TEST_SOURCE_CONFIG_ERROR_MESSAGE = "Workers test元設定の読み込みに失敗しました";
 const WORKER_TEST_METADATA_ERROR_MESSAGE = "Workers test bundle情報の検証に失敗しました";
 const WORKER_TEST_CONFIG_WRITE_ERROR_MESSAGE = "Workers test生成設定の保存に失敗しました";
-
-type BundleMetadata = Readonly<{ inputs?: Record<string, unknown> }>;
 
 async function main(): Promise<void> {
   let sourceConfig: string;
@@ -29,16 +28,13 @@ async function main(): Promise<void> {
     outputDirectory: TEST_BUILD_DIRECTORY,
   });
 
-  let metadata: BundleMetadata;
+  let inputPaths: readonly string[];
   try {
-    metadata = JSON.parse(await readFile(TEST_BUILD_METADATA_PATH, "utf8")) as BundleMetadata;
+    inputPaths = await readWorkerBundleInputPaths(TEST_BUILD_METADATA_PATH);
   } catch {
     throw new Error(WORKER_TEST_METADATA_ERROR_MESSAGE);
   }
-  if (!metadata.inputs || typeof metadata.inputs !== "object") {
-    throw new Error(WORKER_TEST_METADATA_ERROR_MESSAGE);
-  }
-  assertWorkerBundleInputs(Object.keys(metadata.inputs));
+  assertWorkerBundleInputs(inputPaths);
 
   try {
     await writeFile(TEST_BUILD_CONFIG_PATH, generatedConfig, "utf8");

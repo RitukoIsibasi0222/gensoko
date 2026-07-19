@@ -12,12 +12,20 @@ export type HyperdriveBinding = Readonly<{
   connectionString: string;
 }>;
 
-export type DurableObjectNamespaceBinding = Readonly<{
-  idFromName(name: string): unknown;
-  get(id: unknown): unknown;
+export type DurableObjectNamespaceBinding<TObjectId = unknown, TObjectStub = unknown> = Readonly<{
+  idFromName(name: string): TObjectId;
+  get(id: TObjectId): TObjectStub;
 }>;
 
-export type WorkerRuntimeEnvironment = Readonly<{
+export type DurableObjectNamespaceBindingConstraint = Readonly<{
+  idFromName(name: string): unknown;
+  get: (...args: never[]) => unknown;
+}>;
+
+export type WorkerRuntimeEnvironment<
+  TRateLimitNamespace extends DurableObjectNamespaceBindingConstraint =
+    DurableObjectNamespaceBinding,
+> = Readonly<{
   DEPLOYMENT_ENVIRONMENT?: string;
   DATABASE_TARGET?: string;
   NODE_ENV?: string;
@@ -31,15 +39,21 @@ export type WorkerRuntimeEnvironment = Readonly<{
   MAIL_ALLOWED_RECIPIENTS?: string;
   MAIL_TIMEOUT_MS?: string;
   HYPERDRIVE?: HyperdriveBinding;
-  RATE_LIMIT_COUNTER?: DurableObjectNamespaceBinding;
+  RATE_LIMIT_COUNTER?: TRateLimitNamespace;
 }>;
 
-export type WorkerRuntimeConfigOptions = Readonly<{
+export type WorkerRuntimeConfigOptions<
+  TRateLimitNamespace extends DurableObjectNamespaceBindingConstraint =
+    DurableObjectNamespaceBinding,
+> = Readonly<{
   expectedTarget: WorkerDeploymentTarget;
-  environment: WorkerRuntimeEnvironment;
+  environment: WorkerRuntimeEnvironment<TRateLimitNamespace>;
 }>;
 
-export type WorkerRuntimeConfig = Readonly<{
+export type WorkerRuntimeConfig<
+  TRateLimitNamespace extends DurableObjectNamespaceBindingConstraint =
+    DurableObjectNamespaceBinding,
+> = Readonly<{
   target: WorkerDeploymentTarget;
   databaseTarget: WorkerDeploymentTarget;
   frontendUrl: string;
@@ -47,7 +61,7 @@ export type WorkerRuntimeConfig = Readonly<{
   rateLimit: Readonly<{
     store: "durable-object";
     keySecret: string;
-    namespace: DurableObjectNamespaceBinding;
+    namespace: TRateLimitNamespace;
   }>;
   hyperdrive: HyperdriveBinding;
   mail: Readonly<{
@@ -137,9 +151,9 @@ function validateHyperdriveBinding(binding: HyperdriveBinding | undefined): Hype
   return binding;
 }
 
-function validateDurableObjectNamespaceBinding(
-  binding: DurableObjectNamespaceBinding | undefined,
-): DurableObjectNamespaceBinding {
+function validateDurableObjectNamespaceBinding<
+  TRateLimitNamespace extends DurableObjectNamespaceBindingConstraint,
+>(binding: TRateLimitNamespace | undefined): TRateLimitNamespace {
   if (!binding || typeof binding.idFromName !== "function" || typeof binding.get !== "function") {
     rejectInvalidWorkerRuntimeConfig();
   }
@@ -150,10 +164,13 @@ function validateDurableObjectNamespaceBinding(
 /**
  * Workersの文字列設定とresource bindingをrequest処理前に検証する。
  */
-export function getWorkerRuntimeConfig({
+export function getWorkerRuntimeConfig<
+  TRateLimitNamespace extends DurableObjectNamespaceBindingConstraint =
+    DurableObjectNamespaceBinding,
+>({
   expectedTarget,
   environment,
-}: WorkerRuntimeConfigOptions): WorkerRuntimeConfig {
+}: WorkerRuntimeConfigOptions<TRateLimitNamespace>): WorkerRuntimeConfig<TRateLimitNamespace> {
   try {
     const target = requireString(environment.DEPLOYMENT_ENVIRONMENT);
     const databaseTarget = requireString(environment.DATABASE_TARGET);
