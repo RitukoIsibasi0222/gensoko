@@ -1,4 +1,5 @@
 const SECRET_IDENTIFIERS = ['DATABASE_URL', 'JWT_SECRET', 'RATE_LIMIT_KEY_SECRET', 'MAIL_API_KEY'];
+const BUILD_FAILURE_PREFIX = 'Vercel Preview build契約の検証に失敗しました';
 
 /**
  * @param {unknown} value
@@ -6,6 +7,17 @@ const SECRET_IDENTIFIERS = ['DATABASE_URL', 'JWT_SECRET', 'RATE_LIMIT_KEY_SECRET
  */
 function isRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * stack traceや不定形のthrow値を露出せず、検証エラーのmessageだけを返す。
+ *
+ * @param {unknown} error
+ * @returns {string}
+ */
+export function formatVercelBuildFailure(error) {
+  const message = error instanceof Error && error.message ? error.message : '不明なエラー';
+  return `${BUILD_FAILURE_PREFIX}: ${message}`;
 }
 
 /**

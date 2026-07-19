@@ -5,11 +5,24 @@ import { describe, expect, it } from 'vitest';
 import {
   assertExpectedApiUrl,
   assertNoFrontendSecrets,
+  formatVercelBuildFailure,
   validateFunctionConfigs,
   validateVercelOutputConfig
 } from '../scripts/vercel-build-contract.mjs';
 
 describe('Vercel Build Output契約', () => {
+  it('検証失敗時はstack traceを含めず安全なmessageだけを出力する', () => {
+    const error = new Error('SSR catch-all routeが生成されていません');
+
+    expect(formatVercelBuildFailure(error)).toBe(
+      'Vercel Preview build契約の検証に失敗しました: SSR catch-all routeが生成されていません'
+    );
+    expect(formatVercelBuildFailure(error)).not.toContain(error.stack);
+    expect(formatVercelBuildFailure('JWT_SECRET=secret-value')).toBe(
+      'Vercel Preview build契約の検証に失敗しました: 不明なエラー'
+    );
+  });
+
   it('version 3とSSR catch-all routeを必須にする', () => {
     expect(() =>
       validateVercelOutputConfig({

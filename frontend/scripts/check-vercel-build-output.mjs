@@ -6,6 +6,7 @@ import {
   assertExpectedApiUrl,
   assertNoFrontendSecrets,
   expectedVercelRuntime,
+  formatVercelBuildFailure,
   validateFunctionConfigs,
   validateVercelOutputConfig
 } from './vercel-build-contract.mjs';
@@ -52,7 +53,7 @@ async function checkVercelBuildOutput() {
 try {
   await checkVercelBuildOutput();
   console.log('Vercel Preview build契約を確認しました');
-} catch {
-  console.error('Vercel Preview build契約の検証に失敗しました');
+} catch (error) {
+  console.error(formatVercelBuildFailure(error));
   process.exitCode = 1;
 }
