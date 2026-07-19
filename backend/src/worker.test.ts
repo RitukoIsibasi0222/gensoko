@@ -5,7 +5,7 @@ import {
   createWorkerHandler,
   type CreateWorkerRequestAdapters,
   type WorkerRequestAdapters,
-} from "./worker.js";
+} from "./worker-handler.js";
 
 const VALID_JWT_SECRET = "j".repeat(64);
 const VALID_RATE_LIMIT_SECRET = Buffer.from("r".repeat(32)).toString("base64");

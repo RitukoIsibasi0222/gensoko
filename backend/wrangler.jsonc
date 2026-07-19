@@ -1,0 +1,37 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-07-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "env": {
+    "staging": {
+      "name": "gensoko-api-staging",
+      "vars": {
+        "DEPLOYMENT_ENVIRONMENT": "staging",
+        "DATABASE_TARGET": "staging",
+        "NODE_ENV": "production",
+        "RATE_LIMIT_STORE": "durable-object",
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "RATE_LIMIT_COUNTER",
+            "class_name": "RateLimitCounter",
+          },
+        ],
+      },
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE",
+          "id": "00000000000000000000000000000000",
+        },
+      ],
+      "migrations": [
+        {
+          "tag": "v1",
+          "new_sqlite_classes": ["RateLimitCounter"],
+        },
+      ],
+    },
+  },
+}

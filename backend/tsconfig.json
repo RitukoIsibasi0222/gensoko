@@ -15,6 +15,9 @@
     "node_modules",
     "dist",
     "src/cloudflare/**",
+    "src/worker.ts",
+    "src/lib/worker-request-adapters.ts",
+    "src/lib/worker-request-adapters.test.ts",
     "src/middleware/rateLimit/durable-object-store.ts"
   ]
 }

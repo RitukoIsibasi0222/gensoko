@@ -96,7 +96,9 @@ export type StagingAccountDeletionPerformanceConfig = Readonly<{
  * Node.js用Prisma singletonへ渡す接続URLを検証して返す。
  * Workersはrequest bindingから別途接続URLを注入する。
  */
-export function getDatabaseUrl({ environment = process.env }: DatabaseUrlOptions = {}): string {
+export function getDatabaseUrl({
+  environment = { DATABASE_URL: process.env.DATABASE_URL },
+}: DatabaseUrlOptions = {}): string {
   const databaseUrl = environment.DATABASE_URL?.trim();
 
   if (!databaseUrl) {
@@ -267,7 +269,10 @@ function parseAuditLogCleanupEnabled(value: string | undefined): boolean {
  * 保持期間が不明な状態で削除を始めず、cleanup未設定時は安全側で無効化する。
  */
 export function getAuditLogRetentionConfig({
-  environment = process.env,
+  environment = {
+    AUDIT_LOG_RETENTION_DAYS: process.env.AUDIT_LOG_RETENTION_DAYS,
+    AUDIT_LOG_CLEANUP_ENABLED: process.env.AUDIT_LOG_CLEANUP_ENABLED,
+  },
 }: AuditLogRetentionConfigOptions = {}): AuditLogRetentionConfig {
   return {
     retentionDays: parseAuditLogRetentionDays(environment.AUDIT_LOG_RETENTION_DAYS),

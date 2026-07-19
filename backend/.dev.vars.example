@@ -1,0 +1,9 @@
+# `npm run workers:types`専用の型生成placeholder。実secretや実接続先を記載しない。
+FRONTEND_URL="https://staging.example.invalid"
+JWT_SECRET="replace-with-staging-jwt-secret"
+RATE_LIMIT_KEY_SECRET="replace-with-staging-rate-limit-secret"
+MAIL_API_URL="https://mail-api.example.invalid/send"
+MAIL_API_KEY="replace-with-staging-mail-api-key"
+MAIL_FROM="noreply@staging.example.invalid"
+MAIL_ALLOWED_RECIPIENTS="synthetic-user@example.invalid"
+MAIL_TIMEOUT_MS="5000"
