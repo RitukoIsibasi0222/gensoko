@@ -1,11 +1,27 @@
 import { readFileSync } from "node:fs";
+import { parseConfigFileTextToJson } from "typescript";
 import { describe, expect, it } from "vitest";
 
 type JsonObject = Record<string, unknown>;
 
+function parseJsonObject(relativePath: string, jsonc: string): JsonObject {
+  const { config, error } = parseConfigFileTextToJson(relativePath, jsonc);
+  const parsedConfig: unknown = config;
+  if (
+    error ||
+    typeof parsedConfig !== "object" ||
+    parsedConfig === null ||
+    Array.isArray(parsedConfig)
+  ) {
+    throw new Error(`${relativePath}のJSONC設定が不正です`);
+  }
+
+  return parsedConfig as JsonObject;
+}
+
 function readJson(relativePath: string): JsonObject {
   const jsonc = readFileSync(relativePath, "utf8");
-  return JSON.parse(jsonc.replace(/,\s*([}\]])/g, "$1")) as JsonObject;
+  return parseJsonObject(relativePath, jsonc);
 }
 
 function getObject(value: unknown): JsonObject {
@@ -15,6 +31,22 @@ function getObject(value: unknown): JsonObject {
 }
 
 describe("Workers staging build設定", () => {
+  it("comment・trailing comma・文字列内のcommaを含むJSONCを安全に解釈する", () => {
+    expect(
+      parseJsonObject(
+        "inline.jsonc",
+        `{
+          // JSONC comment
+          "pattern": ",}",
+          "items": [1,],
+        }`,
+      ),
+    ).toEqual({
+      pattern: ",}",
+      items: [1],
+    });
+  });
+
   it("compatibility date・nodejs_compat・staging専用bindingを固定する", () => {
     const config = readJson("wrangler.jsonc");
     const staging = getObject(getObject(config.env).staging);
