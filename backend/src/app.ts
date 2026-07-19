@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import type { AppDependencies } from "./lib/app-dependencies.js";
+import { INTERNAL_SERVER_ERROR_MESSAGE } from "./lib/http-error-messages.js";
 import { adminMiddleware } from "./middleware/admin/index.js";
 import { createCorsMiddleware } from "./middleware/cors/index.js";
 import { createIpBucketResolver, getRateLimitStore } from "./middleware/rateLimit/buckets.js";
@@ -24,7 +25,6 @@ export type CreateAppOptions = {
 };
 
 const NOT_FOUND_MESSAGE = "エンドポイントが見つかりません";
-const INTERNAL_SERVER_ERROR_MESSAGE = "サーバーエラーが発生しました";
 const UNHANDLED_ERROR_LOG_MESSAGE = "未捕捉のサーバーエラーが発生しました";
 
 export const createApp = ({

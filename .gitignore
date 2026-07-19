@@ -10,6 +10,7 @@ frontend/.env
 # ─────────────────────────────────────
 backend/node_modules/
 backend/dist/
+backend/.wrangler/
 frontend/node_modules/
 frontend/.svelte-kit/
 frontend/build/

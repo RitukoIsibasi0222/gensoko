@@ -8,7 +8,7 @@ if (process.env.CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV !== "false") {
 export default defineConfig({
   plugins: [
     cloudflareTest({
-      wrangler: { configPath: "./wrangler.test.jsonc" },
+      wrangler: { configPath: "./.wrangler/test-build/wrangler.jsonc" },
     }),
   ],
   test: {

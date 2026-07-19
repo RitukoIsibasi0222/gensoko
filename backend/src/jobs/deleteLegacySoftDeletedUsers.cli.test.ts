@@ -80,7 +80,8 @@ function getConsoleOutput(spy: ReturnType<typeof vi.spyOn>): string {
 }
 
 async function importCli(): Promise<void> {
-  await import("./deleteLegacySoftDeletedUsers.cli.js");
+  const { cleanupCliExecution } = await import("./deleteLegacySoftDeletedUsers.cli.js");
+  await cleanupCliExecution;
 }
 
 describe("deleteLegacySoftDeletedUsers CLI", () => {

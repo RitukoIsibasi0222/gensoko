@@ -20,6 +20,7 @@ describe("backend pull request quality workflow", () => {
     expect(workflow).toContain("npm run lint");
     expect(workflow).toContain("npm run format:check");
     expect(workflow).toContain("npm run build");
+    expect(workflow).toContain("npm run workers:build");
     expect(workflow).toContain("npx prisma validate");
   });
 
