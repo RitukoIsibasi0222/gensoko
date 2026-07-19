@@ -103,6 +103,32 @@ npm run format:check
 npm run format
 ```
 
+### フロントエンド開発・Vercel buildコマンド
+
+```bash
+cd ~/labs/Gensoko/frontend
+
+# 全テストを1回実行
+npm run test:run
+
+# Vercel adapter・API URL・Build Output・CI契約testだけを実行
+npm run test:run -- src/build-config.test.ts src/lib/api/base-url.test.ts src/vercel-build-output.test.ts src/frontend-pr-quality.test.ts
+
+# Lint・Svelte/TypeScript check・非破壊フォーマット確認
+npm run lint
+npm run check
+npm run format:check
+
+# 外部接続しないfixtureでPreview buildと成果物契約を確認
+env \
+  VERCEL_ENV=preview \
+  VERCEL_GIT_COMMIT_REF=develop \
+  VITE_API_BASE_URL=https://staging-api.example.invalid/api/v1 \
+  npm run build:preview
+```
+
+`VITE_API_BASE_URL`は`/api/v1`まで含む公開URLで、Vite build時にbrowser bundleへ埋め込まれる。buildでは未設定・空白・credential・query・fragment・契約外pathを拒否し、Vercel Preview/productionではHTTPSを必須にする。secret、token、DB接続文字列を設定しない。Vercel stagingではPreviewかつ`develop` branch scopeだけにstaging API URLを登録し、productionと値を共用しない。実URLの登録やPreview deployは[deployment runbook](11_deployment.md)の承認境界に従う。
+
 ---
 
 ## 5. 手動バッチ実行

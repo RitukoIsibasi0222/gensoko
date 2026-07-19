@@ -23,13 +23,13 @@
                          └──────────────────────┘
 ```
 
-| サービス               | 役割                   | 費用                                   |
-| ---------------------- | ---------------------- | -------------------------------------- |
-| **Vercel**             | SvelteKitの画面を配信  | **完全無料**（個人利用）               |
-| **Cloudflare Workers** | Hono APIサーバー       | **完全無料**（日10万リクエストまで）   |
-| **Supabase**           | PostgreSQLデータベース | **無料枠あり**（500MB・2プロジェクト） |
+| サービス               | 役割                   | 費用の扱い                                 |
+| ---------------------- | ---------------------- | ------------------------------------------ |
+| **Vercel**             | SvelteKitの画面を配信  | 無料枠候補。SD15直前に現行plan・上限を確認 |
+| **Cloudflare Workers** | Hono APIサーバー       | 無料枠候補。SD13直前に現行plan・上限を確認 |
+| **Supabase**           | PostgreSQLデータベース | 無料枠候補。実接続前に現行plan・容量を確認 |
 
-> ✅ スリープなし。全サービスGitHubと連携して自動デプロイ。
+料金・quota・スリープ・自動deploy条件は変更され得るため、この表を費用承認の根拠にしない。2026-07-19時点でVercel/Cloudflareのproject接続・自動deployは未実施であり、外部操作直前の確認結果を正本とする。
 
 ---
 
@@ -37,9 +37,9 @@
 
 ### Vercel（フロントエンド）
 
-- SvelteKitと作った会社が同じため相性が最高
-- GitHubにpushするだけで数十秒で自動デプロイ
-- 独自ドメインも無料で設定可能
+- SvelteKit公式adapterでBuild Outputを生成できる
+- project接続後はGit連携deployを構成できる
+- plan・domain・build/Function利用量はSD15直前に確認する
 
 ### Cloudflare Workers（バックエンド API）
 
@@ -48,7 +48,7 @@
 - Honoは Cloudflare Workers での動作に最適化されている
 
 > ⚠️ **注意点**: Cloudflare Workers は Node.js の一部APIが使えません。
-> Prisma は `@prisma/adapter-cloudflare` 経由で接続します（後で設定します）。
+> Prismaは`@prisma/adapter-pg`とcache無効Hyperdriveを使い、requestごとにClientを構築します。
 > 開発中は Docker 上の通常の Node.js で動かして、本番だけ Workers にデプロイします。
 
 ### Supabase（データベース）
@@ -104,32 +104,97 @@ type CreateAppOptions = {
 
 `NODE_ENV=production` では `FRONTEND_URL` を必須とし、未設定・空文字ならapp構築時にエラーで停止する。HTTP(S)のorigin形式だけを許可し、path、query、hash、認証情報付きURLは拒否する。localhostへのfallbackはdevelopment/testだけで使用する。
 
+## staging frontend/API配備runbook
+
+### コード基盤の現在地点
+
+2026-07-19時点で、APIはSD9まで、frontendはSD10〜SD12までのローカル配備契約を実装済みである。
+
+- API: Workers専用entrypoint、request-scoped Prisma/mail/DO adapter、`wrangler.jsonc` staging設定、生成binding型、dry-run、bundle contract、production相当Workers runtime test
+- frontend: `@sveltejs/adapter-vercel`、Node.js 22、公開API URL fail-fast、Vercel Build Output/secret contract、frontend PR CIを固定
+- 未実施: Cloudflare resource/secret、API deploy、Vercel project接続・Preview deploy、Supabase/実DB接続、migration、実データ確認
+
+コード基盤のローカル再確認は外部serviceへ接続せず、次で行う。
+
+```bash
+cd ~/labs/Gensoko/backend
+npm ci
+npm run test -- --run
+npm run test:workers
+npm run workers:build
+npm run lint
+npm run format:check
+
+cd ~/labs/Gensoko/frontend
+npm ci
+npm run test:run
+npm run lint
+npm run check
+npm run format:check
+npm audit --audit-level=moderate
+env \
+  VERCEL_ENV=preview \
+  VERCEL_GIT_COMMIT_REF=develop \
+  VITE_API_BASE_URL=https://staging-api.example.invalid/api/v1 \
+  npm run build:preview
+```
+
+`.invalid`は外部接続しないbuild fixtureであり、実staging URLではない。`build:preview`はNode.js 22 Function、Build Output version 3、SSR catch-all、fixture公開API URLの埋め込み、frontend成果物へのDB/JWT/rate limit/mail secret識別子の非混入を自動検証する。API URLの未設定・空白・形式不正、PreviewでのHTTP URLはbuild前に拒否する。
+
+### Preview環境変数契約
+
+| 値                                     | scope                                 | 公開性           | 契約                                                            |
+| -------------------------------------- | ------------------------------------- | ---------------- | --------------------------------------------------------------- |
+| `VITE_API_BASE_URL`                    | Vercel Preview + `develop` branchのみ | browserへ公開    | staging APIのHTTPS origin + `/api/v1`。production値と共用しない |
+| `VERCEL_ENV` / `VERCEL_GIT_COMMIT_REF` | Vercel system                         | server/build情報 | application secretとして扱わず、clientへ転送しない              |
+| DB/JWT/rate limit/mail credential      | frontendへ登録しない                  | secret           | `VITE_` prefix禁止。Cloudflare staging側だけで管理する          |
+
+branch scoped値は新しいdeploymentのbuild時に反映される。設定変更後は既存deploymentを合格扱いにせず、承認後に新しい`develop` Previewを作成して成果物を確認する。固定branch URLだけをAPIの`FRONTEND_URL`に使い、commit URLやwildcard CORSは使わない。
+
+### SD13以降の承認境界
+
+次の操作はローカルコードPRへ含めない。実行直前に対象account/project、現在の料金planと見積り、影響、rollbackを提示し、個別承認を得る。
+
+| task | 外部操作                                                                     | 費用・影響の確認                                                                  | rollback                                                                 |
+| ---- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| SD13 | Cloudflare staging Worker、Hyperdrive、SQLite-backed DO、binding、secret準備 | account/plan、resource数、Hyperdrive・DO・Workers利用料金、staging DB接続先を確認 | 新規resource/bindingを削除または旧設定へ戻す。secret値は表示・記録しない |
+| SD14 | review済みSHAのAPI staging deploy・smoke                                     | 公開staging API、request/DB/mail利用量、synthetic以外へ到達しないことを確認       | 直前Worker versionへrollbackし、必要ならrouteを外す                      |
+| SD15 | Vercel project接続、`develop` Preview、branch scoped env、CORS再deploy       | plan、公開Preview URL、build/Function利用量、アクセス保護可否を確認               | 直前deploymentへ戻し、branch scoped envと不要deploymentを削除する        |
+| SD16 | T34 synthetic API/UI/Playwright                                              | staging synthetic dataだけを変更すること、mail宛先制限、実行時間を確認            | fixture cleanupを実行し、異常時はAPI/UIを直前versionへ戻す               |
+
+Supabase/実DB接続、migration、legacy cleanup、production deploy、実データ確認は上表の承認にも含まれず、それぞれ別の直前承認を必要とする。
+
 ---
 
 ## Vercel へのデプロイ手順
 
-### 1. Vercel アカウント作成
+以下はSD15の直前承認後だけ実行する。承認前にaccount作成、GitHub連携、project import、環境変数登録、Deployを行わない。
 
-1. https://vercel.com にアクセス
-2. 「Sign Up」→「Continue with GitHub」
-3. GitHubアカウントと連携
+### 1. 承認内容を再確認
 
-### 2. プロジェクトをインポート
+1. 対象account・organization・repository・料金plan・見積りを確認する。
+2. staging APIの承認済みHTTPS URL、公開範囲、rollback先を確認する。
+3. project作成・GitHub連携・初回deploymentの影響を提示し、SD15の直前承認を得る。
+
+### 2. projectとbuild設定を準備
 
 1. Vercelダッシュボードで「Add New Project」
 2. GitHubリポジトリ `gensoko` を選択
 3. 設定:
    - **Framework Preset**: SvelteKit（自動検出）
    - **Root Directory**: `frontend`
-4. 「Deploy」をクリック
+   - **Node.js**: repositoryの`engines.node=22.x`と一致
+4. API URL未設定ではbuildがfail-fastすることを前提に、次の環境変数設定まで合格扱いにしない。
 
-### 3. 環境変数を設定
+### 3. branch scoped環境変数を設定してDeploy
 
 Vercelダッシュボード → Settings → Environment Variables：
 
 ```
-VITE_API_BASE_URL = https://gensoko-api.あなたのユーザー名.workers.dev/api/v1
+VITE_API_BASE_URL = https://<approved-staging-api-origin>/api/v1
 ```
+
+stagingではEnvironmentをPreview、Git Branchを`develop`へ限定する。値はbrowserへ公開されるためsecretを設定しない。scopeと値を再確認後にだけDeployし、生成deploymentをCORSやsmokeの合格対象とする。設定前に生成されたdeploymentがある場合は合格扱いにせず、設定後に新しいdeploymentを作成する。
 
 ---
 
@@ -142,20 +207,13 @@ VITE_API_BASE_URL = https://gensoko-api.あなたのユーザー名.workers.dev/
 
 ### 2. Workers基盤の実装状況
 
-2026-07-12時点で、Wrangler設定、Workers専用entrypoint、Cloudflare Prisma adapter、SQLite-backed Durable Object、Workers runtime testは未実装である。フェーズ12でこれらを同じ設計として追加してからデプロイ手順を確定する。
+2026-07-19時点で、SD9までのWorkersコード基盤は実装済みである。`backend/wrangler.jsonc`、Workers専用entrypoint、request-scoped Hyperdrive Prisma adapter、HTTPS mail adapter、SQLite-backed Durable Object、生成binding型、dry-run・bundle contract、production相当runtime testを持つ。
 
 `backend/src/index.ts`はNode.js開発用entrypointであり、`@hono/node-server`とmemory storeを使用する。`wrangler`の`main`へ指定してはいけない。またproductionの`RATE_LIMIT_STORE=durable-object`をNode entrypointへ渡すと、memory storeへの危険なfallbackを防ぐため起動を拒否する。
 
-フェーズ12では最低限、次を先に実装・レビューする。
+`npm run workers:build`は生成型差分、Workers typecheck、staging dry-run、bundle contractを外部resourceなしで検証する。production相当runtime testは別の`npm run test:workers`で実行する。configのHyperdrive IDは全ゼロplaceholderであり、実resource IDではない。
 
-1. Workers専用entrypointとCloudflare Prisma adapter
-2. `wrangler.toml`または`wrangler.jsonc`のstaging/production設定
-3. SQLite-backed Durable Object namespace、migration、binding
-4. Workers runtime用Vitest poolと並行性・永続化・alarm test
-5. `DATABASE_URL`、`JWT_SECRET`、`RATE_LIMIT_KEY_SECRET`のWrangler Secret登録
-6. stagingでの実HTTP確認後にproduction deploy
-
-実行可能な`wrangler dev`、test、deployコマンドは、採用した設定ファイルとpackage scriptがリポジトリへ追加されるまで本番手順として扱わない。
+Cloudflare account/resource、Hyperdrive origin、DO namespace、secret、route/domainは未作成・未登録である。`wrangler deploy --env staging`を含む外部操作はSD13/SD14として分離し、上記staging runbookの直前承認なしに実行しない。production deployは本計画の対象外である。
 
 ---
 
@@ -172,7 +230,7 @@ VITE_API_BASE_URL = https://gensoko-api.あなたのユーザー名.workers.dev/
 5. 作成完了後、`Connect`のPrisma設定からSession pooler（port 5432）のURIを取得する
 6. GitHub Environmentごとの`DATABASE_URL`へ登録し、repository共通Secretには登録しない
 
-Cloudflare Workers実行時の接続URLは、Actionsとは分離して`wrangler secret put DATABASE_URL`で設定する。
+Cloudflare Workersは`DATABASE_URL`を直接受けず、staging専用Hyperdrive bindingの`connectionString`をrequest境界で使う。Hyperdrive origin credentialはCloudflare resource側で管理し、repository、frontend、Worker変数へ複製しない。resource作成・接続先設定はSD13の直前承認後だけ実行する。
 
 ---
 
