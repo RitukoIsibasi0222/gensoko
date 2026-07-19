@@ -406,7 +406,7 @@ Prisma schema/migrationと公開APIは変更していない。Cloudflare/Vercel/
 
 - 記録日: 2026-07-19
 - 実装ブランチ: `feature/staging-app-deployment-sd9`
-- PR: 未作成（local commitまで）
+- PR: #116
 
 ### TDD記録
 
@@ -432,6 +432,13 @@ Prisma schema/migrationと公開APIは変更していない。Cloudflare/Vercel/
    - 対象・直接影響test: 8 files / 55 tests成功。
    - production相当Workers runtime test: 2 files / 15 tests成功。
    - Node全test: 93 files / 986 tests成功。外部DB専用4 files / 10 testsは既定どおりskipした。
+
+### PR #116 review・CI改善記録
+
+1. `DurableObjectNamespaceBindingConstraint.get`の`never[]`は、具体的なDurable Object ID引数型をgenericへ保持しつつcallableであることだけを制約する意図的な型と確認した。constraint経由で`get`を呼ばないことをコメントへ明記し、実`DurableObjectNamespace<RateLimitCounter>`を使うWorkers typecheck成功を再確認した。
+2. PR作成後も残っていた`PR: 未作成`を`PR: #116`へ修正した。
+3. 初回GitHub Actionsは、既存legacy cleanup CLI testがmodule import後の`void main()`完了を1秒pollingしており、並列CIでdynamic importが遅延して1 test失敗した。CLI execution Promiseを明示exportし、test helperが直接awaitするよう修正した。timeout延長やCIの直列化は行っていない。
+4. CIと同じ`npm test -- --run`で93 files / 986 tests成功、対象CLI testは1 file / 29 tests成功を確認した。
 
 ### 実装判断
 
@@ -460,6 +467,7 @@ Prisma schema/migrationと公開APIは変更していない。Cloudflare/Vercel/
 | `backend/package.json` / `tsconfig.json` / `tsconfig.workers.json`                               | 修正       | Node/Workers型境界、types・typecheck・dry-run・runtime test gate       |
 | `backend/src/lib/config.ts` / `backend/src/worker.test.ts`                                       | 修正       | Node env型境界とhandler分離への追従                                    |
 | `backend/src/app.ts` / `middleware/rateLimit/index.ts`                                           | 修正       | API共通500/503文言と503 retry値を利用                                  |
+| `backend/src/jobs/deleteLegacySoftDeletedUsers.cli.ts` / `.test.ts`                              | 修正       | CLI execution完了を直接awaitして並列CIのpolling timeoutを解消          |
 | `.github/workflows/backend-pr-quality.yml` / `backend/src/jobs/backendPrQualityWorkflow.test.ts` | 修正       | PRでWorkers generated types・typecheck・dry-runを必須化                |
 | `.gitignore`                                                                                     | 修正       | local Wrangler生成物を除外                                             |
 
