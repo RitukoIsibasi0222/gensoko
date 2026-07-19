@@ -421,38 +421,54 @@ Prisma schema/migrationと公開APIは変更していない。Cloudflare/Vercel/
    - production相当Workers runtime test: 1 file / 1 test成功。
    - `npm run workers:typecheck`、`npm run workers:types:check`、`npm run workers:dry-run`: 成功。
 
+### 厳格review改善記録
+
+1. Redでは公開500/503応答、bundle metadata validation、PR CI、生成binding型接続を先行testで固定した。
+   - Redコマンド: `npm run test -- --run src/worker.test.ts src/worker-config-files.test.ts src/lib/worker-bundle-metadata.test.ts src/jobs/backendPrQualityWorkflow.test.ts`
+   - Red結果: 4 files失敗。公開503の`Retry-After`欠落と内部用文言露出で3 tests、生成binding型接続で1 test、PR CIのWorkers build欠落で1 testが失敗し、metadata moduleは未存在で収集失敗した。
+2. Greenでは500/503文言と503 retry値を共通化し、production entrypointで生成`CloudflareBindings`から必須runtime envへの代入を型検査する。Durable Object namespaceの実型をhandlerまで伝播し、production codeの二重型アサーションを削除した。
+3. Wrangler metafileは共通Zod境界で非object・配列・空inputs・production entrypoint欠落を拒否し、dry-run検証とWorkers test準備の双方で再利用する。backend PR CIには`npm run workers:build`を追加し、生成型差分、Workers typecheck、staging dry-run bundle contractを必須化した。
+4. production bundleをworkerdで実行し、healthに加えて`CF-Connecting-IP`からHMAC key、Durable Object、認証routeへ到達する429経路と、forwarded headerへfallbackしない503 fail-closed経路を確認した。
+   - 対象・直接影響test: 8 files / 55 tests成功。
+   - production相当Workers runtime test: 2 files / 15 tests成功。
+   - Node全test: 93 files / 986 tests成功。外部DB専用4 files / 10 testsは既定どおりskipした。
+
 ### 実装判断
 
 1. production entrypointは`backend/src/worker.ts`へ固定し、共有handlerを`worker-handler.ts`へ分離した。entrypointは`RateLimitCounter`とstaging handlerだけをexportし、Node entrypoint、Nodemailer、memory store、Node用Prisma singletonへ依存しない。
 2. `compatibility_date`は実装日に利用したWrangler/workerdが受理する固定値`2026-07-18`、互換flagは`nodejs_compat`とした。staging configのHyperdrive IDは全ゼロplaceholderで、実resource、接続URL、secret名・値を保存しない。
-3. `wrangler types`はstaging configとsecret値を含まない`.dev.vars.example`から`CloudflareBindings`を生成し、差分checkとWorkers専用TypeScript checkをbuild gateへ追加した。Node用`process.env`は必要キーだけを明示する既定値へ狭め、Workers bindingへ`DATABASE_URL`を混入させない。
+3. `wrangler types`はstaging configとsecret値を含まない`.dev.vars.example`から`CloudflareBindings`を生成し、差分check、Workers専用TypeScript check、staging dry-runをlocal buildとbackend PR CIのgateへ追加した。Node用`process.env`は必要キーだけを明示する既定値へ狭め、Workers bindingへ`DATABASE_URL`を混入させない。
 4. requestごとにHyperdrive connection stringからPrisma Client、HTTPS fetch mail sender、Durable Object storeを新規構築する。同じrequest内だけで共有し、module-globalへ保持せず、request終了時に`$disconnect()`しない。IP候補は検証済み`CF-Connecting-IP`だけとする。
-5. Wrangler dry-runはbinding値を標準出力へ出さないwrapperで実行し、metafileからNode専用依存の不在を検証する。Workers Vitestは同じWrangler生成bundleをworkerdへ渡し、外部DB・mail providerへ接続しないhealth pathでproduction相当graphの起動、CORS、security headerを確認する。
-6. config、binding、adapter、app構築の失敗は既存handlerの固定日本語500/503応答へ閉じ、memory/SMTP/Node singletonへfallbackしない。
+5. Wrangler dry-runはbinding値を標準出力へ出さないwrapperで実行し、runtime validation済みmetafileからproduction entrypoint存在とNode専用依存の不在を検証する。Workers Vitestは同じWrangler生成bundleをworkerdへ渡し、外部DB・mail providerへ接続しないhealth pathとproduction DO rate limit pathで起動、CORS、security header、fail-closedを確認する。
+6. config、binding、adapter、app構築の失敗はAPI共通の固定日本語500/503応答へ閉じ、503には`Retry-After: 60`を付与する。内部用ログ文言や例外詳細は公開せず、memory/SMTP/Node singletonへfallbackしない。
 
 ### SD9の実際の変更ファイル
 
-| ファイル                                                                      | 変更種別   | 内容                                                                   |
-| ----------------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------- |
-| `backend/wrangler.jsonc` / `.dev.vars.example`                                | 新規       | staging main・compatibility・placeholder bindingと型生成用の値なし契約 |
-| `backend/worker-configuration.d.ts`                                           | 生成       | Wrangler生成`CloudflareBindings`                                       |
-| `backend/src/worker.ts` / `worker-handler.ts`                                 | 修正・新規 | production entrypointと共有handlerの分離                               |
-| `backend/src/lib/worker-request-adapters.ts` / `.test.ts`                     | 新規       | request-scoped Prisma・mail・DO adapter graphとunit test               |
-| `backend/src/lib/worker-bundle-contract.ts` / `.test.ts`                      | 新規       | production bundleのNode専用依存拒否contract                            |
-| `backend/src/lib/wrangler-dry-run.ts` / `backend/src/scripts/*Worker*.cli.ts` | 新規       | 出力抑止dry-run、metafile検証、Workers test bundle準備                 |
-| `backend/src/cloudflare/worker-production.test.ts`                            | 新規       | Wrangler bundleをworkerdで実行するhealth runtime test                  |
-| `backend/src/worker-config-files.test.ts`                                     | 新規       | staging設定・secret不在・生成型・build scripts test                    |
-| `backend/wrangler.test.jsonc` / `vitest.config.workers.ts`                    | 修正       | production相当local fixtureと生成bundle実行                            |
-| `backend/package.json` / `tsconfig.json` / `tsconfig.workers.json`            | 修正       | Node/Workers型境界、types・typecheck・dry-run・runtime test gate       |
-| `backend/src/lib/config.ts` / `backend/src/worker.test.ts`                    | 修正       | Node env型境界とhandler分離への追従                                    |
-| `.gitignore`                                                                  | 修正       | local Wrangler生成物を除外                                             |
+| ファイル                                                                                         | 変更種別   | 内容                                                                   |
+| ------------------------------------------------------------------------------------------------ | ---------- | ---------------------------------------------------------------------- |
+| `backend/wrangler.jsonc` / `.dev.vars.example`                                                   | 新規       | staging main・compatibility・placeholder bindingと型生成用の値なし契約 |
+| `backend/worker-configuration.d.ts`                                                              | 生成       | Wrangler生成`CloudflareBindings`                                       |
+| `backend/src/worker.ts` / `worker-handler.ts`                                                    | 修正・新規 | production entrypointと共有handlerの分離                               |
+| `backend/src/lib/worker-request-adapters.ts` / `.test.ts`                                        | 新規       | request-scoped Prisma・mail・DO adapter graphとunit test               |
+| `backend/src/lib/worker-bundle-contract.ts` / `.test.ts`                                         | 新規       | production bundleのNode専用依存拒否contract                            |
+| `backend/src/lib/worker-bundle-metadata.ts` / `.test.ts`                                         | 新規       | Wrangler metafileの共通runtime validationと境界値test                  |
+| `backend/src/lib/http-error-messages.ts`                                                         | 新規       | API共通500/503文言と503 retry値                                        |
+| `backend/src/lib/wrangler-dry-run.ts` / `backend/src/scripts/*Worker*.cli.ts`                    | 新規       | 出力抑止dry-run、metafile検証、Workers test bundle準備                 |
+| `backend/src/cloudflare/worker-production.test.ts`                                               | 新規       | Wrangler bundleのhealth・DO rate limit・fail-closed runtime test       |
+| `backend/src/worker-config-files.test.ts`                                                        | 新規       | staging設定・secret不在・生成型・build scripts test                    |
+| `backend/wrangler.test.jsonc` / `vitest.config.workers.ts`                                       | 修正       | production相当local fixtureと生成bundle実行                            |
+| `backend/package.json` / `tsconfig.json` / `tsconfig.workers.json`                               | 修正       | Node/Workers型境界、types・typecheck・dry-run・runtime test gate       |
+| `backend/src/lib/config.ts` / `backend/src/worker.test.ts`                                       | 修正       | Node env型境界とhandler分離への追従                                    |
+| `backend/src/app.ts` / `middleware/rateLimit/index.ts`                                           | 修正       | API共通500/503文言と503 retry値を利用                                  |
+| `.github/workflows/backend-pr-quality.yml` / `backend/src/jobs/backendPrQualityWorkflow.test.ts` | 修正       | PRでWorkers generated types・typecheck・dry-runを必須化                |
+| `.gitignore`                                                                                     | 修正       | local Wrangler生成物を除外                                             |
 
-公開API、Prisma schema/migration、frontendは変更していない。実DB・mail provider・Cloudflare/Vercel/Supabaseへ接続せず、resource/binding作成、secret操作、deploy、migration、実データ参照も実施していない。
+endpointと成功responseの公開仕様、Prisma schema/migration、frontendは変更していない。Worker起動前の500/503 responseだけを既存API共通契約へ揃えた。実DB・mail provider・Cloudflare/Vercel/Supabaseへ接続せず、resource/binding作成、secret操作、deploy、migration、実データ参照も実施していない。
 
 ### 最終品質確認
 
-- Node全test: `npm run test -- --run --maxWorkers=1`で92 files / 981 tests成功。外部DB専用4 files / 10 testsは既定どおりskipした。
-- Workers runtime test: `npm run test:workers`で2 files / 13 tests成功。production相当healthとSQLite-backed Durable Objectを同じWrangler生成bundleで確認した。
+- Node全test: `npm run test -- --run --maxWorkers=1`で93 files / 986 tests成功。外部DB専用4 files / 10 testsは既定どおりskipした。
+- Workers runtime test: `npm run test:workers`で2 files / 15 tests成功。production相当health、production DO rate limit経路、SQLite-backed Durable Objectを同じWrangler生成bundleで確認した。
 - `npm run build`、`npm run workers:build`、`npm run lint`、`npm run format:check`、更新config/docsのPrettier check、`git diff --check`: 成功。
 - 初回全testではPrettierがJSONCへ付与した合法な末尾カンマを新規test helperが`JSON.parse`できず1件失敗した。helperをJSONC対応後、全suiteでGreenを再確認した。
 - 初回buildではNode `tsc`がproduction entrypoint経由でCloudflare専用型を辿ったため失敗した。Node configからWorkers専用entrypoint/adapterを除外し、同filesをWorkers専用configで必須checkする契約をtestで固定後、両buildを再確認した。
