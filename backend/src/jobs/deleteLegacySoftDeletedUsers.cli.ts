@@ -200,4 +200,4 @@ export async function main(): Promise<void> {
   process.exitCode = exitCode;
 }
 
-void main();
+export const cleanupCliExecution = main();

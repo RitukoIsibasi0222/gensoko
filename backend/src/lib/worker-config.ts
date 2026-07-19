@@ -17,6 +17,8 @@ export type DurableObjectNamespaceBinding<TObjectId = unknown, TObjectStub = unk
   get(id: TObjectId): TObjectStub;
 }>;
 
+// concrete namespaceのID引数型をgenericへ保持したまま、callableであることだけを制約する。
+// このconstraint経由ではgetを呼ばないため、never[]は任意引数を許可する意味ではない。
 export type DurableObjectNamespaceBindingConstraint = Readonly<{
   idFromName(name: string): unknown;
   get: (...args: never[]) => unknown;
