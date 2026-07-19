@@ -21,7 +21,7 @@ PR #107で完全削除API/UI、staging synthetic fixture、cleanup安全契約�
 | rate limit       | Node用memory storeとSQLite-backed Durable Objectをruntime別graphへ分離済み               | staging実namespace/bindingは未作成                |
 | Prisma           | Node singletonとrequest-scoped Hyperdrive Client factoryを分離しSD9 bundleで検証済み     | staging DBへの実接続・transaction計測は未実施     |
 | メール           | Node NodemailerとWorkers HTTPS fetch adapterを分離しSD9 bundleでNodemailer不在を検証済み | 実provider・credential・送信確認は未実施          |
-| frontend adapter | `@sveltejs/adapter-auto`                                                                 | Vercel固有設定とbuild契約が固定されていない       |
+| frontend adapter | `@sveltejs/adapter-vercel`、Node.js 22、API URL/Build Output contract、PR CIを実装済み   | Vercel project・実URL・Preview deployは未実施     |
 | Vercel環境       | Project・branch URL・branch scoped envが未設定                                           | CORS許可originとAPI URLが未確定                   |
 | E2E              | local synthetic browser回帰は実施済み、Playwright harnessは未作成                        | 実URLで再現可能な自動検証がない                   |
 
@@ -505,24 +505,31 @@ endpointと成功responseの公開仕様、Prisma schema/migration、frontendは
 
 ### 実装判断
 
-1. `adapter-auto`のbuild時自動検出に依存せず、公式推奨どおり`adapter-vercel`を明示lockする。adapter optionは既定のNode runtimeを使い、Vercel project未確定の段階でregion・runtime・ISR等を推測設定しない。
-2. `VITE_API_BASE_URL`は既存`frontend/src/lib/api/config.ts`をsingle sourceのまま維持する。Viteの`VITE_` prefixはbrowser公開値であり、secret、token、DB接続情報を禁止する。
+1. `adapter-auto`のbuild時自動検出に依存せず、公式推奨どおり`adapter-vercel`を明示lockする。Docker、`@types/node`、GitHub Actionsと合わせてFunction runtimeをNode.js 22へ固定し、region・ISR等はVercel project未確定の段階で推測設定しない。
+2. `VITE_API_BASE_URL`は`frontend/src/lib/api/config.ts`をsingle sourceとし、共通pure parserでbuild/runtimeの両境界を検証する。Viteの`VITE_` prefixはbrowser公開値であり、secret、token、DB接続情報を禁止する。
 3. staging API URLはVercel Previewかつ`develop` branch scopeで外部設定し、実URLをrepositoryへ保存しない。production値との共用、backend内部URL、commit固有URL、wildcard CORSを禁止する。
-4. config import、package/lock、env templateをunit契約で固定し、実buildのVercel Build OutputでSSR/SPA route graphを確認する。アプリroute・API client本体は変更しない。
+4. config import、package/lock、env templateをunit契約で固定し、`build:preview`でVercel Build Output version、SSR catch-all、Node runtime、公開API URL、secret非混入を自動検証する。frontend PR CIで同じ契約を継続実行する。
 5. Cloudflare/Vercel/Supabase resource、secret、deploy、実DB、migration、実データ操作はSD13以降へ残し、費用・影響・rollbackを提示した直前承認なしに実行しない。
 
 ### SD10〜SD12の実際の変更ファイル
 
-| ファイル                                      | 変更種別 | 内容                                                                           |
-| --------------------------------------------- | -------- | ------------------------------------------------------------------------------ |
-| `frontend/svelte.config.js`                   | 修正     | `adapter-vercel`を明示使用                                                     |
-| `frontend/package.json` / `package-lock.json` | 修正     | `adapter-auto`を除去し`adapter-vercel` 6.3系とBuild Output依存をlock           |
-| `frontend/src/build-config.test.ts`           | 新規     | adapter・依存lock・Preview公開env・secret非登録の契約test                      |
-| `frontend/.env.example`                       | 修正     | local値、`develop` Preview branch scope、公開値/secret分離を明記               |
-| `docs/09_startup_commands.md`                 | 修正     | frontend test/check/Vercel buildのローカルコマンドを追加                       |
-| `docs/11_deployment.md`                       | 修正     | SD9〜SD12現在地点、Preview env、外部操作の費用・影響・rollback・承認境界を同期 |
-| `docs/05_progress.md`                         | 修正     | SD10〜SD12完了、SD13以降未実施へ同期                                           |
-| `docs/plans/staging-app-deployment/plan.md`   | 修正     | 対象ファイル、判断、TDD・品質・未実施事項を同期                                |
+| ファイル                                                                       | 変更種別 | 内容                                                                           |
+| ------------------------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------ |
+| `frontend/svelte.config.js`                                                    | 修正     | `adapter-vercel`とNode.js 22 Function runtimeを明示使用                        |
+| `frontend/package.json` / `package-lock.json`                                  | 修正     | adapter、Node engines、build/品質script、安全なframework/build依存をlock       |
+| `frontend/src/build-config.test.ts`                                            | 新規     | adapter・依存lock・Preview公開env・secret非登録の契約test                      |
+| `frontend/src/lib/api/config.ts`                                               | 修正     | 検証済みAPI base URLだけを全API clientへ公開                                   |
+| `frontend/src/lib/api/base-url.ts` / `.test.ts`                                | 新規     | API URLの正規化、fail-fast、Preview HTTPS契約                                  |
+| `frontend/scripts/vercel-build-contract.mjs` / `check-vercel-build-output.mjs` | 新規     | Build Output・Node runtime・公開URL・secret非混入検証                          |
+| `frontend/src/vercel-build-output.test.ts`                                     | 新規     | Build Output validatorの正常系・異常系test                                     |
+| `frontend/src/frontend-pr-quality.test.ts`                                     | 新規     | frontend PR workflow・Node 22・品質command契約test                             |
+| `frontend/vite.config.ts` / `eslint.config.js`                                 | 修正     | build時API URL検証とscripts/configを含むlint境界                               |
+| `.github/workflows/frontend-pr-quality.yml`                                    | 新規     | test・audit・lint・check・format・Preview build gate                           |
+| `frontend/.env.example`                                                        | 修正     | local値、`develop` Preview branch scope、公開値/secret分離を明記               |
+| `docs/09_startup_commands.md`                                                  | 修正     | frontend test/check/Vercel buildのローカルコマンドを追加                       |
+| `docs/11_deployment.md`                                                        | 修正     | SD9〜SD12現在地点、Preview env、外部操作の費用・影響・rollback・承認境界を同期 |
+| `docs/05_progress.md`                                                          | 修正     | SD10〜SD12完了、SD13以降未実施へ同期                                           |
+| `docs/plans/staging-app-deployment/plan.md`                                    | 修正     | 対象ファイル、判断、TDD・品質・未実施事項を同期                                |
 
 ### SD11品質確認
 
@@ -532,7 +539,16 @@ endpointと成功responseの公開仕様、Prisma schema/migration、frontendは
 - `npm run format`: 変更対象を整形し、既存ファイルは新規test以外unchanged。
 - Preview相当`npm run build`: 成功。`@sveltejs/adapter-vercel`で`.vercel/output`を生成。
 - backend/schema/migrationは未変更のため、backend全test・Workers test・実DBtestは再実行していない。
-- read-onlyの`npm audit`は既存framework/build依存に7件（low 1 / moderate 3 / high 3）を報告した。adapter-vercel固有packageの指摘ではなく、`npm audit fix`による広範な依存更新はSD10外として実行していない。
+- 初回read-onlyの`npm audit`は既存framework/build依存に7件（low 1 / moderate 3 / high 3）を報告した。
+
+### 厳格review改善記録
+
+1. API URL・Build Output契約のRedでは3 test filesが失敗した。未実装parser/validatorのmodule解決失敗と、Node/runtime/build script未固定が意図した理由だった。
+2. GreenではAPI URL parser、build時fail-fast、Node.js 22、Build Output/secret validatorを実装し、3 files / 25 testsが成功した。空の`VITE_API_BASE_URL`によるPreview build失敗と、fixtureを使う`build:preview`成功を実buildで確認した。
+3. 依存更新はdry-runで対象を確認後、SvelteKit 2.70.1、Svelte 5.56.6、Vite 8.1.5、devalue 5.8.1、undici 7.28.0、brace-expansion 5.0.7へ更新した。auditはhigh/moderate 0、上流SvelteKitの`cookie 0.6.0`由来low 3だけとなった。破壊的な旧版への`--force` downgradeは行わない。
+4. frontend CIのRedではworkflow未作成・非破壊script未定義により1 file / 3 testsが失敗し、GreenではNode.js 22上のtest/audit/lint/check/format/Preview build workflowを追加して3 testsが成功した。
+5. code、依存更新、CI、docsは責務ごとに別コミットとし、Cloudflare/Vercel/Supabase/DBを含む外部操作とPR作成は行っていない。
+6. 最終品質gateはfrontend 48 files / 519 tests、`npm run lint`、`npm run check`（0 errors / 0 warnings）、`npm run format:check`、`npm audit --audit-level=moderate`、`npm run build:preview`、`git diff --check`が成功した。Node.js 22のDocker環境でも対象25 testsとPreview build契約を確認した。
 
 ## 対象ファイル一覧
 
@@ -571,10 +587,17 @@ endpointと成功responseの公開仕様、Prisma schema/migration、frontendは
 | `.github/workflows/backend-pr-quality.yml`                 | 修正           | PRでWorkers runtime testを実行                                         |
 | `backend/.dev.vars.example`                                | 新規           | 型生成用placeholder名のみ。secret値は禁止                              |
 | `backend/.env.example`                                     | 修正           | Node/Workers/mail接続責務の説明                                        |
-| `frontend/svelte.config.js`                                | 修正           | `@sveltejs/adapter-vercel`固定                                         |
-| `frontend/package.json` / `package-lock.json`              | 修正           | adapter-vercel追加、build/check script確認                             |
+| `frontend/svelte.config.js`                                | 修正           | `@sveltejs/adapter-vercel`・Node.js 22固定                             |
+| `frontend/package.json` / `package-lock.json`              | 修正           | adapter、Node engines、build/品質script、安全な依存をlock              |
 | `frontend/.env.example`                                    | 修正           | staging Preview branch scopeとAPI URL形式                              |
-| `frontend/src/build-config.test.ts`                        | 新規           | Vercel adapter・依存lock・Preview公開envの設定契約test                 |
+| `frontend/src/build-config.test.ts`                        | 新規           | Vercel adapter・依存lock・Preview公開env・Node/build設定契約test       |
+| `frontend/src/lib/api/config.ts`                           | 修正           | 検証済みAPI base URLのsingle source                                    |
+| `frontend/src/lib/api/base-url.ts` / `.test.ts`            | 新規           | API URL fail-fast・Preview HTTPS契約                                   |
+| `frontend/scripts/*.mjs`                                   | 新規           | Build Output・runtime・公開URL・secret非混入検証                       |
+| `frontend/src/vercel-build-output.test.ts`                 | 新規           | Vercel成果物validator契約test                                          |
+| `frontend/src/frontend-pr-quality.test.ts`                 | 新規           | frontend PR workflow契約test                                           |
+| `frontend/vite.config.ts` / `eslint.config.js`             | 修正           | build時API URL検証とlint対象境界                                       |
+| `.github/workflows/frontend-pr-quality.yml`                | 新規           | frontend test/audit/lint/check/format/Preview build gate               |
 | `frontend/playwright.config.ts`                            | 新規候補       | 明示BASE_URL、production誤指定拒否、staging project                    |
 | `frontend/e2e/account-deletion.spec.ts`                    | 新規候補       | synthetic本人退会・管理者強制退会・再登録回帰                          |
 | `docs/09_startup_commands.md`                              | 修正           | Workers types/test/dev/build、staging deploy前確認コマンド             |

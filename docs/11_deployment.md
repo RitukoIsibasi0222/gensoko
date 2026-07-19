@@ -23,13 +23,13 @@
                          └──────────────────────┘
 ```
 
-| サービス               | 役割                   | 費用                                   |
-| ---------------------- | ---------------------- | -------------------------------------- |
-| **Vercel**             | SvelteKitの画面を配信  | **完全無料**（個人利用）               |
-| **Cloudflare Workers** | Hono APIサーバー       | **完全無料**（日10万リクエストまで）   |
-| **Supabase**           | PostgreSQLデータベース | **無料枠あり**（500MB・2プロジェクト） |
+| サービス               | 役割                   | 費用の扱い                                 |
+| ---------------------- | ---------------------- | ------------------------------------------ |
+| **Vercel**             | SvelteKitの画面を配信  | 無料枠候補。SD15直前に現行plan・上限を確認 |
+| **Cloudflare Workers** | Hono APIサーバー       | 無料枠候補。SD13直前に現行plan・上限を確認 |
+| **Supabase**           | PostgreSQLデータベース | 無料枠候補。実接続前に現行plan・容量を確認 |
 
-> ✅ スリープなし。全サービスGitHubと連携して自動デプロイ。
+料金・quota・スリープ・自動deploy条件は変更され得るため、この表を費用承認の根拠にしない。2026-07-19時点でVercel/Cloudflareのproject接続・自動deployは未実施であり、外部操作直前の確認結果を正本とする。
 
 ---
 
@@ -37,9 +37,9 @@
 
 ### Vercel（フロントエンド）
 
-- SvelteKitと作った会社が同じため相性が最高
-- GitHubにpushするだけで数十秒で自動デプロイ
-- 独自ドメインも無料で設定可能
+- SvelteKit公式adapterでBuild Outputを生成できる
+- project接続後はGit連携deployを構成できる
+- plan・domain・build/Function利用量はSD15直前に確認する
 
 ### Cloudflare Workers（バックエンド API）
 
@@ -111,7 +111,7 @@ type CreateAppOptions = {
 2026-07-19時点で、APIはSD9まで、frontendはSD10〜SD12までのローカル配備契約を実装済みである。
 
 - API: Workers専用entrypoint、request-scoped Prisma/mail/DO adapter、`wrangler.jsonc` staging設定、生成binding型、dry-run、bundle contract、production相当Workers runtime test
-- frontend: `@sveltejs/adapter-vercel`固定、依存lock、Preview公開env契約test、Vercel Build Output生成
+- frontend: `@sveltejs/adapter-vercel`、Node.js 22、公開API URL fail-fast、Vercel Build Output/secret contract、frontend PR CIを固定
 - 未実施: Cloudflare resource/secret、API deploy、Vercel project接続・Preview deploy、Supabase/実DB接続、migration、実データ確認
 
 コード基盤のローカル再確認は外部serviceへ接続せず、次で行う。
@@ -130,16 +130,16 @@ npm ci
 npm run test:run
 npm run lint
 npm run check
-npm run format
+npm run format:check
+npm audit --audit-level=moderate
 env \
   VERCEL_ENV=preview \
   VERCEL_GIT_COMMIT_REF=develop \
   VITE_API_BASE_URL=https://staging-api.example.invalid/api/v1 \
-  npm run build
-test -f .vercel/output/config.json
+  npm run build:preview
 ```
 
-`.invalid`は外部接続しないbuild fixtureであり、実staging URLではない。`.vercel/output/config.json`に全routeとSSR catch-allが生成されること、client成果物にはfixtureの公開API URLだけが含まれ、`DATABASE_URL`、`JWT_SECRET`、`RATE_LIMIT_KEY_SECRET`、mail credentialが含まれないことを確認する。
+`.invalid`は外部接続しないbuild fixtureであり、実staging URLではない。`build:preview`はNode.js 22 Function、Build Output version 3、SSR catch-all、fixture公開API URLの埋め込み、frontend成果物へのDB/JWT/rate limit/mail secret識別子の非混入を自動検証する。API URLの未設定・空白・形式不正、PreviewでのHTTP URLはbuild前に拒否する。
 
 ### Preview環境変数契約
 
@@ -168,22 +168,25 @@ Supabase/実DB接続、migration、legacy cleanup、production deploy、実デ�
 
 ## Vercel へのデプロイ手順
 
-### 1. Vercel アカウント作成
+以下はSD15の直前承認後だけ実行する。承認前にaccount作成、GitHub連携、project import、環境変数登録、Deployを行わない。
 
-1. https://vercel.com にアクセス
-2. 「Sign Up」→「Continue with GitHub」
-3. GitHubアカウントと連携
+### 1. 承認内容を再確認
 
-### 2. プロジェクトをインポート
+1. 対象account・organization・repository・料金plan・見積りを確認する。
+2. staging APIの承認済みHTTPS URL、公開範囲、rollback先を確認する。
+3. project作成・GitHub連携・初回deploymentの影響を提示し、SD15の直前承認を得る。
+
+### 2. projectとbuild設定を準備
 
 1. Vercelダッシュボードで「Add New Project」
 2. GitHubリポジトリ `gensoko` を選択
 3. 設定:
    - **Framework Preset**: SvelteKit（自動検出）
    - **Root Directory**: `frontend`
-4. 「Deploy」をクリック
+   - **Node.js**: repositoryの`engines.node=22.x`と一致
+4. API URL未設定ではbuildがfail-fastすることを前提に、次の環境変数設定まで合格扱いにしない。
 
-### 3. 環境変数を設定
+### 3. branch scoped環境変数を設定してDeploy
 
 Vercelダッシュボード → Settings → Environment Variables：
 
@@ -191,7 +194,7 @@ Vercelダッシュボード → Settings → Environment Variables：
 VITE_API_BASE_URL = https://<approved-staging-api-origin>/api/v1
 ```
 
-stagingではEnvironmentをPreview、Git Branchを`develop`へ限定する。値はbrowserへ公開されるためsecretを設定しない。project接続・値登録・deployはSD15の直前承認後だけ実行する。
+stagingではEnvironmentをPreview、Git Branchを`develop`へ限定する。値はbrowserへ公開されるためsecretを設定しない。scopeと値を再確認後にだけDeployし、生成deploymentをCORSやsmokeの合格対象とする。設定前に生成されたdeploymentがある場合は合格扱いにせず、設定後に新しいdeploymentを作成する。
 
 ---
 
@@ -208,7 +211,7 @@ stagingではEnvironmentをPreview、Git Branchを`develop`へ限定する。値
 
 `backend/src/index.ts`はNode.js開発用entrypointであり、`@hono/node-server`とmemory storeを使用する。`wrangler`の`main`へ指定してはいけない。またproductionの`RATE_LIMIT_STORE=durable-object`をNode entrypointへ渡すと、memory storeへの危険なfallbackを防ぐため起動を拒否する。
 
-`npm run workers:build`は生成型差分、Workers typecheck、staging dry-run、bundle contract、production相当runtime testを外部resourceなしで検証する。configのHyperdrive IDは全ゼロplaceholderであり、実resource IDではない。
+`npm run workers:build`は生成型差分、Workers typecheck、staging dry-run、bundle contractを外部resourceなしで検証する。production相当runtime testは別の`npm run test:workers`で実行する。configのHyperdrive IDは全ゼロplaceholderであり、実resource IDではない。
 
 Cloudflare account/resource、Hyperdrive origin、DO namespace、secret、route/domainは未作成・未登録である。`wrangler deploy --env staging`を含む外部操作はSD13/SD14として分離し、上記staging runbookの直前承認なしに実行しない。production deployは本計画の対象外である。
 
