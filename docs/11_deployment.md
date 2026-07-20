@@ -108,11 +108,12 @@ type CreateAppOptions = {
 
 ### コード基盤の現在地点
 
-2026-07-19時点で、APIはSD9まで、frontendはSD10〜SD12までのローカル配備契約を実装済みである。
+2026-07-20時点で、APIはSD13の一部、frontendはSD15のPreview配備まで進行中である。
 
 - API: Workers専用entrypoint、request-scoped Prisma/mail/DO adapter、`wrangler.jsonc` staging設定、生成binding型、dry-run、bundle contract、production相当Workers runtime test
 - frontend: `@sveltejs/adapter-vercel`、Node.js 22、公開API URL fail-fast、Vercel Build Output/secret contract、frontend PR CIを固定
-- 未実施: Cloudflare resource/secret、API deploy、Vercel project接続・Preview deploy、Supabase/実DB接続、migration、実データ確認
+- 実環境準備済み: Vercel Hobby project・`develop` Preview・branch scoped API URL・固定alias、Supabase Session Poolerをoriginとするcache無効Hyperdrive、Resend Free・MFA・sending access key
+- 未実施: staging Worker・SQLite-backed DO・Worker secret、API deploy/smoke、CORS実確認、DB query/migration、実データ確認、実メール送信
 
 コード基盤のローカル再確認は外部serviceへ接続せず、次で行う。
 
@@ -150,6 +151,14 @@ env \
 | DB/JWT/rate limit/mail credential      | frontendへ登録しない                  | secret           | `VITE_` prefix禁止。Cloudflare staging側だけで管理する          |
 
 branch scoped値は新しいdeploymentのbuild時に反映される。設定変更後は既存deploymentを合格扱いにせず、承認後に新しい`develop` Previewを作成して成果物を確認する。固定branch URLだけをAPIの`FRONTEND_URL`に使い、commit URLやwildcard CORSは使わない。
+
+Vercel Project Settings → Build and Deployment → Ignored Build StepはCustomとし、次のcommandで`develop`だけをbuildする。Vercelの契約どおりexit code 1はbuild、0はskipを表す。`VITE_API_BASE_URL`を持たないfeature branchの不要なPreview buildと、`main`のProduction buildを作成しない。
+
+```bash
+if [ "$VERCEL_GIT_COMMIT_REF" = "develop" ]; then exit 1; else exit 0; fi
+```
+
+rollback時はIgnored Build Stepを`Only build pre-production`へ戻す。feature branchへstaging API URLを広げて失敗を回避してはいけない。
 
 ### SD13以降の承認境界
 
@@ -207,13 +216,13 @@ stagingではEnvironmentをPreview、Git Branchを`develop`へ限定する。値
 
 ### 2. Workers基盤の実装状況
 
-2026-07-19時点で、SD9までのWorkersコード基盤は実装済みである。`backend/wrangler.jsonc`、Workers専用entrypoint、request-scoped Hyperdrive Prisma adapter、HTTPS mail adapter、SQLite-backed Durable Object、生成binding型、dry-run・bundle contract、production相当runtime testを持つ。
+2026-07-20時点で、SD9までのWorkersコード基盤は実装済みである。`backend/wrangler.jsonc`、Workers専用entrypoint、request-scoped Hyperdrive Prisma adapter、HTTPS mail adapter、SQLite-backed Durable Object、生成binding型、dry-run・bundle contract、production相当runtime testを持つ。
 
 `backend/src/index.ts`はNode.js開発用entrypointであり、`@hono/node-server`とmemory storeを使用する。`wrangler`の`main`へ指定してはいけない。またproductionの`RATE_LIMIT_STORE=durable-object`をNode entrypointへ渡すと、memory storeへの危険なfallbackを防ぐため起動を拒否する。
 
-`npm run workers:build`は生成型差分、Workers typecheck、staging dry-run、bundle contractを外部resourceなしで検証する。production相当runtime testは別の`npm run test:workers`で実行する。configのHyperdrive IDは全ゼロplaceholderであり、実resource IDではない。
+`npm run workers:build`は生成型差分、Workers typecheck、staging dry-run、bundle contractを外部resourceなしで検証する。production相当runtime testは別の`npm run test:workers`で実行する。`backend/wrangler.jsonc`のstaging Hyperdrive IDは、作成済み`gensoko-postgres-staging`の実resource IDへ更新済みであり、production用resourceと共用しない。
 
-Cloudflare account/resource、Hyperdrive origin、DO namespace、secret、route/domainは未作成・未登録である。`wrangler deploy --env staging`を含む外部操作はSD13/SD14として分離し、上記staging runbookの直前承認なしに実行しない。production deployは本計画の対象外である。
+Cloudflare accountとstaging Hyperdrive originは作成済みである。Worker、DO namespace、secret、route/domainは未作成・未登録である。`wrangler deploy --env staging`を含む外部操作はSD14として分離し、上記staging runbookの直前承認なしに実行しない。production deployは本計画の対象外である。
 
 ---
 

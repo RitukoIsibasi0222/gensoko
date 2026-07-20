@@ -91,6 +91,7 @@ export function createFetchMailSender(
             headers: {
               Authorization: `Bearer ${mail.apiKey}`,
               "Content-Type": "application/json",
+              "User-Agent": "Gensoko-Worker/1.0",
             },
             body: JSON.stringify(providerRequest.data),
             signal: abortController.signal,

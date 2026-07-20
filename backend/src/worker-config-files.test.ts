@@ -71,7 +71,7 @@ describe("Workers staging build設定", () => {
     });
     expect(hyperdriveBindings).toContainEqual({
       binding: "HYPERDRIVE",
-      id: "00000000000000000000000000000000",
+      id: "514d12df5d3544b79c269aeb95ce7dc5",
     });
   });
 
