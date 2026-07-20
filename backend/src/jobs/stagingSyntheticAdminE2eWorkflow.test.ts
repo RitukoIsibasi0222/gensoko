@@ -38,18 +38,37 @@ describe("staging synthetic Admin Playwright workflow", () => {
 
   it("ephemeral credentialをlog・artifact・CLI引数へ出さずPlaywrightへ環境変数で渡す", () => {
     const workflow = readFileSync(WORKFLOW_PATH, "utf8");
+    const jobEnvironment = workflow.slice(
+      workflow.indexOf("    env:"),
+      workflow.indexOf("    steps:"),
+    );
+    const backendInstallIndex = workflow.indexOf("Install backend dependencies");
+    const prismaGenerateIndex = workflow.indexOf("Generate Prisma Client");
+    const frontendInstallIndex = workflow.indexOf("Install frontend dependencies");
+    const browserInstallIndex = workflow.indexOf("Install Playwright Chromium");
+    const credentialIndex = workflow.indexOf("Generate ephemeral masked credentials");
+    const prepareIndex = workflow.indexOf("--operation prepare");
 
     expect(workflow).toContain("randomBytes");
-    expect(workflow).toContain("GITHUB_ENV");
+    expect(workflow).toContain("GITHUB_OUTPUT");
+    expect(workflow).not.toContain("GITHUB_ENV");
     expect(workflow).toContain("::add-mask::");
     expect(workflow).not.toContain("--password");
     expect(workflow).not.toContain("upload-artifact");
     expect(workflow).not.toContain("actions/upload-artifact");
     expect(workflow).toContain("STAGING_SYNTHETIC_ADMIN_PASSWORD");
     expect(workflow).toContain("STAGING_SYNTHETIC_USER_PASSWORD");
+    expect(workflow.match(/STAGING_SYNTHETIC_ADMIN_PASSWORD:/g)).toHaveLength(2);
+    expect(workflow.match(/STAGING_SYNTHETIC_USER_PASSWORD:/g)).toHaveLength(2);
+    expect(jobEnvironment).not.toContain("STAGING_SUPABASE_PROJECT_REF");
+    expect(credentialIndex).toBeGreaterThan(backendInstallIndex);
+    expect(credentialIndex).toBeGreaterThan(prismaGenerateIndex);
+    expect(credentialIndex).toBeGreaterThan(frontendInstallIndex);
+    expect(credentialIndex).toBeGreaterThan(browserInstallIndex);
+    expect(prepareIndex).toBeGreaterThan(credentialIndex);
   });
 
-  it("fixture prepare後にPlaywrightを実行し、失敗・cancel時もalways cleanupする", () => {
+  it("fixture prepare後に時間制限付きPlaywrightを実行し、非成功時は独立jobでもcleanupする", () => {
     const workflow = readFileSync(WORKFLOW_PATH, "utf8");
 
     const prepareIndex = workflow.indexOf("--operation prepare");
@@ -58,7 +77,12 @@ describe("staging synthetic Admin Playwright workflow", () => {
     expect(prepareIndex).toBeGreaterThan(-1);
     expect(playwrightIndex).toBeGreaterThan(prepareIndex);
     expect(cleanupIndex).toBeGreaterThan(playwrightIndex);
-    expect(workflow).toContain("if: $" + "{{ always() }}");
+    expect(workflow.match(/--operation remove/g)).toHaveLength(2);
+    expect(workflow).toContain("cleanup-staging-synthetic-fixtures:");
+    expect(workflow).toContain("needs: staging-synthetic-admin-e2e");
+    expect(workflow).toContain("if: $" + "{{ always() && github.ref_name == 'develop' }}");
+    expect(workflow).toContain("needs['staging-synthetic-admin-e2e'].result != 'success'");
+    expect(workflow).toContain("timeout-minutes: 5");
     expect(workflow).toContain("npm run staging:synthetic-admin-e2e-fixtures");
   });
 });

@@ -44,7 +44,9 @@ test('synthetic Adminが対象Userを強制退会し、旧資格情報の再認�
   await page.getByRole('button', { name: 'この内容で実行' }).click();
   const deleteResponse = await deleteResponsePromise;
   expect(deleteResponse.status()).toBe(200);
-  await expect(page.getByText('ユーザーを強制退会しました')).toBeVisible();
+  const successStatus = page.getByRole('status').filter({ hasText: 'ユーザーを強制退会しました' });
+  await expect(successStatus).toHaveCount(1);
+  await expect(successStatus).toBeVisible();
   await expect(deleteButton).toHaveCount(0);
 
   await page.context().clearCookies();

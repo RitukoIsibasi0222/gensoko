@@ -3,20 +3,20 @@ name: Staging Synthetic Admin E2E
 on:
   workflow_dispatch:
 
+concurrency:
+  group: gensoko-batch-jobs
+  cancel-in-progress: false
+
 jobs:
   staging-synthetic-admin-e2e:
     name: Run staging synthetic Admin Playwright E2E
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging
-    concurrency:
-      group: gensoko-batch-jobs
-      cancel-in-progress: false
     permissions:
       contents: read
     env:
       BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
-      STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
       STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED: ${{ vars.STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED }}
       STAGING_E2E_BASE_URL: https://gensoko-frontend-staging-develop.vercel.app
       STAGING_E2E_API_BASE_URL: https://gensoko-api-staging.rituko-labs.workers.dev/api/v1
@@ -28,6 +28,7 @@ jobs:
       - name: Validate manual staging target
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
 
@@ -76,9 +77,25 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
         run: npm run staging:validate-database-target
 
+      - name: Generate Prisma Client
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma generate
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
       - name: Generate ephemeral masked credentials
+        id: credentials
         shell: bash
         run: |
           set -euo pipefail
@@ -91,12 +108,72 @@ jobs:
           process.stdout.write("::add-mask::" + adminPassword + "\n");
           process.stdout.write("::add-mask::" + userPassword + "\n");
           appendFileSync(
-            process.env.GITHUB_ENV,
-            "STAGING_SYNTHETIC_ADMIN_PASSWORD=" + adminPassword + "\n" +
-              "STAGING_SYNTHETIC_USER_PASSWORD=" + userPassword + "\n",
+            process.env.GITHUB_OUTPUT,
+            "admin_password=" + adminPassword + "\n" +
+              "user_password=" + userPassword + "\n",
             { encoding: "utf8" }
           );
           NODE
+
+      - name: Prepare exact synthetic Admin and User fixtures
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+          STAGING_SYNTHETIC_ADMIN_PASSWORD: ${{ steps.credentials.outputs.admin_password }}
+          STAGING_SYNTHETIC_USER_PASSWORD: ${{ steps.credentials.outputs.user_password }}
+        run: npm run staging:synthetic-admin-e2e-fixtures -- --operation prepare
+
+      - name: Run staging Admin Playwright E2E
+        timeout-minutes: 5
+        working-directory: frontend
+        env:
+          STAGING_SYNTHETIC_ADMIN_PASSWORD: ${{ steps.credentials.outputs.admin_password }}
+          STAGING_SYNTHETIC_USER_PASSWORD: ${{ steps.credentials.outputs.user_password }}
+        run: npm run test:e2e:staging
+
+      - name: Cleanup exact synthetic fixtures
+        if: ${{ always() && github.ref_name == 'develop' }}
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+        run: npm run staging:synthetic-admin-e2e-fixtures -- --operation remove
+
+  cleanup-staging-synthetic-fixtures:
+    name: Recover staging synthetic Admin E2E cleanup
+    needs: staging-synthetic-admin-e2e
+    if: ${{ always() && github.ref_name == 'develop' && needs['staging-synthetic-admin-e2e'].result != 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    permissions:
+      contents: read
+    env:
+      BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
+      STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED: ${{ vars.STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Validate staging database target
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+        run: npm run staging:validate-database-target
 
       - name: Generate Prisma Client
         working-directory: backend
@@ -104,27 +181,9 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npx prisma generate
 
-      - name: Prepare exact synthetic Admin and User fixtures
-        working-directory: backend
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: npm run staging:synthetic-admin-e2e-fixtures -- --operation prepare
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Install Playwright Chromium
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium
-
-      - name: Run staging Admin Playwright E2E
-        working-directory: frontend
-        run: npm run test:e2e:staging
-
       - name: Cleanup exact synthetic fixtures
-        if: ${{ always() }}
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
         run: npm run staging:synthetic-admin-e2e-fixtures -- --operation remove

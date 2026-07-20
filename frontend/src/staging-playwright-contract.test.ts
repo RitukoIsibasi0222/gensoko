@@ -36,6 +36,8 @@ describe('staging Playwright source contract', () => {
     expect(PLAYWRIGHT_SPEC).toContain('stagingConfig.adminEmail');
     expect(PLAYWRIGHT_SPEC).toContain('data-admin-action="delete"');
     expect(PLAYWRIGHT_SPEC).toContain("response.request().method() === 'DELETE'");
+    expect(PLAYWRIGHT_SPEC).toContain("getByRole('status')");
+    expect(PLAYWRIGHT_SPEC).not.toContain("getByText('ユーザーを強制退会しました')");
     expect(PLAYWRIGHT_SPEC).toContain('expect(rejectedLoginResponse.status()).toBe(401)');
   });
 });
