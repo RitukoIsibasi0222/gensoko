@@ -702,7 +702,7 @@ T35 cleanup execute、flag変更、migration、production deployはこの手順�
 - Hyperdrive binding IDを`backend/wrangler.jsonc`へ反映した。Worker、SQLite-backed Durable Object namespace、Worker secret、API deployは未実施である。
 - Resend Free accountでMFAを有効化し、sending access限定API keyを作成してpassword managerへ保存した。Worker secret登録、domain verification、実メール送信は未実施である。
 - Resend REST APIの必須`User-Agent`を`fetch-mail-sender`へTDD追加した。Redは1件だけ意図どおり失敗し、Greenは15 tests、関連contractは合計20 tests成功、`workers:build`も成功した。
-- Vercel Hobbyの`gensoko-frontend-staging`へ`develop` Previewを配備し、固定aliasを`https://gensoko-frontend-staging-develop.vercel.app`、branch scoped `VITE_API_BASE_URL`をstaging Worker予定originへ設定した。Production deployは行っていない。
+- Vercel Hobbyの`gensoko-frontend-staging`へ`develop` Previewを配備し、固定aliasを`https://gensoko-frontend-staging-develop.vercel.app`、branch scoped `VITE_API_BASE_URL`をstaging Worker予定originへ設定した。Ignored Build Stepは`VERCEL_GIT_COMMIT_REF=develop`のときだけbuildするCustom commandへ変更し、feature branchと`main`をskipする。Production deployは行っていない。
 - Supabase migration、DB query、実データ参照、Worker/DO作成、API公開、メール送信、production操作は行っていない。
 
 ### 現時点の変更ファイル

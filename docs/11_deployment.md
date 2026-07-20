@@ -152,6 +152,14 @@ env \
 
 branch scoped値は新しいdeploymentのbuild時に反映される。設定変更後は既存deploymentを合格扱いにせず、承認後に新しい`develop` Previewを作成して成果物を確認する。固定branch URLだけをAPIの`FRONTEND_URL`に使い、commit URLやwildcard CORSは使わない。
 
+Vercel Project Settings → Build and Deployment → Ignored Build StepはCustomとし、次のcommandで`develop`だけをbuildする。Vercelの契約どおりexit code 1はbuild、0はskipを表す。`VITE_API_BASE_URL`を持たないfeature branchの不要なPreview buildと、`main`のProduction buildを作成しない。
+
+```bash
+if [ "$VERCEL_GIT_COMMIT_REF" = "develop" ]; then exit 1; else exit 0; fi
+```
+
+rollback時はIgnored Build Stepを`Only build pre-production`へ戻す。feature branchへstaging API URLを広げて失敗を回避してはいけない。
+
 ### SD13以降の承認境界
 
 次の操作はローカルコードPRへ含めない。実行直前に対象account/project、現在の料金planと見積り、影響、rollbackを提示し、個別承認を得る。
