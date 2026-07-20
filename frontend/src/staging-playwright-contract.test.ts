@@ -30,6 +30,16 @@ describe('staging Playwright source contract', () => {
     expect(PLAYWRIGHT_CONFIG).toContain("video: 'off'");
     expect(PLAYWRIGHT_CONFIG).toContain('workers: 1');
     expect(PLAYWRIGHT_CONFIG).toContain('retries: 0');
+    expect(PLAYWRIGHT_CONFIG).not.toContain('extraHTTPHeaders');
+  });
+
+  it('Vercel originだけへautomation bypass headerを送りqueryやWorker APIへ漏らさない', () => {
+    expect(PLAYWRIGHT_SPEC).toContain("page.route(stagingConfig.baseUrl + '/**'");
+    expect(PLAYWRIGHT_SPEC).toContain("'x-vercel-protection-bypass'");
+    expect(PLAYWRIGHT_SPEC).toContain('stagingConfig.vercelProtectionBypassSecret');
+    expect(PLAYWRIGHT_SPEC).toContain("'x-vercel-set-bypass-cookie': 'true'");
+    expect(PLAYWRIGHT_SPEC).not.toContain('?x-vercel-protection-bypass=');
+    expect(PLAYWRIGHT_SPEC).not.toContain('page.route(stagingConfig.apiBaseUrl');
   });
 
   it('Admin login・強制退会・対象User login 401を1つのspecで確認する', () => {

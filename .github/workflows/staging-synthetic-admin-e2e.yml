@@ -29,6 +29,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           set -euo pipefail
 
@@ -46,6 +47,14 @@ jobs:
           fi
           if [ -z "$STAGING_SUPABASE_PROJECT_REF" ] || [ -z "$DATABASE_URL" ]; then
             echo "staging synthetic E2EのDB設定が不足しています"
+            exit 1
+          fi
+          if [ -z "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            echo "staging frontendのautomation bypass設定が不足しています"
+            exit 1
+          fi
+          if [[ "$VERCEL_AUTOMATION_BYPASS_SECRET" =~ [[:space:]] ]]; then
+            echo "staging frontendのautomation bypass設定が不正です"
             exit 1
           fi
           if [ "$STAGING_E2E_BASE_URL" != "https://gensoko-frontend-staging-develop.vercel.app" ]; then
@@ -130,6 +139,7 @@ jobs:
         env:
           STAGING_SYNTHETIC_ADMIN_PASSWORD: ${{ steps.credentials.outputs.admin_password }}
           STAGING_SYNTHETIC_USER_PASSWORD: ${{ steps.credentials.outputs.user_password }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npm run test:e2e:staging
 
       - name: Cleanup exact synthetic fixtures
