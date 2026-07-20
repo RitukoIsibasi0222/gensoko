@@ -178,14 +178,22 @@ Supabase/実DB接続、migration、legacy cleanup、production deploy、実デ�
 
 実行対象は`.github/workflows/staging-synthetic-admin-e2e.yml`だけとし、GitHub Actionsの`develop` refから手動実行する。別branch、schedule、push、PRからは実行しない。
 
-1. GitHub `staging` Environmentの`BATCH_ENVIRONMENT=staging`、staging専用`DATABASE_URL`とproject refが既存validatorの契約を満たすことを、値を表示せず確認する。
+1. GitHub `staging` Environmentの`BATCH_ENVIRONMENT=staging`、staging専用`DATABASE_URL`とproject refが既存validatorの契約を満たすことを、値を表示せず確認する。VercelでProtection Bypass for Automationを有効にし、その値と同一の`VERCEL_AUTOMATION_BYPASS_SECRET`をGitHub Environment Secretとして登録する。どちらの値も読み戻さない。
 2. `STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED`を直前承認後だけ`true`にする。実行完了後は成否にかかわらず`false`へ戻す。
 3. 固定frontend `https://gensoko-frontend-staging-develop.vercel.app`と固定API `https://gensoko-api-staging.rituko-labs.workers.dev/api/v1`を変更しない。production・任意URLはguardが拒否する。
-4. 予約識別子`staging-synthetic-e2e-admin` / `staging-synthetic-e2e-user`と対応username/emailを実在Userや別fixtureへ流用しない。完全一致しない衝突rowがあればworkflowは削除せず停止する。
-5. workflowはbackend/frontend依存、Prisma Client、Chromiumの準備完了後に一時passwordを生成する。値はmaskして`GITHUB_OUTPUT`へ書き、fixture prepareとPlaywrightのstep環境変数だけへ渡す。CLI引数、job全体の環境変数、log、artifactへcredentialを出さない。
-6. backend依存導入→DB target検証→Prisma/frontend/Chromium準備→credential生成→完全一致fixture prepare→5分制限のAdmin強制退会Playwright→main jobの`always()` cleanupの順で実行する。workflow全体を共通batch concurrencyで直列化し、cleanup完了前に次のrunを開始しない。
-7. 通常の失敗・cancelではmain jobの`always()` cleanupを確認する。main jobが非成功の場合は、`needs`と`always()`を持つ10分制限のrecovery cleanup jobが別runnerでも冪等cleanupする。workflow全体または両cleanup runnerの強制終了などで結果を確認できない場合は、実在Userを手動操作せず、同じreview済みSHAのworkflowを再実行する。prepareが完全一致fixtureだけを安全に置換し、最後に再cleanupする。
-8. fixture cleanupは予約済みsynthetic User rowとcascade対象だけを削除する。Admin login・強制退会・対象User login拒否のAuditLogはUserと非連結の監査証跡として保持し、credentialを含まないことを前提に既存の監査ログ保持期限・承認済みcleanup運用で管理する。
+4. Vercel Deployment Protectionは解除しない。automation bypassは固定frontend originへのnavigation/subresource requestだけにheaderで付与し、固定Worker APIへは送らない。query parameter、Playwright全体の`extraHTTPHeaders`、CLI引数、artifactを使わない。`x-vercel-set-bypass-cookie: true`はbrowser遷移を安定させるため同じfrontend requestだけへ付与する。
+5. 予約識別子`staging-synthetic-e2e-admin` / `staging-synthetic-e2e-user`と対応username/emailを実在Userや別fixtureへ流用しない。完全一致しない衝突rowがあればworkflowは削除せず停止する。
+6. workflowはVercel automation bypass Secretをfixture作成前に検証し、backend/frontend依存、Prisma Client、Chromiumの準備完了後に一時passwordを生成する。値はmaskして`GITHUB_OUTPUT`へ書き、fixture prepareとPlaywrightのstep環境変数だけへ渡す。CLI引数、job全体の環境変数、log、artifactへcredentialを出さない。
+7. backend依存導入→DB target検証→Prisma/frontend/Chromium準備→credential生成→完全一致fixture prepare→5分制限のAdmin強制退会Playwright→main jobの`always()` cleanupの順で実行する。workflow全体を共通batch concurrencyで直列化し、cleanup完了前に次のrunを開始しない。
+8. 通常の失敗・cancelではmain jobの`always()` cleanupを確認する。main jobが非成功の場合は、`needs`と`always()`を持つ10分制限のrecovery cleanup jobが別runnerでも冪等cleanupする。workflow全体または両cleanup runnerの強制終了などで結果を確認できない場合は、実在Userを手動操作せず、同じreview済みSHAのworkflowを再実行する。prepareが完全一致fixtureだけを安全に置換し、最後に再cleanupする。
+9. fixture cleanupは予約済みsynthetic User rowとcascade対象だけを削除する。Admin login・強制退会・対象User login拒否のAuditLogはUserと非連結の監査証跡として保持し、credentialを含まないことを前提に既存の監査ログ保持期限・承認済みcleanup運用で管理する。
+
+#### 初回実行と再実行条件（2026-07-20）
+
+- `develop`の`0f43610016587ed3cf7169707853f7ef1fff1239`で[run 29746415785](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29746415785)を実行した。prepareは成功したが、Vercel Deployment Protectionが`/login`をSSOへ302 redirectしたため、Playwrightはログインフォーム取得前にtimeoutし、Admin login・強制退会・旧credential 401確認には到達しなかった。
+- main jobの`always()` cleanupと独立recovery cleanupはともに成功した。追加の直接DB queryは行っていないため、再実行では両cleanup結果に加えてworkflow内のfixture残存確認結果を記録する。`STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED`は終了後に`false`へ戻した。
+- 同じrunを設定変更なしで再実行してもSSO redirectは解消しない。Vercel保護を公開解除せず、上記のorigin限定automation bypass対応を`develop`へmergeし、VercelとGitHub `staging` Environmentへ対応Secretを値を表示せず設定してから、新しい明示承認のもとで再実行する。
+- production URL、production DB、production deploy、migration、実メール送信は実行していない。
 
 このコード実装中はworkflow、staging/production DB、実メール、再配備を実行しない。Playwright実行は別途直前承認を得る。
 
