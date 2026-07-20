@@ -14,16 +14,16 @@ PR #107で完全削除API/UI、staging synthetic fixture、cleanup安全契約�
 
 確認できた現状は次のとおり。
 
-| 項目             | 現状                                                                                     | T34への影響                                       |
-| ---------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| API entrypoint   | `backend/src/index.ts`は`@hono/node-server`とmemory rate limit専用                       | Workersへ指定できない                             |
-| Workers設定      | staging専用`wrangler.jsonc`、生成binding型、local dry-run/runtime gateをSD9で追加        | 実resource ID・secret・deployはSD13以降まで未実施 |
-| rate limit       | Node用memory storeとSQLite-backed Durable Objectをruntime別graphへ分離済み               | staging実namespace/bindingは未作成                |
-| Prisma           | Node singletonとrequest-scoped Hyperdrive Client factoryを分離しSD9 bundleで検証済み     | staging DBへの実接続・transaction計測は未実施     |
-| メール           | Node NodemailerとWorkers HTTPS fetch adapterを分離しSD9 bundleでNodemailer不在を検証済み | 実provider・credential・送信確認は未実施          |
-| frontend adapter | `@sveltejs/adapter-vercel`、Node.js 22、API URL/Build Output contract、PR CIを実装済み   | Vercel project・実URL・Preview deployは未実施     |
-| Vercel環境       | Project・branch URL・branch scoped envが未設定                                           | CORS許可originとAPI URLが未確定                   |
-| E2E              | local synthetic browser回帰は実施済み、Playwright harnessは未作成                        | 実URLで再現可能な自動検証がない                   |
+| 項目             | 現状                                                                                   | T34への影響                            |
+| ---------------- | -------------------------------------------------------------------------------------- | -------------------------------------- |
+| API entrypoint   | `backend/src/index.ts`は`@hono/node-server`とmemory rate limit専用                     | Workersへ指定できない                  |
+| Workers設定      | staging専用`wrangler.jsonc`へ実Hyperdrive binding IDを反映し、local gateを再通過       | Worker・DO・secret・API deployは未実施 |
+| rate limit       | Node用memory storeとSQLite-backed Durable Objectをruntime別graphへ分離済み             | staging実namespace/bindingは未作成     |
+| Prisma           | Supabase staging Session Poolerをcache無効Hyperdriveへ登録済み                         | query・transaction・migrationは未実施  |
+| メール           | Resend Free、MFA、送信専用API keyを準備し、必須User-AgentをTDD追加                     | Worker secret登録・実送信は未実施      |
+| frontend adapter | `@sveltejs/adapter-vercel`、Node.js 22、API URL/Build Output contract、PR CIを実装済み | API公開後の実CORS確認が未実施          |
+| Vercel環境       | Hobby project、`develop` Preview、branch scoped API URL、固定aliasを設定済み           | API CORS設定と再deploy確認が未実施     |
+| E2E              | local synthetic browser回帰は実施済み、Playwright harnessは未作成                      | 実URLで再現可能な自動検証がない        |
 
 ## 目的と完了条件
 
@@ -696,6 +696,27 @@ backend全体testはPrisma/service/router dependency境界を広く変更する�
 
 T35 cleanup execute、flag変更、migration、production deployはこの手順に含めず、別途直前承認を得る。
 
+## SD13・SD15 実環境準備記録（2026-07-20）
+
+- Cloudflare Workers Freeを確認し、staging専用HyperdriveをSupabase Session Pooler（PostgreSQL、port 5432、SSL require、cache無効、origin接続上限20）へ作成した。credentialはCloudflareだけで管理し、値を読み戻していない。
+- Hyperdrive binding IDを`backend/wrangler.jsonc`へ反映した。Worker、SQLite-backed Durable Object namespace、Worker secret、API deployは未実施である。
+- Resend Free accountでMFAを有効化し、sending access限定API keyを作成してpassword managerへ保存した。Worker secret登録、domain verification、実メール送信は未実施である。
+- Resend REST APIの必須`User-Agent`を`fetch-mail-sender`へTDD追加した。Redは1件だけ意図どおり失敗し、Greenは15 tests、関連contractは合計20 tests成功、`workers:build`も成功した。
+- Vercel Hobbyの`gensoko-frontend-staging`へ`develop` Previewを配備し、固定aliasを`https://gensoko-frontend-staging-develop.vercel.app`、branch scoped `VITE_API_BASE_URL`をstaging Worker予定originへ設定した。Production deployは行っていない。
+- Supabase migration、DB query、実データ参照、Worker/DO作成、API公開、メール送信、production操作は行っていない。
+
+### 現時点の変更ファイル
+
+| ファイル                                    | 変更種別 | 内容                                                  |
+| ------------------------------------------- | -------- | ----------------------------------------------------- |
+| `backend/wrangler.jsonc`                    | 修正     | staging Hyperdrive bindingへ実resource IDを反映       |
+| `backend/src/worker-config-files.test.ts`   | 修正     | 実Hyperdrive binding IDの設定契約へ同期               |
+| `backend/src/lib/fetch-mail-sender.ts`      | 修正     | HTTPS mail provider requestへ必須User-Agentを追加     |
+| `backend/src/lib/fetch-mail-sender.test.ts` | 修正     | User-Agent request契約をTDD追加                       |
+| `docs/11_deployment.md`                     | 修正     | Vercel・Hyperdrive・Resendの実施済み/未実施範囲を同期 |
+| `docs/05_progress.md`                       | 修正     | staging配備とVercel Previewの進捗を同期               |
+| `docs/plans/staging-app-deployment/plan.md` | 修正     | SD13/SD15実環境準備、判断、テスト、変更ファイルを記録 |
+
 ## 危険性と安全策
 
 | 危険                                | 影響                         | 安全策                                                                |
@@ -746,9 +767,9 @@ SD17	結果を記録しT34と本計画の完了可否を判定	plan/progress/dep
 - [x] SD10: adapter-vercelとPreview build契約を実装する
 - [x] SD11: 対象test・lint・format・type/buildを実行する
 - [x] SD12: staging runbook・progress・実装記録を同期する
-- [ ] SD13: Cloudflare staging resource/secretを承認後に準備する
+- [-] SD13: Cloudflare staging resource/secretを承認後に準備する
 - [ ] SD14: APIを承認後にstaging deploy・smoke・rollback確認する
-- [ ] SD15: Vercel `develop` Previewを承認後に配備・CORS整合を確認する
+- [-] SD15: Vercel `develop` Previewを承認後に配備・CORS整合を確認する
 - [ ] SD16: T34 synthetic API/UI/Playwrightを承認後に実行する
 - [ ] SD17: 結果を記録しT34と本計画の完了可否を判定する
 
@@ -770,3 +791,6 @@ SD17	結果を記録しT34と本計画の完了可否を判定	plan/progress/dep
 - [Vercel: environments](https://vercel.com/docs/deployments/environments)
 - [Vercel: generated branch URLs](https://vercel.com/docs/deployments/generated-urls)
 - [Vercel: managing environment variables](https://vercel.com/docs/environment-variables/managing-environment-variables)
+- [Resend: Send Email API](https://resend.com/docs/api-reference/emails/send-email)
+- [Resend: API authentication and User-Agent](https://resend.com/docs/api-reference/introduction)
+- [Resend: pricing](https://resend.com/pricing)

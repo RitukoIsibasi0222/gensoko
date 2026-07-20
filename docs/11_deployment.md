@@ -108,11 +108,12 @@ type CreateAppOptions = {
 
 ### コード基盤の現在地点
 
-2026-07-19時点で、APIはSD9まで、frontendはSD10〜SD12までのローカル配備契約を実装済みである。
+2026-07-20時点で、APIはSD13の一部、frontendはSD15のPreview配備まで進行中である。
 
 - API: Workers専用entrypoint、request-scoped Prisma/mail/DO adapter、`wrangler.jsonc` staging設定、生成binding型、dry-run、bundle contract、production相当Workers runtime test
 - frontend: `@sveltejs/adapter-vercel`、Node.js 22、公開API URL fail-fast、Vercel Build Output/secret contract、frontend PR CIを固定
-- 未実施: Cloudflare resource/secret、API deploy、Vercel project接続・Preview deploy、Supabase/実DB接続、migration、実データ確認
+- 実環境準備済み: Vercel Hobby project・`develop` Preview・branch scoped API URL・固定alias、Supabase Session Poolerをoriginとするcache無効Hyperdrive、Resend Free・MFA・sending access key
+- 未実施: staging Worker・SQLite-backed DO・Worker secret、API deploy/smoke、CORS実確認、DB query/migration、実データ確認、実メール送信
 
 コード基盤のローカル再確認は外部serviceへ接続せず、次で行う。
 
@@ -213,7 +214,7 @@ stagingではEnvironmentをPreview、Git Branchを`develop`へ限定する。値
 
 `npm run workers:build`は生成型差分、Workers typecheck、staging dry-run、bundle contractを外部resourceなしで検証する。production相当runtime testは別の`npm run test:workers`で実行する。configのHyperdrive IDは全ゼロplaceholderであり、実resource IDではない。
 
-Cloudflare account/resource、Hyperdrive origin、DO namespace、secret、route/domainは未作成・未登録である。`wrangler deploy --env staging`を含む外部操作はSD13/SD14として分離し、上記staging runbookの直前承認なしに実行しない。production deployは本計画の対象外である。
+Cloudflare accountとstaging Hyperdrive originは作成済みで、実binding IDを`wrangler.jsonc`へ反映した。Worker、DO namespace、secret、route/domainは未作成・未登録である。`wrangler deploy --env staging`を含む外部操作はSD14として分離し、上記staging runbookの直前承認なしに実行しない。production deployは本計画の対象外である。
 
 ---
 
