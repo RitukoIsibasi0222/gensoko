@@ -738,7 +738,16 @@ T35 cleanup execute、flag変更、migration、production deployはこの手順�
 - Redではfixture/CLI/workflow/Playwright設定の未実装、password正規化漏れ、fixture直接呼出し時の同一password拒否漏れを対象testで確認した。厳格レビュー後の追加Redでは、dependency導入前のcredential生成、job全体へのsecret露出、同一job cleanup、重複成功文言を選ぶPlaywright locatorを理由にbackend workflow 2 tests・frontend契約1 testが失敗した。Green/Refactorではstep scope、独立cleanup job、一意なstatus locatorへ修正し、fixture件数不一致・冪等cleanup・DB非接触を含むbackend対象3 files・23 tests、frontend対象2 files・24 testsが成功した。
 - 厳格レビュー改善後の最終品質gateはbackend通常97 files・1012 tests成功（外部DB integration 10 tests skip）、Workers 2 files・15 tests、build、lint、format checkが成功した。frontendは51 files・547 tests、lint、Svelte check（0 errors / 0 warnings）、format check、外部接続しないPreview build契約が成功し、Playwright `--list`で1 specを収集した。
 - frontend `npm audit --omit=dev`は0件だった。devDependencyを含むauditには既存SvelteKit経由の`cookie`低重要度3件が残るが、提示される`--force`修正はSvelteKitのbreaking downgradeになるため本変更では適用しない。
-- 本turnでは外部workflow、staging/production DB、実メール、再配備を実行していない。実staging E2Eとrun IDの記録は別途承認後のSD16後半へ残す。
+- 初回実環境run前のpreflightで12項目のguard、GitHub `staging` Environmentの`develop`限定policy、secret名、外部接続不要testを再確認した。`develop`の`0f43610016587ed3cf7169707853f7ef1fff1239`で[run 29746415785](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29746415785)を実行し、prepare、main cleanup、独立recovery cleanupは成功した。enable flagは終了後に`false`へ復旧した。
+- Playwrightは固定frontendの`/login`がVercel SSOへ302 redirectされたため、メールアドレス欄を取得できずtimeoutした。Admin login・対象User強制退会・旧credential 401拒否には到達しておらず、workflow全体はfailureである。設定を変えない再実行では同じredirectが再発するため、SD16は進行中のままとする。
+
+### SD16初回run follow-up設計（2026-07-20）
+
+- Vercel Deployment Protectionを公開解除せず、Protection Bypass for AutomationのSecretをGitHub `staging` Environment Secretと一致させる。値は取得・表示・文書化せず、workflowの事前検証stepとPlaywright stepだけへ渡す。未設定・空白混入はfixture prepare前に一般化errorで拒否する。
+- bypass headerは`page.route`で固定Vercel originのrequestだけへ付与する。Playwright全体の`extraHTTPHeaders`は固定Worker APIへのcross-origin requestにもSecretを送るため禁止し、query parameterもURL・log・履歴への露出を避けるため禁止する。
+- trace・video・screenshot無効、credential生成順、完全一致fixture、DB/production guard、main/recovery cleanupは変更しない。補正PRを`develop`へmergeし、VercelとGitHubへSecretを安全に設定した後、別の明示承認で再実行する。再実行時はprepare、Playwright、両cleanup、強制退会、401拒否、fixture残存確認を記録する。
+- RedではworkflowのSecret step scope・prepare前fail-fastが未実装でbackend 1件、frontend設定・origin限定header契約が未実装でfrontend 6件が意図どおり失敗した。Green/Refactor後はbackend対象5件、frontend対象30件が成功した。最終品質gateはbackend通常97 files・1013 tests成功（外部DB integration 10 tests skip）、Workers 15 tests、build、lint、format check、frontend 51 files・553 tests、lint、Svelte check（0 errors / 0 warnings）、format check、buildが成功し、Playwright `--list`で1 specを収集した。
+- 初回runではproduction URL・DB、production deploy、migration、実メールを操作していない。追加の直接DB queryも行っていない。
 
 ### SD16厳格レビュー改善記録（2026-07-20）
 

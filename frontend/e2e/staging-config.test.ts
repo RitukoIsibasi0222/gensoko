@@ -13,7 +13,8 @@ const VALID_ENVIRONMENT = {
   STAGING_SYNTHETIC_ADMIN_PASSWORD: 'SyntheticAdmin1!password',
   STAGING_SYNTHETIC_USER_USERNAME: 'staging_synthetic_e2e_user',
   STAGING_SYNTHETIC_USER_EMAIL: 'staging-synthetic-e2e-user@example.test',
-  STAGING_SYNTHETIC_USER_PASSWORD: 'SyntheticUser1!password'
+  STAGING_SYNTHETIC_USER_PASSWORD: 'SyntheticUser1!password',
+  VERCEL_AUTOMATION_BYPASS_SECRET: 'vercel-automation-bypass-test-secret'
 } as const;
 
 describe('staging Playwright config guard', () => {
@@ -25,7 +26,8 @@ describe('staging Playwright config guard', () => {
       adminPassword: VALID_ENVIRONMENT.STAGING_SYNTHETIC_ADMIN_PASSWORD,
       userUsername: VALID_ENVIRONMENT.STAGING_SYNTHETIC_USER_USERNAME,
       userEmail: VALID_ENVIRONMENT.STAGING_SYNTHETIC_USER_EMAIL,
-      userPassword: VALID_ENVIRONMENT.STAGING_SYNTHETIC_USER_PASSWORD
+      userPassword: VALID_ENVIRONMENT.STAGING_SYNTHETIC_USER_PASSWORD,
+      vercelProtectionBypassSecret: VALID_ENVIRONMENT.VERCEL_AUTOMATION_BYPASS_SECRET
     });
   });
 
@@ -45,7 +47,8 @@ describe('staging Playwright config guard', () => {
     'STAGING_SYNTHETIC_ADMIN_PASSWORD',
     'STAGING_SYNTHETIC_USER_USERNAME',
     'STAGING_SYNTHETIC_USER_EMAIL',
-    'STAGING_SYNTHETIC_USER_PASSWORD'
+    'STAGING_SYNTHETIC_USER_PASSWORD',
+    'VERCEL_AUTOMATION_BYPASS_SECRET'
   ] as const)('%sの欠落をcredential値を含まない固定errorで拒否する', (name) => {
     const secret = VALID_ENVIRONMENT[name];
     expect(() => loadStagingE2EConfig({ ...VALID_ENVIRONMENT, [name]: '' })).toThrow(
@@ -120,4 +123,16 @@ describe('staging Playwright config guard', () => {
       'staging Playwright設定が不正です'
     );
   });
+
+  it.each(['   ', ' bypass-secret', 'bypass-secret ', 'bypass secret'])(
+    'Vercel automation bypass Secretの空白・前後空白を拒否する',
+    (value) => {
+      expect(() =>
+        loadStagingE2EConfig({
+          ...VALID_ENVIRONMENT,
+          VERCEL_AUTOMATION_BYPASS_SECRET: value
+        })
+      ).toThrow('staging Playwright設定が不正です');
+    }
+  );
 });

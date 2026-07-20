@@ -16,6 +16,7 @@ export type StagingE2EConfig = Readonly<{
   userUsername: typeof STAGING_SYNTHETIC_USER_USERNAME;
   userEmail: typeof STAGING_SYNTHETIC_USER_EMAIL;
   userPassword: string;
+  vercelProtectionBypassSecret: string;
 }>;
 
 function requireExactValue<T extends string>(value: string | undefined, expected: T): T {
@@ -31,6 +32,13 @@ function requireCredential(value: string | undefined): string {
     throw new Error(INVALID_CONFIG_MESSAGE);
   }
   return normalizedValue;
+}
+
+function requireVercelProtectionBypassSecret(value: string | undefined): string {
+  if (!value || value !== value.trim() || /\s/.test(value)) {
+    throw new Error(INVALID_CONFIG_MESSAGE);
+  }
+  return value;
 }
 
 export function loadStagingE2EConfig(
@@ -56,6 +64,9 @@ export function loadStagingE2EConfig(
     );
     const adminPassword = requireCredential(environment.STAGING_SYNTHETIC_ADMIN_PASSWORD);
     const userPassword = requireCredential(environment.STAGING_SYNTHETIC_USER_PASSWORD);
+    const vercelProtectionBypassSecret = requireVercelProtectionBypassSecret(
+      environment.VERCEL_AUTOMATION_BYPASS_SECRET
+    );
     if (adminPassword === userPassword) {
       throw new Error(INVALID_CONFIG_MESSAGE);
     }
@@ -67,7 +78,8 @@ export function loadStagingE2EConfig(
       adminPassword,
       userUsername,
       userEmail,
-      userPassword
+      userPassword,
+      vercelProtectionBypassSecret
     };
   } catch {
     throw new Error(INVALID_CONFIG_MESSAGE);

@@ -68,6 +68,24 @@ describe("staging synthetic Admin Playwright workflow", () => {
     expect(prepareIndex).toBeGreaterThan(credentialIndex);
   });
 
+  it("Vercel automation bypass Secretをjob全体へ置かずfixture作成前に検証する", () => {
+    const workflow = readFileSync(WORKFLOW_PATH, "utf8");
+    const jobEnvironment = workflow.slice(
+      workflow.indexOf("    env:"),
+      workflow.indexOf("    steps:"),
+    );
+    const bypassValidationIndex = workflow.indexOf('if [ -z "$VERCEL_AUTOMATION_BYPASS_SECRET" ]');
+    const prepareIndex = workflow.indexOf("--operation prepare");
+
+    expect(workflow.match(/VERCEL_AUTOMATION_BYPASS_SECRET:/g)).toHaveLength(2);
+    expect(jobEnvironment).not.toContain("VERCEL_AUTOMATION_BYPASS_SECRET");
+    expect(bypassValidationIndex).toBeGreaterThan(-1);
+    expect(workflow).toContain('[[ "$VERCEL_AUTOMATION_BYPASS_SECRET" =~ [[:space:]] ]]');
+    expect(workflow.indexOf("Install backend dependencies")).toBeGreaterThan(bypassValidationIndex);
+    expect(prepareIndex).toBeGreaterThan(bypassValidationIndex);
+    expect(workflow).not.toContain("?x-vercel-protection-bypass=");
+  });
+
   it("fixture prepare後に時間制限付きPlaywrightを実行し、非成功時は独立jobでもcleanupする", () => {
     const workflow = readFileSync(WORKFLOW_PATH, "utf8");
 

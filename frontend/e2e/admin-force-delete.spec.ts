@@ -5,6 +5,16 @@ import { loadStagingE2EConfig } from './staging-config';
 const stagingConfig = loadStagingE2EConfig(process.env);
 
 test('synthetic Adminが対象Userを強制退会し、旧資格情報の再認証を拒否する', async ({ page }) => {
+  await page.route(stagingConfig.baseUrl + '/**', async (route) => {
+    await route.continue({
+      headers: {
+        ...route.request().headers(),
+        'x-vercel-protection-bypass': stagingConfig.vercelProtectionBypassSecret,
+        'x-vercel-set-bypass-cookie': 'true'
+      }
+    });
+  });
+
   await page.goto('/login');
   await page.getByLabel('メールアドレス').fill(stagingConfig.adminEmail);
   await page.getByLabel('パスワード').fill(stagingConfig.adminPassword);
