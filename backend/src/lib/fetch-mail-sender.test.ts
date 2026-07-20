@@ -81,6 +81,7 @@ describe("createFetchMailSender", () => {
       headers: {
         Authorization: `Bearer ${API_KEY}`,
         "Content-Type": "application/json",
+        "User-Agent": "Gensoko-Worker/1.0",
       },
     });
     expect(init.signal).toBeInstanceOf(AbortSignal);
