@@ -212,9 +212,9 @@ stagingではEnvironmentをPreview、Git Branchを`develop`へ限定する。値
 
 `backend/src/index.ts`はNode.js開発用entrypointであり、`@hono/node-server`とmemory storeを使用する。`wrangler`の`main`へ指定してはいけない。またproductionの`RATE_LIMIT_STORE=durable-object`をNode entrypointへ渡すと、memory storeへの危険なfallbackを防ぐため起動を拒否する。
 
-`npm run workers:build`は生成型差分、Workers typecheck、staging dry-run、bundle contractを外部resourceなしで検証する。production相当runtime testは別の`npm run test:workers`で実行する。configのHyperdrive IDは全ゼロplaceholderであり、実resource IDではない。
+`npm run workers:build`は生成型差分、Workers typecheck、staging dry-run、bundle contractを外部resourceなしで検証する。production相当runtime testは別の`npm run test:workers`で実行する。`backend/wrangler.jsonc`のstaging Hyperdrive IDは、作成済み`gensoko-postgres-staging`の実resource IDへ更新済みであり、production用resourceと共用しない。
 
-Cloudflare accountとstaging Hyperdrive originは作成済みで、実binding IDを`wrangler.jsonc`へ反映した。Worker、DO namespace、secret、route/domainは未作成・未登録である。`wrangler deploy --env staging`を含む外部操作はSD14として分離し、上記staging runbookの直前承認なしに実行しない。production deployは本計画の対象外である。
+Cloudflare accountとstaging Hyperdrive originは作成済みである。Worker、DO namespace、secret、route/domainは未作成・未登録である。`wrangler deploy --env staging`を含む外部操作はSD14として分離し、上記staging runbookの直前承認なしに実行しない。production deployは本計画の対象外である。
 
 ---
 
