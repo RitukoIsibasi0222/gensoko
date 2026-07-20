@@ -208,7 +208,7 @@ stagingではEnvironmentをPreview、Git Branchを`develop`へ限定する。値
 
 ### 2. Workers基盤の実装状況
 
-2026-07-19時点で、SD9までのWorkersコード基盤は実装済みである。`backend/wrangler.jsonc`、Workers専用entrypoint、request-scoped Hyperdrive Prisma adapter、HTTPS mail adapter、SQLite-backed Durable Object、生成binding型、dry-run・bundle contract、production相当runtime testを持つ。
+2026-07-20時点で、SD9までのWorkersコード基盤は実装済みである。`backend/wrangler.jsonc`、Workers専用entrypoint、request-scoped Hyperdrive Prisma adapter、HTTPS mail adapter、SQLite-backed Durable Object、生成binding型、dry-run・bundle contract、production相当runtime testを持つ。
 
 `backend/src/index.ts`はNode.js開発用entrypointであり、`@hono/node-server`とmemory storeを使用する。`wrangler`の`main`へ指定してはいけない。またproductionの`RATE_LIMIT_STORE=durable-object`をNode entrypointへ渡すと、memory storeへの危険なfallbackを防ぐため起動を拒否する。
 
