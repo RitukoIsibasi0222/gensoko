@@ -1,7 +1,7 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { loadEnv } from 'vite';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 import { parseApiBaseUrl } from './src/lib/api/base-url';
 
@@ -25,7 +25,8 @@ export default defineConfig(({ command, mode }) => {
     test: {
       environment: 'jsdom',
       globals: true,
-      setupFiles: []
+      setupFiles: [],
+      exclude: [...configDefaults.exclude, 'e2e/**/*.spec.ts']
     }
   };
 });
