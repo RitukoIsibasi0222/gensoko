@@ -10,20 +10,20 @@
 
 ## 背景と現在地点
 
-PR #107で完全削除API/UI、staging synthetic fixture、cleanup安全契約まで実装済みであり、PR #108でT33のmanaged DB判定基準を文書化した。一方、T34に必要なstagingアプリは未配備である。
+PR #107で完全削除API/UI、staging synthetic fixture、cleanup安全契約まで実装済みであり、PR #108でT33のmanaged DB判定基準を文書化した。その後staging API/frontendと基本synthetic導線を配備・確認し、T34はsynthetic Admin強制退会Playwrightだけを残している。
 
 確認できた現状は次のとおり。
 
-| 項目             | 現状                                                                                   | T34への影響                            |
-| ---------------- | -------------------------------------------------------------------------------------- | -------------------------------------- |
-| API entrypoint   | `backend/src/index.ts`は`@hono/node-server`とmemory rate limit専用                     | Workersへ指定できない                  |
-| Workers設定      | staging専用`wrangler.jsonc`へ実Hyperdrive binding IDを反映し、local gateを再通過       | Worker・DO・secret・API deployは未実施 |
-| rate limit       | Node用memory storeとSQLite-backed Durable Objectをruntime別graphへ分離済み             | staging実namespace/bindingは未作成     |
-| Prisma           | Supabase staging Session Poolerをcache無効Hyperdriveへ登録済み                         | query・transaction・migrationは未実施  |
-| メール           | Resend Free、MFA、送信専用API keyを準備し、必須User-AgentをTDD追加                     | Worker secret登録・実送信は未実施      |
-| frontend adapter | `@sveltejs/adapter-vercel`、Node.js 22、API URL/Build Output contract、PR CIを実装済み | API公開後の実CORS確認が未実施          |
-| Vercel環境       | Hobby project、`develop` Preview、branch scoped API URL、固定aliasを設定済み           | API CORS設定と再deploy確認が未実施     |
-| E2E              | local synthetic browser回帰は実施済み、Playwright harnessは未作成                      | 実URLで再現可能な自動検証がない        |
+| 項目             | 現状                                                                          | T34への影響                   |
+| ---------------- | ----------------------------------------------------------------------------- | ----------------------------- |
+| API entrypoint   | `backend/src/index.ts`は`@hono/node-server`とmemory rate limit専用            | Workersへ指定できない         |
+| Workers設定      | staging Worker・DO・Hyperdrive・7 secretsを配備済み                           | production resourceは未作成   |
+| rate limit       | SQLite-backed Durable Objectをstaging bindingで稼働                           | production/WAF確認は別タスク  |
+| Prisma           | Supabase staging Session Poolerをcache無効Hyperdriveへ登録しmigration current | production DBは操作していない |
+| メール           | Resend allowlistで確認メール2通・resetメール1通を確認                         | production送信は未実施        |
+| frontend adapter | `@sveltejs/adapter-vercel`、Node.js 22、固定API URL/CORSを配備・確認済み      | production配備は未実施        |
+| Vercel環境       | Hobby project、`develop` Preview、branch scoped API URL、固定aliasを配備済み  | Production deploymentは未実施 |
+| E2E              | synthetic本人導線を実機確認し、Admin強制退会Playwright codeを実装             | manual workflow実行は承認待ち |
 
 ## 目的と完了条件
 
@@ -557,56 +557,65 @@ endpointと成功responseの公開仕様、Prisma schema/migration、frontendは
 
 実装時に実態へ合わせて更新する。
 
-| ファイル                                                   | 変更種別       | 内容                                                                   |
-| ---------------------------------------------------------- | -------------- | ---------------------------------------------------------------------- |
-| `backend/src/worker.ts` / `backend/src/worker-handler.ts`  | 新規・修正     | Workers production entrypointと共有request handler                     |
-| `backend/src/worker.test.ts`                               | 新規           | 実app graphのrequest scope、fail-closed、CORS、secret非露出test        |
-| `backend/src/app.ts`                                       | 修正           | runtime共通app factoryとrequest dependency境界                         |
-| `backend/src/lib/app-dependencies.ts`                      | 新規           | middleware・serviceを同一request依存へ束ねる共通factory                |
-| `backend/src/lib/prisma-client.ts`                         | 新規           | Node/Workers共通Prisma client factory                                  |
-| `backend/src/lib/prisma.ts`                                | 修正           | Node client factory/singletonとWorkers client生成契約の分離            |
-| `backend/src/lib/prisma.test.ts`                           | 新規           | Node singletonが検証済みDATABASE_URLだけを使うmodule wiring test       |
-| `backend/src/lib/serializable-transaction-core.ts`         | 新規           | Prisma注入型Serializable transaction runner                            |
-| `backend/src/lib/config.ts` / `.test.ts`                   | 修正           | Workers binding明示入力とNode DATABASE_URLのfail-fast                  |
-| `backend/src/lib/worker-config.ts` / `.test.ts`            | 新規・修正     | Workers env・binding・target・mail timeoutの型付き契約とunit test      |
-| `backend/src/lib/mail-sender.ts`                           | 新規           | runtime共通`MailSender`契約                                            |
-| `backend/src/lib/mail.ts` / `mail.test.ts`                 | 修正・新規     | Node Nodemailer adapter factoryと共通契約test                          |
-| `backend/src/lib/fetch-mail-sender.ts` / `.test.ts`        | 新規           | Workers HTTPS mail adapterとprovider境界・allowlist・timeout test      |
-| `backend/src/lib/mail-runtime-validation.ts`               | 新規           | HTTPS endpointとメールアドレスの共通runtime validation                 |
-| `backend/src/middleware/auth/index.ts`                     | 修正           | Prisma・JWT secret注入型middleware factory                             |
-| `backend/src/middleware/cors/index.ts`                     | 新規           | appとWorker早期エラーで共有する単一origin CORS設定                     |
-| `backend/src/services/*.ts`                                | 必要範囲で修正 | Prisma/mail依存の明示注入。業務ロジックは変更しない                    |
-| `backend/src/routes/**/*.ts`                               | 必要範囲で修正 | service dependencyを受けるrouter factory。API契約は変更しない          |
-| `backend/src/cloudflare/rate-limit-counter.ts`             | 新規           | SQLite-backed Durable Object。仕様正本はrate limit計画                 |
-| `backend/src/cloudflare/rate-limit-counter.test.ts`        | 新規           | Workers runtimeで並行性・永続化・eviction・alarmを検証                 |
-| `backend/src/cloudflare/rate-limit-worker.test-entry.ts`   | 新規           | local Workers test専用entrypoint                                       |
-| `backend/src/middleware/rateLimit/durable-object-store.ts` | 新規           | DO binding adapter。仕様正本はrate limit計画                           |
-| `backend/wrangler.jsonc`                                   | 新規           | main、compatibility、staging env、DO/Hyperdrive placeholder、migration |
-| `backend/worker-configuration.d.ts`                        | 生成           | `wrangler types`によるbinding型。手編集しない                          |
-| `backend/wrangler.test.jsonc`                              | 新規・修正     | production相当local bundle・SQLite DO fixture。外部接続しない          |
-| `backend/vitest.config.workers.ts`                         | 新規           | Workers runtime test分離とdotenv読込拒否                               |
-| `backend/tsconfig.json` / `tsconfig.workers.json`          | 修正・新規     | Node/Workers型check境界                                                |
-| `backend/package.json` / `package-lock.json`               | 修正           | Wrangler、Workers test、types/build/test scripts                       |
-| `.github/workflows/backend-pr-quality.yml`                 | 修正           | PRでWorkers runtime testを実行                                         |
-| `backend/.dev.vars.example`                                | 新規           | 型生成用placeholder名のみ。secret値は禁止                              |
-| `backend/.env.example`                                     | 修正           | Node/Workers/mail接続責務の説明                                        |
-| `frontend/svelte.config.js`                                | 修正           | `@sveltejs/adapter-vercel`・Node.js 22固定                             |
-| `frontend/package.json` / `package-lock.json`              | 修正           | adapter、Node engines、build/品質script、安全な依存をlock              |
-| `frontend/.env.example`                                    | 修正           | staging Preview branch scopeとAPI URL形式                              |
-| `frontend/src/build-config.test.ts`                        | 新規           | Vercel adapter・依存lock・Preview公開env・Node/build設定契約test       |
-| `frontend/src/lib/api/config.ts`                           | 修正           | 検証済みAPI base URLのsingle source                                    |
-| `frontend/src/lib/api/base-url.ts` / `.test.ts`            | 新規           | API URL fail-fast・Preview HTTPS契約                                   |
-| `frontend/scripts/*.mjs`                                   | 新規           | Build Output・runtime・公開URL・secret非混入検証                       |
-| `frontend/src/vercel-build-output.test.ts`                 | 新規           | Vercel成果物validator契約test                                          |
-| `frontend/src/frontend-pr-quality.test.ts`                 | 新規           | frontend PR workflow契約test                                           |
-| `frontend/vite.config.ts` / `eslint.config.js`             | 修正           | build時API URL検証とlint対象境界                                       |
-| `.github/workflows/frontend-pr-quality.yml`                | 新規           | frontend test/audit/lint/check/format/Preview build gate               |
-| `frontend/playwright.config.ts`                            | 新規候補       | 明示BASE_URL、production誤指定拒否、staging project                    |
-| `frontend/e2e/account-deletion.spec.ts`                    | 新規候補       | synthetic本人退会・管理者強制退会・再登録回帰                          |
-| `docs/09_startup_commands.md`                              | 修正           | Workers types/test/dev/build、staging deploy前確認コマンド             |
-| `docs/11_deployment.md`                                    | 修正           | 実行可能なstaging runbook、secret/binding/rollback                     |
-| `docs/05_progress.md`                                      | 修正           | 本計画とT34依存の進捗同期                                              |
-| `docs/plans/staging-app-deployment/plan.md`                | 修正           | 実装記録、差分、結果                                                   |
+| ファイル                                                                | 変更種別       | 内容                                                                   |
+| ----------------------------------------------------------------------- | -------------- | ---------------------------------------------------------------------- |
+| `backend/src/worker.ts` / `backend/src/worker-handler.ts`               | 新規・修正     | Workers production entrypointと共有request handler                     |
+| `backend/src/worker.test.ts`                                            | 新規           | 実app graphのrequest scope、fail-closed、CORS、secret非露出test        |
+| `backend/src/app.ts`                                                    | 修正           | runtime共通app factoryとrequest dependency境界                         |
+| `backend/src/lib/app-dependencies.ts`                                   | 新規           | middleware・serviceを同一request依存へ束ねる共通factory                |
+| `backend/src/lib/prisma-client.ts`                                      | 新規           | Node/Workers共通Prisma client factory                                  |
+| `backend/src/lib/prisma.ts`                                             | 修正           | Node client factory/singletonとWorkers client生成契約の分離            |
+| `backend/src/lib/prisma.test.ts`                                        | 新規           | Node singletonが検証済みDATABASE_URLだけを使うmodule wiring test       |
+| `backend/src/lib/serializable-transaction-core.ts`                      | 新規           | Prisma注入型Serializable transaction runner                            |
+| `backend/src/lib/config.ts` / `.test.ts`                                | 修正           | Workers binding明示入力とNode DATABASE_URLのfail-fast                  |
+| `backend/src/lib/worker-config.ts` / `.test.ts`                         | 新規・修正     | Workers env・binding・target・mail timeoutの型付き契約とunit test      |
+| `backend/src/lib/mail-sender.ts`                                        | 新規           | runtime共通`MailSender`契約                                            |
+| `backend/src/lib/mail.ts` / `mail.test.ts`                              | 修正・新規     | Node Nodemailer adapter factoryと共通契約test                          |
+| `backend/src/lib/fetch-mail-sender.ts` / `.test.ts`                     | 新規           | Workers HTTPS mail adapterとprovider境界・allowlist・timeout test      |
+| `backend/src/lib/mail-runtime-validation.ts`                            | 新規           | HTTPS endpointとメールアドレスの共通runtime validation                 |
+| `backend/src/middleware/auth/index.ts`                                  | 修正           | Prisma・JWT secret注入型middleware factory                             |
+| `backend/src/middleware/cors/index.ts`                                  | 新規           | appとWorker早期エラーで共有する単一origin CORS設定                     |
+| `backend/src/services/*.ts`                                             | 必要範囲で修正 | Prisma/mail依存の明示注入。業務ロジックは変更しない                    |
+| `backend/src/routes/**/*.ts`                                            | 必要範囲で修正 | service dependencyを受けるrouter factory。API契約は変更しない          |
+| `backend/src/cloudflare/rate-limit-counter.ts`                          | 新規           | SQLite-backed Durable Object。仕様正本はrate limit計画                 |
+| `backend/src/cloudflare/rate-limit-counter.test.ts`                     | 新規           | Workers runtimeで並行性・永続化・eviction・alarmを検証                 |
+| `backend/src/cloudflare/rate-limit-worker.test-entry.ts`                | 新規           | local Workers test専用entrypoint                                       |
+| `backend/src/middleware/rateLimit/durable-object-store.ts`              | 新規           | DO binding adapter。仕様正本はrate limit計画                           |
+| `backend/wrangler.jsonc`                                                | 新規           | main、compatibility、staging env、DO/Hyperdrive placeholder、migration |
+| `backend/worker-configuration.d.ts`                                     | 生成           | `wrangler types`によるbinding型。手編集しない                          |
+| `backend/wrangler.test.jsonc`                                           | 新規・修正     | production相当local bundle・SQLite DO fixture。外部接続しない          |
+| `backend/vitest.config.workers.ts`                                      | 新規           | Workers runtime test分離とdotenv読込拒否                               |
+| `backend/tsconfig.json` / `tsconfig.workers.json`                       | 修正・新規     | Node/Workers型check境界                                                |
+| `backend/package.json` / `package-lock.json`                            | 修正           | Wrangler、Workers test、types/build/test scripts                       |
+| `.github/workflows/backend-pr-quality.yml`                              | 修正           | PRでWorkers runtime testを実行                                         |
+| `backend/.dev.vars.example`                                             | 新規           | 型生成用placeholder名のみ。secret値は禁止                              |
+| `backend/.env.example`                                                  | 修正           | Node/Workers/mail接続責務の説明                                        |
+| `frontend/svelte.config.js`                                             | 修正           | `@sveltejs/adapter-vercel`・Node.js 22固定                             |
+| `frontend/package.json` / `package-lock.json`                           | 修正           | adapter、Node engines、build/品質script、安全な依存をlock              |
+| `frontend/.env.example`                                                 | 修正           | staging Preview branch scopeとAPI URL形式                              |
+| `frontend/src/build-config.test.ts`                                     | 新規           | Vercel adapter・依存lock・Preview公開env・Node/build設定契約test       |
+| `frontend/src/lib/api/config.ts`                                        | 修正           | 検証済みAPI base URLのsingle source                                    |
+| `frontend/src/lib/api/base-url.ts` / `.test.ts`                         | 新規           | API URL fail-fast・Preview HTTPS契約                                   |
+| `frontend/scripts/*.mjs`                                                | 新規           | Build Output・runtime・公開URL・secret非混入検証                       |
+| `frontend/src/vercel-build-output.test.ts`                              | 新規           | Vercel成果物validator契約test                                          |
+| `frontend/src/frontend-pr-quality.test.ts`                              | 新規           | frontend PR workflow契約test                                           |
+| `frontend/vite.config.ts` / `eslint.config.js`                          | 修正           | build時API URL検証とlint対象境界                                       |
+| `.github/workflows/frontend-pr-quality.yml`                             | 新規           | frontend test/audit/lint/check/format/Preview build gate               |
+| `backend/src/jobs/stagingSyntheticAdminE2eFixtures.ts` / `.test.ts`     | 新規           | 完全一致synthetic Admin/Userの作成・cleanupと衝突拒否契約              |
+| `backend/src/jobs/stagingSyntheticAdminE2eFixtures.cli.ts` / `.test.ts` | 新規           | 環境変数credentialだけを受ける安全なprepare/remove CLI                 |
+| `backend/src/jobs/stagingSyntheticAdminE2eWorkflow.test.ts`             | 新規           | manual・develop・staging・always cleanup workflow契約                  |
+| `backend/package.json`                                                  | 修正           | staging synthetic fixture CLI script                                   |
+| `.github/workflows/staging-synthetic-admin-e2e.yml`                     | 新規           | staging Environment限定のmanual Playwright workflow                    |
+| `frontend/playwright.config.ts`                                         | 新規           | 固定staging URL、単一Chromium、artifact無効化                          |
+| `frontend/e2e/staging-config.ts` / `.test.ts`                           | 新規           | production・任意URLとsynthetic識別子差替えを拒否する設定guard          |
+| `frontend/e2e/admin-force-delete.spec.ts`                               | 新規           | Admin login・synthetic User強制退会・再認証401                         |
+| `frontend/src/staging-playwright-contract.test.ts`                      | 新規           | Vitest分離、credential artifact禁止、E2E導線のsource契約               |
+| `frontend/package.json` / `package-lock.json`                           | 修正           | Playwright依存とstaging E2E script                                     |
+| `frontend/vite.config.ts` / `.gitignore`                                | 修正           | Playwright specのVitest除外とlocal output除外                          |
+| `docs/09_startup_commands.md`                                           | 修正           | Workers types/test/dev/build、staging deploy前確認コマンド             |
+| `docs/11_deployment.md`                                                 | 修正           | 実行可能なstaging runbook、secret/binding/rollback                     |
+| `docs/05_progress.md`                                                   | 修正           | 本計画とT34依存の進捗同期                                              |
+| `docs/plans/staging-app-deployment/plan.md`                             | 修正           | 実装記録、差分、結果                                                   |
 
 ## API仕様
 
@@ -699,11 +708,13 @@ T35 cleanup execute、flag変更、migration、production deployはこの手順�
 ## SD13・SD15 実環境準備記録（2026-07-20）
 
 - Cloudflare Workers Freeを確認し、staging専用HyperdriveをSupabase Session Pooler（PostgreSQL、port 5432、SSL require、cache無効、origin接続上限20）へ作成した。credentialはCloudflareだけで管理し、値を読み戻していない。
-- Hyperdrive binding IDを`backend/wrangler.jsonc`へ反映した。Worker、SQLite-backed Durable Object namespace、Worker secret、API deployは未実施である。
-- Resend Free accountでMFAを有効化し、sending access限定API keyを作成してpassword managerへ保存した。Worker secret登録、domain verification、実メール送信は未実施である。
+- Hyperdrive binding IDを`backend/wrangler.jsonc`へ反映した。staging Worker `gensoko-api-staging`、SQLite-backed Durable Object、Hyperdrive binding、7件のWorker secretを作成・登録し、APIを公開した。secret値は読み戻し・記録していない。
+- Resend Free accountでMFAを有効化し、sending access限定API keyをWorkerへ登録した。`onboarding@resend.dev`と宛先allowlistだけを使い、確認メール2通とpassword resetメール1通の送受信を確認した。最初に画像へ写った旧keyは削除済みであり、現在値は取得・表示・記録しない。
 - Resend REST APIの必須`User-Agent`を`fetch-mail-sender`へTDD追加した。Redは1件だけ意図どおり失敗し、Greenは15 tests、関連contractは合計20 tests成功、`workers:build`も成功した。
 - Vercel Hobbyの`gensoko-frontend-staging`へ`develop` Previewを配備し、固定aliasを`https://gensoko-frontend-staging-develop.vercel.app`、branch scoped `VITE_API_BASE_URL`をstaging Worker予定originへ設定した。Ignored Build Stepは`VERCEL_GIT_COMMIT_REF=develop`のときだけbuildするCustom commandへ変更し、feature branchと`main`をskipする。Production deployは行っていない。
-- Supabase migration、DB query、実データ参照、Worker/DO作成、API公開、メール送信、production操作は行っていない。
+- Staging Database Setupで全migration currentを確認した。health 200、CORS、OPTIONS 204、Hyperdrive経由の元素118件を確認した。
+- synthetic accountだけで登録・メール認証・login・本人退会・削除後login拒否を確認した。別accountでは初級ゲーム10問、score 500、password reset、旧password拒否、新password login、履歴を持つ本人退会、削除後login拒否を確認し、終了時に一時passwordを破棄した。
+- production resource・production deploy・production DB操作は行っていない。
 
 ### 現時点の変更ファイル
 
@@ -716,6 +727,17 @@ T35 cleanup execute、flag変更、migration、production deployはこの手順�
 | `docs/11_deployment.md`                     | 修正     | Vercel・Hyperdrive・Resendの実施済み/未実施範囲を同期 |
 | `docs/05_progress.md`                       | 修正     | staging配備とVercel Previewの進捗を同期               |
 | `docs/plans/staging-app-deployment/plan.md` | 修正     | SD13/SD15実環境準備、判断、テスト、変更ファイルを記録 |
+
+## SD16 synthetic Admin Playwrightコード基盤（2026-07-20）
+
+- staging専用の固定Admin/User識別子を予約し、ID・username・email・role・verified/active状態が完全一致するrowだけを置換・cleanupする。1項目でも衝突した既存Userは削除せず処理を停止する。
+- 既存のstaging DB target validatorをprepare/removeの両方で必須化し、明示enable flag、`BATCH_ENVIRONMENT=staging`、staging project ref一致が揃わない限りPrismaを読み込まない。
+- credentialはworkflow内で`crypto.randomBytes`から生成し、mask後に`GITHUB_ENV`だけでCLIとPlaywrightへ渡す。値をCLI引数、log、artifactへ出さず、trace・screenshot・videoも無効にする。
+- workflowは`workflow_dispatch`、`develop`、GitHub `staging` Environment、共通batch concurrencyへ限定する。prepare後はPlaywrightの成功・失敗・cancelにかかわらず`always()`で完全一致fixtureをcleanupする。
+- Playwrightは固定Vercel URLからAdmin login、対象synthetic Userの強制退会、対象Userの旧credentialによるlogin 401を確認する。固定Worker API URL以外とproduction・任意URLは設定guardで拒否する。
+- Redではfixture/CLI/workflow/Playwright設定の未実装、password正規化漏れ、fixture直接呼出し時の同一password拒否漏れを対象testで確認した。Green/Refactorではbackend対象4 files・23 tests、frontend対象2 files・13 testsが成功し、Playwright `--list`で1 specを収集した。
+- 最終品質gateはbackend通常97 files・1004 tests成功（外部DB integration 10 tests skip）、Workers 2 files・15 tests、build、lint、format checkが成功した。frontendは51 files・536 tests、lint、Svelte check（0 errors / 0 warnings）、format check、外部接続しないPreview build契約が成功した。
+- 本turnでは外部workflow、staging/production DB、実メール、再配備を実行していない。実staging E2Eとrun IDの記録は別途承認後のSD16後半へ残す。
 
 ## 危険性と安全策
 
@@ -767,10 +789,10 @@ SD17	結果を記録しT34と本計画の完了可否を判定	plan/progress/dep
 - [x] SD10: adapter-vercelとPreview build契約を実装する
 - [x] SD11: 対象test・lint・format・type/buildを実行する
 - [x] SD12: staging runbook・progress・実装記録を同期する
-- [-] SD13: Cloudflare staging resource/secretを承認後に準備する
-- [ ] SD14: APIを承認後にstaging deploy・smoke・rollback確認する
-- [-] SD15: Vercel `develop` Previewを承認後に配備・CORS整合を確認する
-- [ ] SD16: T34 synthetic API/UI/Playwrightを承認後に実行する
+- [x] SD13: Cloudflare staging resource/secretを承認後に準備する
+- [-] SD14: APIを承認後にstaging deploy・smokeを実施済み。rollback確認を残す
+- [x] SD15: Vercel `develop` Previewを承認後に配備・CORS整合を確認する
+- [-] SD16: T34 synthetic API/UI/Playwrightの安全なfixture・manual workflow・E2E基盤を実装し、承認後に実行する
 - [ ] SD17: 結果を記録しT34と本計画の完了可否を判定する
 
 ## 参照した公式文書

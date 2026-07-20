@@ -206,8 +206,8 @@
   - [x] T31: frontend品質check完了（Prettier・ESLint・Svelte/TypeScript check・production build成功、通常全test 490件成功）
   - [x] T32: 専用Docker PostgreSQL integration 5件成功（15 migrations適用済み・pending 0、終了後fixture 0件）
   - [-] T33: stagingのGameSession 5,000件・GameAnswer 50,000件cascadeは1,446.32msで基準5,000ms以内、cleanup・事後preview・flag `false`復旧まで成功。ローカル専用PostgreSQL 16.13で対象migrationだけpendingを再構築した30秒baselineも、migration 1,427ms・probe 115回・最大write待ち 22.14ms・cleanup成功・残存fixture 0件だった。managed DB再計測の同等性条件と暫定gate（probe 30秒以上、migration 5,000ms以下、最大write待ち1,000ms以下、probe 20回以上、cleanup完了、migration current）を文書化したが、ローカル値をmanaged DB合格証拠とは扱わない。managed DB証拠または正式な残余リスク承認まで進行中
-  - [-] 2026-07-18残作業区分: T33のmanaged DB固有検証、stagingアプリ未配備のT34、PR #107 merge後に実環境実行だけが残るT35、production・backup・restore・shared contract適用は実環境条件付きで継続。T34の前提となるstaging frontend/API配備基盤は専用計画[`staging-app-deployment`](plans/staging-app-deployment/plan.md)で追跡する。T35安全preflight、T39非参照code/test、T43 guard test・専用DB検証は実装済みであり、共有環境deploy・migration適用とは分離する
-  - [-] T34/T35ローカル・安全preflight: synthetic browser回帰とfixture完全一致preflightを実装し、executeもsynthetic fixture IDだけへ限定。preflight後の未知legacy rowは削除せず残件として失敗させる。staging API/UI、cleanup dry-run/execute/再実行は未実施
+  - [-] 2026-07-20残作業区分: T33のmanaged DB固有検証、配備済みstagingアプリでのAdmin強制退会Playwright実行、PR #107 merge後に実環境実行だけが残るT35、production・backup・restore・shared contract適用は実環境条件付きで継続。T34のstaging frontend/APIは配備・基本smoke済みで、専用計画[`staging-app-deployment`](plans/staging-app-deployment/plan.md)のSD16でsynthetic Admin E2Eを追跡する
+  - [-] T34/T35安全preflight: synthetic browser回帰、fixture完全一致preflight、staging synthetic本人退会・ゲーム・password resetを確認済み。Admin/User専用fixture・manual Playwright workflowを実装した。staging Admin強制退会workflow、cleanup dry-run/execute/再実行は未実施
   - [-] Phase 5: T39の`deletedAt`非参照code・test、Prisma User writeの明示`select`契約、v1 deprecated互換値を実装済み。staging/production deploy・soakとT44のPrisma Client再生成は未実施
   - [ ] Phase 6: cleanup後backup、旧Artifactの7日失効、isolated restore drill・削除replay
   - [-] Phase 7: T43のtable lock付き隔離guard SQL・contract test・ローカル専用DB fail/success/並行insert/drop後Prisma writeを完了。staging/production適用はT44として未実施
@@ -242,7 +242,8 @@
 - [x] Supabase staging・production project作成、東京region・Session pooler接続設定
 - [-] 本番DBバックアップ・Prismaマイグレーション運用（Free plan暗号化backup・容量監視workflow実装中） — 計画書: [`docs/plans/audit-log-production-operations/plan.md`](plans/audit-log-production-operations/plan.md)
 - [ ] 本番DBバックアップ耐障害性強化（日次化・最大3回再試行・36時間鮮度監視・最大7世代・四半期隔離復元訓練） — 計画書: [`docs/plans/backup-resilience/plan.md`](plans/backup-resilience/plan.md)
-- [-] staging frontend/API配備基盤（Workers専用entrypoint・Prisma/mail runtime境界・Wrangler・Vercel Preview・T34実機確認） — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md) / PR: #117 — SD1〜SD12完了。Vercel Hobby `develop` Preview・branch scoped API URL・固定alias・`develop`限定Ignored Build Step、Supabase Session Pooler接続のcache無効Hyperdrive、Resend Free/MFA/sending keyを準備済み。Worker・DO・secret・API deploy/smoke・CORS実確認・migration・実データ操作は未実施
+- [-] staging frontend/API配備基盤（Workers専用entrypoint・Prisma/mail runtime境界・Wrangler・Vercel Preview・T34実機確認） — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md) / PR: #117 — SD1〜SD13・SD15完了。Vercel `develop` Preview、Cloudflare staging Worker/DO/Hyperdrive/secret、Supabase migration、health/CORS/OPTIONS、元素118件、synthetic登録・認証・ゲーム・password reset・本人退会を確認済み。production resource・deploy・DB操作は未実施
+  - [-] SD16コード基盤: 完全一致staging synthetic Admin/User fixture、`develop`限定manual workflow、固定Vercel/Worker URL向けPlaywright管理者強制退会E2EをTDD実装。外部workflow・DB・メール・再配備は未実行
 - [ ] Cloudflare Workers Wrangler + Prisma `@prisma/adapter-pg`/接続binding 設定・デプロイ（採用接続方式はstaging計測後に確定）
 - [-] APIレート制限の本番適用継続（Workers専用entrypoint・SQLite-backed Durable Object・WAF・staging/production実機確認） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md) — T13/T14のDO test・store adapterは完了。実namespace/binding、WAF、staging/production実機確認は未実施
 - [x] Vercel SvelteKit `develop` Previewデプロイ・branch scoped環境変数設定 — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md)
