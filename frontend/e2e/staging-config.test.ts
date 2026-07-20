@@ -68,6 +68,40 @@ describe('staging Playwright config guard', () => {
     ).toThrow('staging Playwright設定が不正です');
   });
 
+  it('passwordの先頭末尾空白をbackendと同じく正規化して返す', () => {
+    const config = loadStagingE2EConfig({
+      ...VALID_ENVIRONMENT,
+      STAGING_SYNTHETIC_ADMIN_PASSWORD: `  ${VALID_ENVIRONMENT.STAGING_SYNTHETIC_ADMIN_PASSWORD}  `,
+      STAGING_SYNTHETIC_USER_PASSWORD: `  ${VALID_ENVIRONMENT.STAGING_SYNTHETIC_USER_PASSWORD}  `
+    });
+
+    expect(config.adminPassword).toBe(VALID_ENVIRONMENT.STAGING_SYNTHETIC_ADMIN_PASSWORD);
+    expect(config.userPassword).toBe(VALID_ENVIRONMENT.STAGING_SYNTHETIC_USER_PASSWORD);
+  });
+
+  it('正規化後に同一になるAdminと対象Userのpasswordを拒否する', () => {
+    expect(() =>
+      loadStagingE2EConfig({
+        ...VALID_ENVIRONMENT,
+        STAGING_SYNTHETIC_ADMIN_PASSWORD: `  ${VALID_ENVIRONMENT.STAGING_SYNTHETIC_ADMIN_PASSWORD}`,
+        STAGING_SYNTHETIC_USER_PASSWORD: `${VALID_ENVIRONMENT.STAGING_SYNTHETIC_ADMIN_PASSWORD}  `
+      })
+    ).toThrow('staging Playwright設定が不正です');
+  });
+
+  it.each([
+    ['8文字未満', 'Aa1!abc'],
+    ['内部スペース', 'Synthetic Admin1!password'],
+    ['bcrypt上限超過', `Aa1!${'a'.repeat(69)}`]
+  ])('%sのpasswordをbackendへ到達する前に拒否する', (_label, password) => {
+    expect(() =>
+      loadStagingE2EConfig({
+        ...VALID_ENVIRONMENT,
+        STAGING_SYNTHETIC_ADMIN_PASSWORD: password
+      })
+    ).toThrow('staging Playwright設定が不正です');
+  });
+
   it.each(['STAGING_SYNTHETIC_ADMIN_PASSWORD', 'STAGING_SYNTHETIC_USER_PASSWORD'] as const)(
     '%sの空白のみの値を拒否する',
     (name) => {

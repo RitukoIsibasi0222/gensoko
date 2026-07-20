@@ -1,3 +1,5 @@
+import { validatePassword } from '../src/lib/validation/password';
+
 export const STAGING_FRONTEND_BASE_URL = 'https://gensoko-frontend-staging-develop.vercel.app';
 export const STAGING_API_BASE_URL = 'https://gensoko-api-staging.rituko-labs.workers.dev/api/v1';
 
@@ -24,10 +26,11 @@ function requireExactValue<T extends string>(value: string | undefined, expected
 }
 
 function requireCredential(value: string | undefined): string {
-  if (value === undefined || value.trim().length === 0) {
+  const normalizedValue = value?.trim() ?? '';
+  if (validatePassword(normalizedValue) !== null) {
     throw new Error(INVALID_CONFIG_MESSAGE);
   }
-  return value;
+  return normalizedValue;
 }
 
 export function loadStagingE2EConfig(
