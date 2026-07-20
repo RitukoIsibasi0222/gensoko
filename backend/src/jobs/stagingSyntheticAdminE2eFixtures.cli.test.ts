@@ -5,6 +5,7 @@ const runtimeMocks = vi.hoisted(() => ({
   remove: vi.fn(),
   validateEnvironment: vi.fn(),
   prismaModuleLoaded: vi.fn(),
+  prismaModuleError: false,
   disconnect: vi.fn(),
 }));
 
@@ -14,10 +15,15 @@ vi.mock("./stagingSyntheticAdminE2eFixtures.js", () => ({
   validateStagingSyntheticAdminE2eFixtureEnvironment: runtimeMocks.validateEnvironment,
 }));
 
-vi.mock("../lib/prisma.js", () => {
-  runtimeMocks.prismaModuleLoaded();
-  return { prisma: { $disconnect: runtimeMocks.disconnect } };
-});
+vi.mock("../lib/prisma.js", () => ({
+  get prisma() {
+    runtimeMocks.prismaModuleLoaded();
+    if (runtimeMocks.prismaModuleError) {
+      throw new Error("DATABASE_URL=dependency-secret");
+    }
+    return { $disconnect: runtimeMocks.disconnect };
+  },
+}));
 
 const ORIGINAL_ARGV = [...process.argv];
 const ORIGINAL_ENV = { ...process.env };
@@ -41,6 +47,7 @@ describe("stagingSyntheticAdminE2eFixtures CLI", () => {
     runtimeMocks.validateEnvironment.mockImplementation(() => undefined);
     runtimeMocks.prepare.mockResolvedValue({ createdUsers: 2, replacedUsers: 0 });
     runtimeMocks.remove.mockResolvedValue({ deletedUsers: 1 });
+    runtimeMocks.prismaModuleError = false;
     runtimeMocks.disconnect.mockResolvedValue(undefined);
     process.argv = [process.execPath, "/app/src/jobs/stagingSyntheticAdminE2eFixtures.cli.ts"];
     process.env = {
@@ -99,6 +106,31 @@ describe("stagingSyntheticAdminE2eFixtures CLI", () => {
     expect(getConsoleOutput(consoleInfoSpy)).not.toContain("UserSecret1!");
   });
 
+  it("staging環境guardが失敗した場合はDBをloadしない", async () => {
+    process.argv.push("--operation", "prepare");
+    runtimeMocks.validateEnvironment.mockImplementation(() => {
+      throw new Error("DATABASE_URL=guard-secret");
+    });
+    await runCli();
+
+    expect(process.exitCode).toBe(2);
+    expect(runtimeMocks.prismaModuleLoaded).not.toHaveBeenCalled();
+    expect(getConsoleOutput(consoleErrorSpy)).not.toContain("guard-secret");
+  });
+
+  it("DB dependencyのload失敗を固定errorに置換する", async () => {
+    process.argv.push("--operation", "remove");
+    runtimeMocks.prismaModuleError = true;
+    await runCli();
+
+    expect(process.exitCode).toBe(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith({
+      event: "staging_synthetic_e2e.fixtures.failed",
+      message: "staging synthetic E2E fixture CLIの実行に失敗しました",
+    });
+    expect(getConsoleOutput(consoleErrorSpy)).not.toContain("dependency-secret");
+  });
+
   it("removeはcredential欠落時もstaging guardを通してcleanupする", async () => {
     delete process.env.STAGING_SYNTHETIC_ADMIN_PASSWORD;
     delete process.env.STAGING_SYNTHETIC_USER_PASSWORD;
@@ -131,5 +163,14 @@ describe("stagingSyntheticAdminE2eFixtures CLI", () => {
       "secret",
     );
     expect(getConsoleOutput(consoleErrorSpy)).not.toContain("private");
+  });
+
+  it("prepare失敗後もDB接続を終了する", async () => {
+    process.argv.push("--operation", "prepare");
+    runtimeMocks.prepare.mockRejectedValue(new Error("prepare failed"));
+    await runCli();
+
+    expect(process.exitCode).toBe(1);
+    expect(runtimeMocks.disconnect).toHaveBeenCalledTimes(1);
   });
 });

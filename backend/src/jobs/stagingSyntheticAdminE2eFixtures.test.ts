@@ -36,12 +36,17 @@ function fixtureRow(
   };
 }
 
-function createClient(identifierRows: StagingSyntheticAdminE2eFixtureUser[] = []) {
+function createClient(
+  identifierRows: StagingSyntheticAdminE2eFixtureUser[] = [],
+  resultCounts: { deleted?: number; created?: number } = {},
+) {
   const transactionClient = {
     user: {
       findMany: vi.fn().mockResolvedValue(identifierRows),
-      deleteMany: vi.fn().mockResolvedValue({ count: identifierRows.length }),
-      createMany: vi.fn().mockResolvedValue({ count: 2 }),
+      deleteMany: vi
+        .fn()
+        .mockResolvedValue({ count: resultCounts.deleted ?? identifierRows.length }),
+      createMany: vi.fn().mockResolvedValue({ count: resultCounts.created ?? 2 }),
     },
   };
   const client = {
@@ -69,6 +74,7 @@ describe("staging synthetic Admin E2E fixtures", () => {
       { ...VALID_ENVIRONMENT, DATABASE_URL: "postgresql://production.invalid/postgres" },
       { ...VALID_ENVIRONMENT, STAGING_SYNTHETIC_ADMIN_PASSWORD: "" },
       { ...VALID_ENVIRONMENT, STAGING_SYNTHETIC_USER_PASSWORD: "" },
+      { ...VALID_ENVIRONMENT, STAGING_SYNTHETIC_USER_PASSWORD: ADMIN_PASSWORD },
     ]) {
       expect(() =>
         validateStagingSyntheticAdminE2eFixtureEnvironment(invalidEnvironment, {
@@ -145,6 +151,22 @@ describe("staging synthetic Admin E2E fixtures", () => {
     expect(client.$transaction).not.toHaveBeenCalled();
   });
 
+  it("password hash生成に失敗した場合はtransactionを開始しない", async () => {
+    const { client } = createClient();
+
+    await expect(
+      prepareStagingSyntheticAdminE2eFixtures({
+        client,
+        adminPassword: ADMIN_PASSWORD,
+        userPassword: USER_PASSWORD,
+        createPasswordHash: async () => {
+          throw new Error("hash failed");
+        },
+      }),
+    ).rejects.toThrow("hash failed");
+    expect(client.$transaction).not.toHaveBeenCalled();
+  });
+
   it("ID・username・emailの一部だけが衝突する既存Userには触れず停止する", async () => {
     const collision = {
       ...fixtureRow(STAGING_SYNTHETIC_E2E_USER),
@@ -171,6 +193,51 @@ describe("staging synthetic Admin E2E fixtures", () => {
       deletedUsers: 1,
     });
     expect(transactionClient.user.deleteMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("fixtureが残っていないcleanupを冪等に成功させる", async () => {
+    const { client } = createClient();
+
+    await expect(removeStagingSyntheticAdminE2eFixtures({ client })).resolves.toEqual({
+      deletedUsers: 0,
+    });
+  });
+
+  it("prepareの削除件数が識別済みrow数と違う場合は作成せず停止する", async () => {
+    const { client, transactionClient } = createClient([fixtureRow(STAGING_SYNTHETIC_E2E_ADMIN)], {
+      deleted: 0,
+    });
+
+    await expect(
+      prepareStagingSyntheticAdminE2eFixtures({
+        client,
+        adminPassword: ADMIN_PASSWORD,
+        userPassword: USER_PASSWORD,
+        createPasswordHash: async () => "hash",
+      }),
+    ).rejects.toThrow("staging synthetic E2E fixtureの識別に失敗しました");
+    expect(transactionClient.user.createMany).not.toHaveBeenCalled();
+  });
+
+  it("prepareの作成件数が2件でない場合は失敗する", async () => {
+    const { client } = createClient([], { created: 1 });
+
+    await expect(
+      prepareStagingSyntheticAdminE2eFixtures({
+        client,
+        adminPassword: ADMIN_PASSWORD,
+        userPassword: USER_PASSWORD,
+        createPasswordHash: async () => "hash",
+      }),
+    ).rejects.toThrow("staging synthetic E2E fixtureの作成に失敗しました");
+  });
+
+  it("cleanupの削除件数が識別済みrow数と違う場合は失敗する", async () => {
+    const { client } = createClient([fixtureRow(STAGING_SYNTHETIC_E2E_ADMIN)], { deleted: 0 });
+
+    await expect(removeStagingSyntheticAdminE2eFixtures({ client })).rejects.toThrow(
+      "staging synthetic E2E fixtureの識別に失敗しました",
+    );
   });
 
   it("cleanupも識別fieldが完全一致しないUserを削除しない", async () => {

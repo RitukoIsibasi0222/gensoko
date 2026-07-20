@@ -58,4 +58,32 @@ describe('staging Playwright config guard', () => {
       expect(String(error)).not.toContain(secret);
     }
   });
+
+  it('Adminと対象Userの同一passwordを拒否する', () => {
+    expect(() =>
+      loadStagingE2EConfig({
+        ...VALID_ENVIRONMENT,
+        STAGING_SYNTHETIC_USER_PASSWORD: VALID_ENVIRONMENT.STAGING_SYNTHETIC_ADMIN_PASSWORD
+      })
+    ).toThrow('staging Playwright設定が不正です');
+  });
+
+  it.each(['STAGING_SYNTHETIC_ADMIN_PASSWORD', 'STAGING_SYNTHETIC_USER_PASSWORD'] as const)(
+    '%sの空白のみの値を拒否する',
+    (name) => {
+      expect(() => loadStagingE2EConfig({ ...VALID_ENVIRONMENT, [name]: '   ' })).toThrow(
+        'staging Playwright設定が不正です'
+      );
+    }
+  );
+
+  it.each([
+    ['STAGING_SYNTHETIC_ADMIN_EMAIL', 'staging-synthetic-e2e-admin+other@example.test'],
+    ['STAGING_SYNTHETIC_USER_USERNAME', 'staging_synthetic_e2e_user_other'],
+    ['STAGING_SYNTHETIC_USER_EMAIL', 'staging-synthetic-e2e-user+other@example.test']
+  ] as const)('%sの近似識別子を拒否する', (name, value) => {
+    expect(() => loadStagingE2EConfig({ ...VALID_ENVIRONMENT, [name]: value })).toThrow(
+      'staging Playwright設定が不正です'
+    );
+  });
 });
