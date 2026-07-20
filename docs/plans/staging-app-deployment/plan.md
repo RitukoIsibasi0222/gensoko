@@ -732,12 +732,20 @@ T35 cleanup execute、flag変更、migration、production deployはこの手順�
 
 - staging専用の固定Admin/User識別子を予約し、ID・username・email・role・verified/active状態が完全一致するrowだけを置換・cleanupする。1項目でも衝突した既存Userは削除せず処理を停止する。
 - 既存のstaging DB target validatorをprepare/removeの両方で必須化し、明示enable flag、`BATCH_ENVIRONMENT=staging`、staging project ref一致が揃わない限りPrismaを読み込まない。
-- credentialはworkflow内で`crypto.randomBytes`から生成し、mask後に`GITHUB_ENV`だけでCLIとPlaywrightへ渡す。値をCLI引数、log、artifactへ出さず、trace・screenshot・videoも無効にする。
-- workflowは`workflow_dispatch`、`develop`、GitHub `staging` Environment、共通batch concurrencyへ限定する。prepare後はPlaywrightの成功・失敗・cancelにかかわらず`always()`で完全一致fixtureをcleanupする。
+- credentialは全dependency・Prisma Client・Chromium準備後にworkflow内で`crypto.randomBytes`から生成し、mask後に`GITHUB_OUTPUT`からfixture prepareとPlaywrightのstep環境変数だけへ渡す。値をjob全体の環境変数、CLI引数、log、artifactへ出さず、trace・screenshot・videoも無効にする。
+- workflowは`workflow_dispatch`、`develop`、GitHub `staging` Environment、workflow単位の共通batch concurrencyへ限定する。Playwright stepを5分に制限し、main jobの`always()` cleanupに加え、main job非成功時は`needs`と`always()`を持つ10分制限のrecovery jobが別runnerで冪等cleanupする。workflow全体・両cleanup runnerの強制終了はplatform上絶対保証できないため、同じreview済みSHAの冪等再実行で回復する。
 - Playwrightは固定Vercel URLからAdmin login、対象synthetic Userの強制退会、対象Userの旧credentialによるlogin 401を確認する。固定Worker API URL以外とproduction・任意URLは設定guardで拒否する。
-- Redではfixture/CLI/workflow/Playwright設定の未実装、password正規化漏れ、fixture直接呼出し時の同一password拒否漏れを対象testで確認した。Green/Refactorではbackend対象4 files・23 tests、frontend対象2 files・13 testsが成功し、Playwright `--list`で1 specを収集した。
-- 最終品質gateはbackend通常97 files・1004 tests成功（外部DB integration 10 tests skip）、Workers 2 files・15 tests、build、lint、format checkが成功した。frontendは51 files・536 tests、lint、Svelte check（0 errors / 0 warnings）、format check、外部接続しないPreview build契約が成功した。
+- Redではfixture/CLI/workflow/Playwright設定の未実装、password正規化漏れ、fixture直接呼出し時の同一password拒否漏れを対象testで確認した。厳格レビュー後の追加Redでは、dependency導入前のcredential生成、job全体へのsecret露出、同一job cleanup、重複成功文言を選ぶPlaywright locatorを理由にbackend workflow 2 tests・frontend契約1 testが失敗した。Green/Refactorではstep scope、独立cleanup job、一意なstatus locatorへ修正し、fixture件数不一致・冪等cleanup・DB非接触を含むbackend対象3 files・23 tests、frontend対象2 files・19 testsが成功した。
+- 厳格レビュー改善後の最終品質gateはbackend通常97 files・1012 tests成功（外部DB integration 10 tests skip）、Workers 2 files・15 tests、build、lint、format checkが成功した。frontendは51 files・542 tests、lint、Svelte check（0 errors / 0 warnings）、format check、外部接続しないPreview build契約が成功し、Playwright `--list`で1 specを収集した。
+- frontend `npm audit --omit=dev`は0件だった。devDependencyを含むauditには既存SvelteKit経由の`cookie`低重要度3件が残るが、提示される`--force`修正はSvelteKitのbreaking downgradeになるため本変更では適用しない。
 - 本turnでは外部workflow、staging/production DB、実メール、再配備を実行していない。実staging E2Eとrun IDの記録は別途承認後のSD16後半へ残す。
+
+### SD16厳格レビュー改善記録（2026-07-20）
+
+- synthetic passwordを生成する前に第三者dependency・browserの導入を完了し、生成後に値を参照できる処理をrepository管理下のfixture CLIとPlaywrightだけへ縮小した。staging project refとDB URLも必要なstepだけへ限定した。
+- main job末尾の`always()` cleanupを通常失敗・cancel向けに維持し、main job非成功時だけ別runnerが実行するrecovery cleanupを追加した。workflow全体のconcurrency lock、E2E 5分、recovery cleanup 10分の時間枠を設定し、platform・両runner強制終了時は冪等再実行を必要とする残余リスクをrunbookと一致させた。
+- 管理画面が同一成功文言をsr-only live regionとtoastへ表示する既存A11Y設計を維持し、Playwright側を一意な`role=status`のtoastへscopeした。
+- AuditLogは削除漏れではなくUser削除後も保持する既存監査契約であるため、fixture cleanupの対象外とし、保持期限cleanup運用で管理することをrunbookへ明記した。
 
 ## 危険性と安全策
 
