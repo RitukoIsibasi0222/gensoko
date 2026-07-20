@@ -1,0 +1,189 @@
+name: Staging Synthetic Admin E2E
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: gensoko-batch-jobs
+  cancel-in-progress: false
+
+jobs:
+  staging-synthetic-admin-e2e:
+    name: Run staging synthetic Admin Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    permissions:
+      contents: read
+    env:
+      BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
+      STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED: ${{ vars.STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED }}
+      STAGING_E2E_BASE_URL: https://gensoko-frontend-staging-develop.vercel.app
+      STAGING_E2E_API_BASE_URL: https://gensoko-api-staging.rituko-labs.workers.dev/api/v1
+      STAGING_SYNTHETIC_ADMIN_EMAIL: staging-synthetic-e2e-admin@example.test
+      STAGING_SYNTHETIC_USER_USERNAME: staging_synthetic_e2e_user
+      STAGING_SYNTHETIC_USER_EMAIL: staging-synthetic-e2e-user@example.test
+
+    steps:
+      - name: Validate manual staging target
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_REF_NAME" != "develop" ]; then
+            echo "staging synthetic E2Eはdevelop branchから実行してください"
+            exit 1
+          fi
+          if [ "$BATCH_ENVIRONMENT" != "staging" ]; then
+            echo "staging synthetic E2EのEnvironment設定が不正です"
+            exit 1
+          fi
+          if [ "$STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED" != "true" ]; then
+            echo "staging synthetic E2E fixtureは無効です"
+            exit 1
+          fi
+          if [ -z "$STAGING_SUPABASE_PROJECT_REF" ] || [ -z "$DATABASE_URL" ]; then
+            echo "staging synthetic E2EのDB設定が不足しています"
+            exit 1
+          fi
+          if [ "$STAGING_E2E_BASE_URL" != "https://gensoko-frontend-staging-develop.vercel.app" ]; then
+            echo "staging frontend URLが不正です"
+            exit 1
+          fi
+          if [ "$STAGING_E2E_API_BASE_URL" != "https://gensoko-api-staging.rituko-labs.workers.dev/api/v1" ]; then
+            echo "staging API URLが不正です"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Validate staging database target
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+        run: npm run staging:validate-database-target
+
+      - name: Generate Prisma Client
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma generate
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Generate ephemeral masked credentials
+        id: credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from "node:fs";
+          import { randomBytes } from "node:crypto";
+
+          const adminPassword = "Aa1!" + randomBytes(24).toString("base64url");
+          const userPassword = "Bb2!" + randomBytes(24).toString("base64url");
+          process.stdout.write("::add-mask::" + adminPassword + "\n");
+          process.stdout.write("::add-mask::" + userPassword + "\n");
+          appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            "admin_password=" + adminPassword + "\n" +
+              "user_password=" + userPassword + "\n",
+            { encoding: "utf8" }
+          );
+          NODE
+
+      - name: Prepare exact synthetic Admin and User fixtures
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+          STAGING_SYNTHETIC_ADMIN_PASSWORD: ${{ steps.credentials.outputs.admin_password }}
+          STAGING_SYNTHETIC_USER_PASSWORD: ${{ steps.credentials.outputs.user_password }}
+        run: npm run staging:synthetic-admin-e2e-fixtures -- --operation prepare
+
+      - name: Run staging Admin Playwright E2E
+        timeout-minutes: 5
+        working-directory: frontend
+        env:
+          STAGING_SYNTHETIC_ADMIN_PASSWORD: ${{ steps.credentials.outputs.admin_password }}
+          STAGING_SYNTHETIC_USER_PASSWORD: ${{ steps.credentials.outputs.user_password }}
+        run: npm run test:e2e:staging
+
+      - name: Cleanup exact synthetic fixtures
+        if: ${{ always() && github.ref_name == 'develop' }}
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+        run: npm run staging:synthetic-admin-e2e-fixtures -- --operation remove
+
+  cleanup-staging-synthetic-fixtures:
+    name: Recover staging synthetic Admin E2E cleanup
+    needs: staging-synthetic-admin-e2e
+    if: ${{ always() && github.ref_name == 'develop' && needs['staging-synthetic-admin-e2e'].result != 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    permissions:
+      contents: read
+    env:
+      BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
+      STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED: ${{ vars.STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Validate staging database target
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+        run: npm run staging:validate-database-target
+
+      - name: Generate Prisma Client
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma generate
+
+      - name: Cleanup exact synthetic fixtures
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+        run: npm run staging:synthetic-admin-e2e-fixtures -- --operation remove

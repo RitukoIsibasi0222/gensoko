@@ -29,7 +29,7 @@
 | **Cloudflare Workers** | Hono APIサーバー       | 無料枠候補。SD13直前に現行plan・上限を確認 |
 | **Supabase**           | PostgreSQLデータベース | 無料枠候補。実接続前に現行plan・容量を確認 |
 
-料金・quota・スリープ・自動deploy条件は変更され得るため、この表を費用承認の根拠にしない。2026-07-19時点でVercel/Cloudflareのproject接続・自動deployは未実施であり、外部操作直前の確認結果を正本とする。
+料金・quota・スリープ・自動deploy条件は変更され得るため、この表を費用承認の根拠にしない。2026-07-20時点でstaging Vercel/Cloudflareは配備済みだが、追加の外部操作前には現在のplanと影響を再確認する。
 
 ---
 
@@ -108,12 +108,13 @@ type CreateAppOptions = {
 
 ### コード基盤の現在地点
 
-2026-07-20時点で、APIはSD13の一部、frontendはSD15のPreview配備まで進行中である。
+2026-07-20時点で、staging API/frontendは配備・基本smoke済みであり、SD16のsynthetic Admin Playwright実行を残している。
 
 - API: Workers専用entrypoint、request-scoped Prisma/mail/DO adapter、`wrangler.jsonc` staging設定、生成binding型、dry-run、bundle contract、production相当Workers runtime test
 - frontend: `@sveltejs/adapter-vercel`、Node.js 22、公開API URL fail-fast、Vercel Build Output/secret contract、frontend PR CIを固定
-- 実環境準備済み: Vercel Hobby project・`develop` Preview・branch scoped API URL・固定alias、Supabase Session Poolerをoriginとするcache無効Hyperdrive、Resend Free・MFA・sending access key
-- 未実施: staging Worker・SQLite-backed DO・Worker secret、API deploy/smoke、CORS実確認、DB query/migration、実データ確認、実メール送信
+- 実環境確認済み: Vercel Hobby `develop` Preview、staging Worker、SQLite-backed DO、Hyperdrive、7件のWorker secret、Supabase migration current、health/CORS/OPTIONS、元素118件
+- synthetic確認済み: 登録・メール認証・login・ゲーム10問/score 500・password reset・本人退会・削除後login拒否。Resendはallowlist宛の確認メール2通・resetメール1通だけを送信
+- 未実施: synthetic Admin強制退会Playwright workflow、production resource・deploy・DB操作
 
 コード基盤のローカル再確認は外部serviceへ接続せず、次で行う。
 
@@ -173,6 +174,21 @@ rollback時はIgnored Build Stepを`Only build pre-production`へ戻す。featur
 
 Supabase/実DB接続、migration、legacy cleanup、production deploy、実データ確認は上表の承認にも含まれず、それぞれ別の直前承認を必要とする。
 
+### SD16 synthetic Admin Playwright runbook
+
+実行対象は`.github/workflows/staging-synthetic-admin-e2e.yml`だけとし、GitHub Actionsの`develop` refから手動実行する。別branch、schedule、push、PRからは実行しない。
+
+1. GitHub `staging` Environmentの`BATCH_ENVIRONMENT=staging`、staging専用`DATABASE_URL`とproject refが既存validatorの契約を満たすことを、値を表示せず確認する。
+2. `STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED`を直前承認後だけ`true`にする。実行完了後は成否にかかわらず`false`へ戻す。
+3. 固定frontend `https://gensoko-frontend-staging-develop.vercel.app`と固定API `https://gensoko-api-staging.rituko-labs.workers.dev/api/v1`を変更しない。production・任意URLはguardが拒否する。
+4. 予約識別子`staging-synthetic-e2e-admin` / `staging-synthetic-e2e-user`と対応username/emailを実在Userや別fixtureへ流用しない。完全一致しない衝突rowがあればworkflowは削除せず停止する。
+5. workflowはbackend/frontend依存、Prisma Client、Chromiumの準備完了後に一時passwordを生成する。値はmaskして`GITHUB_OUTPUT`へ書き、fixture prepareとPlaywrightのstep環境変数だけへ渡す。CLI引数、job全体の環境変数、log、artifactへcredentialを出さない。
+6. backend依存導入→DB target検証→Prisma/frontend/Chromium準備→credential生成→完全一致fixture prepare→5分制限のAdmin強制退会Playwright→main jobの`always()` cleanupの順で実行する。workflow全体を共通batch concurrencyで直列化し、cleanup完了前に次のrunを開始しない。
+7. 通常の失敗・cancelではmain jobの`always()` cleanupを確認する。main jobが非成功の場合は、`needs`と`always()`を持つ10分制限のrecovery cleanup jobが別runnerでも冪等cleanupする。workflow全体または両cleanup runnerの強制終了などで結果を確認できない場合は、実在Userを手動操作せず、同じreview済みSHAのworkflowを再実行する。prepareが完全一致fixtureだけを安全に置換し、最後に再cleanupする。
+8. fixture cleanupは予約済みsynthetic User rowとcascade対象だけを削除する。Admin login・強制退会・対象User login拒否のAuditLogはUserと非連結の監査証跡として保持し、credentialを含まないことを前提に既存の監査ログ保持期限・承認済みcleanup運用で管理する。
+
+このコード実装中はworkflow、staging/production DB、実メール、再配備を実行しない。Playwright実行は別途直前承認を得る。
+
 ---
 
 ## Vercel へのデプロイ手順
@@ -222,7 +238,7 @@ stagingではEnvironmentをPreview、Git Branchを`develop`へ限定する。値
 
 `npm run workers:build`は生成型差分、Workers typecheck、staging dry-run、bundle contractを外部resourceなしで検証する。production相当runtime testは別の`npm run test:workers`で実行する。`backend/wrangler.jsonc`のstaging Hyperdrive IDは、作成済み`gensoko-postgres-staging`の実resource IDへ更新済みであり、production用resourceと共用しない。
 
-Cloudflare accountとstaging Hyperdrive originは作成済みである。Worker、DO namespace、secret、route/domainは未作成・未登録である。`wrangler deploy --env staging`を含む外部操作はSD14として分離し、上記staging runbookの直前承認なしに実行しない。production deployは本計画の対象外である。
+Cloudflare account、staging Hyperdrive origin、Worker `gensoko-api-staging`、SQLite-backed DO、7件のWorker secret、公開Workers URLは作成・配備済みである。health 200、CORS、OPTIONS 204、Hyperdrive経由の元素118件を確認済みで、production resourceは作成していない。secret値は読み戻し・文書化しない。
 
 ---
 
