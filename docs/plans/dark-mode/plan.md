@@ -225,7 +225,7 @@ export const themeStore: {
 
 - 完了日: 2026-07-21
 - 実装ブランチ: `feature/dark-mode`
-- PR: 作成後に追記
+- PR: #127
 
 ### 計画からの変更点
 
