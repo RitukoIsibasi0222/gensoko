@@ -211,6 +211,14 @@ Supabase/実DB接続、migration、legacy cleanup、production deploy、実デ�
 - 補正を`develop`へmergeし、実行SHA、workflow guard、GitHub `staging` Environment、固定URL、automation bypass Secret名、enable flag `false`を再確認する。Secret値は取得・表示しない。
 - 新しい明示承認を得るまでworkflowを起動しない。承認後もenable flagを`true`にして1回だけ起動し、成否にかかわらず`false`へ戻す既存手順を維持する。
 
+#### PR #122 merge後の再実行結果（2026-07-21）
+
+- `develop`の`31723f2a44f4a527253479548d9dfecf242ee7c4`で[run 29795967063](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29795967063)を1回だけ実行した。fixture prepareは`createdUsers: 2`、`replacedUsers: 0`で成功した。
+- hydration readiness確認後のAdmin loginは200となり、固定frontendのトップへ遷移した。前回のlogin response timeoutは再発しなかった。
+- 続く`/admin`遷移後に「管理者ダッシュボード」見出しを10秒以内に取得できずPlaywrightは失敗した。synthetic Userの強制退会と対象Userの旧credentialによる401拒否には未到達であり、workflow全体はfailureである。
+- main cleanupは`deletedUsers: 2`、独立recovery cleanupは`deletedUsers: 0`で成功した。recovery時点で予約fixtureが残っていないことをworkflow結果で確認し、enable flagは終了後に`false`へ戻して確認した。
+- credential値は取得・表示していない。staging DBへの追加の直接DB query、手動fixture操作、production URL・DB・deploy、migration、実メール、再配備は実行していない。原因を診断し、必要な修正をreview・mergeして新しい明示承認を得るまで同一workflowを再実行しない。
+
 このコード実装中はworkflow、staging/production DB、実メール、再配備を実行しない。Playwright実行は別途直前承認を得る。
 
 ---

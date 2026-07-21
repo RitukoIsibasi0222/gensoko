@@ -766,6 +766,14 @@ T35 cleanup execute、flag変更、migration、production deployはこの手順�
 - 最終品質gateはfrontend 51 files・554 tests、lint、Svelte check（0 errors / 0 warnings）、format check、build、backend workflow contract 5 tests、文書format checkが成功し、Playwright `--list`で1 specを収集した。
 - 修正はまだ`develop`へmergeされておらず、staging workflowも再実行していない。merge後のpreflightと新しい明示承認までSD16を進行中とする。
 
+### SD16 PR #122 merge後再実行（2026-07-21）
+
+- PR #121・#122・#123 merge後の`develop` SHA `31723f2a44f4a527253479548d9dfecf242ee7c4`から[run 29795967063](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29795967063)を1回だけ実行した。prepareはsynthetic Admin/User 2件作成・置換0件で成功した。
+- hydration readiness確認後のAdmin loginは200となり、固定frontendのトップへ遷移した。前回のlogin response timeoutは再発しなかった。
+- `page.goto('/admin')`後に「管理者ダッシュボード」見出しを10秒以内に取得できずPlaywrightは失敗した。synthetic Userの強制退会と旧credential 401拒否には未到達であり、runとSD16を成功扱いにしない。
+- main cleanupは`deletedUsers: 2`、独立recovery cleanupは`deletedUsers: 0`で成功し、予約fixture残存なしをworkflow結果で確認した。enable flagは終了後に`false`へ復旧した。
+- credential値、staging DBへの追加の直接DB query、手動fixture操作、production URL・DB・deploy、migration、実メール、再配備は扱っていない。管理画面到達失敗を安全に診断し、必要な修正をreview・mergeして別の明示承認を得るまで再実行しない。
+
 ### SD16厳格レビュー改善記録（2026-07-20）
 
 - synthetic passwordを生成する前に第三者dependency・browserの導入を完了し、生成後に値を参照できる処理をrepository管理下のfixture CLIとPlaywrightだけへ縮小した。staging project refとDB URLも必要なstepだけへ限定した。
