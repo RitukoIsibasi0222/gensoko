@@ -204,6 +204,13 @@ Supabase/実DB接続、migration、legacy cleanup、production deploy、実デ�
 - 設定を変えない再実行で解消する根拠がないため、同一内容のworkflowは再実行しない。browser側のlogin request発行とresponse観測をcredentialを含めず診断し、必要な修正をTDD・review・mergeした後、改めて明示承認を得る。
 - staging DBへの追加直接queryや手動fixture操作、production URL・DB・deploy、migration、実メール、再配備は実行していない。
 
+#### login response timeout補正後の再実行条件（2026-07-21）
+
+- credentialを使わないlive診断ではclient validationとdummy login 401を確認し、固定Worker APIへ同じdummy requestを直接送った場合も約1.6秒で401だった。run logではSSR formの入力・click後にPOST responseがなく、遅いrunnerでhydration完了前にnative submitした可能性が最も高いと推定する。
+- Playwrightは各loginでsynthetic credentialを入力する前に、画面遷移を起こさないcancelable `SubmitEvent`をformへdispatchし、Svelte handlerの`preventDefault()`とclient validation alertをhydration readinessとして待つ。入力値、API request、fixture、credential、AuditLogを使用しない。
+- 補正を`develop`へmergeし、実行SHA、workflow guard、GitHub `staging` Environment、固定URL、automation bypass Secret名、enable flag `false`を再確認する。Secret値は取得・表示しない。
+- 新しい明示承認を得るまでworkflowを起動しない。承認後もenable flagを`true`にして1回だけ起動し、成否にかかわらず`false`へ戻す既存手順を維持する。
+
 このコード実装中はworkflow、staging/production DB、実メール、再配備を実行しない。Playwright実行は別途直前承認を得る。
 
 ---
