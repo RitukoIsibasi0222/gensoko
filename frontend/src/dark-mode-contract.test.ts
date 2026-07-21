@@ -32,6 +32,37 @@ function configureBootstrapDocument(): void {
   localStorage.clear();
 }
 
+function getTokenColors(appCss: string, token: string): readonly [string, string] {
+  const tokenValue = appCss.match(
+    new RegExp(
+      `${token}:\\s*(?:light-dark\\((#[0-9a-f]{6}),\\s*(#[0-9a-f]{6})\\)|(#[0-9a-f]{6}))`,
+      'i'
+    )
+  );
+  if (!tokenValue) throw new Error(`${token} の色定義が見つかりません`);
+
+  const solidColor = tokenValue[3];
+  return solidColor ? [solidColor, solidColor] : [tokenValue[1], tokenValue[2]];
+}
+
+function getContrastRatio(foreground: string, background: string): number {
+  const getRelativeLuminance = (hex: string): number => {
+    const channels = [1, 3, 5].map(
+      (start) => Number.parseInt(hex.slice(start, start + 2), 16) / 255
+    );
+    const [red, green, blue] = channels.map((channel) =>
+      channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+    );
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  };
+
+  const foregroundLuminance = getRelativeLuminance(foreground);
+  const backgroundLuminance = getRelativeLuminance(background);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 beforeEach(() => {
   configureBootstrapDocument();
   vi.restoreAllMocks();
@@ -149,5 +180,33 @@ describe('dark mode source contract', () => {
 
     const missingTokens = [...usedTokens].filter((token) => !appCss.includes(`--color-${token}:`));
     expect(missingTokens).toEqual([]);
+  });
+
+  it('主要な文字色とfocus indicatorがlight・dark双方でWCAGコントラストを満たす', () => {
+    const appCss = readSource('src/app.css');
+    const contrastPairs = [
+      { foreground: '--color-text', background: '--color-canvas', minimum: 4.5 },
+      { foreground: '--color-text-muted', background: '--color-surface', minimum: 4.5 },
+      { foreground: '--color-text-inverse', background: '--color-action', minimum: 4.5 },
+      { foreground: '--color-text-inverse', background: '--color-danger-solid', minimum: 4.5 },
+      { foreground: '--color-success-text', background: '--color-success-surface', minimum: 4.5 },
+      { foreground: '--color-warning-text', background: '--color-warning-surface', minimum: 4.5 },
+      { foreground: '--color-danger-text', background: '--color-danger-surface', minimum: 4.5 },
+      { foreground: '--color-info-text', background: '--color-info-surface', minimum: 4.5 },
+      { foreground: '--color-focus', background: '--color-surface', minimum: 3 }
+    ] as const;
+
+    for (const pair of contrastPairs) {
+      const foregroundColors = getTokenColors(appCss, pair.foreground);
+      const backgroundColors = getTokenColors(appCss, pair.background);
+
+      for (const [themeIndex, theme] of ['light', 'dark'].entries()) {
+        const ratio = getContrastRatio(foregroundColors[themeIndex], backgroundColors[themeIndex]);
+        expect(
+          ratio,
+          `${theme}: ${pair.foreground} / ${pair.background} のコントラスト比`
+        ).toBeGreaterThanOrEqual(pair.minimum);
+      }
+    }
   });
 });
