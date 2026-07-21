@@ -1183,7 +1183,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 - [x] T31: frontend品質checkを通す
 - [x] T32: 専用Docker PostgreSQL integration testを通す
 - [ ] T33: staging expand migration・性能を確認する
-- [-] T34: staging API/UI・Playwrightの安全なsynthetic実行基盤を実装し、承認後に確認する
+- [x] T34: staging API/UI・Playwrightの安全なsynthetic実行基盤を実装し、承認後に確認する
 - [ ] T35: staging cleanup dry-run/execute/再実行を確認する
 - [ ] T36: production expand migrationを適用する
 - [ ] T37: production物理削除を段階deployする
@@ -1292,6 +1292,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 
 > T35 safety preflight TDD記録（2026-07-18）: staging cleanup前に完全一致するsynthetic legacy target 1件とactive/suspended sentinelを検証し、未知のlegacy row、fixture識別子衝突、所有row不整合、Element欠落があれば削除前に停止するfixture module・CLI・manual workflowを追加した。cleanup workflowはproject ref照合、Prisma Client生成、dry-run/execute前の`verify-isolated`、execute後の`verify-cleaned`を必須化した。cleanup済み0件かつ所有row 0件は冪等再実行として許可する。Redではmodule/workflow未実装と再実行不許可を確認し、Greenはmodule/workflow 13件とTypeScript buildが成功した。変更はPR #107で`develop`へmerge済みだが、staging workflowのdry-run/execute/再実行はBタスクとして未実施であり、T35全体は未完了とする。
 
+> T34 staging synthetic Admin E2E完了記録（2026-07-21）: PR #125 merge後の`develop` SHA `6bb898d52915df1139b863383e8be88e35a3d63b`から[run 29802327100](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29802327100)を明示承認付きで1回実行した。Admin login、管理者linkのSPA遷移、`/admin` dashboard、synthetic User強制退会、旧credential 401拒否を含むPlaywright 1件が成功した。prepareはAdmin/User 2件作成・置換0件、E2E内で対象Userを削除し、main cleanupは残るAdmin 1件を削除して成功した。recovery cleanupはmain成功のためskipされ、enable flagは終了後に`false`へ復旧した。production URL・DB・deploy、migration、実メール、追加の直接DB queryは実行していない。これによりT34を完了とするが、T33、T35、production、restore、contract適用のgateは未完了のまま維持する。
+
 > T39 Red/Green記録（2026-07-18）: `usable-admin`、auth、admin、ranking、admin-create、user serviceに旧DB列名が残れば失敗し、admin v1 route境界のdeprecated `deletedAt: null`合成は維持するsource contract testを先行追加した。Redは6 service fileの参照を検出し、route互換だけGreenだった。Greenではserviceの型・select・where・状態判定から旧列依存を除去し、現存Userだけを扱うcontract後の集計へ切り替えた。`status=deleted`の200空一覧と公開responseの`deletedAt: null`は維持した。関連151件、追加contract 7件、TypeScript buildが成功した。staging/production deployとsoakはT38完了後のBタスクとして残す。
 
 > T43 Red/Green・専用DB記録（2026-07-18）: guard SQLを通常の`prisma/migrations`ではなく`prisma/contract-migrations`へ隔離し、`deletedAt IS NOT NULL`が1件でもあれば件数・IDを含まないgeneric errorでindex/column drop前に停止する契約testを追加した。RedはSQL未作成で失敗し、Greenは配置・guard順序2件が成功した。ローカルDocker PostgreSQLの完全一致専用DB `gensoko_account_deletion_contract_test`へ通常15 migrationsを適用し、legacy rowありでは列・index保持、0件では列・一時index dropの2件が成功した。test終了時に専用DBの列・indexとfixture 0件を復元した。共有環境の`prisma migrate deploy`、staging、productionへは適用しておらず、T44と元のrelease gateを維持する。
@@ -1307,7 +1309,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 ### A: 現在の環境で実施する
 
 - T33は、stagingへのexpand migration適用、staging cascade性能、ローカルisolated初回migration baselineまでを実施済み証拠として維持する。managed DB再計測用の環境同等性条件、暫定数値gate、停止条件だけを文書化し、ローカル値をmanaged DB合格証拠へ昇格させない。managed DB固有の証拠または正式な残余リスク承認がないため、T33全体は進行中のままとし、新しいSupabase projectや追加費用は発生させない。
-- T34は、配備済みCloudflare Workers/Vercelへ安全に実行するsynthetic Admin/User fixture・manual workflow・Playwright specをローカルTDD実装する。実URLへの実行はBへ残す。
+- T34は、synthetic Admin/User fixture・manual workflow・Playwright specのローカルTDD実装と、承認後のstaging実URL検証まで完了した。run 29802327100の結果とproduction非操作境界を完了記録として維持する。
 - T35は、staging cleanupの対象が完全一致するsynthetic fixtureだけであることをID・識別field・対象件数で事前検証し、execute自体もfixture IDだけに限定する仕組みをTDD実装する。preflight後に未知のlegacy rowが発生しても削除せず、残件として失敗させる。
 - T39は、DB列非参照codeとtestを実装できる。Userを返すPrisma writeへ明示`select`を要求するsource contractで旧列の暗黙取得も防ぐ。v1のdeprecated `deletedAt: null`はroute境界の互換値として維持する。staging/productionへdeployする前に各環境のlegacy cleanup 0件を必須とし、元のT38依存はproduction deploy gateとして維持する。
 - T43は、table lock付きguard SQLのcontract testとローカル専用DBでのfail/success・並行insert確認を準備できる。ただし通常の`prisma migrate deploy`へ混入して共有環境へ早期適用される構成にはしない。安全に分離できない場合はmigration追加をBへ戻す。
@@ -1315,7 +1317,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 ### B: 実環境・前提が整った時点で実施する
 
 - T33のmanaged DB固有write待ち検証と、正式なmaintenance windowに基づく数値gate承認。暫定候補だけでは完了扱いにしない。
-- T34のstaging Admin強制退会Playwright実行。配備先と安全なsynthetic実行基盤は準備済みだが、workflow実行は直前承認を必要とする。
+- T34のstaging Admin強制退会Playwright実行は、直前承認を得たrun 29802327100で完了した。再実行は新しい回帰確認が必要な場合に限り、同じpreflightと承認境界を適用する。
 - T35のstaging dry-run/execute/再実行0件。fixture preflightを含む変更が`develop`へmergeされ、staging固定workflowから実行できることを前提とする。
 - T36〜T38、T39の実環境deploy、T40〜T42、T44、production smoke test、production release gate。
 - T43 migrationのstaging/production適用。legacy 0件、非参照code、backup、旧Artifact失効、restore drill、rollback制限を元計画どおり要求する。
@@ -1330,7 +1332,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 
 ### 依存関係の扱い
 
-- T33の未解決部分はproduction expand migrationの判断材料であり、ローカル参考検証を妨げない。ただしT34 staging完了の前提を満たしたとは扱わない。
+- T33の未解決部分はproduction expand migrationの判断材料であり、完了済みT34のstaging synthetic結果をproduction migrationの合格証拠へ昇格させない。
 - T33のmanaged DB証拠がない状態でproduction migrationを初回性能試験に使わない。暫定gateを満たせる同等環境が用意できない場合はT36をblockし、通常`CREATE INDEX`以外の移行方式を別設計する。
 - T39/T43は「code・test・専用DB検証」と「共有環境deploy・適用」を分離する。前者を先に準備しても、元のT38/T41/T42依存とrelease gateを完了扱いにしない。
 - 共有環境へ適用され得るmigrationを安全に隔離できない場合は、T43の実migration作成を開始せずBへ残す。
