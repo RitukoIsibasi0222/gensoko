@@ -71,6 +71,21 @@ afterEach(async () => {
 });
 
 describe('Header admin navigation', () => {
+  it('theme toggleをdesktopとmobile menuの両方から操作可能にする', async () => {
+    const target = renderHeader();
+    await tick();
+
+    const themeToggles = target.querySelectorAll<HTMLButtonElement>(
+      'button[aria-label$="モードに切り替える"]'
+    );
+    const mobileNavigation = target.querySelector('#mobile-navigation');
+
+    expect(themeToggles).toHaveLength(2);
+    expect(mobileNavigation?.contains(themeToggles[1])).toBe(true);
+    expect((mobileNavigation as HTMLElement & { inert: boolean }).inert).toBe(true);
+    expect(mobileNavigation?.getAttribute('aria-hidden')).toBe('true');
+  });
+
   it('ADMINにはdesktopとmobileの両方で管理者導線を表示する', async () => {
     const target = renderHeader();
     await tick();

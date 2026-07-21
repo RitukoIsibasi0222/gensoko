@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
 
   type NavItem = {
@@ -87,6 +88,7 @@
 
     <!-- 認証エリア：初期化完了後にログイン状態に応じて切り替え -->
     <div class="hidden items-center gap-2 text-sm md:flex">
+      <ThemeToggle />
       {#if authStore.isInitializing}
         <!-- 初期化中は非表示（refresh 結果が出る前にフリッカーするのを防ぐ） -->
       {:else if authStore.isLoggedIn}
@@ -118,6 +120,7 @@
   >
     <div class="overflow-hidden">
       <div class="mx-auto max-w-5xl space-y-4 px-4 py-4">
+        <ThemeToggle />
         <ul class="text-ink grid gap-1 text-sm font-medium">
           {#each primaryNavItems as item (item.href)}
             <li>
