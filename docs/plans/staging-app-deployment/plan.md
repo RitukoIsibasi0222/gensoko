@@ -774,6 +774,14 @@ T35 cleanup execute、flag変更、migration、production deployはこの手順�
 - main cleanupは`deletedUsers: 2`、独立recovery cleanupは`deletedUsers: 0`で成功し、予約fixture残存なしをworkflow結果で確認した。enable flagは終了後に`false`へ復旧した。
 - credential値、staging DBへの追加の直接DB query、手動fixture操作、production URL・DB・deploy、migration、実メール、再配備は扱っていない。管理画面到達失敗を安全に診断し、必要な修正をreview・mergeして別の明示承認を得るまで再実行しない。
 
+### SD16 `/admin`到達失敗の診断・TDD補正（2026-07-21）
+
+- Admin login成功時は`authStore.login()`がADMIN roleとaccess tokenをmemory・`sessionStorage`へ保存する。直後の`page.goto('/admin')`はSvelteKit内のSPA遷移ではなく新しいdocument navigationであり、memory stateを破棄してroot layoutの`authStore.initialize()`からrefreshへ入る。
+- backendのrefresh cookieは`SameSite=Strict`で、固定frontendの`vercel.app`と固定APIの`workers.dev`はcross-siteである。したがってフルナビゲーション後のrefreshにはcookieを送れず、失敗時にauth storeがanonymousへclearされる。Admin pageはredirectせず未認証表示へ分岐するため、URLは`/admin`でもdashboard見出しを取得できない。Admin role判定や10秒timeout自体は原因ではない。
+- 実利用導線と同じHeaderの「管理者」リンクをvisible確認後にclickし、SPA遷移後の`/admin` URLとdashboard見出しを順に検証する形へ変更した。source contractで管理者リンク・click・URL・見出しの順序と`page.goto('/admin')`禁止を固定した。Redは新規contract 1件だけ失敗し、Greenは6件、RefactorはHeader・Admin pageを含む関連3 files・35 testsが成功した。
+- 最終品質gateはfrontend 51 files・555 tests、ESLint、Prettier check、Svelte check（0 errors / 0 warnings）、production build、backend workflow contract 5 testsが成功した。実credential・Secretを使わないローカル用ダミー設定のPlaywright `--list`で1 specを収集し、browser・staging接続は実行していない。
+- 強制退会・旧credential 401、hydration readiness、fixture、workflow、cleanup、固定URL、bypass header送信範囲、trace/video/screenshot設定は変更していない。workflowは再実行せず、merge後preflightと別の明示承認までSD16を進行中とし、enable flag `false`を維持する。
+
 ### SD16厳格レビュー改善記録（2026-07-20）
 
 - synthetic passwordを生成する前に第三者dependency・browserの導入を完了し、生成後に値を参照できる処理をrepository管理下のfixture CLIとPlaywrightだけへ縮小した。staging project refとDB URLも必要なstepだけへ限定した。

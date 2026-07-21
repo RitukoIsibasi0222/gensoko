@@ -44,7 +44,10 @@ test('synthetic Adminが対象Userを強制退会し、旧資格情報の再認�
   expect(adminLoginResponse.status()).toBe(200);
   await expect(page).toHaveURL(stagingConfig.baseUrl + '/');
 
-  await page.goto('/admin');
+  const adminLink = page.getByRole('link', { name: '管理者', exact: true });
+  await expect(adminLink).toBeVisible();
+  await adminLink.click();
+  await expect(page).toHaveURL(stagingConfig.baseUrl + '/admin');
   await expect(page.getByRole('heading', { name: '管理者ダッシュボード' })).toBeVisible();
 
   await page.getByLabel('ユーザー名またはメールアドレス').fill(stagingConfig.userUsername);
