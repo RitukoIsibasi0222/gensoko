@@ -120,7 +120,7 @@
 </script>
 
 <div class="mx-auto max-w-md px-4 py-8">
-  <h1 class="text-2xl font-bold text-gray-800">ユーザー登録</h1>
+  <h1 class="text-text text-2xl font-bold">ユーザー登録</h1>
 
   {#if !isSuccess}
     <!-- novalidate でネイティブバリデーションを無効化し、カスタムバリデーションの日本語メッセージを優先する -->
@@ -130,7 +130,7 @@
         <div
           id="form-error"
           role="alert"
-          class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          class="border-danger-border bg-danger-surface text-danger-text rounded-md border px-4 py-3 text-sm"
         >
           {formError}
         </div>
@@ -138,7 +138,7 @@
 
       <!-- ユーザー名入力 -->
       <div>
-        <label for="username" class="block text-sm font-medium text-gray-700"> ユーザー名 </label>
+        <label for="username" class="text-text block text-sm font-medium"> ユーザー名 </label>
         <input
           id="username"
           type="text"
@@ -148,16 +148,16 @@
           required
           aria-invalid={usernameError ? 'true' : undefined}
           aria-describedby={usernameError ? 'username-error' : undefined}
-          class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+          class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
         />
         {#if usernameError}
-          <p id="username-error" class="mt-1 text-sm text-red-600">{usernameError}</p>
+          <p id="username-error" class="text-danger-text mt-1 text-sm">{usernameError}</p>
         {/if}
       </div>
 
       <!-- メールアドレス入力 -->
       <div>
-        <label for="email" class="block text-sm font-medium text-gray-700"> メールアドレス </label>
+        <label for="email" class="text-text block text-sm font-medium"> メールアドレス </label>
         <input
           id="email"
           type="email"
@@ -167,16 +167,16 @@
           required
           aria-invalid={emailError ? 'true' : undefined}
           aria-describedby={emailError ? 'email-error' : undefined}
-          class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+          class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
         />
         {#if emailError}
-          <p id="email-error" class="mt-1 text-sm text-red-600">{emailError}</p>
+          <p id="email-error" class="text-danger-text mt-1 text-sm">{emailError}</p>
         {/if}
       </div>
 
       <!-- パスワード入力 -->
       <div>
-        <label for="password" class="block text-sm font-medium text-gray-700"> パスワード </label>
+        <label for="password" class="text-text block text-sm font-medium"> パスワード </label>
         <div class="relative mt-1">
           <input
             id="password"
@@ -187,13 +187,13 @@
             required
             aria-invalid={passwordError ? 'true' : undefined}
             aria-describedby={passwordError ? 'password-hint password-error' : 'password-hint'}
-            class="w-full rounded-md border border-gray-300 px-3 py-2 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+            class="border-border focus:border-focus focus:ring-focus w-full rounded-md border px-3 py-2 pr-10 focus:ring-1 focus:outline-none"
           />
           <button
             type="button"
             onclick={() => (showPassword = !showPassword)}
             aria-label={showPassword ? 'パスワードを隠す' : 'パスワードを表示する'}
-            class="absolute inset-y-0 right-0 flex items-center rounded-md pr-3 text-gray-400 hover:text-gray-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+            class="text-text-disabled hover:text-text-muted focus:ring-focus absolute inset-y-0 right-0 flex items-center rounded-md pr-3 focus:ring-2 focus:ring-offset-2 focus:outline-none"
           >
             {#if showPassword}
               <!-- eye-off: 表示中 → クリックで隠す -->
@@ -232,11 +232,11 @@
             {/if}
           </button>
         </div>
-        <p id="password-hint" class="mt-1 text-sm text-gray-600">
+        <p id="password-hint" class="text-text-muted mt-1 text-sm">
           {PASSWORD_BYTE_LIMIT_HINT}
         </p>
         {#if passwordError}
-          <p id="password-error" class="mt-1 text-sm text-red-600">{passwordError}</p>
+          <p id="password-error" class="text-danger-text mt-1 text-sm">{passwordError}</p>
         {/if}
       </div>
 
@@ -244,7 +244,7 @@
       <button
         type="submit"
         disabled={isSubmitting}
-        class="w-full rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        class="bg-action text-text-inverse hover:bg-action-hover focus:ring-focus w-full rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isSubmitting ? '登録中...' : '登録'}
       </button>
@@ -253,10 +253,10 @@
     <!-- 登録完了画面 -->
     <div
       role="status"
-      class="mt-6 rounded-md border border-green-200 bg-green-50 px-6 py-8 text-center"
+      class="border-success-border bg-success-surface mt-6 rounded-md border px-6 py-8 text-center"
     >
-      <p class="text-lg font-semibold text-green-800">確認メールを送信しました</p>
-      <p class="mt-2 text-sm text-green-700">
+      <p class="text-success-text text-lg font-semibold">確認メールを送信しました</p>
+      <p class="text-success-text mt-2 text-sm">
         ご登録のメールアドレスに確認メールをお送りしました。<br />
         メール内のリンクをクリックして登録を完了してください。
       </p>
@@ -265,7 +265,7 @@
 
   <!-- ログインページへの導線 -->
   <div class="mt-4 text-center text-sm">
-    <span class="text-gray-600">すでにアカウントをお持ちの方は</span>
-    <a href="/login" class="text-blue-600 hover:underline">ログイン</a>
+    <span class="text-text-muted">すでにアカウントをお持ちの方は</span>
+    <a href="/login" class="text-action hover:underline">ログイン</a>
   </div>
 </div>

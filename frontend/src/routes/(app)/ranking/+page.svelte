@@ -138,9 +138,9 @@
 
 <div class="space-y-6">
   <section class="space-y-2">
-    <p class="text-sm font-semibold text-gray-500">ランキング</p>
-    <h1 class="text-2xl font-bold text-gray-900">週間・全期間ランキング</h1>
-    <p class="max-w-2xl text-sm leading-6 text-gray-600">
+    <p class="text-text-subtle text-sm font-semibold">ランキング</p>
+    <h1 class="text-text text-2xl font-bold">週間・全期間ランキング</h1>
+    <p class="text-text-muted max-w-2xl text-sm leading-6">
       保存されたゲーム結果のスコアをもとに、上位50件を表示します。
     </p>
   </section>
@@ -152,10 +152,10 @@
   >
     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h2 id="ranking-heading" class="text-lg font-bold text-gray-900">
+        <h2 id="ranking-heading" class="text-text text-lg font-bold">
           {currentPeriod === 'weekly' ? '週間ランキング' : '全期間ランキング'}
         </h2>
-        <p class="mt-1 text-sm text-gray-600">
+        <p class="text-text-muted mt-1 text-sm">
           {currentPeriod === 'weekly'
             ? '今週のスコア順に表示します。'
             : 'これまでの累計スコア順に表示します。'}
@@ -163,15 +163,15 @@
       </div>
 
       <div
-        class="inline-flex rounded border border-gray-300 bg-white p-1"
+        class="border-border bg-surface inline-flex rounded border p-1"
         role="group"
         aria-label="ランキング種別"
       >
         <button
           type="button"
           class={currentPeriod === 'weekly'
-            ? 'rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white'
-            : 'rounded px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500'}
+            ? 'bg-action text-text-inverse rounded px-4 py-2 text-sm font-semibold'
+            : 'text-text hover:bg-surface-muted focus-visible:outline-focus rounded px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2'}
           aria-pressed={currentPeriod === 'weekly'}
           onclick={() => updatePeriod('weekly')}
           onkeydown={(event) => handlePeriodKeydown(event, 'weekly')}
@@ -181,8 +181,8 @@
         <button
           type="button"
           class={currentPeriod === 'alltime'
-            ? 'rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white'
-            : 'rounded px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500'}
+            ? 'bg-action text-text-inverse rounded px-4 py-2 text-sm font-semibold'
+            : 'text-text hover:bg-surface-muted focus-visible:outline-focus rounded px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2'}
           aria-pressed={currentPeriod === 'alltime'}
           onclick={() => updatePeriod('alltime')}
           onkeydown={(event) => handlePeriodKeydown(event, 'alltime')}
@@ -193,26 +193,29 @@
     </div>
 
     {#if isRankingBusy}
-      <div class="rounded border border-gray-200 bg-white p-5" aria-live="polite">
-        <p class="text-sm text-gray-600">ランキングを読み込んでいます...</p>
+      <div class="border-border-muted bg-surface rounded border p-5" aria-live="polite">
+        <p class="text-text-muted text-sm">ランキングを読み込んでいます...</p>
       </div>
     {:else if loadStatus === 'error'}
-      <div class="rounded border border-red-200 bg-red-50 p-5 text-red-700" role="alert">
+      <div
+        class="border-danger-border bg-danger-surface text-danger-text rounded border p-5"
+        role="alert"
+      >
         <p class="text-sm font-semibold">{errorMessage}</p>
         <button
           type="button"
           onclick={retryRanking}
           disabled={isLoading}
-          class="mt-3 rounded border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:cursor-not-allowed disabled:bg-red-100"
+          class="border-danger-border-strong bg-surface text-danger-text hover:bg-danger-surface-strong focus-visible:outline-danger-border-strong disabled:bg-danger-surface-strong mt-3 rounded border px-3 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
         >
           再試行
         </button>
       </div>
     {:else if rankingResponse && !hasRankingEntries}
-      <div class="rounded border border-gray-200 bg-white p-5">
-        <p class="text-sm text-gray-600">まだランキング対象のゲーム結果がありません。</p>
+      <div class="border-border-muted bg-surface rounded border p-5">
+        <p class="text-text-muted text-sm">まだランキング対象のゲーム結果がありません。</p>
         <a
-          class="mt-4 inline-flex rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+          class="bg-action text-text-inverse hover:bg-action-hover focus-visible:outline-focus mt-4 inline-flex rounded px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
           href="/game"
         >
           ゲームを始める

@@ -22,8 +22,8 @@
 
 <div class="space-y-3" aria-label="ゲーム進捗">
   <div class="flex items-center justify-between gap-3">
-    <p class="text-sm font-semibold text-gray-700">進捗</p>
-    <p class="text-sm text-gray-600">{progressLabel}</p>
+    <p class="text-text text-sm font-semibold">進捗</p>
+    <p class="text-text-muted text-sm">{progressLabel}</p>
   </div>
 
   <ol
@@ -35,7 +35,11 @@
       <li>
         <span
           class={`block h-2.5 rounded-full ${
-            item.isCurrent ? 'bg-brand' : item.isAnswered ? 'bg-emerald-500' : 'bg-gray-200'
+            item.isCurrent
+              ? 'bg-action'
+              : item.isAnswered
+                ? 'bg-success-solid'
+                : 'bg-surface-disabled'
           }`}
           title={item.label}
           aria-label={`${item.label}${item.isCurrent ? '、現在の問題' : item.isAnswered ? '、回答済み' : '、未回答'}`}

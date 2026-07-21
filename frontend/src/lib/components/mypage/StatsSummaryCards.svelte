@@ -44,12 +44,12 @@
 
 <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
   {#each summaryItems as item (item.label)}
-    <article class="rounded border border-gray-200 bg-white p-4 shadow-sm">
-      <p class="text-sm font-semibold text-gray-500">{item.label}</p>
-      <p class="mt-2 text-2xl font-bold text-gray-900">{item.value}</p>
-      <p class="mt-1 text-sm text-gray-600">{item.description}</p>
+    <article class="border-border-muted bg-surface rounded border p-4 shadow-sm">
+      <p class="text-text-subtle text-sm font-semibold">{item.label}</p>
+      <p class="text-text mt-2 text-2xl font-bold">{item.value}</p>
+      <p class="text-text-muted mt-1 text-sm">{item.description}</p>
     </article>
   {/each}
 </div>
 
-<p class="text-xs text-gray-500">最終更新: {formatStatsDate(stats.updatedAt)}</p>
+<p class="text-text-subtle text-xs">最終更新: {formatStatsDate(stats.updatedAt)}</p>

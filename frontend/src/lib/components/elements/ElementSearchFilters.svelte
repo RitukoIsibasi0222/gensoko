@@ -115,12 +115,10 @@
   }
 </script>
 
-<section class="rounded border border-gray-200 bg-white p-4">
+<section class="border-border-muted bg-surface rounded border p-4">
   <form class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_13rem_11rem_auto]" onsubmit={handleSubmit}>
     <div>
-      <label for="element-keyword" class="block text-sm font-medium text-gray-700">
-        キーワード
-      </label>
+      <label for="element-keyword" class="text-text block text-sm font-medium"> キーワード </label>
       <input
         id="element-keyword"
         type="search"
@@ -128,18 +126,18 @@
         {disabled}
         placeholder="番号・記号・名前"
         onkeydown={handleKeywordKeydown}
-        class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+        class="border-border focus:border-focus focus:ring-focus disabled:bg-surface-subtle disabled:text-text-subtle mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none disabled:cursor-not-allowed"
       />
     </div>
 
     <div>
-      <label for="element-category" class="block text-sm font-medium text-gray-700"> 分類 </label>
+      <label for="element-category" class="text-text block text-sm font-medium"> 分類 </label>
       <select
         id="element-category"
         value={filters.category}
         {disabled}
         onchange={handleCategoryChange}
-        class="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+        class="border-border bg-surface focus:border-focus focus:ring-focus disabled:bg-surface-subtle disabled:text-text-subtle mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none disabled:cursor-not-allowed"
       >
         <option value="">すべての分類</option>
         {#if selectedCategoryIsUnknown}
@@ -152,13 +150,13 @@
     </div>
 
     <div>
-      <label for="element-period" class="block text-sm font-medium text-gray-700"> 周期 </label>
+      <label for="element-period" class="text-text block text-sm font-medium"> 周期 </label>
       <select
         id="element-period"
         value={filters.period === null ? '' : String(filters.period)}
         {disabled}
         onchange={handlePeriodChange}
-        class="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+        class="border-border bg-surface focus:border-focus focus:ring-focus disabled:bg-surface-subtle disabled:text-text-subtle mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none disabled:cursor-not-allowed"
       >
         <option value="">すべての周期</option>
         {#each ELEMENT_PERIOD_OPTIONS as period}
@@ -171,7 +169,7 @@
       <button
         type="submit"
         {disabled}
-        class="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        class="bg-action text-text-inverse hover:bg-action-hover focus:ring-focus rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
       >
         検索
       </button>
@@ -179,14 +177,14 @@
         type="button"
         {disabled}
         onclick={handleReset}
-        class="rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-100 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        class="border-border text-text hover:bg-surface-subtle focus:ring-focus rounded-md border px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
       >
         リセット
       </button>
     </div>
   </form>
 
-  <p class="mt-3 text-sm text-gray-600" aria-live="polite">
+  <p class="text-text-muted mt-3 text-sm" aria-live="polite">
     {#if isSearching}
       検索結果を更新しています。現在{resultCount}件を表示しています。
     {:else if totalCount === undefined}

@@ -27,12 +27,12 @@
   );
   const buttonClass = $derived(
     showResult && isCorrectChoice
-      ? 'border-emerald-500 bg-emerald-50 text-emerald-900'
+      ? 'border-success-border-strong bg-success-surface text-success-text'
       : showResult && isSelected && correctChoiceId === null
-        ? 'border-sky-400 bg-sky-50 text-sky-900'
+        ? 'border-info-border-strong bg-info-surface text-info-text'
         : showResult && isSelected
-          ? 'border-red-400 bg-red-50 text-red-900'
-          : 'border-gray-200 bg-white text-gray-900 hover:border-gray-300 hover:bg-gray-50'
+          ? 'border-danger-border-strong bg-danger-surface text-danger-text-strong'
+          : 'border-border-muted bg-surface text-text hover:border-border hover:bg-surface-muted'
   );
 
   function handleClick(): void {
@@ -48,11 +48,11 @@
   type="button"
   {disabled}
   onclick={handleClick}
-  class={`flex min-h-16 w-full items-center gap-3 rounded border px-4 py-3 text-left text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)] disabled:cursor-not-allowed ${buttonClass}`}
+  class={`focus-visible:outline-focus flex min-h-16 w-full items-center gap-3 rounded border px-4 py-3 text-left text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed ${buttonClass}`}
   aria-label={`${index + 1}番、${choice.text}${resultLabel ? `、${resultLabel}` : ''}`}
 >
   <span
-    class="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-gray-100 text-sm font-bold text-gray-700"
+    class="bg-surface-subtle text-text flex h-8 w-8 shrink-0 items-center justify-center rounded text-sm font-bold"
   >
     {index + 1}
   </span>

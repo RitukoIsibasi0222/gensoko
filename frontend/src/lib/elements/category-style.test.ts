@@ -10,15 +10,15 @@ describe('ELEMENT_CATEGORY_STYLE_MAP', () => {
 describe('getElementCategoryStyle', () => {
   it('既知カテゴリでは定義済みスタイルを返す', () => {
     expect(getElementCategoryStyle('非金属')).toEqual({
-      cardClass: 'border-emerald-200 bg-emerald-50',
-      badgeClass: 'bg-emerald-200 text-emerald-800'
+      cardClass: 'border-category-nonmetal-border bg-category-nonmetal-surface',
+      badgeClass: 'bg-category-nonmetal-badge text-category-nonmetal-text'
     });
   });
 
   it('未知カテゴリではフォールバックスタイルを返す', () => {
     expect(getElementCategoryStyle('未知カテゴリ')).toEqual({
-      cardClass: 'border-slate-200 bg-slate-50',
-      badgeClass: 'bg-slate-200 text-slate-700'
+      cardClass: 'border-category-fallback-border bg-category-fallback-surface',
+      badgeClass: 'bg-category-fallback-badge text-category-fallback-text'
     });
   });
 });

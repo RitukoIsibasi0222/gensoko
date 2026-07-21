@@ -11,6 +11,7 @@
   --color-surface-muted: light-dark(#f3f4f6, #1d2823);
   --color-surface-subtle: light-dark(#e5e7eb, #26342e);
   --color-surface-disabled: light-dark(#e5e7eb, #2d3a35);
+  --color-disabled-solid: light-dark(#9ca3af, #60756b);
   --color-text: light-dark(#111827, #f3f4f6);
   --color-text-muted: light-dark(#4b5563, #cbd5d1);
   --color-text-subtle: light-dark(#6b7280, #9ca3af);

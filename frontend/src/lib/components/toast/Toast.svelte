@@ -16,10 +16,10 @@
 
   // variant に応じたスタイルとアイコンを決定
   const variantStyles = {
-    success: 'bg-green-50 border-green-500 text-green-900',
-    error: 'bg-red-50 border-red-500 text-red-900',
-    info: 'bg-blue-50 border-blue-500 text-blue-900',
-    warning: 'bg-yellow-50 border-yellow-500 text-yellow-900'
+    success: 'bg-success-surface border-success-border-strong text-success-text-strong',
+    error: 'bg-danger-surface border-danger-border-strong text-danger-text-strong',
+    info: 'bg-info-surface border-focus text-info-text',
+    warning: 'bg-warning-surface border-warning-border-strong text-warning-text-strong'
   };
 
   const variantIcons = {
