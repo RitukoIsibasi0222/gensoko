@@ -42,6 +42,38 @@ describe('staging Playwright source contract', () => {
     expect(PLAYWRIGHT_SPEC).not.toContain('page.route(stagingConfig.apiBaseUrl');
   });
 
+  it('client validationでhydration完了を確認してからsynthetic credentialを入力する', () => {
+    const hydrationCall = 'await waitForHydratedLoginForm(page);';
+    const firstHydrationCallIndex = PLAYWRIGHT_SPEC.indexOf(hydrationCall);
+    const secondHydrationCallIndex = PLAYWRIGHT_SPEC.indexOf(
+      hydrationCall,
+      firstHydrationCallIndex + hydrationCall.length
+    );
+
+    expect(PLAYWRIGHT_SPEC).toContain(
+      'async function waitForHydratedLoginForm(page: Page): Promise<void>'
+    );
+    expect(PLAYWRIGHT_SPEC).toContain(
+      "const event = new SubmitEvent('submit', { bubbles: true, cancelable: true })"
+    );
+    expect(PLAYWRIGHT_SPEC).toContain('form.dispatchEvent(event)');
+    expect(PLAYWRIGHT_SPEC).toContain('return event.defaultPrevented');
+    expect(PLAYWRIGHT_SPEC).toContain(
+      "await expect(page.getByRole('alert')).toHaveText('メールアドレスを入力してください')"
+    );
+    expect(PLAYWRIGHT_SPEC).not.toContain('LOGIN_HYDRATION_PROBE_EMAIL');
+    expect(PLAYWRIGHT_SPEC).not.toContain('LOGIN_HYDRATION_PROBE_PASSWORD');
+    expect(PLAYWRIGHT_SPEC.split(hydrationCall)).toHaveLength(3);
+    expect(firstHydrationCallIndex).toBeGreaterThan(-1);
+    expect(firstHydrationCallIndex).toBeLessThan(
+      PLAYWRIGHT_SPEC.indexOf('stagingConfig.adminEmail')
+    );
+    expect(secondHydrationCallIndex).toBeGreaterThan(firstHydrationCallIndex);
+    expect(secondHydrationCallIndex).toBeLessThan(
+      PLAYWRIGHT_SPEC.indexOf('stagingConfig.userEmail')
+    );
+  });
+
   it('Admin login・強制退会・対象User login 401を1つのspecで確認する', () => {
     expect(PLAYWRIGHT_SPEC).toContain('stagingConfig.adminEmail');
     expect(PLAYWRIGHT_SPEC).toContain('data-admin-action="delete"');
