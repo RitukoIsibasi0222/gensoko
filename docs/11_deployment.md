@@ -219,6 +219,15 @@ Supabase/実DB接続、migration、legacy cleanup、production deploy、実デ�
 - main cleanupは`deletedUsers: 2`、独立recovery cleanupは`deletedUsers: 0`で成功した。recovery時点で予約fixtureが残っていないことをworkflow結果で確認し、enable flagは終了後に`false`へ戻して確認した。
 - credential値は取得・表示していない。staging DBへの追加の直接DB query、手動fixture操作、production URL・DB・deploy、migration、実メール、再配備は実行していない。原因を診断し、必要な修正をreview・mergeして新しい明示承認を得るまで同一workflowを再実行しない。
 
+#### `/admin`到達失敗の診断・TDD補正（2026-07-21）
+
+- Admin login成功時は`authStore.login()`がADMIN roleとaccess tokenをmemory・`sessionStorage`へ保存し、SvelteKitのSPA遷移でトップへ移動する。失敗時の`page.goto('/admin')`は新しいdocumentを読み込むためmemory上の認証stateを失い、root layoutの`authStore.initialize()`が認証確定前にrefreshを実行する経路へ入っていた。
+- refresh cookieはbackend契約上`SameSite=Strict`である。固定frontendの`vercel.app`と固定APIの`workers.dev`はcross-siteのためフルナビゲーション後のrefreshにはcookieを送れず、refresh失敗時にauth storeがanonymousへclearされる。Admin pageはURLをredirectせず「ログインが必要です」を表示するため、runでは`/admin`に留まったまま「管理者ダッシュボード」見出しを取得できなかった。Admin role不足やtimeout長不足ではない。
+- Playwrightはlogin後に実UIの「管理者」リンクが表示されることを確認してclickし、SPA遷移後の`/admin` URLと「管理者ダッシュボード」見出しを順に検証する。後続の対象User強制退会と旧credential 401確認、hydration readiness、固定URL、origin限定automation bypass、完全一致fixture、両cleanupは変更しない。
+- RedではAdmin login後の管理者リンク・SPA遷移・URL確認を要求し、`page.goto('/admin')`を禁止するsource contract 1件が意図どおり失敗した。Greenではcontract 6件、RefactorではHeader・Admin pageを含む関連3 files・35 testsが成功した。
+- 最終品質gateはfrontend 51 files・555 tests、ESLint、Prettier check、Svelte check（0 errors / 0 warnings）、production build、backend workflow contract 5 testsが成功した。実credential・Secretを使わないローカル用ダミー設定のPlaywright `--list`で1 specを収集し、browser・staging接続は実行していない。
+- この補正中にstaging workflow、fixture、DB query、migration、実メール、再配備、production操作は実行していない。補正をreview・`develop`へmergeし、merge後preflightと新しい明示承認を得るまでworkflowを起動せず、enable flag `false`を維持する。
+
 このコード実装中はworkflow、staging/production DB、実メール、再配備を実行しない。Playwright実行は別途直前承認を得る。
 
 ---
