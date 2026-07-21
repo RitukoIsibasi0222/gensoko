@@ -749,6 +749,23 @@ T35 cleanup execute、flag変更、migration、production deployはこの手順�
 - RedではworkflowのSecret step scope・prepare前fail-fastが未実装でbackend 1件、frontend設定・origin限定header契約が未実装でfrontend 6件が意図どおり失敗した。Green/Refactor後はbackend対象5件、frontend対象30件が成功した。最終品質gateはbackend通常97 files・1013 tests成功（外部DB integration 10 tests skip）、Workers 15 tests、build、lint、format check、frontend 51 files・553 tests、lint、Svelte check（0 errors / 0 warnings）、format check、buildが成功し、Playwright `--list`で1 specを収集した。
 - 初回runではproduction URL・DB、production deploy、migration、実メールを操作していない。追加の直接DB queryも行っていない。
 
+### SD16 PR #120 merge後再実行（2026-07-21）
+
+- PR #120 merge済みの`develop` SHA `e3893c95c6c842c74f22e65fb23613e0b7987947`から[run 29788242095](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29788242095)を1回だけ実行した。Vercel automation bypassは機能し、固定frontendのAdmin login画面へ到達した。fixture prepareは`createdUsers: 2`、`replacedUsers: 0`で成功した。
+- Playwrightはlogin送信後、固定Worker APIの`POST /api/v1/auth/login` response待ちで60秒timeoutした。Admin login成功、synthetic User強制退会、旧credential 401拒否には到達していないため、runとSD16を成功扱いにしない。
+- main cleanupは`deletedUsers: 2`、独立recovery cleanupは`deletedUsers: 0`でともに成功し、recovery時点で予約fixtureが残っていないことを確認した。enable flagは終了後に`false`へ復旧し、credential値は取得・表示していない。
+- 追加の読み取り確認ではstaging API health 200と固定Vercel originからlogin endpointへのCORS preflight 204を確認したが、失敗原因は未確定である。設定を変えない再実行で解消する根拠がないため、browser側のrequest発行・response観測を安全に診断し、必要な補正をTDD・review・mergeしてから別の明示承認で再実行する。
+- staging DBへの追加直接query、手動fixture操作、production URL・DB・deploy、migration、実メール、再配備は実行していない。
+
+### SD16 login response timeout follow-up（2026-07-21）
+
+- credentialを使わない追加診断では、配備済みlogin画面のclient validationが動作し、存在しないdummy `.test` emailのloginはUIと固定Worker APIの直接requestの両方で401を返した。API health、CORS、frontend hydrationに恒常障害は再現しなかった。
+- runではSSRで表示されたlogin formの入力・clickまでは進んだ一方でPOST responseが発生していない。遅いGitHub runnerでclient hydration完了前にnative form submitした可能性が最も高いと判断したが、これはrun logと上記診断に基づく推定である。
+- synthetic credentialを入力する前に、画面遷移を起こさないcancelable `SubmitEvent`をformへdispatchし、Svelte handlerが`preventDefault()`した時点をhydration readinessとして待つhelperを2回のlogin導線へ追加した。入力値、API request、fixture、credential、AuditLogを使用しない。
+- Redではreadiness helper未実装を理由にfrontend source contract 1件だけが失敗し、既存4件は成功した。Green/Refactorではlogin/configを含む関連3 files・36 testsが成功した。workflow、固定URL、bypass headerのorigin限定、Worker API、cleanup、trace/video/screenshot設定は変更していない。
+- 最終品質gateはfrontend 51 files・554 tests、lint、Svelte check（0 errors / 0 warnings）、format check、build、backend workflow contract 5 tests、文書format checkが成功し、Playwright `--list`で1 specを収集した。
+- 修正はまだ`develop`へmergeされておらず、staging workflowも再実行していない。merge後のpreflightと新しい明示承認までSD16を進行中とする。
+
 ### SD16厳格レビュー改善記録（2026-07-20）
 
 - synthetic passwordを生成する前に第三者dependency・browserの導入を完了し、生成後に値を参照できる処理をrepository管理下のfixture CLIとPlaywrightだけへ縮小した。staging project refとDB URLも必要なstepだけへ限定した。
