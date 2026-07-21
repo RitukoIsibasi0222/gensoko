@@ -757,6 +757,15 @@ T35 cleanup execute、flag変更、migration、production deployはこの手順�
 - 追加の読み取り確認ではstaging API health 200と固定Vercel originからlogin endpointへのCORS preflight 204を確認したが、失敗原因は未確定である。設定を変えない再実行で解消する根拠がないため、browser側のrequest発行・response観測を安全に診断し、必要な補正をTDD・review・mergeしてから別の明示承認で再実行する。
 - staging DBへの追加の直接DB query、手動fixture操作、production URL・DB・deploy、migration、実メール、再配備は実行していない。
 
+### SD16 login response timeout follow-up（2026-07-21）
+
+- credentialを使わない追加診断では、配備済みlogin画面のclient validationが動作し、存在しないdummy `.test` emailのloginはUIと固定Worker APIの直接requestの両方で401を返した。API health、CORS、frontend hydrationに恒常障害は再現しなかった。
+- runではSSRで表示されたlogin formの入力・clickまでは進んだ一方でPOST responseが発生していない。遅いGitHub runnerでclient hydration完了前にnative form submitした可能性が最も高いと判断したが、これはrun logと上記診断に基づく推定である。
+- synthetic credentialを入力する前に、画面遷移を起こさないcancelable `SubmitEvent`をformへdispatchし、Svelte handlerが`preventDefault()`した時点をhydration readinessとして待つhelperを2回のlogin導線へ追加した。入力値、API request、fixture、credential、AuditLogを使用しない。
+- Redではreadiness helper未実装を理由にfrontend source contract 1件だけが失敗し、既存4件は成功した。Green/Refactorではlogin/configを含む関連3 files・36 testsが成功した。workflow、固定URL、bypass headerのorigin限定、Worker API、cleanup、trace/video/screenshot設定は変更していない。
+- 最終品質gateはfrontend 51 files・554 tests、lint、Svelte check（0 errors / 0 warnings）、format check、build、backend workflow contract 5 tests、文書format checkが成功し、Playwright `--list`で1 specを収集した。
+- 修正はまだ`develop`へmergeされておらず、staging workflowも再実行していない。merge後のpreflightと新しい明示承認までSD16を進行中とする。
+
 ### SD16厳格レビュー改善記録（2026-07-20）
 
 - synthetic passwordを生成する前に第三者dependency・browserの導入を完了し、生成後に値を参照できる処理をrepository管理下のfixture CLIとPlaywrightだけへ縮小した。staging project refとDB URLも必要なstepだけへ限定した。
