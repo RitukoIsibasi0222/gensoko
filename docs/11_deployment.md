@@ -202,7 +202,7 @@ Supabase/実DB接続、migration、legacy cleanup、production deploy、実デ�
 - main cleanupは`deletedUsers: 2`で成功し、独立recovery cleanupも`deletedUsers: 0`で成功した。recovery時点で削除対象fixtureが残っていないことをworkflow結果で確認した。credential値は取得・表示していない。
 - `STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED`は成否にかかわらず終了後に`false`へ戻し、値が`false`であることを確認した。追加の読み取り確認ではstaging API healthが200、固定Vercel originからlogin endpointへのCORS preflightが204だったが、失敗原因は未確定である。
 - 設定を変えない再実行で解消する根拠がないため、同一内容のworkflowは再実行しない。browser側のlogin request発行とresponse観測をcredentialを含めず診断し、必要な修正をTDD・review・mergeした後、改めて明示承認を得る。
-- staging DBへの追加直接queryや手動fixture操作、production URL・DB・deploy、migration、実メール、再配備は実行していない。
+- staging DBへの追加の直接DB queryや手動fixture操作、production URL・DB・deploy、migration、実メール、再配備は実行していない。
 
 このコード実装中はworkflow、staging/production DB、実メール、再配備を実行しない。Playwright実行は別途直前承認を得る。
 

@@ -755,7 +755,7 @@ T35 cleanup execute、flag変更、migration、production deployはこの手順�
 - Playwrightはlogin送信後、固定Worker APIの`POST /api/v1/auth/login` response待ちで60秒timeoutした。Admin login成功、synthetic User強制退会、旧credential 401拒否には到達していないため、runとSD16を成功扱いにしない。
 - main cleanupは`deletedUsers: 2`、独立recovery cleanupは`deletedUsers: 0`でともに成功し、recovery時点で予約fixtureが残っていないことを確認した。enable flagは終了後に`false`へ復旧し、credential値は取得・表示していない。
 - 追加の読み取り確認ではstaging API health 200と固定Vercel originからlogin endpointへのCORS preflight 204を確認したが、失敗原因は未確定である。設定を変えない再実行で解消する根拠がないため、browser側のrequest発行・response観測を安全に診断し、必要な補正をTDD・review・mergeしてから別の明示承認で再実行する。
-- staging DBへの追加直接query、手動fixture操作、production URL・DB・deploy、migration、実メール、再配備は実行していない。
+- staging DBへの追加の直接DB query、手動fixture操作、production URL・DB・deploy、migration、実メール、再配備は実行していない。
 
 ### SD16厳格レビュー改善記録（2026-07-20）
 
