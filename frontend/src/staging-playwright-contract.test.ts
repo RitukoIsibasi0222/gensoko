@@ -74,6 +74,36 @@ describe('staging Playwright source contract', () => {
     );
   });
 
+  it('Admin login後は認証stateを維持する管理者リンクでSPA遷移し到達URLを確認する', () => {
+    const adminLinkDeclaration =
+      "const adminLink = page.getByRole('link', { name: '管理者', exact: true });";
+    const adminLinkClick = 'await adminLink.click();';
+    const adminUrlAssertion = "await expect(page).toHaveURL(stagingConfig.baseUrl + '/admin');";
+    const adminHeadingAssertion =
+      "await expect(page.getByRole('heading', { name: '管理者ダッシュボード' })).toBeVisible();";
+
+    expect(PLAYWRIGHT_SPEC).toContain(adminLinkDeclaration);
+    expect(PLAYWRIGHT_SPEC).toContain('await expect(adminLink).toBeVisible();');
+    expect(PLAYWRIGHT_SPEC).toContain(adminLinkClick);
+    expect(PLAYWRIGHT_SPEC).toContain(adminUrlAssertion);
+    expect(PLAYWRIGHT_SPEC).toContain(adminHeadingAssertion);
+    expect(PLAYWRIGHT_SPEC).not.toContain("page.goto('/admin')");
+
+    const adminLoginUrlIndex = PLAYWRIGHT_SPEC.indexOf(
+      "await expect(page).toHaveURL(stagingConfig.baseUrl + '/');"
+    );
+    const adminLinkIndex = PLAYWRIGHT_SPEC.indexOf(adminLinkDeclaration);
+    const adminLinkClickIndex = PLAYWRIGHT_SPEC.indexOf(adminLinkClick);
+    const adminUrlAssertionIndex = PLAYWRIGHT_SPEC.indexOf(adminUrlAssertion);
+    const adminHeadingAssertionIndex = PLAYWRIGHT_SPEC.indexOf(adminHeadingAssertion);
+
+    expect(adminLoginUrlIndex).toBeGreaterThan(-1);
+    expect(adminLinkIndex).toBeGreaterThan(adminLoginUrlIndex);
+    expect(adminLinkClickIndex).toBeGreaterThan(adminLinkIndex);
+    expect(adminUrlAssertionIndex).toBeGreaterThan(adminLinkClickIndex);
+    expect(adminHeadingAssertionIndex).toBeGreaterThan(adminUrlAssertionIndex);
+  });
+
   it('Admin login・強制退会・対象User login 401を1つのspecで確認する', () => {
     expect(PLAYWRIGHT_SPEC).toContain('stagingConfig.adminEmail');
     expect(PLAYWRIGHT_SPEC).toContain('data-admin-action="delete"');
