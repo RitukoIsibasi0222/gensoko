@@ -297,7 +297,7 @@ backendでは少なくともHono、Nodemailer、Prisma toolchain経由の`@hono/
 | R18      | 公開後タスクをissue/計画へ引き継ぐ        | docs/issues          | 中     | ownerと再着手条件を記録                             |
 
 - [x] R1: Admin E2E修正後runを記録する
-- [ ] R2: ダークモードをTDD実装する
+- [-] R2: ダークモードをTDD実装する
 - [ ] R3: `/privacy`をTDD実装する
 - [ ] R4: privacy・監査・backup・問い合わせ先を承認する
 - [ ] R5: 認証・refreshのproduction構成を確定する
