@@ -108,13 +108,13 @@ type CreateAppOptions = {
 
 ### コード基盤の現在地点
 
-2026-07-20時点で、staging API/frontendは配備・基本smoke済みであり、SD16のsynthetic Admin Playwright実行を残している。
+2026-07-21時点で、staging API/frontendは配備・基本smoke済みであり、PR #125 merge後のSD16 synthetic Admin Playwrightも成功した。staging配備計画はAPI rollback実確認、完全削除計画はT33/T35以降を残している。
 
 - API: Workers専用entrypoint、request-scoped Prisma/mail/DO adapter、`wrangler.jsonc` staging設定、生成binding型、dry-run、bundle contract、production相当Workers runtime test
 - frontend: `@sveltejs/adapter-vercel`、Node.js 22、公開API URL fail-fast、Vercel Build Output/secret contract、frontend PR CIを固定
 - 実環境確認済み: Vercel Hobby `develop` Preview、staging Worker、SQLite-backed DO、Hyperdrive、7件のWorker secret、Supabase migration current、health/CORS/OPTIONS、元素118件
-- synthetic確認済み: 登録・メール認証・login・ゲーム10問/score 500・password reset・本人退会・削除後login拒否。Resendはallowlist宛の確認メール2通・resetメール1通だけを送信
-- 未実施: synthetic Admin強制退会Playwright workflow、production resource・deploy・DB操作
+- synthetic確認済み: 登録・メール認証・login・ゲーム10問/score 500・password reset・本人退会・削除後login拒否・Admin強制退会・旧credential拒否。Resendはallowlist宛の確認メール2通・resetメール1通だけを送信
+- 未実施: staging API rollback実確認、T35 legacy cleanup、production resource・deploy・DB操作
 
 コード基盤のローカル再確認は外部serviceへ接続せず、次で行う。
 
@@ -227,6 +227,14 @@ Supabase/実DB接続、migration、legacy cleanup、production deploy、実デ�
 - RedではAdmin login後の管理者リンク・SPA遷移・URL確認を要求し、`page.goto('/admin')`を禁止するsource contract 1件が意図どおり失敗した。Greenではcontract 6件、RefactorではHeader・Admin pageを含む関連3 files・35 testsが成功した。
 - 最終品質gateはfrontend 51 files・555 tests、ESLint、Prettier check、Svelte check（0 errors / 0 warnings）、production build、backend workflow contract 5 testsが成功した。実credential・Secretを使わないローカル用ダミー設定のPlaywright `--list`で1 specを収集し、browser・staging接続は実行していない。
 - この補正中にstaging workflow、fixture、DB query、migration、実メール、再配備、production操作は実行していない。補正をreview・`develop`へmergeし、merge後preflightと新しい明示承認を得るまでworkflowを起動せず、enable flag `false`を維持する。
+
+#### PR #125 merge後の成功run（2026-07-21）
+
+- `develop`の`6bb898d52915df1139b863383e8be88e35a3d63b`で[run 29802327100](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29802327100)を1回だけ実行した。実行前にworkflow guard、staging Environmentの必要Secret名、固定frontend/API、enable flag `false`を値非表示で確認し、承認後だけflagを`true`へ変更した。
+- fixture prepareは`createdUsers: 2`、`replacedUsers: 0`で成功した。Admin login、実UIの管理者linkによる`/admin` SPA遷移、dashboard見出し、synthetic User強制退会、旧credential 401拒否を含むPlaywright 1件が11.7秒で成功した。
+- E2E内で対象Userを物理削除し、main cleanupは残るsynthetic Admin 1件を削除して成功した。main job成功のためrecovery cleanupは契約どおりskipされた。
+- workflowとmain jobは成功し、終了後にenable flagを`false`へ戻して確認した。credential、Secret値、DB接続情報は取得・表示していない。
+- production URL・DB・deploy、migration、実メール、追加の直接DB queryは実行していない。SD16/T34は完了とし、T35 legacy cleanupとproduction gateは未完了のまま維持する。
 
 このコード実装中はworkflow、staging/production DB、実メール、再配備を実行しない。Playwright実行は別途直前承認を得る。
 
@@ -726,7 +734,7 @@ T19では次の順序を変更しない。
 
 ## 本番レート制限設定
 
-> 2026-07-12時点: Honoのpolicy・HMAC key・middleware・route配線とフロントエンド回帰テストまでは実装済み。Durable Object、Workers binding、WAF、staging/production実機確認は未完了であり、本番適用済みとは扱わない。
+> 2026-07-21時点: Honoのpolicy・HMAC key・middleware・route配線、SQLite-backed Durable Object、Workers runtime test、staging namespace/bindingは実装・配備済み。rate limit専用のstaging実HTTP 429/503、WAF、production namespace/binding・実機確認は未完了であり、本番適用済みとは扱わない。
 
 ### リリースゲート
 
@@ -792,7 +800,17 @@ T19では次の順序を変更しない。
 
 ## 本番デプロイのチェックリスト
 
+ポートフォリオ版v0.1の公開範囲とrelease blockerは
+[`docs/plans/portfolio-release-v0-1/plan.md`](plans/portfolio-release-v0-1/plan.md)を正本とし、個別計画の未完了gateをこの一覧だけで完了扱いにしない。
+
 ```
+[ ] ダークモードを実装し、主要画面のlight/dark・keyboard・contrastを確認
+[ ] プライバシーポリシー /privacy を公開し、Footer・register・settings導線とowner承認を確認
+[ ] 一般ユーザー登録・メール認証・login・refresh・logoutをstagingで最終確認
+[ ] production frontend/APIをSameSite=Strict Cookieが成立するsite構成にし、reload後refreshを確認
+[ ] 本人退会の物理削除・旧auth拒否・再登録契約をstagingで確認
+[x] staging synthetic Admin E2Eで /admin・強制退会・旧credential拒否・cleanupを確認
+[ ] 基本responsive・keyboard・focus・live regionを主要画面で確認
 [x] Supabase staging・production project作成、Session pooler接続設定
 [ ] Vercelアカウント作成・プロジェクトインポート
 [ ] Vercelに VITE_API_BASE_URL 環境変数を設定
@@ -805,7 +823,7 @@ T19では次の順序を変更しない。
 [ ] 本番API hostnameが対象zoneのWAFを通り、直接到達・迂回経路がないことを確認
 [x] GitHub Actions production Environmentの DATABASE_URL Secret を設定（migrate deploy 用）
 [x] GitHub Actions Variables に AUDIT_LOG_RETENTION_DAYS と AUDIT_LOG_CLEANUP_ENABLED=false を設定
-[-] 本番DB暗号化backup workflowを実装し、初回Artifactを確認
+[-] 本番DB暗号化backup workflowを実装し、初回Artifact・checksum・復号成功を確認
 [ ] 監査ログの正式保持期間・内部ID保持・承認者・通知先を記録
 [-] DB容量70%/85% workflowを実装し、GitHub Actions failureの受信者を設定（初回run待ち）
 [ ] production dry-runと初回executeの結果を記録
@@ -818,6 +836,9 @@ T19では次の順序を変更しない。
 [ ] DO request/alarm/storage利用量とFree/Paid移行条件を確認
 [ ] 本番環境での動作確認（ログイン・ゲーム・メール）
 [ ] CORS設定の確認（フロントエンドのURLが正しく許可されているか）
+[ ] backend/frontendのtest・Workers test・build・lint・format・Prisma validateをrelease候補SHAで確認
+[ ] backend/frontendのnpm audit結果と未解決項目の影響・期限を記録
+[ ] production smokeでhealth・auth/refresh・game・delete・privacy/theme・headers/CORSを確認
 ```
 
 | サービス             | 役割                   | 費用目安                 |

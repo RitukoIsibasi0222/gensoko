@@ -419,10 +419,7 @@ export type RateLimitResult = Readonly<{
 }>;
 
 export interface RateLimitStore {
-  consume(input: {
-    policyId: RateLimitPolicyId;
-    keyDigest: string;
-  }): Promise<RateLimitResult>;
+  consume(input: { policyId: RateLimitPolicyId; keyDigest: string }): Promise<RateLimitResult>;
 }
 
 export type RateLimitStoreFactory = (context: Context) => RateLimitStore;
@@ -431,9 +428,7 @@ export type RateLimitBucket = Readonly<{
   keyContext: RateLimitKeyContext;
 }>;
 
-export type RateLimitBucketResolver = (
-  context: Context,
-) => Promise<readonly RateLimitBucket[]>;
+export type RateLimitBucketResolver = (context: Context) => Promise<readonly RateLimitBucket[]>;
 
 export function rateLimit(options: {
   getStore: RateLimitStoreFactory;
@@ -447,15 +442,9 @@ export function resolveClientIp(input: {
 }): string | null;
 export function normalizeIpActor(ip: string): string | null;
 export function normalizeRateLimitEmail(email: string): string;
-export function createIpRateLimitKey(
-  context: RateLimitKeyContext,
-): Promise<string | null>;
-export function createUserRateLimitKey(
-  context: RateLimitKeyContext,
-): Promise<string | null>;
-export function createEmailRateLimitKey(
-  context: RateLimitKeyContext,
-): Promise<string | null>;
+export function createIpRateLimitKey(context: RateLimitKeyContext): Promise<string | null>;
+export function createUserRateLimitKey(context: RateLimitKeyContext): Promise<string | null>;
+export function createEmailRateLimitKey(context: RateLimitKeyContext): Promise<string | null>;
 export function createRateLimitKeyDigest(input: {
   secret: string;
   policyId: RateLimitPolicyId;
@@ -473,13 +462,9 @@ export function createRateLimitExceededResponse(
   context: Context,
   result: RateLimitResult,
 ): Response;
-export function createRateLimitStoreUnavailableResponse(
-  context: Context,
-): Response;
+export function createRateLimitStoreUnavailableResponse(context: Context): Response;
 
-export const RATE_LIMIT_POLICIES: Readonly<
-  Record<RateLimitPolicyId, RateLimitPolicy>
->;
+export const RATE_LIMIT_POLICIES: Readonly<Record<RateLimitPolicyId, RateLimitPolicy>>;
 ```
 
 - `remaining`と`retryAfterSec`は0以上、`resetAtMs`はUnix epoch milliseconds。
@@ -799,7 +784,7 @@ DOはschemaを`new_sqlite_classes` migrationとして追加し、stagingとprodu
 - [x] T12: frontend回帰testを追加する
 - [x] T13: Durable Object testをRed化する
 - [x] T14: SQLite-backed Durable Object/store adapterを実装する
-- [ ] T15: staging WAF/DOを適用する
+- [-] T15: staging DO namespace/bindingは配備済み。staging実HTTP 429/503、WAF適用を確認する
 - [x] T16: format/lint/test/buildを通す
 - [ ] T17: 手動A11Y・主要導線を確認する
 - [ ] T18: production deploy/監視/rollbackを確認する
@@ -941,6 +926,12 @@ Workers test scriptと`wrangler dev`確認コマンドは、フェーズ12で採
 - Workers: 1 file / 12 tests成功。
 
 ## 手動確認項目
+
+### staging配備追補（2026-07-21）
+
+- staging WorkerではSQLite-backed Durable Object用namespace/bindingと専用HMAC Secretを設定し、memory fallbackなしで起動する構成を配備済みである。Workers runtime、health、CORS、OPTIONS、登録・認証・ゲーム・本人/Admin退会のsynthetic導線は成功している。
+- rate limit専用の境界確認として、policy上限までの実HTTP、429、`Retry-After`、sensitive store障害503、DO alarm/storage、WAF eventは未確認である。一般導線の成功をrate limit T15完了証拠に置き換えない。
+- production namespace/binding/Secret、公開hostname、WAF、監視、rollbackは未実施であり、本計画全体とT15は進行中のままとする。
 
 - [ ] root/health/OPTIONSがrate limit対象外で、preflightが成功する
 - [ ] elements/ranking/weak/users/admin/game GETが一般制限対象になる

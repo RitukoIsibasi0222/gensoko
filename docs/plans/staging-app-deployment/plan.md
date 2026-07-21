@@ -10,20 +10,20 @@
 
 ## 背景と現在地点
 
-PR #107で完全削除API/UI、staging synthetic fixture、cleanup安全契約まで実装済みであり、PR #108でT33のmanaged DB判定基準を文書化した。その後staging API/frontendと基本synthetic導線を配備・確認し、T34はsynthetic Admin強制退会Playwrightだけを残している。
+PR #107で完全削除API/UI、staging synthetic fixture、cleanup安全契約まで実装済みであり、PR #108でT33のmanaged DB判定基準を文書化した。その後staging API/frontendと基本synthetic導線を配備・確認し、PR #125のAdmin遷移補正後にsynthetic Admin強制退会Playwrightも成功した。T34は完了し、本計画はSD14のrollback実確認だけを残している。
 
 確認できた現状は次のとおり。
 
 | 項目             | 現状                                                                          | T34への影響                   |
 | ---------------- | ----------------------------------------------------------------------------- | ----------------------------- |
-| API entrypoint   | `backend/src/index.ts`は`@hono/node-server`とmemory rate limit専用            | Workersへ指定できない         |
+| API entrypoint   | Node用`index.ts`とWorkers用`worker.ts`を分離し、staging Workerへ配備済み      | Workers runtime確認済み       |
 | Workers設定      | staging Worker・DO・Hyperdrive・7 secretsを配備済み                           | production resourceは未作成   |
 | rate limit       | SQLite-backed Durable Objectをstaging bindingで稼働                           | production/WAF確認は別タスク  |
 | Prisma           | Supabase staging Session Poolerをcache無効Hyperdriveへ登録しmigration current | production DBは操作していない |
 | メール           | Resend allowlistで確認メール2通・resetメール1通を確認                         | production送信は未実施        |
 | frontend adapter | `@sveltejs/adapter-vercel`、Node.js 22、固定API URL/CORSを配備・確認済み      | production配備は未実施        |
 | Vercel環境       | Hobby project、`develop` Preview、branch scoped API URL、固定aliasを配備済み  | Production deploymentは未実施 |
-| E2E              | synthetic本人導線を実機確認し、Admin強制退会Playwright codeを実装             | manual workflow実行は承認待ち |
+| E2E              | synthetic本人導線とAdmin強制退会・旧credential拒否を実機確認済み              | T34完了、T35は別タスク        |
 
 ## 目的と完了条件
 
@@ -782,6 +782,14 @@ T35 cleanup execute、flag変更、migration、production deployはこの手順�
 - 最終品質gateはfrontend 51 files・555 tests、ESLint、Prettier check、Svelte check（0 errors / 0 warnings）、production build、backend workflow contract 5 testsが成功した。実credential・Secretを使わないローカル用ダミー設定のPlaywright `--list`で1 specを収集し、browser・staging接続は実行していない。
 - 強制退会・旧credential 401、hydration readiness、fixture、workflow、cleanup、固定URL、bypass header送信範囲、trace/video/screenshot設定は変更していない。workflowは再実行せず、merge後preflightと別の明示承認までSD16を進行中とし、enable flag `false`を維持する。
 
+### SD16 PR #125 merge後再実行（2026-07-21）
+
+- PR #125 merge後の`develop` SHA `6bb898d52915df1139b863383e8be88e35a3d63b`から[run 29802327100](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29802327100)を1回だけ実行した。事前にworkflow guard、staging Environmentの必要Secret名、固定URL、enable flag `false`を値非表示で確認し、承認後だけflagを`true`へ変更した。
+- fixture prepareは`createdUsers: 2`、`replacedUsers: 0`で成功した。PlaywrightはAdmin login、Headerの管理者linkによるSPA遷移、`/admin` URL、dashboard見出し、synthetic User強制退会、旧credentialの401拒否を含む1件が11.7秒で成功した。
+- E2E内で対象Userを物理削除したため、main cleanupは残るsynthetic Admin 1件を削除して成功した。main job成功時は独立recovery cleanupを実行しない契約のためskipされ、予約fixtureの後処理は完了した。
+- workflow全体とmain jobは成功し、終了後にenable flagを`false`へ戻して値を確認した。credential、Secret値、DB接続情報は取得・表示していない。
+- production URL・DB・deploy、migration、実メール、追加の直接DB queryは実行していない。これによりSD16とT34を完了とし、T35 legacy cleanupは別の未完了タスクとして維持する。
+
 ### SD16厳格レビュー改善記録（2026-07-20）
 
 - synthetic passwordを生成する前に第三者dependency・browserの導入を完了し、生成後に値を参照できる処理をrepository管理下のfixture CLIとPlaywrightだけへ縮小した。staging project refとDB URLも必要なstepだけへ限定した。
@@ -843,8 +851,8 @@ SD17	結果を記録しT34と本計画の完了可否を判定	plan/progress/dep
 - [x] SD13: Cloudflare staging resource/secretを承認後に準備する
 - [-] SD14: APIを承認後にstaging deploy・smokeを実施済み。rollback確認を残す
 - [x] SD15: Vercel `develop` Previewを承認後に配備・CORS整合を確認する
-- [-] SD16: T34 synthetic API/UI/Playwrightの安全なfixture・manual workflow・E2E基盤を実装し、承認後に実行する
-- [ ] SD17: 結果を記録しT34と本計画の完了可否を判定する
+- [x] SD16: T34 synthetic API/UI/Playwrightの安全なfixture・manual workflow・E2E基盤を実装し、承認後に実行する
+- [x] SD17: run 29802327100の成功、cleanup、flag `false`復旧を記録し、T34完了・本計画はSD14 rollback確認待ちと判定する
 
 ## 参照した公式文書
 
