@@ -234,56 +234,56 @@
 
 <div class="space-y-6">
   <section class="space-y-2">
-    <p class="text-sm font-semibold text-gray-500">苦手元素</p>
-    <h1 class="text-2xl font-bold text-gray-900">苦手リスト</h1>
-    <p class="max-w-2xl text-sm leading-6 text-gray-600">
+    <p class="text-text-subtle text-sm font-semibold">苦手元素</p>
+    <h1 class="text-text text-2xl font-bold">苦手リスト</h1>
+    <p class="text-text-muted max-w-2xl text-sm leading-6">
       間違えた元素を見直し、必要なくなったものはリストから削除できます。
     </p>
   </section>
 
   {#if authStore.isInitializing}
     <section
-      class="rounded border border-gray-200 bg-white p-5"
+      class="border-border-muted bg-surface rounded border p-5"
       aria-busy="true"
       aria-live="polite"
     >
-      <p class="text-sm text-gray-600">ログイン状態を確認しています...</p>
+      <p class="text-text-muted text-sm">ログイン状態を確認しています...</p>
     </section>
   {:else if !authStore.isLoggedIn}
-    <section class="rounded border border-gray-200 bg-white p-5">
-      <p class="text-sm text-gray-700">苦手リストを見るにはログインが必要です。</p>
+    <section class="border-border-muted bg-surface rounded border p-5">
+      <p class="text-text text-sm">苦手リストを見るにはログインが必要です。</p>
       <a
         href="/login"
-        class="mt-4 inline-flex rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+        class="bg-action text-text-inverse hover:bg-action-hover focus-visible:outline-focus mt-4 inline-flex rounded px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         ログインへ
       </a>
     </section>
   {:else if isLoading}
     <section
-      class="rounded border border-gray-200 bg-white p-5"
+      class="border-border-muted bg-surface rounded border p-5"
       aria-busy="true"
       aria-live="polite"
     >
-      <p class="text-sm text-gray-600">苦手リストを読み込み中です...</p>
+      <p class="text-text-muted text-sm">苦手リストを読み込み中です...</p>
     </section>
   {:else if loadStatus === 'error'}
-    <section class="rounded border border-red-200 bg-red-50 p-5" role="alert">
-      <p class="text-sm text-red-700">{errorMessage}</p>
+    <section class="border-danger-border bg-danger-surface rounded border p-5" role="alert">
+      <p class="text-danger-text text-sm">{errorMessage}</p>
       <button
         type="button"
         onclick={retryLoadWeakElements}
-        class="mt-4 rounded border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500"
+        class="border-danger-border-strong bg-surface text-danger-text hover:bg-danger-surface-strong focus-visible:outline-danger-border-strong mt-4 rounded border px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         再読み込み
       </button>
     </section>
   {:else if isEmpty}
-    <section class="rounded border border-gray-200 bg-white p-5">
-      <p class="text-sm text-gray-700">苦手元素はまだありません。</p>
+    <section class="border-border-muted bg-surface rounded border p-5">
+      <p class="text-text text-sm">苦手元素はまだありません。</p>
       <a
         href="/game"
-        class="mt-4 inline-flex rounded border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+        class="border-border text-text hover:bg-surface-subtle focus-visible:outline-focus mt-4 inline-flex rounded border px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         ゲームで練習する
       </a>
@@ -292,19 +292,19 @@
     <section class="space-y-4" aria-labelledby="weak-list-heading">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 id="weak-list-heading" class="text-lg font-bold text-gray-900">一覧</h2>
-          <p class="mt-1 text-sm text-gray-600" aria-live="polite">
+          <h2 id="weak-list-heading" class="text-text text-lg font-bold">一覧</h2>
+          <p class="text-text-muted mt-1 text-sm" aria-live="polite">
             {weakElements.length}件の苦手元素
           </p>
         </div>
 
         <div class="grid gap-3 sm:grid-cols-2">
-          <label class="text-sm font-semibold text-gray-700">
+          <label class="text-text text-sm font-semibold">
             並び替え
             <select
               value={appliedSortState.key}
               onchange={(event) => updateSortKey(event.currentTarget.value)}
-              class="mt-1 block w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+              class="border-border bg-surface text-text focus-visible:outline-focus mt-1 block w-full rounded border px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2"
             >
               <option value="missCount">ミス回数</option>
               <option value="addedAt">追加日</option>
@@ -313,12 +313,12 @@
             </select>
           </label>
 
-          <label class="text-sm font-semibold text-gray-700">
+          <label class="text-text text-sm font-semibold">
             順序
             <select
               value={appliedSortState.order}
               onchange={(event) => updateSortOrder(event.currentTarget.value)}
-              class="mt-1 block w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+              class="border-border bg-surface text-text focus-visible:outline-focus mt-1 block w-full rounded border px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2"
             >
               <option value="desc">降順</option>
               <option value="asc">昇順</option>
@@ -332,22 +332,22 @@
           {@const isConfirming = confirmingElementId === element.elementId}
           {@const isDeleting = deletingElementIds.has(element.elementId)}
           {@const rowError = rowErrors[element.elementId]}
-          <li class="rounded border border-gray-200 bg-white p-4">
+          <li class="border-border-muted bg-surface rounded border p-4">
             <div class="flex items-start justify-between gap-4">
               <div class="min-w-0">
-                <p class="text-sm font-semibold text-gray-500">No. {element.elementId}</p>
-                <p class="mt-1 text-2xl font-bold text-gray-900">{element.symbol}</p>
-                <p class="text-sm font-medium text-gray-700">{element.nameJa}</p>
+                <p class="text-text-subtle text-sm font-semibold">No. {element.elementId}</p>
+                <p class="text-text mt-1 text-2xl font-bold">{element.symbol}</p>
+                <p class="text-text text-sm font-medium">{element.nameJa}</p>
               </div>
-              <div class="text-right text-sm text-gray-600">
-                <p><span class="font-semibold text-gray-900">{element.missCount}</span> 回ミス</p>
+              <div class="text-text-muted text-right text-sm">
+                <p><span class="text-text font-semibold">{element.missCount}</span> 回ミス</p>
                 <p class="mt-1">追加日 {formatAddedAt(element.addedAt)}</p>
               </div>
             </div>
 
             {#if rowError}
               <p
-                class="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700"
+                class="border-danger-border bg-danger-surface text-danger-text mt-3 rounded border p-2 text-sm"
                 role="alert"
               >
                 {rowError}
@@ -357,11 +357,11 @@
             <div class="mt-4">
               {#if isConfirming}
                 <div
-                  class="space-y-3 rounded border border-amber-200 bg-amber-50 p-3"
+                  class="border-warning-border bg-warning-surface space-y-3 rounded border p-3"
                   aria-busy={isDeleting}
                   aria-live="polite"
                 >
-                  <p class="text-sm text-amber-900">
+                  <p class="text-warning-text text-sm">
                     {element.nameJa}を苦手リストから削除しますか？
                   </p>
                   <div class="flex flex-wrap gap-2">
@@ -370,7 +370,7 @@
                       aria-label={element.nameJa + 'を苦手リストから削除する'}
                       disabled={isDeleting}
                       onclick={() => confirmDelete(element)}
-                      class="rounded bg-red-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      class="bg-danger-solid text-text-inverse hover:bg-danger-solid-hover focus-visible:outline-danger-border-strong rounded px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isDeleting ? '削除中...' : '削除する'}
                     </button>
@@ -379,7 +379,7 @@
                       aria-label={element.nameJa + 'の削除をキャンセル'}
                       disabled={isDeleting}
                       onclick={() => cancelDelete(element.elementId)}
-                      class="rounded border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      class="border-border bg-surface text-text hover:bg-surface-subtle focus-visible:outline-focus rounded border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       キャンセル
                     </button>
@@ -391,7 +391,7 @@
                   aria-label={element.nameJa + 'を苦手リストから削除'}
                   disabled={isDeleting}
                   onclick={() => requestDelete(element.elementId)}
-                  class="rounded border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  class="border-border text-text hover:bg-surface-subtle focus-visible:outline-focus rounded border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   リストから削除
                 </button>

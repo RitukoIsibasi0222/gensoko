@@ -2,13 +2,12 @@ import { AuditResult, type Prisma, type Role } from "@prisma/client";
 import { createHash, randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { sign } from "hono/jwt";
-import { getFrontendUrl } from "../lib/config.js";
-import { mailer } from "../lib/mail.js";
+import type { MailSender } from "../lib/mail-sender.js";
 import { normalizePassword } from "../lib/normalize.js";
 import { hashPassword } from "../lib/password.js";
-import { prisma } from "../lib/prisma.js";
+import type { AppPrismaClient } from "../lib/prisma-client.js";
 import { AUDIT_ACTIONS, AUDIT_FAILURE_REASONS, AUDIT_TARGET_TYPES } from "./audit-events.js";
-import { recordAuditEvent, recordAuditEventBestEffort } from "./audit.service.js";
+import { recordAuditEvent, type AuditService } from "./audit.service.js";
 
 export class AuthError extends Error {
   constructor(
@@ -20,11 +19,23 @@ export class AuthError extends Error {
   }
 }
 
-export async function register(input: {
-  username: string;
-  email: string;
-  password: string;
-}): Promise<void> {
+type AuthServiceDependencies = Readonly<{
+  prisma: AppPrismaClient;
+  mailSender: MailSender;
+  jwtSecret: string;
+  frontendUrl: string;
+  mailFrom: string;
+  auditService: AuditService;
+}>;
+
+async function register(
+  { prisma, mailSender, frontendUrl, mailFrom }: AuthServiceDependencies,
+  input: {
+    username: string;
+    email: string;
+    password: string;
+  },
+): Promise<void> {
   const { username, email, password: rawPassword } = input;
   const password = normalizePassword(rawPassword);
 
@@ -39,14 +50,9 @@ export async function register(input: {
         username: true,
         emailVerified: true,
         isActive: true,
-        deletedAt: true,
       },
     });
     if (existing) {
-      if (existing.deletedAt) {
-        throw new AuthError(403, "このアカウントは削除済みのため再登録できません");
-      }
-
       if (existing.isActive === false) {
         throw new AuthError(403, "このアカウントは利用停止されています");
       }
@@ -101,10 +107,10 @@ export async function register(input: {
 
   // 5. メール送信（DB 確定後に実行。DB トランザクション内で外部 I/O を待たないよう分離）
   // 送信失敗時はユーザーを補償的に削除する（EmailVerification は onDelete: Cascade で自動削除）
-  const verifyUrl = `${getFrontendUrl()}/verify-email?token=${token}`;
+  const verifyUrl = `${frontendUrl}/verify-email?token=${token}`;
   try {
-    await mailer.sendMail({
-      from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
+    await mailSender.send({
+      from: mailFrom,
       to: email,
       subject: "【元素庫】メールアドレスの確認",
       text: `以下のURLをクリックしてメールアドレスを確認してください（有効期限: 24時間）\n\n${verifyUrl}`,
@@ -113,7 +119,7 @@ export async function register(input: {
   } catch (err) {
     if (createdNewUser) {
       // 送信失敗時は作成済みユーザーを削除して再登録可能な状態に戻す
-      await prisma.user.delete({ where: { id: userId } });
+      await prisma.user.delete({ where: { id: userId }, select: { id: true } });
     } else {
       // 未認証ユーザーの再登録時はアカウントを残し、今回発行した確認トークンだけ無効化する
       await prisma.emailVerification.deleteMany({ where: { userId } });
@@ -157,20 +163,26 @@ async function saveRefreshToken(
   });
 }
 
-export async function issueRefreshToken(userId: string): Promise<string> {
+async function issueRefreshToken(
+  { prisma }: AuthServiceDependencies,
+  userId: string,
+): Promise<string> {
   const values = createRefreshTokenValues();
   await saveRefreshToken(prisma, userId, values);
 
   return values.rawToken;
 }
 
-export async function logout(rawToken: string): Promise<void> {
+async function logout({ prisma }: AuthServiceDependencies, rawToken: string): Promise<void> {
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
   // deleteMany で P2025 を回避（存在しないトークンでも正常終了）
   await prisma.refreshToken.deleteMany({ where: { tokenHash } });
 }
 
-export async function refreshAccessToken(rawToken: string): Promise<{
+async function refreshAccessToken(
+  { prisma, jwtSecret }: AuthServiceDependencies,
+  rawToken: string,
+): Promise<{
   accessToken: string;
   newRefreshToken: string;
   user: { id: string; role: Role };
@@ -213,13 +225,10 @@ export async function refreshAccessToken(rawToken: string): Promise<{
     });
   });
 
-  const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error("JWT_SECRET is not set");
-
   const now = Math.floor(Date.now() / 1000);
   const accessToken = await sign(
     { sub: record.user.id, role: record.user.role, iat: now, exp: now + ACCESS_TOKEN_TTL_SEC },
-    secret,
+    jwtSecret,
     "HS256",
   );
 
@@ -236,19 +245,16 @@ type LoginResult = {
   user: { id: string; username: string; role: Role };
 };
 
+const INVALID_LOGIN_CREDENTIALS_MESSAGE = "メールアドレスまたはパスワードが正しくありません";
+
 type LoginAccountState = {
   role: Role;
   emailVerified: boolean;
   isActive: boolean;
-  deletedAt: Date | null;
   lockedUntil: Date | null;
 };
 
 function assertLoginAccountIsUsable(user: LoginAccountState, now = new Date()): void {
-  if (user.deletedAt) {
-    throw new AuthError(403, "このアカウントは削除されています");
-  }
-
   if (!user.isActive) {
     throw new AuthError(403, "アカウントが停止されています");
   }
@@ -262,12 +268,15 @@ function assertLoginAccountIsUsable(user: LoginAccountState, now = new Date()): 
   }
 }
 
-export async function login(input: { email: string; password: string }): Promise<LoginResult> {
+async function login(
+  dependencies: AuthServiceDependencies,
+  input: { email: string; password: string },
+): Promise<LoginResult> {
   try {
-    return await loginWithRequiredAudit(input);
+    return await loginWithRequiredAudit(dependencies, input);
   } catch (error) {
     if (error instanceof AuthError) {
-      await recordAuditEventBestEffort({
+      await dependencies.auditService.recordAuditEventBestEffort({
         action: AUDIT_ACTIONS.LOGIN,
         result: AuditResult.FAILURE,
         actorId: null,
@@ -282,10 +291,13 @@ export async function login(input: { email: string; password: string }): Promise
   }
 }
 
-async function loginWithRequiredAudit(input: {
-  email: string;
-  password: string;
-}): Promise<LoginResult> {
+async function loginWithRequiredAudit(
+  { prisma, jwtSecret }: AuthServiceDependencies,
+  input: {
+    email: string;
+    password: string;
+  },
+): Promise<LoginResult> {
   const { email, password: rawPassword } = input;
   const password = normalizePassword(rawPassword);
 
@@ -299,14 +311,13 @@ async function loginWithRequiredAudit(input: {
       passwordHash: true,
       emailVerified: true,
       isActive: true,
-      deletedAt: true,
       loginFailCount: true,
       lockedUntil: true,
     },
   });
 
   if (!user) {
-    throw new AuthError(401, "メールアドレスまたはパスワードが正しくありません");
+    throw new AuthError(401, INVALID_LOGIN_CREDENTIALS_MESSAGE);
   }
 
   // 2. アカウント状態チェック
@@ -318,6 +329,7 @@ async function loginWithRequiredAudit(input: {
     await prisma.user.update({
       where: { id: user.id },
       data: { loginFailCount: 0, lockedUntil: null },
+      select: { id: true },
     });
     currentFailCount = 0;
   }
@@ -333,18 +345,19 @@ async function loginWithRequiredAudit(input: {
     if (newFailCount >= MAX_LOGIN_FAIL) {
       updateData.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
     }
-    await prisma.user.update({ where: { id: user.id }, data: updateData });
-    throw new AuthError(401, "メールアドレスまたはパスワードが正しくありません");
+    await prisma.user.update({
+      where: { id: user.id },
+      data: updateData,
+      select: { id: true },
+    });
+    throw new AuthError(401, INVALID_LOGIN_CREDENTIALS_MESSAGE);
   }
 
   // 6. JWT署名とrefresh token生成はtransaction開始前に完了する
-  const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error("JWT_SECRET is not set");
-
   const now = Math.floor(Date.now() / 1000);
   const accessToken = await sign(
     { sub: user.id, role: user.role, iat: now, exp: now + ACCESS_TOKEN_TTL_SEC },
-    secret,
+    jwtSecret,
     "HS256",
   );
 
@@ -359,13 +372,12 @@ async function loginWithRequiredAudit(input: {
         role: true,
         emailVerified: true,
         isActive: true,
-        deletedAt: true,
         lockedUntil: true,
       },
     });
 
     if (!currentUser) {
-      throw new AuthError(401, "メールアドレスまたはパスワードが正しくありません");
+      throw new AuthError(401, INVALID_LOGIN_CREDENTIALS_MESSAGE);
     }
 
     assertLoginAccountIsUsable(currentUser, stateCheckedAt);
@@ -380,7 +392,6 @@ async function loginWithRequiredAudit(input: {
         role: user.role,
         emailVerified: true,
         isActive: true,
-        deletedAt: null,
         OR: [{ lockedUntil: null }, { lockedUntil: { lte: stateCheckedAt } }],
       },
       data: { loginFailCount: 0, lockedUntil: null, lastLoginAt: new Date() },
@@ -447,7 +458,10 @@ async function updateLoginStreak(client: LoginStreakClient, userId: string): Pro
   });
 }
 
-export async function verifyEmail(input: { token: string }): Promise<void> {
+async function verifyEmail(
+  { prisma }: AuthServiceDependencies,
+  input: { token: string },
+): Promise<void> {
   const { token } = input;
 
   // 1. tokenをsha256ハッシュ化してDBと照合
@@ -484,25 +498,29 @@ export async function verifyEmail(input: { token: string }): Promise<void> {
     await tx.user.update({
       where: { id: record.userId },
       data: { emailVerified: true },
+      select: { id: true },
     });
   });
 }
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1時間
 
-export async function forgotPassword(input: { email: string }): Promise<void> {
+async function forgotPassword(
+  { prisma, mailSender, frontendUrl, mailFrom }: AuthServiceDependencies,
+  input: { email: string },
+): Promise<void> {
   const { email } = input;
 
   // 1. ユーザー検索
   const user = await prisma.user.findUnique({
     where: { email },
-    select: { id: true, isActive: true, deletedAt: true },
+    select: { id: true, isActive: true },
   });
 
   // 2. ユーザーが存在しない場合は何もしない（列挙攻撃対策: エラーを返さない）
   // タイミング攻撃対策: ダミーのハッシュ計算で存在するユーザーとの処理時間差を縮める
   // cost=4 にして CPU 負荷を抑える（cost=12 は DoS の踏み台になり得る）
-  if (!user || user.isActive === false || user.deletedAt) {
+  if (!user || user.isActive === false) {
     await bcrypt.hash("timing-safe-dummy", 4);
     return;
   }
@@ -511,7 +529,7 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
   const token = randomBytes(32).toString("hex");
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
-  const resetUrl = `${getFrontendUrl()}/reset-password?token=${token}`;
+  const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
 
   // 4. トークンをDBに確定（upsert で原子的に置き換え）
   await prisma.passwordResetToken.upsert({
@@ -523,8 +541,8 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
   // 5. メール送信（失敗時はトークンを削除して無効化する）
   // ※ DB トランザクション内で外部 I/O（SMTP）を待たないよう分離する
   try {
-    await mailer.sendMail({
-      from: process.env.MAIL_FROM ?? "noreply@gensoko.app",
+    await mailSender.send({
+      from: mailFrom,
       to: email,
       subject: "【元素庫】パスワードリセット",
       text: `以下のURLをクリックしてパスワードをリセットしてください（有効期限: 1時間）\n\n${resetUrl}`,
@@ -537,7 +555,10 @@ export async function forgotPassword(input: { email: string }): Promise<void> {
   }
 }
 
-export async function resetPassword(input: { token: string; password: string }): Promise<void> {
+async function resetPassword(
+  { prisma }: AuthServiceDependencies,
+  input: { token: string; password: string },
+): Promise<void> {
   const { token, password: rawPassword } = input;
   const password = normalizePassword(rawPassword);
 
@@ -576,6 +597,7 @@ export async function resetPassword(input: { token: string; password: string }):
     await tx.user.update({
       where: { id: record.userId },
       data: { passwordHash },
+      select: { id: true },
     });
     // 3. 全リフレッシュトークン削除（全デバイスからログアウト）
     await tx.refreshToken.deleteMany({ where: { userId: record.userId } });
@@ -591,3 +613,20 @@ export async function resetPassword(input: { token: string; password: string }):
     });
   });
 }
+
+export function createAuthService(dependencies: AuthServiceDependencies) {
+  return {
+    register: (input: Parameters<typeof register>[1]) => register(dependencies, input),
+    issueRefreshToken: (userId: string) => issueRefreshToken(dependencies, userId),
+    logout: (rawToken: string) => logout(dependencies, rawToken),
+    refreshAccessToken: (rawToken: string) => refreshAccessToken(dependencies, rawToken),
+    login: (input: Parameters<typeof login>[1]) => login(dependencies, input),
+    verifyEmail: (input: Parameters<typeof verifyEmail>[1]) => verifyEmail(dependencies, input),
+    forgotPassword: (input: Parameters<typeof forgotPassword>[1]) =>
+      forgotPassword(dependencies, input),
+    resetPassword: (input: Parameters<typeof resetPassword>[1]) =>
+      resetPassword(dependencies, input),
+  };
+}
+
+export type AuthService = ReturnType<typeof createAuthService>;

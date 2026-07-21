@@ -34,8 +34,9 @@ describe("staging audit cleanup fixture workflow", () => {
       "AUDIT_LOG_STAGING_FIXTURES_ENABLED: ${{ vars.AUDIT_LOG_STAGING_FIXTURES_ENABLED }}",
     );
     expect(workflow).toContain(
-      "STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}",
+      "STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}",
     );
+    expect(workflow).not.toContain("${{ vars.STAGING_SUPABASE_PROJECT_REF }}");
     expect(workflow).toContain("DATABASE_URL: ${{ secrets.DATABASE_URL }}");
   });
 

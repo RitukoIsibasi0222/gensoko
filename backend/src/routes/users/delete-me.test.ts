@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { usersRouter } from "./index.js";
+import { createUsersTestRouter, deleteCurrentUser } from "./test-helpers.js";
 
 vi.mock("../../middleware/auth/index.js", () => ({
   authMiddleware: vi.fn(
@@ -46,10 +46,11 @@ vi.mock("../../services/user.service.js", () => {
   };
 });
 
-import { deleteCurrentUser, UserError } from "../../services/user.service.js";
+import { UserError } from "../../services/user.service.js";
 import { STRONG_PASSWORD_73_BYTES } from "../../test/password-byte-boundary-fixtures.js";
 
 const app = new Hono();
+const usersRouter = createUsersTestRouter();
 app.route("/users", usersRouter);
 
 describe("DELETE /users/me", () => {
@@ -89,7 +90,7 @@ describe("DELETE /users/me", () => {
   });
 
   it("アカウント削除成功時は200を返し、refreshToken削除ヘッダーを付ける", async () => {
-    vi.mocked(deleteCurrentUser).mockResolvedValue();
+    vi.mocked(deleteCurrentUser).mockResolvedValue(undefined);
 
     const res = await app.request("/users/me", {
       method: "DELETE",
@@ -118,7 +119,7 @@ describe("DELETE /users/me", () => {
   });
 
   it("73バイトのcurrentPasswordは上限拒否せず完全な値をサービス層へ渡す", async () => {
-    vi.mocked(deleteCurrentUser).mockResolvedValue();
+    vi.mocked(deleteCurrentUser).mockResolvedValue(undefined);
 
     const res = await app.request("/users/me", {
       method: "DELETE",
@@ -150,6 +151,42 @@ describe("DELETE /users/me", () => {
     const body = await res.json();
     expect(body.error).toBe("バリデーションエラー");
     expect(deleteCurrentUser).not.toHaveBeenCalled();
+  });
+
+  it("未定義fieldを含む場合は400を返し、サービス層を呼び出さない", async () => {
+    const res = await app.request("/users/me", {
+      method: "DELETE",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ currentPassword: "Pass1234!", userId: "another-user" }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "バリデーションエラー" });
+    expect(deleteCurrentUser).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["最後の管理者", "最後の管理者は退会できません"],
+    ["account状態競合", "アカウントの状態が変更されています。再ログインしてください"],
+    ["Serializable競合", "同時操作により退会できませんでした。再試行してください"],
+  ])("%sのUserErrorは409と日本語メッセージを維持する", async (_label, message) => {
+    vi.mocked(deleteCurrentUser).mockRejectedValue(new UserError(409, message));
+
+    const res = await app.request("/users/me", {
+      method: "DELETE",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ currentPassword: "Pass1234!" }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: message });
+    expect(res.headers.getSetCookie()).toHaveLength(0);
   });
 
   it("サービス層のUserErrorはステータスと日本語メッセージを返す", async () => {
@@ -184,5 +221,7 @@ describe("DELETE /users/me", () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body).toEqual({ error: "サーバーエラーが発生しました" });
+    expect(JSON.stringify(body)).not.toContain("unexpected");
+    expect(res.headers.getSetCookie()).toHaveLength(0);
   });
 });

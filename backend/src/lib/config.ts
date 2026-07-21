@@ -1,4 +1,5 @@
 const DEVELOPMENT_FRONTEND_URL = "http://localhost:5174";
+const DATABASE_URL_REQUIRED_MESSAGE = "DATABASE_URLの設定が必要です";
 const FRONTEND_URL_REQUIRED_MESSAGE = "production環境ではFRONTEND_URLの設定が必要です";
 const FRONTEND_URL_INVALID_MESSAGE = "FRONTEND_URLはHTTP(S)のオリジン形式で設定してください";
 const RATE_LIMIT_STORE_PRODUCTION_REQUIRED_MESSAGE =
@@ -14,14 +15,32 @@ const AUDIT_LOG_RETENTION_DAYS_INVALID_MESSAGE =
   "AUDIT_LOG_RETENTION_DAYSは30から3650までの10進整数で設定してください";
 const AUDIT_LOG_CLEANUP_ENABLED_INVALID_MESSAGE =
   "AUDIT_LOG_CLEANUP_ENABLEDはtrueまたはfalseで設定してください";
+const ACCOUNT_DATA_DELETION_EXECUTE_ENABLED_INVALID_MESSAGE =
+  "ACCOUNT_DATA_DELETION_EXECUTE_ENABLEDはtrueまたはfalseで設定してください";
+const ACCOUNT_DATA_DELETION_BATCH_SIZE_INVALID_MESSAGE =
+  "ACCOUNT_DATA_DELETION_BATCH_SIZEは1から100までの10進整数で設定してください";
+const STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED_INVALID_MESSAGE =
+  "STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLEDはtrueまたはfalseで設定してください";
 const MIN_RATE_LIMIT_KEY_BYTES = 32;
 const MIN_AUDIT_LOG_RETENTION_DAYS = 30;
 const MAX_AUDIT_LOG_RETENTION_DAYS = 3650;
+const DEFAULT_ACCOUNT_DATA_DELETION_BATCH_SIZE = 25;
+const MIN_ACCOUNT_DATA_DELETION_BATCH_SIZE = 1;
+const MAX_ACCOUNT_DATA_DELETION_BATCH_SIZE = 100;
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const DECIMAL_INTEGER_PATTERN = /^\d+$/;
 
+export type DatabaseUrlOptions = Readonly<{
+  environment?: Readonly<{
+    DATABASE_URL?: string;
+  }>;
+}>;
+
 export type FrontendUrlOptions = {
   isProduction?: boolean;
+  environment?: Readonly<{
+    FRONTEND_URL?: string;
+  }>;
 };
 
 export type RateLimitRuntime = "development" | "test" | "production";
@@ -56,6 +75,39 @@ export type AuditLogRetentionConfig = Readonly<{
   cleanupEnabled: boolean;
 }>;
 
+export type AccountDataDeletionConfigOptions = Readonly<{
+  environment?: Readonly<Record<string, string | undefined>>;
+}>;
+
+export type AccountDataDeletionConfig = Readonly<{
+  executeEnabled: boolean;
+  batchSize: number;
+}>;
+
+export type StagingAccountDeletionPerformanceConfigOptions = Readonly<{
+  environment?: Readonly<Record<string, string | undefined>>;
+}>;
+
+export type StagingAccountDeletionPerformanceConfig = Readonly<{
+  executeEnabled: boolean;
+}>;
+
+/**
+ * Node.js用Prisma singletonへ渡す接続URLを検証して返す。
+ * Workersはrequest bindingから別途接続URLを注入する。
+ */
+export function getDatabaseUrl({
+  environment = { DATABASE_URL: process.env.DATABASE_URL },
+}: DatabaseUrlOptions = {}): string {
+  const databaseUrl = environment.DATABASE_URL?.trim();
+
+  if (!databaseUrl) {
+    throw new Error(DATABASE_URL_REQUIRED_MESSAGE);
+  }
+
+  return databaseUrl;
+}
+
 function parseFrontendOrigin(value: string): string {
   let url: URL;
 
@@ -86,8 +138,9 @@ function parseFrontendOrigin(value: string): string {
  */
 export function getFrontendUrl({
   isProduction = process.env.NODE_ENV === "production",
+  environment = process.env,
 }: FrontendUrlOptions = {}): string {
-  const frontendUrl = process.env.FRONTEND_URL?.trim();
+  const frontendUrl = environment.FRONTEND_URL?.trim();
 
   if (frontendUrl) {
     return parseFrontendOrigin(frontendUrl);
@@ -216,10 +269,82 @@ function parseAuditLogCleanupEnabled(value: string | undefined): boolean {
  * 保持期間が不明な状態で削除を始めず、cleanup未設定時は安全側で無効化する。
  */
 export function getAuditLogRetentionConfig({
-  environment = process.env,
+  environment = {
+    AUDIT_LOG_RETENTION_DAYS: process.env.AUDIT_LOG_RETENTION_DAYS,
+    AUDIT_LOG_CLEANUP_ENABLED: process.env.AUDIT_LOG_CLEANUP_ENABLED,
+  },
 }: AuditLogRetentionConfigOptions = {}): AuditLogRetentionConfig {
   return {
     retentionDays: parseAuditLogRetentionDays(environment.AUDIT_LOG_RETENTION_DAYS),
     cleanupEnabled: parseAuditLogCleanupEnabled(environment.AUDIT_LOG_CLEANUP_ENABLED),
+  };
+}
+
+function parseDisabledByDefaultBoolean(value: string | undefined, invalidMessage: string): boolean {
+  if (value === undefined) {
+    return false;
+  }
+
+  const normalizedValue = value.trim();
+
+  if (normalizedValue === "true") {
+    return true;
+  }
+
+  if (normalizedValue === "false") {
+    return false;
+  }
+
+  throw new Error(invalidMessage);
+}
+
+function parseAccountDataDeletionBatchSize(value: string | undefined): number {
+  if (value === undefined) {
+    return DEFAULT_ACCOUNT_DATA_DELETION_BATCH_SIZE;
+  }
+
+  const normalizedValue = value.trim();
+
+  if (!DECIMAL_INTEGER_PATTERN.test(normalizedValue)) {
+    throw new Error(ACCOUNT_DATA_DELETION_BATCH_SIZE_INVALID_MESSAGE);
+  }
+
+  const batchSize = Number(normalizedValue);
+
+  if (
+    !Number.isSafeInteger(batchSize) ||
+    batchSize < MIN_ACCOUNT_DATA_DELETION_BATCH_SIZE ||
+    batchSize > MAX_ACCOUNT_DATA_DELETION_BATCH_SIZE
+  ) {
+    throw new Error(ACCOUNT_DATA_DELETION_BATCH_SIZE_INVALID_MESSAGE);
+  }
+
+  return batchSize;
+}
+
+/**
+ * 既存soft-deleted user cleanupの実行許可と1 transactionあたりの件数を検証して返す。
+ * 未設定時は削除を無効化し、batch sizeを25件に制限する。
+ */
+export function getAccountDataDeletionConfig({
+  environment = process.env,
+}: AccountDataDeletionConfigOptions = {}): AccountDataDeletionConfig {
+  return {
+    executeEnabled: parseDisabledByDefaultBoolean(
+      environment.ACCOUNT_DATA_DELETION_EXECUTE_ENABLED,
+      ACCOUNT_DATA_DELETION_EXECUTE_ENABLED_INVALID_MESSAGE,
+    ),
+    batchSize: parseAccountDataDeletionBatchSize(environment.ACCOUNT_DATA_DELETION_BATCH_SIZE),
+  };
+}
+
+export function getStagingAccountDeletionPerformanceConfig({
+  environment = process.env,
+}: StagingAccountDeletionPerformanceConfigOptions = {}): StagingAccountDeletionPerformanceConfig {
+  return {
+    executeEnabled: parseDisabledByDefaultBoolean(
+      environment.STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED,
+      STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED_INVALID_MESSAGE,
+    ),
   };
 }

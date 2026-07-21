@@ -1,6 +1,6 @@
 # Gensoko 実装タスク一覧
 
-> 更新日: 2026-07-14
+> 更新日: 2026-07-21
 > ステータス: `[ ]` 未実装 / `[-]` 実装中 / `[x]` 完了
 
 ---
@@ -171,17 +171,75 @@
 
 - [x] bcrypt 72バイト上限の入力検証統一（UTF-8バイト数、登録・変更・リセット・管理者CLI、既存ユーザー互換性、フロント表示、72/73バイト境界テスト） — 計画書: [`docs/plans/bcrypt-password-byte-limit/plan.md`](plans/bcrypt-password-byte-limit/plan.md) / PR: #82
 - [x] セキュリティヘッダーミドルウェア（CSP/HSTS/X-Frame-Options/nosniff等） — 計画書: [`docs/plans/security-headers/plan.md`](plans/security-headers/plan.md) / PR: #84
-- [-] APIレート制限の本番設計・適用（認証系 / 一般API / `POST /game/sessions`） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md) — Hono・フロントエンド先行実装済み。本番Durable Object・WAF・実機検証はフェーズ12基盤後に実施
-- [-] 監査ログ本番運用設計（保持期間365日・退会後内部IDの同期間保持は2026-07-14承認済み。T20完了、T21の7日baseline観測中） — 計画書: [docs/plans/audit-log-production-operations/plan.md](plans/audit-log-production-operations/plan.md)
+- [-] APIレート制限の本番設計・適用（認証系 / 一般API / `POST /game/sessions`） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md) — Hono・フロントエンド、SQLite-backed Durable Object/store adapter、local Workers runtime test、staging namespace/binding稼働まで確認済み。staging実HTTP 429/503、WAF、監視、production namespace/binding・実機確認は未実施
+- [-] 監査ログ本番運用設計（保持期間365日・退会後内部IDの同期間保持は2026-07-14承認済み。T20・公開前T21完了、T22進行中） — 計画書: [docs/plans/audit-log-production-operations/plan.md](plans/audit-log-production-operations/plan.md)
   - [x] T20: production容量監視・通知先・暗号化backup・migration gateを実環境で確認
-  - [-] T21: production初回dry-run成功。2026-07-21 22:55 JSTまで7日間の増加量baselineを観測
+  - [x] T21: 2026-07-14 22:54 JST〜2026-07-21 22:55 JSTの公開前baselineを確認。開始・終了とも監査row 0件、7日増加量0件
   - [x] 自動test: 10,000件上限、上限後の残件通知、stable concurrency group、cleanup失敗時の非0終了
   - [ ] 実環境運用確認: schedule/manualのqueue動作、Actions失敗通知の受信、retention変更前dry-run
-  - [ ] 本番アプリ公開後の監査回帰: LOGIN success/failure、password change/reset、admin操作、本人・管理者退会、API status/body/Cookie
-  - [ ] T22: 7日baselineと残課題を記録し、完了記録用docs PRをreview後developへmerge
-- [ ] 退会時の個人情報・学習データ完全削除方針（本人退会・管理者強制退会・既存soft-deleted userの移行） — 監査ログ保持とは分離した本番公開前ブロッカー
+  - [ ] 本番アプリ公開後の監査回帰・実負荷baseline: LOGIN success/failure、password change/reset、admin操作、本人・管理者退会、API status/body/Cookie
+  - [-] T22: 7日baselineと残課題を記録済み。完了記録用docs PR #95のreview・develop merge待ち
+- [-] 退会時の個人情報・学習データ完全削除方針（本人退会・管理者強制退会・既存soft-deleted userの移行） — 計画書: [docs/plans/account-data-complete-deletion/plan.md](plans/account-data-complete-deletion/plan.md) — 監査ログ保持とは分離した本番公開前ブロッカー（実装中・本番公開gate未完了）
+  - [x] 実装計画・現行soft delete・User配下のcascade対象・不足indexを確認
+  - [-] Phase 0: privacy・監査内部ID・backup・再登録・削除replay・性能基準・本番cleanup体制を決定（T1A確定、T1B継続）
+    - [x] T1A: 物理削除、監査成功action、再登録、backup境界、replay block、同期削除性能基準の実装契約を確定
+    - [-] T1B: 監査保持365日・内部ID同期間保持は2026-07-14承認済み。privacy問い合わせ先、本番cleanup体制、全損時replayの最終判断を本番公開前gateとして継続
+  - [-] Phase 1: cascade/index契約test、expand index migration、専用DB・staging検証
+  - [x] Phase 2: 共通Serializable transaction、本人退会・管理者強制退会の物理削除、成功監査、cleanup CLI・workflow
+    - [x] T5〜T9: 共通Serializable transaction、本人退会の物理削除、last-admin、成功監査
+    - [x] T10〜T11: 管理者強制退会のactor再確認、物理削除、成功・失敗監査
+    - [x] T12: 本人・管理者退会routeのvalidation、409/404、Cookie、generic 500契約
+    - [x] T13: 専用DBで全所有row cascade・Element保持・成功監査・rollback・並行退会を検証
+    - [x] T14: legacy cleanupの実行許可・batch size設定を安全側defaultと厳格validationでTDD実装
+    - [x] T15: legacy cleanupのdry-run・batch削除・安全log・失敗停止契約をRed test化
+    - [x] T16: legacy cleanup serviceを集合dry-run・Serializable batch物理削除・安全logで実装
+    - [x] T17: legacy cleanup CLIの三重gate・DB load前拒否・残件確認・秘密非出力をRed test化
+    - [x] T18: legacy cleanup CLI・npm scriptを三重gate・実行後dry-run・安全errorで実装
+    - [x] T19: staging/production workflowのmanual限定・三重gate・backup・承認契約をRed test化
+    - [x] T20: staging/production workflowを実装（manual限定、productionは24時間以内のbackup・dry-run marker・承認記録を必須化。実環境検証はT35/T38）
+    - [x] T21: 物理削除後のregister/login/forgot-password/refresh・Bearer認証契約をTDD更新（対象71件・backend全体789件成功）
+    - [x] T22: admin v1互換一覧・detail・stats契約をTDD更新（対象55件・backend全体793件成功）
+  - [ ] Phase 3: staging cleanupを検証し、Phase 2・4の同時公開後にproductionの既存soft-deleted userをdry-run・batch削除・冪等再実行
+  - [-] Phase 4: 設定画面・認証store・管理画面の契約／A11Y整合
+    - [x] T23: settings退会フォームの説明・control別error・focus・busy・Abort契約をRed test化（専用18件中11件成功・7件Red、frontend全体466件成功・7件Red）
+    - [x] T24: settings退会フォームの説明・control別error・focus・busy・Abortを実装（専用18件・frontend全体473件成功）
+    - [x] T25: auth storeのlocal/cross-tab clear・refresh abort・安全event・SSR fallback契約をRed test化（専用5件Red、frontend既存473件成功・追加5件Red）
+    - [x] T26: auth storeのlocal/cross-tab clearを実装しsettings退会成功処理へ接続（対象24件・frontend全体479件成功）
+    - [x] T27: admin frontendのdeleted UI除去・完全削除警告・削除後focus・同期失敗分離をRed test化（対象85件中68件成功・17件Red、frontend全体473件成功・17件Red）
+    - [x] T28: admin deleted UIを除去し、強制退会後の同期・focus・失敗表示を実装（対象85件・frontend全体490件成功）
+  - [x] T29: API・security・testing・deployment文書を実装済み契約と未承認gateへ同期（6文書とworkflow/CLIを照合、Prettier・diff check成功。実環境workflow未実行）
+  - [x] T30: backend品質check完了（ESLint・Prettier・TypeScript build・Prisma validate成功、通常全test 793件成功・専用DB 7件skip）
+  - [x] T31: frontend品質check完了（Prettier・ESLint・Svelte/TypeScript check・production build成功、通常全test 490件成功）
+  - [x] T32: 専用Docker PostgreSQL integration 5件成功（15 migrations適用済み・pending 0、終了後fixture 0件）
+  - [-] T33: stagingのGameSession 5,000件・GameAnswer 50,000件cascadeは1,446.32msで基準5,000ms以内、cleanup・事後preview・flag `false`復旧まで成功。ローカル専用PostgreSQL 16.13で対象migrationだけpendingを再構築した30秒baselineも、migration 1,427ms・probe 115回・最大write待ち 22.14ms・cleanup成功・残存fixture 0件だった。managed DB再計測の同等性条件と暫定gate（probe 30秒以上、migration 5,000ms以下、最大write待ち1,000ms以下、probe 20回以上、cleanup完了、migration current）を文書化したが、ローカル値をmanaged DB合格証拠とは扱わない。managed DB証拠または正式な残余リスク承認まで進行中
+  - [-] 2026-07-21残作業区分: T34はrun 29802327100成功で完了。T33のmanaged DB固有検証、T35 cleanup dry-run/execute/再実行、production・backup・restore・shared contract適用は実環境条件付きで継続する
+  - [x] T34安全なstaging synthetic確認: synthetic browser回帰、fixture完全一致preflight、登録・メール認証・login・本人退会・ゲーム・password resetに加え、PR #125 merge後のrun 29802327100でAdmin login、管理者linkのSPA遷移、`/admin` dashboard、強制退会、旧credential 401、main cleanupを確認した。prepareは2件作成・置換0件、main cleanupはE2E後に残るAdmin 1件を削除し、recoveryはmain成功のためskip。flagは`false`へ復旧済み
+  - [ ] T35 staging legacy cleanup: 完全一致fixture preflightは実装済み。明示承認付きdry-run/execute/再実行0、sentinel保持、両flag `false`復旧は未実施
+  - [-] Phase 5: T39の`deletedAt`非参照code・test、Prisma User writeの明示`select`契約、v1 deprecated互換値を実装済み。staging/production deploy・soakとT44のPrisma Client再生成は未実施
+  - [ ] Phase 6: cleanup後backup、旧Artifactの7日失効、isolated restore drill・削除replay
+  - [-] Phase 7: T43のtable lock付き隔離guard SQL・contract test・ローカル専用DB fail/success/並行insert/drop後Prisma writeを完了。staging/production適用はT44として未実施
+  - [x] 2026-07-18 PR #107 review follow-up品質check: backend 887件成功・10件skip、ESLint・Prettier・TypeScript build・Prisma validate成功。deleteOnlyUserIds空配列拒否とshorthand select許容を含み、専用cascade 5件とcontract migration 5件も成功
+  - [ ] Release gate: privacy policyの問い合わせ先・backup説明、全損時replay方針、本番cleanup体制、integration・Playwright・smoke testを完了
+
+### 完全削除から切り出した関連タスクの着手タイミング
+
+> Phase番号は作業パッケージを表し、そのまま本番公開順を意味しない。Phase 2のバックエンドを先に実装・staging検証してもよいが、下表の「完了期限」を満たすまで本番公開・不可逆cleanupへ進まない。
+
+| 切り出しタスク                                   | 着手タイミング                                                  | 完了期限・合流点                                                                  | 進捗管理先                                                                         |
+| ------------------------------------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 監査ログ保持期間・退会後内部IDの承認             | Phase 0で既存案の確認を開始し、本体と並行                       | Phase 2の物理削除backendを本番公開する前                                          | [`audit-log-production-operations`](plans/audit-log-production-operations/plan.md) |
+| プライバシーポリシー `/privacy`                  | Phase 0で文言案を作り、Phase 4のUI文言確定後に実装              | Phase 2の物理削除backendを本番公開する前                                          | フェーズ11「プライバシーポリシーページ」                                           |
+| 現行DB全損時の外部削除replay source              | Phase 0で「実装」または「残余リスク承認」を決定                 | 方針決定・承認はPhase 2本番公開前。実装を選ぶ場合はPhase 6のrestore drill前に完成 | 新規計画を作成する場合は本計画からlink                                             |
+| 監査内部IDのHMAC化・退会時null化・legal hold     | 監査保持方針で必要と判断した時点                                | 必要と判断した場合はPhase 2本番公開前                                             | 監査ログ本番運用の追加計画                                                         |
+| 非同期削除queue                                  | Phase 1〜3のstaging性能計測が基準超過した場合だけ着手           | 同期削除を本番公開する前。超過時は本計画を再設計                                  | 新規計画                                                                           |
+| 匿名化済みhistorical KPI                         | 完全削除後も退会者を含む統計が必要と決まった時点                | 本機能のrelease blockerではない。Phase 7後でも可                                  | 新規計画                                                                           |
+| 管理API v2・deprecated field廃止                 | Phase 5の非参照codeが安定し、旧frontend退役条件を定義できた時点 | Phase 7のDB contract migrationとは分離し、旧asset失効後                           | 新規API version計画                                                                |
+| メール配送事業者・外部log・browser保持期間の確認 | Phase 0で調査開始                                               | `/privacy` 文言確定・本番公開前                                                   | security/privacy運用記録                                                           |
+
+### その他の品質タスク
+
 - [ ] エラートラッキング・構造化ログ導入（500通知・requestId・個人情報除外）
-- [ ] ダークモード対応（OS設定追従 + トグルボタン）
+- [x] ダークモード対応（OS設定追従 + トグルボタン）— D1〜D12、browser確認、frontend 580 test・全品質gate成功
 - [ ] レスポンシブデザイン確認・修正（PC/タブレット/スマホ）
 - [ ] アクセシビリティ確認（キーボード操作・スクリーンリーダー）
 - [ ] プライバシーポリシーページ `/privacy`
@@ -190,8 +248,65 @@
 
 - [x] Supabase staging・production project作成、東京region・Session pooler接続設定
 - [x] 本番DBバックアップ・Prismaマイグレーション運用（Free plan容量確認・暗号化backup・migration gateをproductionで確認済み） — 計画書: [`docs/plans/audit-log-production-operations/plan.md`](plans/audit-log-production-operations/plan.md)
-- [ ] Cloudflare Workers wrangler.toml + @prisma/adapter-cloudflare 設定・デプロイ
-- [ ] APIレート制限の本番適用継続（Workers専用entrypoint・SQLite-backed Durable Object・WAF・staging/production実機確認） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md)（フェーズ11先行実装の続き）
-- [ ] Vercel SvelteKit デプロイ・環境変数設定
+- [ ] 本番DBバックアップ耐障害性強化（日次化・最大3回再試行・36時間鮮度監視・最大7世代・四半期隔離復元訓練） — 計画書: [`docs/plans/backup-resilience/plan.md`](plans/backup-resilience/plan.md)
+- [-] staging frontend/API配備基盤（Workers専用entrypoint・Prisma/mail runtime境界・Wrangler・Vercel Preview・T34実機確認） — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md) / PR: #117 — SD1〜SD13・SD15完了。Vercel `develop` Preview、Cloudflare staging Worker/DO/Hyperdrive/secret、Supabase migration、health/CORS/OPTIONS、元素118件、synthetic登録・認証・ゲーム・password reset・本人退会を確認済み。production resource・deploy・DB操作は未実施
+  - [x] SD16実環境検証: PR #125で管理者linkのSPA遷移をTDD固定し、run 29802327100でAdmin login、`/admin` dashboard、強制退会、旧credential 401、main cleanupが成功した。flagは`false`へ復旧済み。production・migration・実メール・再配備・追加の直接DB queryは未実行
+- [-] Cloudflare Workers Wrangler + Prisma `@prisma/adapter-pg`/接続binding設定・デプロイ — stagingはHyperdrive方式で設定・配備・実機確認済み。production resource・binding・deployは未実施
+- [-] APIレート制限の本番適用継続（Workers専用entrypoint・SQLite-backed Durable Object・WAF・staging/production実機確認） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md) — T13/T14のDO test・store adapterとstaging namespace/binding稼働は確認済み。staging実HTTP 429/503、WAF、production namespace/binding・実機確認は未実施
+- [x] Vercel SvelteKit `develop` Previewデプロイ・branch scoped環境変数設定 — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md)
 - [ ] GitHub Actions CI/CD 設定（本番マイグレーション → APIデプロイ → フロントデプロイ）
 - [ ] npm audit・本番環境動作確認（ログイン/ゲーム/メール）
+
+## ポートフォリオ版 v0.1 公開計画
+
+> リリース範囲の正本: [`docs/plans/portfolio-release-v0-1/plan.md`](plans/portfolio-release-v0-1/plan.md)
+>
+> 個別計画の未完了項目をこの区分だけで完了扱いにしない。本番DBに実利用者がいないことは未確認であり、証拠なしの簡略化を適用しない。
+
+### ポートフォリオ版 v0.1 公開前に必須
+
+- [x] staging synthetic Admin E2Eの`/admin`到達・強制退会・旧credential拒否・cleanup — run 29802327100
+- [x] bcryptjsハッシュ、UTF-8 72バイト境界、Zod入力検証、安全な日本語errorのコード契約
+- [x] APIセキュリティヘッダーとCORS単一originのコード契約
+- [-] 一般ユーザー登録・メール認証・login/logout — staging確認済み、production smoke待ち
+- [ ] refresh tokenのproduction same-site構成とreload後refresh確認
+- [-] 本人退会の物理削除 — code・専用DB・staging本人/Admin導線を確認済み、残る移行・production gate待ち
+- [x] ダークモード（OS設定追従 + 明示toggle） — D1〜D12完了、計画: [`dark-mode`](plans/dark-mode/plan.md)
+- [ ] プライバシーポリシーページ`/privacy` — 計画: [`privacy-policy`](plans/privacy-policy/plan.md)
+- [-] 基本レスポンシブ・keyboard・focus・live region — 実装済み範囲あり、主要画面のrelease確認待ち
+- [-] 認証系・ゲーム送信APIのアプリレベルrate limit — Hono/DOとstaging binding済み、実HTTP 429/503・production binding待ち
+- [ ] production CORS、HttpOnly/Secure/SameSite Cookie、security headersの実HTTP確認
+- [ ] staging/production logでPII・token・Cookie・Authorization・DB URL・raw error非出力を最終確認
+- [-] 最低限の暗号化backup — workflow実装済み、初回Artifact・checksum・復号確認待ち
+- [ ] backend production依存のHigh 2 / Moderate 3を安全に更新し、TDD回帰後にproduction依存High/Moderate 0件を確認
+- [ ] release候補SHAのtest・Workers test・build・lint・format・Prisma validate・npm audit（frontendは全依存Low 3、production依存0を再確認）
+- [ ] dark/privacyを含むstaging主要導線の最終確認
+- [ ] production deploy後のsmoke test
+
+### 初回リリース後
+
+- [ ] 共通APIクライアントへの全面移行 — 計画: [`frontend-api-client`](plans/frontend-api-client/plan.md)
+- [ ] Hono RPC導入
+- [ ] ゲームAPIテスト追加補強 — 計画: [`game-api-tests`](plans/game-api-tests/plan.md)
+- [ ] 高度なWAF tuning
+- [ ] 本番公開後の監査ログ実負荷7日baseline（公開前0件baselineは2026-07-21完了）
+- [ ] 高度な容量監視・通知
+- [ ] backup最大3回retry・日次最大7世代・四半期隔離restore — 計画: [`backup-resilience`](plans/backup-resilience/plan.md)
+- [ ] 完全自動CI/CD
+- [ ] 管理画面Playwright網羅
+- [ ] 複数screen reader/browserの高度検証
+- [ ] 本番公開後の追加運用自動化
+
+### 条件付きで v0.1 対象外
+
+- [ ] productionの全User・legacy・関連rowが0件であることを、承認付きread-only workflowでPII/IDなしに確認する
+- [ ] 上記証拠がある場合だけ、legacy production cleanup、既存利用者向け段階migration、旧backend長期soak、旧backup失効待ち、既存利用者向けexpand/contractを「v0.1対象外」と記録する
+- [ ] 0件以外・接続先不一致・結果不明の場合は簡略化せず、完全削除計画の通常gateを維持する
+
+### 外部承認・実環境確認待ち
+
+- [ ] privacyの運営主体、問い合わせ先、監査正式保持期間・目的、backup/replay説明、発効日をowner承認する
+- [ ] production hostname、same-site Cookie、CORS origin、Cloudflare DO binding/secret、rollback先を値非表示で確認する
+- [ ] production初回暗号化backupを実行し、期限内Artifactと復号成功を確認する
+- [ ] T33/T35とproduction完全削除gateのうち、DB空証拠で対象外にできない項目を承認付きで実行する
+- [ ] review済みrelease候補SHAをproductionへ配備し、smokeとrollback記録を残す

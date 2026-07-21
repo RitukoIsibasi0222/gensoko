@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { adminRouter } from "./index.js";
+import { createAdminTestRouter, getAdminUsers } from "./test-helpers.js";
 
 vi.mock("../../middleware/auth/index.js", () => ({
   authMiddleware: vi.fn(
@@ -76,9 +76,10 @@ vi.mock("../../services/admin.service.js", () => {
   };
 });
 
-import { AdminServiceError, getAdminUsers } from "../../services/admin.service.js";
+import { AdminServiceError } from "../../services/admin.service.js";
 
 const app = new Hono();
+const adminRouter = createAdminTestRouter();
 app.route("/admin", adminRouter);
 
 describe("GET /admin/users", () => {
@@ -114,7 +115,6 @@ describe("GET /admin/users", () => {
           role: "USER",
           emailVerified: true,
           isActive: true,
-          deletedAt: null,
           lockedUntil: null,
           lastLoginAt: new Date("2026-06-20T12:00:00.000Z"),
           createdAt: new Date("2026-05-01T00:00:00.000Z"),
@@ -157,6 +157,21 @@ describe("GET /admin/users", () => {
       ],
       nextCursor: null,
     });
+  });
+
+  it("deprecated status=deleted をserviceへ渡して空一覧を返す", async () => {
+    vi.mocked(getAdminUsers).mockResolvedValue({ users: [], nextCursor: null });
+
+    const res = await app.request("/admin/users?status=deleted", {
+      headers: { Authorization: "Bearer admin-token" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(getAdminUsers).toHaveBeenCalledWith({
+      limit: 20,
+      status: "deleted",
+    });
+    expect(await res.json()).toEqual({ users: [], nextCursor: null });
   });
 
   it("limit が範囲外なら400を返し service を呼ばない", async () => {

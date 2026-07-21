@@ -1,6 +1,12 @@
 import type { Context } from "hono";
 import type { RateLimitPolicyId } from "./policies.js";
 
+const HMAC_SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
+
+export function isRateLimitKeyDigest(value: unknown): value is string {
+  return typeof value === "string" && HMAC_SHA256_HEX_PATTERN.test(value);
+}
+
 export type RateLimitResult = Readonly<{
   allowed: boolean;
   limit: number;

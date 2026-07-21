@@ -19,12 +19,11 @@ vi.mock("../../lib/prisma.js", () => ({
 }));
 
 import { prisma } from "../../lib/prisma.js";
-import { elementsRouter } from "./index.js";
-
-const app = new Hono<{ Variables: AppVariables }>();
-app.route("/elements", elementsRouter);
+import { createElementsTestRouter } from "./test-helpers.js";
 
 const TEST_SECRET = "test-secret-key-for-vitest";
+const app = new Hono<{ Variables: AppVariables }>();
+app.route("/elements", createElementsTestRouter(prisma as never, TEST_SECRET));
 
 const createToken = async () => {
   return sign(

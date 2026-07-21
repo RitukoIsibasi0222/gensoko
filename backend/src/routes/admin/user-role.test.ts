@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { adminRouter } from "./index.js";
+import { createAdminTestRouter, updateAdminUserRole } from "./test-helpers.js";
 
 vi.mock("../../middleware/auth/index.js", () => ({
   authMiddleware: vi.fn(
@@ -76,9 +76,10 @@ vi.mock("../../services/admin.service.js", () => {
   };
 });
 
-import { AdminServiceError, updateAdminUserRole } from "../../services/admin.service.js";
+import { AdminServiceError } from "../../services/admin.service.js";
 
 const app = new Hono();
+const adminRouter = createAdminTestRouter();
 app.route("/admin", adminRouter);
 
 describe("PATCH /admin/users/:id/role", () => {
@@ -96,7 +97,6 @@ describe("PATCH /admin/users/:id/role", () => {
         role: "ADMIN",
         emailVerified: true,
         isActive: true,
-        deletedAt: null,
         lockedUntil: null,
         lastLoginAt: null,
         createdAt: new Date("2026-05-01T00:00:00.000Z"),
@@ -116,7 +116,9 @@ describe("PATCH /admin/users/:id/role", () => {
       targetUserId: "user-1",
       role: "ADMIN",
     });
-    expect((await res.json()).user.role).toBe("ADMIN");
+    const body = await res.json();
+    expect(body.user.role).toBe("ADMIN");
+    expect(body.user.deletedAt).toBeNull();
   });
 
   it("role が不正なら400を返し service を呼ばない", async () => {

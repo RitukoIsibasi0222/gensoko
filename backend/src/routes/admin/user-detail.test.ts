@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { adminRouter } from "./index.js";
+import { createAdminTestRouter, getAdminUserDetail } from "./test-helpers.js";
 
 vi.mock("../../middleware/auth/index.js", () => ({
   authMiddleware: vi.fn(
@@ -76,9 +76,10 @@ vi.mock("../../services/admin.service.js", () => {
   };
 });
 
-import { AdminServiceError, getAdminUserDetail } from "../../services/admin.service.js";
+import { AdminServiceError } from "../../services/admin.service.js";
 
 const app = new Hono();
+const adminRouter = createAdminTestRouter();
 app.route("/admin", adminRouter);
 
 describe("GET /admin/users/:id", () => {
@@ -95,7 +96,6 @@ describe("GET /admin/users/:id", () => {
         role: "USER",
         emailVerified: true,
         isActive: true,
-        deletedAt: null,
         loginFailCount: 0,
         lockedUntil: null,
         lastLoginAt: null,
@@ -124,6 +124,7 @@ describe("GET /admin/users/:id", () => {
     expect(getAdminUserDetail).toHaveBeenCalledWith({ userId: "user-1" });
     const body = await res.json();
     expect(body.user.createdAt).toBe("2026-05-01T00:00:00.000Z");
+    expect(body.user.deletedAt).toBeNull();
     expect(body.user.stats.lastActiveDate).toBe("2026-06-20T12:00:00.000Z");
     expect(body.user).not.toHaveProperty("passwordHash");
   });

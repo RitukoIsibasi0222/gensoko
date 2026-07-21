@@ -153,7 +153,7 @@
 </script>
 
 <div class="mx-auto max-w-md px-4 py-8">
-  <h1 class="text-2xl font-bold text-gray-800">ログイン</h1>
+  <h1 class="text-text text-2xl font-bold">ログイン</h1>
 
   <!-- novalidate でネイティブバリデーションを無効化し、カスタムバリデーションの日本語メッセージを優先する -->
   <form class="mt-6 space-y-4" novalidate onsubmit={handleSubmit}>
@@ -162,7 +162,7 @@
       <div
         id="login-error"
         role="alert"
-        class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+        class="border-danger-border bg-danger-surface text-danger-text rounded-md border px-4 py-3 text-sm"
       >
         {errorMessage}
       </div>
@@ -170,7 +170,7 @@
 
     <!-- メールアドレス入力 -->
     <div>
-      <label for="email" class="block text-sm font-medium text-gray-700"> メールアドレス </label>
+      <label for="email" class="text-text block text-sm font-medium"> メールアドレス </label>
       <input
         id="email"
         type="email"
@@ -178,13 +178,13 @@
         autocomplete="email"
         required
         aria-describedby={errorMessage ? 'login-error' : undefined}
-        class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+        class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
       />
     </div>
 
     <!-- パスワード入力 -->
     <div>
-      <label for="password" class="block text-sm font-medium text-gray-700"> パスワード </label>
+      <label for="password" class="text-text block text-sm font-medium"> パスワード </label>
       <input
         id="password"
         type="password"
@@ -192,7 +192,7 @@
         autocomplete="current-password"
         required
         aria-describedby={errorMessage ? 'login-error' : undefined}
-        class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+        class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
       />
     </div>
 
@@ -200,7 +200,7 @@
     <button
       type="submit"
       disabled={isSubmitting}
-      class="w-full rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+      class="bg-action text-text-inverse hover:bg-action-hover focus:ring-focus w-full rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
     >
       {isSubmitting ? 'ログイン中...' : 'ログイン'}
     </button>
@@ -208,7 +208,7 @@
 
   <!-- パスワードリセットリンク -->
   <div class="mt-4 text-center text-sm">
-    <a href="/forgot-password" class="text-blue-600 hover:underline">
+    <a href="/forgot-password" class="text-action hover:underline">
       パスワードを忘れた方はこちら
     </a>
   </div>

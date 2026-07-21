@@ -30,16 +30,13 @@ vi.mock("../../services/game.service.js", () => ({
 }));
 
 import { prisma } from "../../lib/prisma.js";
-import {
-  GameSessionHistoryCursorError,
-  getGameSessionHistory,
-} from "../../services/game.service.js";
-import { gameRouter, gameSessionHistoryQuerySchema } from "./index.js";
-
-const app = new Hono<{ Variables: AppVariables }>();
-app.route("/game", gameRouter);
+import { GameSessionHistoryCursorError } from "../../services/game.service.js";
+import { gameSessionHistoryQuerySchema } from "./index.js";
+import { createGameTestRouter, getGameSessionHistory } from "./test-helpers.js";
 
 const TEST_SECRET = "test-secret-key-for-vitest";
+const app = new Hono<{ Variables: AppVariables }>();
+app.route("/game", createGameTestRouter(prisma as never, TEST_SECRET));
 const mockActiveUser = {
   id: "user-1",
   role: "USER" as const,

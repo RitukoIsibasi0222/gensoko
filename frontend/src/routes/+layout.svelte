@@ -3,6 +3,7 @@
   import '../app.css';
   import favicon from '$lib/assets/favicon.svg';
   import { authStore } from '$lib/stores/auth.svelte';
+  import { themeStore } from '$lib/stores/theme.svelte';
   import Toaster from '$lib/components/toast/Toaster.svelte';
 
   let { children } = $props();
@@ -14,6 +15,7 @@
   // セットしてから最初の描画が走るようにする。
   // browser ガードにより SSR 環境では実行しない。
   if (browser) {
+    themeStore.initialize();
     void authStore.initialize();
   }
 </script>

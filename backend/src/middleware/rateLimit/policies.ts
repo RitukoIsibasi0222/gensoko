@@ -70,3 +70,7 @@ export const RATE_LIMIT_POLICIES = {
     failureMode: "fail-closed",
   },
 } as const satisfies Readonly<Record<RateLimitPolicyId, RateLimitPolicy>>;
+
+export function isRateLimitPolicyId(value: unknown): value is RateLimitPolicyId {
+  return typeof value === "string" && Object.hasOwn(RATE_LIMIT_POLICIES, value);
+}

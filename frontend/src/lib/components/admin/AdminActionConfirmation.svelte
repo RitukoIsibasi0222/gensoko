@@ -32,10 +32,7 @@
   );
 
   function getCurrentStatus(): string {
-    if (user.deletedAt !== null) {
-      return '退会済み';
-    }
-    return user.isActive ? '有効（未退会）' : '停止中';
+    return user.isActive ? '有効' : '停止中';
   }
 
   function handleConfirm(): void {
@@ -65,41 +62,41 @@
 
 <section data-confirmation aria-busy={isSubmitting} class="grid gap-4">
   <div>
-    <p class="text-sm text-gray-600">対象ユーザー</p>
-    <p class="mt-1 text-lg font-bold text-gray-900">{user.username}</p>
+    <p class="text-text-muted text-sm">対象ユーザー</p>
+    <p class="text-text mt-1 text-lg font-bold">{user.username}</p>
   </div>
 
   {#if action.type === 'status'}
-    <div class="rounded-xl bg-amber-50 p-4">
-      <h3 class="font-semibold text-amber-950">アカウント状態を変更</h3>
+    <div class="bg-warning-surface rounded-xl p-4">
+      <h3 class="text-warning-text-strong font-semibold">アカウント状態を変更</h3>
       <dl class="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
-        <dt class="text-gray-600">変更前</dt>
-        <dd class="font-semibold text-gray-900">{getCurrentStatus()}</dd>
-        <dt class="text-gray-600">変更後</dt>
-        <dd class="font-semibold text-gray-900">
-          {action.nextIsActive ? '有効（未退会）' : '停止中'}
+        <dt class="text-text-muted">変更前</dt>
+        <dd class="text-text font-semibold">{getCurrentStatus()}</dd>
+        <dt class="text-text-muted">変更後</dt>
+        <dd class="text-text font-semibold">
+          {action.nextIsActive ? '有効' : '停止中'}
         </dd>
       </dl>
     </div>
   {:else if action.type === 'role'}
-    <div class="rounded-xl bg-blue-50 p-4">
-      <h3 class="font-semibold text-blue-950">ロールを変更</h3>
+    <div class="bg-info-surface rounded-xl p-4">
+      <h3 class="text-info-text-strong font-semibold">ロールを変更</h3>
       <dl class="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
-        <dt class="text-gray-600">変更前</dt>
-        <dd class="font-semibold text-gray-900">{user.role}</dd>
-        <dt class="text-gray-600">変更後</dt>
-        <dd class="font-semibold text-gray-900">{action.nextRole}</dd>
+        <dt class="text-text-muted">変更前</dt>
+        <dd class="text-text font-semibold">{user.role}</dd>
+        <dt class="text-text-muted">変更後</dt>
+        <dd class="text-text font-semibold">{action.nextRole}</dd>
       </dl>
     </div>
   {:else}
-    <div class="rounded-xl border border-red-200 bg-red-50 p-4">
-      <h3 class="font-semibold text-red-900">強制退会</h3>
-      <p class="mt-2 text-sm text-red-800">
-        停止と異なり、この管理画面から元に戻せません。対象と影響を確認してください。
+    <div class="border-danger-border bg-danger-surface rounded-xl border p-4">
+      <h3 class="text-danger-text-strong font-semibold">強制退会</h3>
+      <p class="text-danger-text mt-2 text-sm">
+        対象ユーザーのプロフィール・認証情報・学習データを稼働DBから物理削除します。削除後は取り消せません。
       </p>
       <label
         for="admin-force-delete-confirmation"
-        class="mt-4 block text-sm font-semibold text-red-900"
+        class="text-danger-text-strong mt-4 block text-sm font-semibold"
       >
         確認のため「強制退会」と入力
       </label>
@@ -110,23 +107,26 @@
         autocomplete="off"
         spellcheck={false}
         disabled={isSubmitting}
-        class="mt-2 w-full rounded-lg border border-red-300 bg-white px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100"
+        class="border-danger-border-strong bg-surface focus:border-danger-border-strong focus:ring-danger-border-strong disabled:bg-surface-subtle mt-2 w-full rounded-lg border px-3 py-2 text-sm focus:ring-1 focus:outline-none disabled:cursor-not-allowed"
       />
     </div>
   {/if}
 
   {#if errorMessage !== null}
-    <p role="alert" class="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+    <p
+      role="alert"
+      class="border-danger-border bg-danger-surface text-danger-text rounded-xl border p-3 text-sm"
+    >
       {errorMessage || '管理操作を完了できませんでした'}
     </p>
   {/if}
 
-  <div class="flex flex-wrap justify-end gap-2 border-t border-gray-200 pt-4">
+  <div class="border-border-muted flex flex-wrap justify-end gap-2 border-t pt-4">
     <button
       type="button"
       data-cancel
       disabled={isSubmitting}
-      class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:text-gray-400"
+      class="border-border text-text hover:bg-surface-muted focus-visible:outline-focus disabled:text-text-disabled rounded-lg border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
       onclick={handleCancel}
     >
       キャンセル
@@ -136,8 +136,8 @@
       data-confirm
       disabled={!canConfirm}
       class={action.type === 'delete'
-        ? 'rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:cursor-not-allowed disabled:bg-gray-400'
-        : 'bg-brand hover:bg-brand-hover rounded-lg px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:bg-gray-400'}
+        ? 'bg-danger-solid text-text-inverse hover:bg-danger-solid-hover focus-visible:outline-danger-border-strong disabled:bg-disabled-solid rounded-lg px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed'
+        : 'bg-action hover:bg-action-hover text-text-inverse focus-visible:outline-focus disabled:bg-disabled-solid rounded-lg px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed'}
       onclick={handleConfirm}
     >
       {isSubmitting ? '処理中...' : 'この内容で実行'}

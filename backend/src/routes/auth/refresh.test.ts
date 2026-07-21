@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { authRouter } from "./index.js";
+import { createAuthTestRouter } from "./test-helpers.js";
 
 // Prisma モック
 vi.mock("../../lib/prisma.js", () => ({
@@ -26,6 +26,7 @@ vi.mock("hono/jwt", () => ({
 
 import { sign } from "hono/jwt";
 import { prisma } from "../../lib/prisma.js";
+const authRouter = createAuthTestRouter(prisma as never);
 
 const app = new Hono();
 app.route("/auth", authRouter);
@@ -151,7 +152,7 @@ describe("POST /auth/refresh", () => {
     expect(body.error).toBeDefined();
   });
 
-  it("異常系: DBにトークンが存在しない場合は 401 を返し Cookie を削除する", async () => {
+  it("物理削除後: cascadeでトークンが消えている場合は401を返し両PathのCookieを削除する", async () => {
     vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(null);
 
     const res = await app.request("/auth/refresh", {
@@ -163,11 +164,19 @@ describe("POST /auth/refresh", () => {
 
     expect(res.status).toBe(401);
     const body = await res.json();
-    expect(body.error).toBeDefined();
-    // クライアントの壊れた Cookie を削除する
-    const setCookieHeader = res.headers.get("Set-Cookie");
-    expect(setCookieHeader).toContain("refreshToken=");
-    expect(setCookieHeader).toContain("Max-Age=0");
+    expect(body).toEqual({ error: "無効なリフレッシュトークンです" });
+    const setCookies = res.headers.getSetCookie();
+    expect(
+      setCookies.some((cookie) => /Path=\/auth(?!\/)/.test(cookie) && cookie.includes("Max-Age=0")),
+    ).toBe(true);
+    expect(
+      setCookies.some(
+        (cookie) => cookie.includes("Path=/auth/refresh") && cookie.includes("Max-Age=0"),
+      ),
+    ).toBe(true);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    expect(sign).not.toHaveBeenCalled();
   });
 
   it("異常系: トークンが期限切れの場合は 401 を返しトークンを削除・Cookie をクリアする", async () => {

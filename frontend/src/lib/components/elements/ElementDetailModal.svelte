@@ -101,7 +101,7 @@
     <button
       type="button"
       tabindex="-1"
-      class="absolute inset-0 cursor-default bg-black/50 focus:outline-none"
+      class="bg-overlay absolute inset-0 cursor-default focus:outline-none"
       onclick={onClose}
       aria-label="背景をクリックして閉じる"
     ></button>
@@ -113,23 +113,23 @@
       aria-labelledby={titleId}
       aria-describedby={descId}
       tabindex="-1"
-      class="relative z-10 max-h-[90vh] w-full max-w-md overflow-y-auto rounded border border-gray-200 bg-white p-6 shadow-xl"
+      class="border-border-muted bg-surface relative z-10 max-h-[90vh] w-full max-w-md overflow-y-auto rounded border p-6 shadow-xl"
     >
       <div class="flex items-start justify-between gap-3">
         <div>
-          <p class="text-base font-semibold text-gray-500">{element.id}</p>
-          <h2 id={titleId} class="mt-1 text-2xl font-bold text-gray-900">
+          <p class="text-text-subtle text-base font-semibold">{element.id}</p>
+          <h2 id={titleId} class="text-text mt-1 text-2xl font-bold">
             {element.symbol}
             {element.nameJa}
           </h2>
-          <p class="mt-1 text-base text-gray-600">{element.nameEn}</p>
+          <p class="text-text-muted mt-1 text-base">{element.nameEn}</p>
         </div>
 
         <button
           type="button"
           bind:this={closeButtonEl}
           onclick={onClose}
-          class="rounded border border-gray-300 px-3 py-1.5 text-base text-gray-700 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          class="border-border text-text hover:bg-surface-subtle focus-visible:ring-focus rounded border px-3 py-1.5 text-base focus:outline-none focus-visible:ring-2"
           aria-label="閉じる"
         >
           閉じる
@@ -145,8 +145,8 @@
       <dl class="mt-5 space-y-3">
         {#each fields as field (field.key)}
           <div class="grid grid-cols-[5rem_1fr] items-start gap-2">
-            <dt class="text-base font-medium text-gray-500">{field.label}</dt>
-            <dd class="text-base break-words text-gray-800">{field.value}</dd>
+            <dt class="text-text-subtle text-base font-medium">{field.label}</dt>
+            <dd class="text-text text-base break-words">{field.value}</dd>
           </div>
         {/each}
       </dl>

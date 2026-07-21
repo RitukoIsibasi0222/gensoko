@@ -9,7 +9,9 @@ vi.mock("../lib/prisma.js", () => ({
 }));
 
 import { prisma } from "../lib/prisma.js";
-import { getElementMasteryStatusMap } from "./element-mastery.service.js";
+import { createElementMasteryService } from "./element-mastery.service.js";
+
+const { getElementMasteryStatusMap } = createElementMasteryService(prisma as never);
 
 describe("getElementMasteryStatusMap", () => {
   beforeEach(() => {

@@ -1,22 +1,15 @@
 import { zValidator } from "@hono/zod-validator";
 import type { Role } from "@prisma/client";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { adminMiddleware } from "../../middleware/admin/index.js";
-import { authMiddleware } from "../../middleware/auth/index.js";
 import {
   ADMIN_USERS_DEFAULT_LIMIT,
   ADMIN_USERS_MAX_LIMIT,
   AdminServiceError,
-  forceDeleteAdminUser,
-  getAdminStats,
-  getAdminUserDetail,
-  getAdminUsers,
+  type AdminService,
   type AdminUserDetail,
   type AdminUserListItem,
   type AdminUserSummary,
-  updateAdminUserRole,
-  updateAdminUserStatus,
 } from "../../services/admin.service.js";
 import type { AppVariables } from "../../types/index.js";
 
@@ -122,7 +115,7 @@ function toPublicAdminUserSummary(user: AdminUserSummary) {
     role: user.role,
     emailVerified: user.emailVerified,
     isActive: user.isActive,
-    deletedAt: toIsoString(user.deletedAt),
+    deletedAt: null,
     lockedUntil: toIsoString(user.lockedUntil),
     lastLoginAt: toIsoString(user.lastLoginAt),
     createdAt: user.createdAt.toISOString(),
@@ -169,133 +162,150 @@ function handleAdminServiceError(
   return c.json({ error: "サーバーエラーが発生しました" }, 500);
 }
 
-export const adminRouter = new Hono<{ Variables: AppVariables }>();
+export type AdminRouterDependencies = Readonly<{
+  authMiddleware: MiddlewareHandler<{ Variables: AppVariables }>;
+  adminMiddleware: MiddlewareHandler<{ Variables: AppVariables }>;
+  service: AdminService;
+}>;
 
-adminRouter.get(
-  "/users",
+export function createAdminRouter({
   authMiddleware,
   adminMiddleware,
-  zValidator("query", adminUsersQuerySchema, validationErrorResponse),
-  async (c) => {
-    const query = c.req.valid("query");
+  service,
+}: AdminRouterDependencies) {
+  const adminRouter = new Hono<{ Variables: AppVariables }>();
 
+  adminRouter.get(
+    "/users",
+    authMiddleware,
+    adminMiddleware,
+    zValidator("query", adminUsersQuerySchema, validationErrorResponse),
+    async (c) => {
+      const query = c.req.valid("query");
+
+      try {
+        const result = await service.getAdminUsers(query);
+        return c.json(
+          {
+            users: result.users.map(toPublicAdminUserListItem),
+            nextCursor: result.nextCursor,
+          },
+          200,
+        );
+      } catch (err) {
+        return handleAdminServiceError(err, c);
+      }
+    },
+  );
+
+  adminRouter.get(
+    "/users/:id",
+    authMiddleware,
+    adminMiddleware,
+    zValidator("param", adminUserParamSchema, validationErrorResponse),
+    async (c) => {
+      const { id } = c.req.valid("param");
+
+      try {
+        const result = await service.getAdminUserDetail({ userId: id });
+        return c.json({ user: toPublicAdminUserDetail(result.user) }, 200);
+      } catch (err) {
+        return handleAdminServiceError(err, c);
+      }
+    },
+  );
+
+  adminRouter.patch(
+    "/users/:id/status",
+    authMiddleware,
+    adminMiddleware,
+    zValidator("param", adminUserParamSchema, validationErrorResponse),
+    zValidator("json", adminUserStatusSchema, validationErrorResponse),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const { isActive } = c.req.valid("json");
+      const authUser = c.get("user")!;
+
+      try {
+        const result = await service.updateAdminUserStatus({
+          adminUserId: authUser.id,
+          targetUserId: id,
+          isActive,
+        });
+
+        return c.json(
+          {
+            message: result.message,
+            user: toPublicAdminUserSummary(result.user),
+          },
+          200,
+        );
+      } catch (err) {
+        return handleAdminServiceError(err, c);
+      }
+    },
+  );
+
+  adminRouter.patch(
+    "/users/:id/role",
+    authMiddleware,
+    adminMiddleware,
+    zValidator("param", adminUserParamSchema, validationErrorResponse),
+    zValidator("json", adminUserRoleSchema, validationErrorResponse),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const { role } = c.req.valid("json");
+      const authUser = c.get("user")!;
+
+      try {
+        const result = await service.updateAdminUserRole({
+          adminUserId: authUser.id,
+          targetUserId: id,
+          role,
+        });
+
+        return c.json(
+          {
+            message: result.message,
+            user: toPublicAdminUserSummary(result.user),
+          },
+          200,
+        );
+      } catch (err) {
+        return handleAdminServiceError(err, c);
+      }
+    },
+  );
+
+  adminRouter.delete(
+    "/users/:id",
+    authMiddleware,
+    adminMiddleware,
+    zValidator("param", adminUserParamSchema, validationErrorResponse),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const authUser = c.get("user")!;
+
+      try {
+        const result = await service.forceDeleteAdminUser({
+          adminUserId: authUser.id,
+          targetUserId: id,
+        });
+        return c.json(result, 200);
+      } catch (err) {
+        return handleAdminServiceError(err, c);
+      }
+    },
+  );
+
+  adminRouter.get("/stats", authMiddleware, adminMiddleware, async (c) => {
     try {
-      const result = await getAdminUsers(query);
-      return c.json(
-        {
-          users: result.users.map(toPublicAdminUserListItem),
-          nextCursor: result.nextCursor,
-        },
-        200,
-      );
+      const stats = await service.getAdminStats();
+      return c.json(stats, 200);
     } catch (err) {
       return handleAdminServiceError(err, c);
     }
-  },
-);
+  });
 
-adminRouter.get(
-  "/users/:id",
-  authMiddleware,
-  adminMiddleware,
-  zValidator("param", adminUserParamSchema, validationErrorResponse),
-  async (c) => {
-    const { id } = c.req.valid("param");
-
-    try {
-      const result = await getAdminUserDetail({ userId: id });
-      return c.json({ user: toPublicAdminUserDetail(result.user) }, 200);
-    } catch (err) {
-      return handleAdminServiceError(err, c);
-    }
-  },
-);
-
-adminRouter.patch(
-  "/users/:id/status",
-  authMiddleware,
-  adminMiddleware,
-  zValidator("param", adminUserParamSchema, validationErrorResponse),
-  zValidator("json", adminUserStatusSchema, validationErrorResponse),
-  async (c) => {
-    const { id } = c.req.valid("param");
-    const { isActive } = c.req.valid("json");
-    const authUser = c.get("user")!;
-
-    try {
-      const result = await updateAdminUserStatus({
-        adminUserId: authUser.id,
-        targetUserId: id,
-        isActive,
-      });
-
-      return c.json(
-        {
-          message: result.message,
-          user: toPublicAdminUserSummary(result.user),
-        },
-        200,
-      );
-    } catch (err) {
-      return handleAdminServiceError(err, c);
-    }
-  },
-);
-
-adminRouter.patch(
-  "/users/:id/role",
-  authMiddleware,
-  adminMiddleware,
-  zValidator("param", adminUserParamSchema, validationErrorResponse),
-  zValidator("json", adminUserRoleSchema, validationErrorResponse),
-  async (c) => {
-    const { id } = c.req.valid("param");
-    const { role } = c.req.valid("json");
-    const authUser = c.get("user")!;
-
-    try {
-      const result = await updateAdminUserRole({
-        adminUserId: authUser.id,
-        targetUserId: id,
-        role,
-      });
-
-      return c.json(
-        {
-          message: result.message,
-          user: toPublicAdminUserSummary(result.user),
-        },
-        200,
-      );
-    } catch (err) {
-      return handleAdminServiceError(err, c);
-    }
-  },
-);
-
-adminRouter.delete(
-  "/users/:id",
-  authMiddleware,
-  adminMiddleware,
-  zValidator("param", adminUserParamSchema, validationErrorResponse),
-  async (c) => {
-    const { id } = c.req.valid("param");
-    const authUser = c.get("user")!;
-
-    try {
-      const result = await forceDeleteAdminUser({ adminUserId: authUser.id, targetUserId: id });
-      return c.json(result, 200);
-    } catch (err) {
-      return handleAdminServiceError(err, c);
-    }
-  },
-);
-
-adminRouter.get("/stats", authMiddleware, adminMiddleware, async (c) => {
-  try {
-    const stats = await getAdminStats();
-    return c.json(stats, 200);
-  } catch (err) {
-    return handleAdminServiceError(err, c);
-  }
-});
+  return adminRouter;
+}

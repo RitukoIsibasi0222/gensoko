@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Hono } from "hono";
-import { authRouter } from "./index.js";
+import { createAuthTestRouter } from "./test-helpers.js";
 
 // Prisma のモック
 vi.mock("../../lib/prisma.js", () => ({
@@ -30,8 +30,10 @@ vi.mock("bcryptjs", () => ({
   },
 }));
 
-import { prisma } from "../../lib/prisma.js";
+import bcrypt from "bcryptjs";
 import { mailer } from "../../lib/mail.js";
+import { prisma } from "../../lib/prisma.js";
+const authRouter = createAuthTestRouter(prisma as never);
 
 const app = new Hono().route("/auth", authRouter);
 
@@ -92,7 +94,7 @@ describe("POST /auth/forgot-password", () => {
     expect(consoleErrorCalls.flat()).not.toContain(internalError);
   });
 
-  it("列挙攻撃対策: 存在しないメールでも200を返す（メールは送信しない）", async () => {
+  it("物理削除後: 旧メールアドレスでも200を返しトークン作成・メール送信をしない", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
 
     const res = await app.request("/auth/forgot-password", {
@@ -104,6 +106,29 @@ describe("POST /auth/forgot-password", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual({ message: "パスワードリセットメールを送信しました" });
+    expect(bcrypt.hash).toHaveBeenCalledWith("timing-safe-dummy", 4);
+    expect(prisma.passwordResetToken.upsert).not.toHaveBeenCalled();
+    expect(mailer.sendMail).not.toHaveBeenCalled();
+  });
+
+  it("停止中のrowでも200を返しトークン作成・メール送信をしない", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "suspended-user",
+      isActive: false,
+    } as never);
+
+    const res = await app.request("/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "deleted@example.com" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      message: "パスワードリセットメールを送信しました",
+    });
+    expect(bcrypt.hash).toHaveBeenCalledWith("timing-safe-dummy", 4);
+    expect(prisma.passwordResetToken.upsert).not.toHaveBeenCalled();
     expect(mailer.sendMail).not.toHaveBeenCalled();
   });
 

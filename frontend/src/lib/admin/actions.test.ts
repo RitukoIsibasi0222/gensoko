@@ -17,18 +17,23 @@ const USER: AdminUserSummary = {
 };
 
 describe('admin actions', () => {
-  it('自分自身と退会済みユーザーの全管理操作を禁止する', () => {
+  it('自分自身への全管理操作を禁止する', () => {
     for (const action of ['status', 'role', 'delete'] as const) {
       expect(getAdminActionBlockReason(USER, action, USER.id)).toBe(
         '自分自身には管理操作を実行できません'
       );
+    }
+  });
+
+  it('deprecated deletedAtを操作可否の判断に使用しない', () => {
+    for (const action of ['status', 'role', 'delete'] as const) {
       expect(
         getAdminActionBlockReason(
           { ...USER, deletedAt: '2026-07-11T00:00:00.000Z' },
           action,
           'admin-1'
         )
-      ).toBe('退会済みユーザーは変更できません');
+      ).toBeNull();
     }
   });
 

@@ -48,15 +48,18 @@ afterEach(async () => {
 });
 
 describe('AdminStatsSection', () => {
-  it('統計の意味を誤解しないラベルと値を表示する', () => {
+  it('現在保持しているユーザーの統計だけを示し、退会済みcardを表示しない', () => {
     const target = renderStats({ stats: STATS });
 
-    expect(target.textContent).toContain('登録ユーザー累計（退会含む）');
+    expect(target.textContent).toContain('現在の登録ユーザー');
     expect(target.textContent).toContain('30');
-    expect(target.textContent).toContain('未退会ADMIN');
+    expect(target.textContent).toContain('ADMIN');
     expect(target.textContent).toContain('2');
-    expect(target.textContent).toContain('メール確認済み（未退会）');
+    expect(target.textContent).toContain('メール確認済み');
     expect(target.textContent).toContain('25');
+    expect(target.textContent).not.toContain('退会済み');
+    expect(target.textContent).not.toContain('未退会');
+    expect(target.textContent).not.toContain('登録ユーザー累計');
     expect(target.textContent).not.toContain('利用可能な管理者');
   });
 
@@ -103,6 +106,6 @@ describe('AdminStatsSection', () => {
     const target = renderStats({ stats: null });
 
     expect(target.textContent).toContain('統計情報はまだ読み込まれていません');
-    expect(target.textContent).not.toContain('登録ユーザー累計（退会含む）');
+    expect(target.textContent).not.toContain('現在の登録ユーザー');
   });
 });

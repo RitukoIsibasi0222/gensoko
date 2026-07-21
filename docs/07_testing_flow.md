@@ -41,6 +41,7 @@ src/
 ## テストの種類
 
 ### ユニットテスト（Unit Test）
+
 - 対象: ミドルウェア・サービス関数など「部品」単体
 - DB や外部サービスは **モック（偽物）** に差し替える
 - 速くて安定している
@@ -56,7 +57,7 @@ vi.mock("../lib/prisma.js", () => ({
 
 - 対象: 複数の処理とDBを組み合わせた境界（サービスtransaction、またはミドルウェア + ルートハンドラ + DB）
 - 実際の DB を使う（テスト用 DB を別途用意）
-- 原則は今後拡充する。監査ログのtransaction rollbackのみ、Docker PostgreSQLを使う明示実行testを実装済み
+- 通常suiteでは専用env未設定時にskipし、Docker PostgreSQLを使うtestだけを明示実行する
 
 #### 監査ログrollback test
 
@@ -100,6 +101,67 @@ docker compose exec -T \
 - User row削除後も保持対象監査rowの`actorId`・`targetId`が維持されることを確認する
 - test終了時に専用DBの監査fixtureを削除する
 
+#### account deletion cascade・rollback test
+
+本人退会・管理者強制退会は広いcascade削除を行うため、通常の開発DBとは分離した専用DB
+`gensoko_account_deletion_test`だけで実行する。通常の`npm run test -- --run`ではDB接続を要求せずskipする。
+
+初回だけ専用DBを作成し、migrationを適用する。
+
+```bash
+docker compose exec -T postgres createdb -U gensoko gensoko_account_deletion_test
+docker compose exec -T \
+  -e DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_account_deletion_test \
+  hono npx prisma migrate deploy
+```
+
+integration testを実行する。
+
+```bash
+docker compose exec -T \
+  -e ACCOUNT_DELETION_INTEGRATION_DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_account_deletion_test \
+  hono npm run test:integration:account-deletion
+```
+
+- 接続先hostは`localhost`、`127.0.0.1`、`postgres`だけを許可する
+- DB名が`gensoko_account_deletion_test`でなければfixture削除を含むDB操作を開始しない
+- Userを直接参照する7modelとGameAnswerの間接cascade、共有Element保持を確認する
+- self/admin成功監査が残り、email・usernameを含まないことを確認する
+- 監査insert失敗時にUserと全所有rowがrollbackすることを確認する
+- 同一Userの並行削除は1commit・成功監査1件になることを確認する
+- 2人のADMINの並行本人退会後も利用可能なADMINが1人残ることを確認する
+- 各test終了時に専用DBのUser・AuditLog fixtureを削除する
+- account deletion suiteは5件で、通常suiteでは専用環境変数がないためskipされる。通常suiteで表示される専用DB test 7件は、監査rollback 1件・監査cleanup 1件との合計である。T32で上記commandを明示実行し、account deletion 5件すべての成功を記録する
+- この手順はローカルDocker PostgreSQL専用である。staging/productionの接続URLを渡さず、実環境確認はT33以降の承認付き手順へ分離する
+
+#### account deletion contract migration test
+
+`deletedAt` dropは通常の`prisma migrate deploy`へ含めず、専用DB
+`gensoko_account_deletion_contract_test`だけでguard失敗・成功を確認する。初回だけ専用DBを作成して通常migrationを適用する。
+
+```bash
+docker compose exec -T postgres createdb -U gensoko gensoko_account_deletion_contract_test
+docker compose exec -T \
+  -e DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_account_deletion_contract_test \
+  hono npx prisma migrate deploy
+```
+
+integration testを実行する。
+
+```bash
+docker compose exec -T \
+  -e ACCOUNT_DELETION_CONTRACT_DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_account_deletion_contract_test \
+  hono npm run test:integration:account-deletion-contract
+```
+
+- 接続先hostは`localhost`、`127.0.0.1`、`postgres`だけを許可し、DB名完全一致前にDDL・fixture操作を行わない
+- legacy rowありではguardがdrop前に失敗し、列と一時indexが残ることを確認する
+- 未commitの並行legacy insertがある場合はcontract SQLがtable lockを待ち、insert commit後のguardで中止して列とindexを保持することを確認する
+- legacy row 0件では列と一時indexがdropされることを確認する
+- drop後は現行Prisma Clientで明示`select`付きのUser update/deleteが成功し、旧列を暗黙取得しないことを確認する
+- test終了時に列・indexを復元し、synthetic fixtureを0件に戻す
+- `backend/prisma/contract-migrations`は通常migration directoryではない。T41/T42とrelease gate完了前に共有環境へ手動適用しない
+
 ---
 
 ## Hono のテスト方法
@@ -129,7 +191,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // describe: テスト対象をグループ化
 describe("authMiddleware", () => {
-
   // beforeEach: 各テスト前に実行（モックのリセットなど）
   beforeEach(() => {
     vi.clearAllMocks();
@@ -155,16 +216,16 @@ describe("authMiddleware", () => {
 
 ## よく使う Vitest の関数
 
-| 関数 | 用途 |
-|---|---|
-| `vi.mock("パス")` | モジュールをモック化 |
-| `vi.fn()` | モック関数を作成 |
+| 関数                                 | 用途                           |
+| ------------------------------------ | ------------------------------ |
+| `vi.mock("パス")`                    | モジュールをモック化           |
+| `vi.fn()`                            | モック関数を作成               |
 | `vi.mocked(fn).mockResolvedValue(x)` | 非同期モック関数の戻り値を設定 |
-| `vi.clearAllMocks()` | 全モックをリセット |
-| `vi.stubEnv("KEY", "value")` | 環境変数を一時的に設定 |
-| `expect(x).toBe(y)` | 厳密に等しいか検証 |
-| `expect(x).toEqual(y)` | 深い比較で等しいか検証 |
-| `expect(fn).rejects.toThrow()` | エラーが投げられるか検証 |
+| `vi.clearAllMocks()`                 | 全モックをリセット             |
+| `vi.stubEnv("KEY", "value")`         | 環境変数を一時的に設定         |
+| `expect(x).toBe(y)`                  | 厳密に等しいか検証             |
+| `expect(x).toEqual(y)`               | 深い比較で等しいか検証         |
+| `expect(fn).rejects.toThrow()`       | エラーが投げられるか検証       |
 
 ---
 
@@ -186,6 +247,40 @@ npm run test -- --coverage
 
 ---
 
+## テスト実行範囲の方針
+
+開発中はフィードバックを速く保つため、TDD の各フェーズに応じて実行範囲を絞る。
+外部 DB を使わない全体確認は、実装・再レビュー・文書同期が終わった後の最終品質ゲートにまとめる。
+
+| タイミング | 実行対象 |
+| ---------- | -------- |
+| Red / Green | 変更対象の test file のみ |
+| Refactor | 変更対象の test file と、直接影響する関連 test のみ |
+| 最終品質ゲート | 外部 DB 不要の backend 全テスト、Workers test、build、lint、format:check |
+
+- 軽微な修正のたびに backend 全テストを繰り返さない。
+- 最終品質ゲートは、実装・再レビュー・文書同期が完了してから原則 1 回だけ実行する。
+- 最終全テストで失敗した場合は、原因に関係する test file へ絞って修正・確認する。その後、影響範囲に応じて必要な全体確認を最後に再実行する。
+
+```bash
+# Red / Green: 変更対象の test file のみ
+npm run test -- --run src/path/to/target.test.ts
+
+# Refactor: 対象 test と直接影響する関連 test のみ
+npm run test -- --run src/path/to/target.test.ts src/path/to/related.test.ts
+
+# 最終品質ゲート（backend/ で原則 1 回）
+npm run test -- --run
+npm run test:workers
+npm run build
+npm run lint
+npm run format:check
+```
+
+専用 DB を使うインテグレーションテストはこの最終品質ゲートに含めず、変更内容と各専用テストの実行条件に応じて別途実行する。
+
+---
+
 ## DB構造変更時の追加確認（必須）
 
 `schema.prisma` や `prisma/migrations/` を変更したときは、ユニットテストだけで完了にしない。
@@ -196,8 +291,10 @@ npm run test -- --coverage
 1. マイグレーション適用（開発環境）
 2. バックエンドテスト実行（回帰確認）
 3. フロントエンドの主要導線を Playwright で確認
-  - 例: 認証（register/login/verify-email）
-  - 例: DB変更の影響がある画面（settings、一覧、詳細など）
+
+- 例: 認証（register/login/verify-email）
+- 例: DB変更の影響がある画面（settings、一覧、詳細など）
+
 4. 「画面表示は成功したが裏で 500 が出ていないか」を確認
 
 ### 記録ルール
@@ -209,10 +306,10 @@ npm run test -- --coverage
 
 ## 各フェーズのテスト方針
 
-| フェーズ | テスト対象 | 種類 |
-|---|---|---|
-| フェーズ2 | middleware・auth routes | ユニットテスト |
-| フェーズ3 | elements・game routes | ユニットテスト |
-| フェーズ4 | users・ranking routes | ユニットテスト |
+| フェーズ   | テスト対象                 | 種類                               |
+| ---------- | -------------------------- | ---------------------------------- |
+| フェーズ2  | middleware・auth routes    | ユニットテスト                     |
+| フェーズ3  | elements・game routes      | ユニットテスト                     |
+| フェーズ4  | users・ranking routes      | ユニットテスト                     |
 | フェーズ10 | 監査insert失敗時のrollback | Docker PostgreSQL integration test |
-| 将来 | API 全体 | インテグレーションテスト |
+| 将来       | API 全体                   | インテグレーションテスト           |

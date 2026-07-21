@@ -1,6 +1,11 @@
 import { AuditResult, Prisma, type Role } from "@prisma/client";
+import type { AppPrismaClient } from "../lib/prisma-client.js";
 import { calculateAccuracyRate, normalizeNonNegativeCount } from "../lib/stats.js";
-import { prisma } from "../lib/prisma.js";
+import {
+  SerializationRetryExhaustedError,
+  type SerializableTransactionRunner,
+} from "../lib/serializable-transaction-core.js";
+import { getUsableAdminWhere, isUsableAdmin } from "../lib/usable-admin.js";
 import {
   AUDIT_ACTIONS,
   AUDIT_FAILURE_REASONS,
@@ -8,7 +13,7 @@ import {
   type AdminAuditAction,
   type AdminAuditFailureReason,
 } from "./audit-events.js";
-import { recordAuditEvent, recordAuditEventBestEffort } from "./audit.service.js";
+import { recordAuditEvent, type AuditService } from "./audit.service.js";
 
 export class AdminServiceError extends Error {
   constructor(
@@ -39,7 +44,6 @@ export type AdminUserSummary = {
   role: Role;
   emailVerified: boolean;
   isActive: boolean;
-  deletedAt: Date | null;
   lockedUntil: Date | null;
   lastLoginAt: Date | null;
   createdAt: Date;
@@ -93,14 +97,18 @@ export type AdminStats = {
 
 export const ADMIN_USERS_DEFAULT_LIMIT = 20;
 export const ADMIN_USERS_MAX_LIMIT = 100;
-const ADMIN_MUTATION_MAX_SERIALIZATION_ATTEMPTS = 2;
 const ADMIN_MUTATION_CONFLICT_MESSAGE = "同時操作により処理できませんでした。再試行してください";
-
 type AdminAuditDescriptor = {
   action: AdminAuditAction;
   adminUserId: string;
   targetUserId: string;
 };
+
+type AdminServiceDependencies = Readonly<{
+  prisma: AppPrismaClient;
+  runSerializableTransaction: SerializableTransactionRunner;
+  auditService: AuditService;
+}>;
 
 const adminUserSummarySelect = {
   id: true,
@@ -109,7 +117,6 @@ const adminUserSummarySelect = {
   role: true,
   emailVerified: true,
   isActive: true,
-  deletedAt: true,
   lockedUntil: true,
   lastLoginAt: true,
   createdAt: true,
@@ -175,26 +182,6 @@ function normalizeLimit(limit: number | undefined): number {
   return Math.min(Math.max(integerLimit, 1), ADMIN_USERS_MAX_LIMIT);
 }
 
-function getUsableAdminWhere(now: Date): Prisma.UserWhereInput {
-  return {
-    role: "ADMIN",
-    isActive: true,
-    deletedAt: null,
-    emailVerified: true,
-    OR: [{ lockedUntil: null }, { lockedUntil: { lte: now } }],
-  };
-}
-
-function isUsableAdmin(user: AdminUserSummaryRow, now: Date): boolean {
-  return (
-    user.role === "ADMIN" &&
-    user.isActive &&
-    user.deletedAt === null &&
-    user.emailVerified &&
-    (user.lockedUntil === null || user.lockedUntil <= now)
-  );
-}
-
 function buildAdminUsersWhere(input: {
   q?: string;
   role?: Role;
@@ -211,16 +198,10 @@ function buildAdminUsersWhere(input: {
 
   if (input.status === "active") {
     where.isActive = true;
-    where.deletedAt = null;
   }
 
   if (input.status === "suspended") {
     where.isActive = false;
-    where.deletedAt = null;
-  }
-
-  if (input.status === "deleted") {
-    where.deletedAt = { not: null };
   }
 
   if (normalizedQuery) {
@@ -254,7 +235,6 @@ function toAdminUserSummary(user: AdminUserSummaryRow): AdminUserSummary {
     role: user.role,
     emailVerified: user.emailVerified,
     isActive: user.isActive,
-    deletedAt: user.deletedAt,
     lockedUntil: user.lockedUntil,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,
@@ -307,58 +287,40 @@ async function deleteUserTokens(tx: TokenCleanupClient, userId: string): Promise
   ]);
 }
 
-function isSerializationConflict(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
-}
-
 // 最後の管理者保護は count -> update なので、write skew を DB 側で検出する。
 async function runAdminMutationTransaction<T>(
+  { runSerializableTransaction }: AdminServiceDependencies,
   audit: AdminAuditDescriptor,
   callback: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
-  for (let attempt = 1; attempt <= ADMIN_MUTATION_MAX_SERIALIZATION_ATTEMPTS; attempt += 1) {
-    try {
-      return await prisma.$transaction(
-        async (tx) => {
-          const result = await callback(tx);
-          await recordAuditEvent(tx, {
-            action: audit.action,
-            result: AuditResult.SUCCESS,
-            actorId: audit.adminUserId,
-            actorRole: "ADMIN",
-            targetType: AUDIT_TARGET_TYPES.USER,
-            targetId: audit.targetUserId,
-            failureReason: null,
-          });
-          return result;
-        },
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        },
+  try {
+    return await runSerializableTransaction(async (tx) => {
+      const result = await callback(tx);
+      await recordAuditEvent(tx, {
+        action: audit.action,
+        result: AuditResult.SUCCESS,
+        actorId: audit.adminUserId,
+        actorRole: "ADMIN",
+        targetType: AUDIT_TARGET_TYPES.USER,
+        targetId: audit.targetUserId,
+        failureReason: null,
+      });
+      return result;
+    });
+  } catch (error) {
+    if (error instanceof SerializationRetryExhaustedError) {
+      throw new AdminServiceError(
+        409,
+        ADMIN_MUTATION_CONFLICT_MESSAGE,
+        AUDIT_FAILURE_REASONS.SERIALIZATION_CONFLICT,
       );
-    } catch (error) {
-      if (!isSerializationConflict(error)) {
-        throw error;
-      }
-
-      if (attempt === ADMIN_MUTATION_MAX_SERIALIZATION_ATTEMPTS) {
-        throw new AdminServiceError(
-          409,
-          ADMIN_MUTATION_CONFLICT_MESSAGE,
-          AUDIT_FAILURE_REASONS.SERIALIZATION_CONFLICT,
-        );
-      }
     }
+    throw error;
   }
-
-  throw new AdminServiceError(
-    409,
-    ADMIN_MUTATION_CONFLICT_MESSAGE,
-    AUDIT_FAILURE_REASONS.SERIALIZATION_CONFLICT,
-  );
 }
 
 async function runAuditedAdminMutation<T>(
+  { auditService }: AdminServiceDependencies,
   audit: AdminAuditDescriptor,
   operation: () => Promise<T>,
 ): Promise<T> {
@@ -366,7 +328,7 @@ async function runAuditedAdminMutation<T>(
     return await operation();
   } catch (error) {
     if (error instanceof AdminServiceError && error.auditFailureReason) {
-      await recordAuditEventBestEffort({
+      await auditService.recordAuditEventBestEffort({
         action: audit.action,
         result: AuditResult.FAILURE,
         actorId: audit.adminUserId,
@@ -381,10 +343,17 @@ async function runAuditedAdminMutation<T>(
   }
 }
 
-export async function getAdminUsers(input: AdminUserListQuery = {}): Promise<{
+async function getAdminUsers(
+  { prisma }: AdminServiceDependencies,
+  input: AdminUserListQuery = {},
+): Promise<{
   users: AdminUserListItem[];
   nextCursor: string | null;
 }> {
+  if (input.status === "deleted") {
+    return { users: [], nextCursor: null };
+  }
+
   const limit = normalizeLimit(input.limit);
   const normalizedCursor = input.cursor?.trim();
   const normalizedQuery = input.q?.trim();
@@ -427,9 +396,12 @@ export async function getAdminUsers(input: AdminUserListQuery = {}): Promise<{
   };
 }
 
-export async function getAdminUserDetail(input: {
-  userId: string;
-}): Promise<{ user: AdminUserDetail }> {
+async function getAdminUserDetail(
+  { prisma }: AdminServiceDependencies,
+  input: {
+    userId: string;
+  },
+): Promise<{ user: AdminUserDetail }> {
   const userId = normalizeId(input.userId);
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -443,11 +415,14 @@ export async function getAdminUserDetail(input: {
   return { user: toAdminUserDetail(user) };
 }
 
-export async function updateAdminUserStatus(input: {
-  adminUserId: string;
-  targetUserId: string;
-  isActive: boolean;
-}): Promise<{ message: string; user: AdminUserSummary }> {
+async function updateAdminUserStatus(
+  dependencies: AdminServiceDependencies,
+  input: {
+    adminUserId: string;
+    targetUserId: string;
+    isActive: boolean;
+  },
+): Promise<{ message: string; user: AdminUserSummary }> {
   const adminUserId = normalizeId(input.adminUserId);
   const targetUserId = normalizeId(input.targetUserId);
   const audit: AdminAuditDescriptor = {
@@ -456,7 +431,7 @@ export async function updateAdminUserStatus(input: {
     targetUserId,
   };
 
-  return await runAuditedAdminMutation(audit, async () => {
+  return await runAuditedAdminMutation(dependencies, audit, async () => {
     if (adminUserId === targetUserId) {
       throw new AdminServiceError(
         409,
@@ -466,7 +441,7 @@ export async function updateAdminUserStatus(input: {
       );
     }
 
-    return await runAdminMutationTransaction(audit, async (tx) => {
+    return await runAdminMutationTransaction(dependencies, audit, async (tx) => {
       const targetUser = await tx.user.findUnique({
         where: { id: targetUserId },
         select: adminUserSummarySelect,
@@ -477,15 +452,6 @@ export async function updateAdminUserStatus(input: {
           404,
           "ユーザーが見つかりません",
           AUDIT_FAILURE_REASONS.TARGET_NOT_FOUND,
-        );
-      }
-
-      if (targetUser.deletedAt) {
-        throw new AdminServiceError(
-          409,
-          "削除済みユーザーは変更できません",
-          AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
-          targetUser.id,
         );
       }
 
@@ -520,11 +486,14 @@ export async function updateAdminUserStatus(input: {
   });
 }
 
-export async function updateAdminUserRole(input: {
-  adminUserId: string;
-  targetUserId: string;
-  role: Role;
-}): Promise<{ message: string; user: AdminUserSummary }> {
+async function updateAdminUserRole(
+  dependencies: AdminServiceDependencies,
+  input: {
+    adminUserId: string;
+    targetUserId: string;
+    role: Role;
+  },
+): Promise<{ message: string; user: AdminUserSummary }> {
   const adminUserId = normalizeId(input.adminUserId);
   const targetUserId = normalizeId(input.targetUserId);
   const audit: AdminAuditDescriptor = {
@@ -533,7 +502,7 @@ export async function updateAdminUserRole(input: {
     targetUserId,
   };
 
-  return await runAuditedAdminMutation(audit, async () => {
+  return await runAuditedAdminMutation(dependencies, audit, async () => {
     if (adminUserId === targetUserId) {
       throw new AdminServiceError(
         409,
@@ -543,7 +512,7 @@ export async function updateAdminUserRole(input: {
       );
     }
 
-    return await runAdminMutationTransaction(audit, async (tx) => {
+    return await runAdminMutationTransaction(dependencies, audit, async (tx) => {
       const targetUser = await tx.user.findUnique({
         where: { id: targetUserId },
         select: adminUserSummarySelect,
@@ -557,10 +526,10 @@ export async function updateAdminUserRole(input: {
         );
       }
 
-      if (!targetUser.isActive || targetUser.deletedAt) {
+      if (!targetUser.isActive) {
         throw new AdminServiceError(
           409,
-          "停止中または削除済みのユーザーは変更できません",
+          "停止中のユーザーは変更できません",
           AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
           targetUser.id,
         );
@@ -602,10 +571,13 @@ export async function updateAdminUserRole(input: {
   });
 }
 
-export async function forceDeleteAdminUser(input: {
-  adminUserId: string;
-  targetUserId: string;
-}): Promise<{ message: string }> {
+async function forceDeleteAdminUser(
+  dependencies: AdminServiceDependencies,
+  input: {
+    adminUserId: string;
+    targetUserId: string;
+  },
+): Promise<{ message: string }> {
   const adminUserId = normalizeId(input.adminUserId);
   const targetUserId = normalizeId(input.targetUserId);
   const audit: AdminAuditDescriptor = {
@@ -614,7 +586,7 @@ export async function forceDeleteAdminUser(input: {
     targetUserId,
   };
 
-  return await runAuditedAdminMutation(audit, async () => {
+  return await runAuditedAdminMutation(dependencies, audit, async () => {
     if (adminUserId === targetUserId) {
       throw new AdminServiceError(
         409,
@@ -624,7 +596,26 @@ export async function forceDeleteAdminUser(input: {
       );
     }
 
-    return await runAdminMutationTransaction(audit, async (tx) => {
+    return await runAdminMutationTransaction(dependencies, audit, async (tx) => {
+      const actor = await tx.user.findUnique({
+        where: { id: adminUserId },
+        select: {
+          id: true,
+          role: true,
+          isActive: true,
+          emailVerified: true,
+          lockedUntil: true,
+        },
+      });
+      const now = new Date();
+      if (!actor || !isUsableAdmin(actor, now)) {
+        throw new AdminServiceError(
+          409,
+          "管理者の状態が変更されています。再ログインしてください",
+          AUDIT_FAILURE_REASONS.ACTOR_STATE_CONFLICT,
+        );
+      }
+
       const targetUser = await tx.user.findUnique({
         where: { id: targetUserId },
         select: adminUserSummarySelect,
@@ -638,16 +629,6 @@ export async function forceDeleteAdminUser(input: {
         );
       }
 
-      if (targetUser.deletedAt) {
-        throw new AdminServiceError(
-          409,
-          "ユーザーは既に削除されています",
-          AUDIT_FAILURE_REASONS.TARGET_STATE_CONFLICT,
-          targetUser.id,
-        );
-      }
-
-      const now = new Date();
       if (isUsableAdmin(targetUser, now)) {
         const usableAdminCount = await tx.user.count({ where: getUsableAdminWhere(now) });
         if (usableAdminCount <= 1) {
@@ -660,24 +641,18 @@ export async function forceDeleteAdminUser(input: {
         }
       }
 
-      await tx.user.update({
-        where: { id: targetUserId },
-        data: { isActive: false, deletedAt: now, lockedUntil: null },
-        select: { id: true },
-      });
-      await deleteUserTokens(tx, targetUserId);
+      await tx.user.delete({ where: { id: targetUserId }, select: { id: true } });
 
       return { message: "ユーザーを強制退会しました" };
     });
   });
 }
 
-export async function getAdminStats(): Promise<AdminStats> {
+async function getAdminStats({ prisma }: AdminServiceDependencies): Promise<AdminStats> {
   const [
     totalUsers,
     activeUsers,
     suspendedUsers,
-    deletedUsers,
     adminUsers,
     emailVerifiedUsers,
     totalSessions,
@@ -685,11 +660,10 @@ export async function getAdminStats(): Promise<AdminStats> {
     statsAggregate,
   ] = await Promise.all([
     prisma.user.count(),
-    prisma.user.count({ where: { isActive: true, deletedAt: null } }),
-    prisma.user.count({ where: { isActive: false, deletedAt: null } }),
-    prisma.user.count({ where: { deletedAt: { not: null } } }),
-    prisma.user.count({ where: { role: "ADMIN", deletedAt: null } }),
-    prisma.user.count({ where: { emailVerified: true, deletedAt: null } }),
+    prisma.user.count({ where: { isActive: true } }),
+    prisma.user.count({ where: { isActive: false } }),
+    prisma.user.count({ where: { role: "ADMIN" } }),
+    prisma.user.count({ where: { emailVerified: true } }),
     prisma.gameSession.count(),
     prisma.weakElement.count(),
     prisma.userStats.aggregate({
@@ -705,7 +679,7 @@ export async function getAdminStats(): Promise<AdminStats> {
       total: normalizeNonNegativeCount(totalUsers),
       active: normalizeNonNegativeCount(activeUsers),
       suspended: normalizeNonNegativeCount(suspendedUsers),
-      deleted: normalizeNonNegativeCount(deletedUsers),
+      deleted: 0,
       admins: normalizeNonNegativeCount(adminUsers),
       emailVerified: normalizeNonNegativeCount(emailVerifiedUsers),
     },
@@ -720,3 +694,20 @@ export async function getAdminStats(): Promise<AdminStats> {
     },
   };
 }
+
+export function createAdminService(dependencies: AdminServiceDependencies) {
+  return {
+    getAdminUsers: (input: AdminUserListQuery = {}) => getAdminUsers(dependencies, input),
+    getAdminUserDetail: (input: Parameters<typeof getAdminUserDetail>[1]) =>
+      getAdminUserDetail(dependencies, input),
+    updateAdminUserStatus: (input: Parameters<typeof updateAdminUserStatus>[1]) =>
+      updateAdminUserStatus(dependencies, input),
+    updateAdminUserRole: (input: Parameters<typeof updateAdminUserRole>[1]) =>
+      updateAdminUserRole(dependencies, input),
+    forceDeleteAdminUser: (input: Parameters<typeof forceDeleteAdminUser>[1]) =>
+      forceDeleteAdminUser(dependencies, input),
+    getAdminStats: () => getAdminStats(dependencies),
+  };
+}
+
+export type AdminService = ReturnType<typeof createAdminService>;

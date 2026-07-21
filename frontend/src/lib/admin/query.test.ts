@@ -36,6 +36,14 @@ describe('parseAdminListLocation', () => {
     expect(result.needsCanonicalization).toBe(true);
   });
 
+  it('deprecated status=deletedをURLから除去してcanonicalizationを要求する', () => {
+    const result = parseAdminListLocation(new URLSearchParams('status=deleted'), undefined);
+
+    expect(result.query).toEqual({});
+    expect(result.canonicalSearchParams.toString()).toBe('');
+    expect(result.needsCanonicalization).toBe(true);
+  });
+
   it('URLのq/cursorを利用せず除去し、page stateの値だけを復元する', () => {
     const result = parseAdminListLocation(
       new URLSearchParams('q=leaked%40example.com&cursor=url-cursor&role=USER'),

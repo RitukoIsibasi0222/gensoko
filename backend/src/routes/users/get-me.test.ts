@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { usersRouter } from "./index.js";
+import { createUsersTestRouter, getCurrentUserProfile } from "./test-helpers.js";
 
 vi.mock("../../middleware/auth/index.js", () => ({
   authMiddleware: vi.fn(
@@ -42,9 +42,10 @@ vi.mock("../../services/user.service.js", () => {
   };
 });
 
-import { getCurrentUserProfile, UserError } from "../../services/user.service.js";
+import { UserError } from "../../services/user.service.js";
 
 const app = new Hono();
+const usersRouter = createUsersTestRouter();
 app.route("/users", usersRouter);
 
 describe("GET /users/me", () => {

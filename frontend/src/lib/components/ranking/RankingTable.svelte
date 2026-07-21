@@ -12,12 +12,12 @@
   const caption = $derived(period === 'weekly' ? '週間ランキング' : '全期間ランキング');
 </script>
 
-<div class="overflow-hidden rounded border border-gray-200 bg-white shadow-sm">
+<div class="border-border-muted bg-surface overflow-hidden rounded border shadow-sm">
   <div class="overflow-x-auto">
-    <table class="min-w-full divide-y divide-gray-200 text-sm">
+    <table class="divide-border min-w-full divide-y text-sm">
       <caption class="sr-only">{caption}</caption>
       <thead
-        class="bg-gray-50 text-left text-xs font-semibold tracking-normal text-gray-600 uppercase"
+        class="bg-surface-muted text-text-muted text-left text-xs font-semibold tracking-normal uppercase"
       >
         <tr>
           <th scope="col" class="w-20 px-4 py-3">順位</th>
@@ -27,12 +27,12 @@
           <th scope="col" class="min-w-28 px-4 py-3 text-right">正答率</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-gray-100 bg-white">
+      <tbody class="divide-border-muted bg-surface divide-y">
         {#each entries as entry (entry.rank + '-' + entry.username)}
-          <tr class="text-gray-700">
-            <td class="px-4 py-3 font-bold text-gray-900">{entry.rank}位</td>
-            <th scope="row" class="px-4 py-3 font-semibold text-gray-900">{entry.username}</th>
-            <td class="px-4 py-3 text-right font-semibold text-blue-700">
+          <tr class="text-text">
+            <td class="text-text px-4 py-3 font-bold">{entry.rank}位</td>
+            <th scope="row" class="text-text px-4 py-3 font-semibold">{entry.username}</th>
+            <td class="text-action px-4 py-3 text-right font-semibold">
               {formatRankingScore(entry.score)}
             </td>
             <td class="px-4 py-3 text-right">{entry.totalGames}回</td>

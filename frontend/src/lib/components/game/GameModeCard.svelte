@@ -32,33 +32,33 @@
   }
 </script>
 
-<div class="flex h-full flex-col rounded border border-gray-200 bg-white p-5 shadow-sm">
+<div class="border-border-muted bg-surface flex h-full flex-col rounded border p-5 shadow-sm">
   <div class="flex flex-wrap gap-2">
-    <span class="rounded bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+    <span class="bg-info-surface text-action rounded px-2 py-1 text-xs font-semibold">
       {config.formatLabel}
     </span>
-    <span class="rounded bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
+    <span class="bg-surface-subtle text-text rounded px-2 py-1 text-xs font-semibold">
       {config.difficultyLabel}
     </span>
-    <span class="rounded bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+    <span class="bg-success-surface text-success-text rounded px-2 py-1 text-xs font-semibold">
       {config.rangeLabel}
     </span>
   </div>
 
   <div class="mt-4 flex-1">
-    <h3 class="text-lg font-bold text-gray-900">{config.title}</h3>
-    <p class="mt-2 text-sm leading-6 text-gray-600">{config.description}</p>
+    <h3 class="text-text text-lg font-bold">{config.title}</h3>
+    <p class="text-text-muted mt-2 text-sm leading-6">{config.description}</p>
   </div>
 
   {#if guardMessage}
-    <p class="mt-4 text-sm text-gray-600">{guardMessage}</p>
+    <p class="text-text-muted mt-4 text-sm">{guardMessage}</p>
   {/if}
 
   <div class="mt-5">
     {#if !isLoggedIn}
       <a
         href="/login"
-        class="bg-brand hover:bg-brand-hover focus-visible:outline-brand inline-flex w-full items-center justify-center rounded px-4 py-2 text-sm font-semibold text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+        class="bg-action hover:bg-action-hover focus-visible:outline-focus text-text-inverse inline-flex w-full items-center justify-center rounded px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         ログインして始める
       </a>
@@ -67,7 +67,7 @@
         type="button"
         disabled={!canStart}
         onclick={handleStart}
-        class="bg-brand hover:bg-brand-hover focus-visible:outline-brand inline-flex w-full items-center justify-center rounded px-4 py-2 text-sm font-semibold text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500"
+        class="bg-action hover:bg-action-hover focus-visible:outline-focus text-text-inverse disabled:bg-surface-disabled disabled:text-text-subtle inline-flex w-full items-center justify-center rounded px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
       >
         {buttonLabel}
       </button>

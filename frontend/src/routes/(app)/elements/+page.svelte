@@ -200,28 +200,28 @@
 
 <div class="space-y-6">
   <section>
-    <h1 class="text-2xl font-bold text-gray-800">元素一覧</h1>
-    <p class="mt-2 text-sm text-gray-600">118種類の元素を分類ごとに色分けして表示します。</p>
+    <h1 class="text-text text-2xl font-bold">元素一覧</h1>
+    <p class="text-text-muted mt-2 text-sm">118種類の元素を分類ごとに色分けして表示します。</p>
   </section>
 
   {#if isInitialLoading}
-    <section class="rounded border border-gray-200 bg-white p-6">
-      <p class="text-sm text-gray-600">元素一覧を読み込み中です...</p>
+    <section class="border-border-muted bg-surface rounded border p-6">
+      <p class="text-text-muted text-sm">元素一覧を読み込み中です...</p>
     </section>
   {:else if errorMessage}
-    <section class="rounded border border-red-200 bg-red-50 p-6">
-      <p class="text-sm text-red-700">{errorMessage}</p>
+    <section class="border-danger-border bg-danger-surface rounded border p-6">
+      <p class="text-danger-text text-sm">{errorMessage}</p>
       <button
         type="button"
         onclick={() => loadElements({ showToast: true })}
-        class="mt-4 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+        class="bg-action text-text-inverse hover:bg-action-hover focus:ring-focus mt-4 rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none"
       >
         再読み込み
       </button>
     </section>
   {:else if isEmpty}
-    <section class="rounded border border-gray-200 bg-white p-6">
-      <p class="text-sm text-gray-600">該当する元素がありません。</p>
+    <section class="border-border-muted bg-surface rounded border p-6">
+      <p class="text-text-muted text-sm">該当する元素がありません。</p>
     </section>
   {:else}
     <section class="space-y-3" aria-busy={isSearching ? 'true' : undefined}>
@@ -234,17 +234,19 @@
       />
 
       {#if isUpdatingWithoutResults}
-        <section class="rounded border border-gray-200 bg-white p-6" aria-busy="true">
-          <p class="text-sm text-gray-600">検索結果を読み込み中です...</p>
+        <section class="border-border-muted bg-surface rounded border p-6" aria-busy="true">
+          <p class="text-text-muted text-sm">検索結果を読み込み中です...</p>
         </section>
       {:else if isSearchEmpty}
-        <section class="rounded border border-gray-200 bg-white p-6">
-          <p class="text-sm text-gray-700">条件に一致する元素がありません。</p>
-          <p class="mt-1 text-sm text-gray-500">キーワードやフィルター条件を変更してください。</p>
+        <section class="border-border-muted bg-surface rounded border p-6">
+          <p class="text-text text-sm">条件に一致する元素がありません。</p>
+          <p class="text-text-subtle mt-1 text-sm">
+            キーワードやフィルター条件を変更してください。
+          </p>
           <button
             type="button"
             onclick={resetFilters}
-            class="mt-4 rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-100 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+            class="border-border text-text hover:bg-surface-subtle focus:ring-focus mt-4 rounded-md border px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none"
           >
             条件をリセット
           </button>
@@ -256,13 +258,13 @@
             <li>
               <button
                 type="button"
-                class={`w-full rounded border p-3 text-left transition-shadow hover:ring-2 hover:ring-[var(--color-brand)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)] ${style.cardClass}`}
+                class={`hover:ring-focus focus-visible:ring-focus w-full rounded border p-3 text-left transition-shadow hover:ring-2 focus:outline-none focus-visible:ring-2 ${style.cardClass}`}
                 aria-label={getElementCardAriaLabel(element)}
                 onclick={(event) => openModal(element, event)}
               >
-                <p class="text-base font-semibold text-gray-500">{element.id}</p>
-                <p class="mt-2 text-2xl font-bold text-gray-900">{element.symbol}</p>
-                <p class="mt-1 text-sm font-medium text-gray-700">{element.nameJa}</p>
+                <p class="text-text-subtle text-base font-semibold">{element.id}</p>
+                <p class="text-text mt-2 text-2xl font-bold">{element.symbol}</p>
+                <p class="text-text mt-1 text-sm font-medium">{element.nameJa}</p>
                 <p
                   class={`mt-3 inline-block rounded px-2 py-1 text-xs font-semibold ${style.badgeClass}`}
                 >

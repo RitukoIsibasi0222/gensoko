@@ -148,44 +148,46 @@
 
 <div class="space-y-6">
   <section class="space-y-2">
-    <p class="text-sm font-semibold text-gray-500">4択クイズ</p>
-    <h1 class="text-2xl font-bold text-gray-900">ゲーム</h1>
-    <p class="max-w-2xl text-sm leading-6 text-gray-600">
+    <p class="text-text-subtle text-sm font-semibold">4択クイズ</p>
+    <h1 class="text-text text-2xl font-bold">ゲーム</h1>
+    <p class="text-text-muted max-w-2xl text-sm leading-6">
       元素記号と名前を、初級・上級・苦手リストのモードから選んで練習できます。
     </p>
   </section>
 
   {#if authStore.isInitializing}
     <section
-      class="rounded border border-gray-200 bg-white p-5"
+      class="border-border-muted bg-surface rounded border p-5"
       aria-busy="true"
       aria-live="polite"
     >
-      <p class="text-sm text-gray-600">ログイン状態を確認しています...</p>
+      <p class="text-text-muted text-sm">ログイン状態を確認しています...</p>
     </section>
   {:else if GAME_MODE_CONFIGS.length === 0}
-    <section class="rounded border border-gray-200 bg-white p-5">
-      <p class="text-sm text-gray-600">利用できるゲームモードがありません。</p>
+    <section class="border-border-muted bg-surface rounded border p-5">
+      <p class="text-text-muted text-sm">利用できるゲームモードがありません。</p>
     </section>
   {:else}
     <section class="space-y-4" aria-labelledby="game-mode-list-heading">
       <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 id="game-mode-list-heading" class="text-lg font-bold text-gray-900">モードを選択</h2>
-          <p class="mt-1 text-sm text-gray-600">
+          <h2 id="game-mode-list-heading" class="text-text text-lg font-bold">モードを選択</h2>
+          <p class="text-text-muted mt-1 text-sm">
             苦手モードは苦手元素が{MIN_WEAK_ELEMENTS_FOR_GAME}件以上になると開始できます。
           </p>
         </div>
         {#if authStore.isLoggedIn}
-          <div class="space-y-2 text-sm text-gray-600" aria-live="polite">
+          <div class="text-text-muted space-y-2 text-sm" aria-live="polite">
             <p>{weakCountText}</p>
             {#if weakLoadStatus === 'error' && weakLoadError}
-              <div class="space-y-2 rounded border border-red-200 bg-red-50 p-3 text-red-700">
+              <div
+                class="border-danger-border bg-danger-surface text-danger-text space-y-2 rounded border p-3"
+              >
                 <p>{weakLoadError}</p>
                 <button
                   type="button"
                   onclick={retryWeakElements}
-                  class="rounded border border-red-300 bg-white px-3 py-1 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500"
+                  class="border-danger-border-strong bg-surface text-danger-text hover:bg-danger-surface-strong focus-visible:outline-danger-border-strong rounded border px-3 py-1 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
                 >
                   再試行
                 </button>

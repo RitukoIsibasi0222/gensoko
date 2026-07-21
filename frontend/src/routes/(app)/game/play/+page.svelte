@@ -411,63 +411,71 @@
 
 <div class="space-y-6">
   {#if authStore.isInitializing}
-    <section class="rounded border border-gray-200 bg-white p-5" aria-busy="true">
-      <p class="text-sm text-gray-600">ログイン状態を確認しています...</p>
+    <section class="border-border-muted bg-surface rounded border p-5" aria-busy="true">
+      <p class="text-text-muted text-sm">ログイン状態を確認しています...</p>
     </section>
   {:else if !authStore.isLoggedIn}
-    <section class="space-y-4 rounded border border-gray-200 bg-white p-6">
+    <section class="border-border-muted bg-surface space-y-4 rounded border p-6">
       <div>
-        <p class="text-sm font-semibold text-gray-500">4択クイズ</p>
-        <h1 class="mt-2 text-2xl font-bold text-gray-900">ログインが必要です</h1>
-        <p class="mt-2 text-sm leading-6 text-gray-600">
+        <p class="text-text-subtle text-sm font-semibold">4択クイズ</p>
+        <h1 class="text-text mt-2 text-2xl font-bold">ログインが必要です</h1>
+        <p class="text-text-muted mt-2 text-sm leading-6">
           ゲームを開始するにはログインしてください。
         </p>
       </div>
       <div class="flex flex-wrap gap-3">
         <a
           href="/login"
-          class="bg-brand hover:bg-brand-hover focus-visible:outline-brand inline-flex items-center justify-center rounded px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2"
+          class="bg-action hover:bg-action-hover focus-visible:outline-focus text-text-inverse inline-flex items-center justify-center rounded px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           ログインへ
         </a>
         <a
           href="/game"
-          class="inline-flex items-center justify-center rounded border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+          class="border-border text-text hover:bg-surface-muted focus-visible:outline-focus inline-flex items-center justify-center rounded border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           モード選択へ戻る
         </a>
       </div>
     </section>
   {:else if mode === null || modeConfig === null}
-    <section class="space-y-4 rounded border border-red-200 bg-red-50 p-6" role="alert">
+    <section
+      class="border-danger-border bg-danger-surface space-y-4 rounded border p-6"
+      role="alert"
+    >
       <div>
-        <p class="text-sm font-semibold text-red-700">ゲームを開始できません</p>
-        <h1 class="mt-2 text-2xl font-bold text-red-900">ゲームモードが正しくありません</h1>
-        <p class="mt-2 text-sm leading-6 text-red-800">
+        <p class="text-danger-text text-sm font-semibold">ゲームを開始できません</p>
+        <h1 class="text-danger-text-strong mt-2 text-2xl font-bold">
+          ゲームモードが正しくありません
+        </h1>
+        <p class="text-danger-text mt-2 text-sm leading-6">
           モード選択画面から、もう一度ゲームを開始してください。
         </p>
       </div>
       <a
         href="/game"
-        class="inline-flex items-center justify-center rounded bg-white px-4 py-2 text-sm font-semibold text-red-800 ring-1 ring-red-200 hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+        class="bg-surface text-danger-text ring-danger-border hover:bg-danger-surface-strong focus-visible:outline-danger-border-strong inline-flex items-center justify-center rounded px-4 py-2 text-sm font-semibold ring-1 focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         モード選択へ戻る
       </a>
     </section>
   {:else if isQuestionLoading}
     <section
-      class="rounded border border-gray-200 bg-white p-5"
+      class="border-border-muted bg-surface rounded border p-5"
       aria-busy="true"
       aria-live="polite"
     >
-      <p class="text-sm text-gray-600">ゲーム問題を読み込んでいます...</p>
+      <p class="text-text-muted text-sm">ゲーム問題を読み込んでいます...</p>
     </section>
   {:else if questionLoadStatus === 'error'}
-    <section class="space-y-4 rounded border border-red-200 bg-red-50 p-6" role="alert">
+    <section
+      class="border-danger-border bg-danger-surface space-y-4 rounded border p-6"
+      role="alert"
+    >
       <div>
-        <p class="text-sm font-semibold text-red-700">ゲームを開始できません</p>
-        <h1 class="mt-2 text-2xl font-bold text-red-900">問題の取得に失敗しました</h1>
-        <p class="mt-2 text-sm leading-6 text-red-800">
+        <p class="text-danger-text text-sm font-semibold">ゲームを開始できません</p>
+        <h1 class="text-danger-text-strong mt-2 text-2xl font-bold">問題の取得に失敗しました</h1>
+        <p class="text-danger-text mt-2 text-sm leading-6">
           {questionLoadError ?? 'ゲーム問題の取得に失敗しました'}
         </p>
       </div>
@@ -475,13 +483,13 @@
         <button
           type="button"
           onclick={retryQuestionLoad}
-          class="inline-flex items-center justify-center rounded bg-white px-4 py-2 text-sm font-semibold text-red-800 ring-1 ring-red-200 hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+          class="bg-surface text-danger-text ring-danger-border hover:bg-danger-surface-strong focus-visible:outline-danger-border-strong inline-flex items-center justify-center rounded px-4 py-2 text-sm font-semibold ring-1 focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           もう一度読み込む
         </button>
         <a
           href="/game"
-          class="inline-flex items-center justify-center rounded border border-red-200 px-4 py-2 text-sm font-semibold text-red-800 hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+          class="border-danger-border text-danger-text hover:bg-danger-surface-strong focus-visible:outline-danger-border-strong inline-flex items-center justify-center rounded border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           モード選択へ戻る
         </a>
@@ -489,40 +497,42 @@
     </section>
   {:else if phase === 'completed'}
     <section
-      class="space-y-5 rounded border border-gray-200 bg-white p-6"
+      class="border-border-muted bg-surface space-y-5 rounded border p-6"
       aria-busy={isSubmitting}
       aria-live={submitStatus === 'error' ? 'assertive' : 'polite'}
       role={submitStatus === 'error' ? 'alert' : 'status'}
     >
       <div>
-        <p class="text-sm font-semibold text-gray-500">4択クイズ</p>
-        <h1 class="mt-2 text-2xl font-bold text-gray-900">
+        <p class="text-text-subtle text-sm font-semibold">4択クイズ</p>
+        <h1 class="text-text mt-2 text-2xl font-bold">
           {submitStatus === 'error' ? '結果を保存できませんでした' : '結果を保存しています'}
         </h1>
-        <p class="mt-2 text-sm leading-6 text-gray-600">
+        <p class="text-text-muted mt-2 text-sm leading-6">
           {modeConfig.title}（{modeConfig.difficultyLabel}）を最後まで回答しました。
         </p>
       </div>
 
       <div class="grid gap-3 sm:grid-cols-2">
-        <div class="rounded border border-gray-200 bg-gray-50 p-4">
-          <p class="text-sm text-gray-600">回答数</p>
-          <p class="mt-1 text-2xl font-bold text-gray-900">{answers.length} / {questions.length}</p>
+        <div class="border-border-muted bg-surface-muted rounded border p-4">
+          <p class="text-text-muted text-sm">回答数</p>
+          <p class="text-text mt-1 text-2xl font-bold">{answers.length} / {questions.length}</p>
         </div>
-        <div class="rounded border border-gray-200 bg-gray-50 p-4">
-          <p class="text-sm text-gray-600">保存状態</p>
-          <p class="mt-1 text-2xl font-bold text-gray-900">
+        <div class="border-border-muted bg-surface-muted rounded border p-4">
+          <p class="text-text-muted text-sm">保存状態</p>
+          <p class="text-text mt-1 text-2xl font-bold">
             {submitStatus === 'error' ? '失敗' : '送信中'}
           </p>
         </div>
       </div>
 
       {#if submitStatus === 'error'}
-        <div class="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <div
+          class="border-danger-border bg-danger-surface text-danger-text rounded border px-4 py-3 text-sm"
+        >
           {submitError ?? 'ゲーム結果の送信に失敗しました'}
         </div>
       {:else}
-        <p class="text-sm text-gray-600">サーバーで正誤判定とスコア計算を行っています...</p>
+        <p class="text-text-muted text-sm">サーバーで正誤判定とスコア計算を行っています...</p>
       {/if}
 
       <div class="flex flex-wrap gap-3">
@@ -530,7 +540,7 @@
           type="button"
           onclick={submitCompletedGame}
           disabled={isSubmitting}
-          class="bg-brand hover:bg-brand-hover focus-visible:outline-brand inline-flex items-center justify-center rounded px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2"
+          class="bg-action hover:bg-action-hover focus-visible:outline-focus text-text-inverse inline-flex items-center justify-center rounded px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           再送信
         </button>
@@ -538,13 +548,13 @@
           type="button"
           onclick={restartGame}
           disabled={isSubmitting}
-          class="inline-flex items-center justify-center rounded border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+          class="border-border text-text hover:bg-surface-muted focus-visible:outline-focus inline-flex items-center justify-center rounded border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           新しく始める
         </button>
         <a
           href="/game"
-          class="inline-flex items-center justify-center rounded border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+          class="border-border text-text hover:bg-surface-muted focus-visible:outline-focus inline-flex items-center justify-center rounded border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           モード選択へ戻る
         </a>
@@ -553,11 +563,11 @@
   {:else if currentQuestion}
     <section class="space-y-5" aria-labelledby="game-play-heading">
       <div class="space-y-2">
-        <p class="text-sm font-semibold text-gray-500">4択クイズ</p>
-        <h1 id="game-play-heading" class="text-2xl font-bold text-gray-900">
+        <p class="text-text-subtle text-sm font-semibold">4択クイズ</p>
+        <h1 id="game-play-heading" class="text-text text-2xl font-bold">
           {modeConfig.title}
         </h1>
-        <p class="text-sm text-gray-600">
+        <p class="text-text-muted text-sm">
           {modeConfig.formatLabel} / {modeConfig.difficultyLabel} / {modeConfig.rangeLabel}
         </p>
       </div>
@@ -571,17 +581,17 @@
         <GameTimerBar {remainingSec} timeLimitSec={QUESTION_TIME_LIMIT_SEC} />
       </div>
 
-      <div class="rounded border border-gray-200 bg-white p-5 shadow-sm">
-        <p class="text-sm font-semibold text-gray-500">問題</p>
-        <p class="mt-3 text-center text-5xl font-bold break-words text-gray-900">
+      <div class="border-border-muted bg-surface rounded border p-5 shadow-sm">
+        <p class="text-text-subtle text-sm font-semibold">問題</p>
+        <p class="text-text mt-3 text-center text-5xl font-bold break-words">
           {currentQuestion.prompt}
         </p>
       </div>
 
       <section class="space-y-3" aria-labelledby="choice-heading">
         <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <h2 id="choice-heading" class="text-lg font-bold text-gray-900">答えを選択</h2>
-          <p class="text-sm text-gray-600">キーボードの 1〜4 でも回答できます。</p>
+          <h2 id="choice-heading" class="text-text text-lg font-bold">答えを選択</h2>
+          <p class="text-text-muted text-sm">キーボードの 1〜4 でも回答できます。</p>
         </div>
 
         <div class="grid gap-3 sm:grid-cols-2">
@@ -601,7 +611,7 @@
 
       {#if selectedAnswer}
         <section
-          class="rounded border border-sky-200 bg-sky-50 px-4 py-3 text-sky-900"
+          class="border-info-border bg-info-surface text-info-text rounded border px-4 py-3"
           role="status"
           aria-live="polite"
         >

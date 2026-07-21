@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gensoko-worker-test",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-07-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "DEPLOYMENT_ENVIRONMENT": "staging",
+    "DATABASE_TARGET": "staging",
+    "NODE_ENV": "production",
+    "FRONTEND_URL": "https://staging.example.invalid",
+    "JWT_SECRET": "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj",
+    "RATE_LIMIT_STORE": "durable-object",
+    "RATE_LIMIT_KEY_SECRET": "cnJycnJycnJycnJycnJycnJycnJycnJycnJycnJycnI=",
+    "MAIL_API_URL": "https://mail-api.example.invalid/send",
+    "MAIL_API_KEY": "local-worker-test-key",
+    "MAIL_FROM": "noreply@staging.example.invalid",
+    "MAIL_ALLOWED_RECIPIENTS": "synthetic-user@example.invalid",
+    "MAIL_TIMEOUT_MS": "5000",
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "00000000000000000000000000000000",
+      "localConnectionString": "postgresql://local-worker:local-worker@127.0.0.1:5432/gensoko_worker_test",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RATE_LIMIT_COUNTER",
+        "class_name": "RateLimitCounter",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["RateLimitCounter"],
+    },
+  ],
+}

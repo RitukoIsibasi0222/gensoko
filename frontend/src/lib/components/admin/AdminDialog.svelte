@@ -137,7 +137,7 @@
       tabindex="-1"
       aria-label="&#x30C0;&#x30A4;&#x30A2;&#x30ED;&#x30B0;&#x3092;&#x9589;&#x3058;&#x308B;"
       disabled={isBusy}
-      class="absolute inset-0 bg-black/50"
+      class="bg-overlay absolute inset-0"
       onclick={requestClose}
     ></button>
     <div
@@ -148,14 +148,14 @@
       aria-describedby={description ? 'admin-dialog-description' : undefined}
       aria-busy={isBusy}
       tabindex="-1"
-      class="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-xl"
+      class="bg-surface relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl shadow-xl"
       onkeydown={handleDialogKeydown}
     >
-      <div class="flex items-start justify-between gap-4 border-b border-gray-200 px-5 py-4">
+      <div class="border-border-muted flex items-start justify-between gap-4 border-b px-5 py-4">
         <div>
-          <h2 id="admin-dialog-title" class="text-ink text-xl font-bold">{title}</h2>
+          <h2 id="admin-dialog-title" class="text-text text-xl font-bold">{title}</h2>
           {#if description}
-            <p id="admin-dialog-description" class="mt-1 text-sm text-gray-600">{description}</p>
+            <p id="admin-dialog-description" class="text-text-muted mt-1 text-sm">{description}</p>
           {/if}
         </div>
         <button
@@ -164,7 +164,7 @@
           type="button"
           aria-label="ダイアログを閉じる"
           disabled={isBusy}
-          class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:text-gray-400"
+          class="border-border text-text hover:bg-surface-muted focus-visible:outline-focus disabled:text-text-disabled rounded-lg border px-3 py-1.5 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
           onclick={requestClose}
         >
           閉じる

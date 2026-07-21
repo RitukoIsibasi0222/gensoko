@@ -85,7 +85,7 @@
 
 ## 現状調査結果
 
-### 確認できた事実
+### 計画作成時点で確認できた事実
 
 - `docs/05_progress.md`の本タスクは`[ ]`である。
 - 監査ログ記録基盤はPR #80で実装済みである。
@@ -106,7 +106,7 @@
 - `backend/src/lib/config.ts`がバックエンド共通設定の取得とvalidationを担当する。
 - `backend/.env.example`がローカル環境変数のテンプレートである。
 
-### 推測・未確定事項
+### 計画作成時点の推測・未確定事項
 
 - 本番の1日当たり監査ログ生成数。
 - LOGIN FAILUREが全体に占める割合。
@@ -145,11 +145,11 @@
 
 **`backend/src/services/user.service.ts`**
 
-- `deleteCurrentUser(input): Promise<void>` — Userをsoft deleteし、関連tokenを削除する。
+- `deleteCurrentUser(input): Promise<void>` — Serializable transactionでUserを物理削除し、所有rowをcascade削除して成功監査を保存する。
 
 **`backend/src/services/admin.service.ts`**
 
-- `forceDeleteAdminUser(input): Promise<{ message: string }>` — 対象Userをsoft deleteし、成功監査を同一transactionへ保存する。
+- `forceDeleteAdminUser(input): Promise<{ message: string }>` — 対象Userを物理削除し、成功監査を同一transactionへ保存する。
 
 ### 重要な制約
 
@@ -175,21 +175,21 @@
 
 実装開始前に以下を記録する。
 
-| 確認事項                      | 推奨案                                      | 承認者・確定値                      |
-| ----------------------------- | ------------------------------------------- | ----------------------------------- |
-| 保持期間                      | 365日                                       | `RitukoIsibasi0222`が2026-07-14承認 |
-| cleanup Cron                  | 毎日UTC 18:37（JST 03:37）                  | 2026-07-14確定                      |
-| 退会後内部ID                  | 監査rowと同じ365日保持し、row cleanupで削除 | `RitukoIsibasi0222`が2026-07-14承認 |
-| cleanup実行主体               | GitHub Actions schedule                     | 2026-07-14確定                      |
-| cleanup失敗通知先             | GitHub Actions失敗通知を登録メールへ送る    | 2026-07-14設定                      |
-| DB容量警告                    | Supabase Free 500MBの70%=350MB              | 2026-07-14確定                      |
-| DB容量重大                    | Supabase Free 500MBの85%=425MB              | 2026-07-14確定                      |
-| cleanup一次対応者             | `RitukoIsibasi0222`                         | 2026-07-14設定                      |
-| 保持期間変更承認者            | プロダクトオーナー`RitukoIsibasi0222`       | 2026-07-14設定                      |
-| 削除保留承認者                | インシデント責任者                          | 未確定                              |
-| soft delete不整合の解消タスク | 本番公開前の別タスクとして追加              | 未確定                              |
+| 確認事項                     | 推奨案                                      | 承認者・確定値                      |
+| ---------------------------- | ------------------------------------------- | ----------------------------------- |
+| 保持期間                     | 365日                                       | `RitukoIsibasi0222`が2026-07-14承認 |
+| cleanup Cron                 | 毎日UTC 18:37（JST 03:37）                  | 2026-07-14確定                      |
+| 退会後内部ID                 | 監査rowと同じ365日保持し、row cleanupで削除 | `RitukoIsibasi0222`が2026-07-14承認 |
+| cleanup実行主体              | GitHub Actions schedule                     | 2026-07-14確定                      |
+| cleanup失敗通知先            | GitHub Actions失敗通知を登録メールへ送る    | 2026-07-14設定                      |
+| DB容量警告                   | Supabase Free 500MBの70%=350MB              | 2026-07-14確定                      |
+| DB容量重大                   | Supabase Free 500MBの85%=425MB              | 2026-07-14確定                      |
+| cleanup一次対応者            | `RitukoIsibasi0222`                         | 2026-07-14設定                      |
+| 保持期間変更承認者           | プロダクトオーナー`RitukoIsibasi0222`       | 2026-07-14設定                      |
+| 削除保留承認者               | インシデント責任者                          | 未確定                              |
+| アカウント完全削除の運用gate | 別計画で物理削除を実装し、本番公開前に検証  | production gate未完了               |
 
-削除保留承認者、soft delete不整合、7日baselineなど残るrelease gateが完了するまで`AUDIT_LOG_CLEANUP_ENABLED=true`を本番へ設定しない。
+削除保留承認者、アカウント完全削除のproduction gate、公開後実負荷baselineなど残るrelease gateが完了するまで`AUDIT_LOG_CLEANUP_ENABLED=true`を本番へ設定しない。
 
 ## 保持期間・削除保留方針
 
@@ -441,20 +441,11 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 | keyed HMACへ変換             | 相関は維持可能             | 元IDの直接保持を避けられる | 鍵管理、rotation、migrationが必要 | 別計画が必要               |
 | 監査ログを即時削除           | 調査不能                   | 最も少ない保持             | cleanupは簡単                     | 監査要件を満たさない可能性 |
 
-### soft deleteとの不整合
+### アカウント完全削除との境界
 
-現在のUser rowにはsoft delete後もemail・username・学習データが残る。内部IDだけを監査ログに保持する問題とは別に、`docs/02_security.md`の完全削除要件を満たしていない。
+計画作成時点のsoft delete不整合は、`docs/plans/account-data-complete-deletion/plan.md`へ分離した。現在は本人退会・管理者強制退会の物理削除、所有rowのcascade、成功監査まで実装済みである。
 
-本計画では、退会処理全体を無断でphysical deleteへ変更しない。以下を本番公開前の別タスクとして追加する。
-
-- User個人情報の匿名化またはphysical delete方針。
-- 学習データの削除範囲。
-- 管理者強制退会と本人退会の整合。
-- 監査ログ内部IDを例外保持する場合のプライバシーポリシー記載。
-- 既存soft-deleted userへの移行。
-- cascade deleteと監査証跡の非連動確認。
-
-この別タスクが未解決でもcleanup codeは実装できるが、本番運用タスクを完了扱いにしない。
+ただし、既存soft-deleted Userのcleanup、privacy問い合わせ先・backup説明、全損時replay方針、本番cleanup体制、production配備・smokeは未完了である。監査ログcleanup codeはこれらと独立して安全停止できるが、残るproduction gateが完了するまで`AUDIT_LOG_CLEANUP_ENABLED=false`を維持する。
 
 ## 運用責任・runbook
 
@@ -622,9 +613,9 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
     - 選択: 初期スコープでは採用しない。
     - 根拠: 鍵rotation、既存row移行、transaction変更が必要で、独立レビューなしに安全に追加できないため。
 
-16. **soft delete不整合**
-    - 選択: 本タスクで無断修正せず、本番公開前の別ブロッカーとして追跡する。
-    - 根拠: 学習データcascade、認証、監査、管理者操作へ広範囲な影響があるため。
+16. **アカウント完全削除**
+    - 選択: 本タスクから完全削除計画へ分離する。物理削除実装後もproduction gateを独立追跡する。
+    - 根拠: 学習データcascade、認証、監査、管理者操作、backup/replayへ広範囲な影響があるため。
 
 17. **cleanup自身の監査**
     - 選択: `AuditLog`へ保存しない。
@@ -903,7 +894,7 @@ schema変更・backfillは想定しない。
 | raw error漏えい                  | 接続情報・内部情報漏えい  | 固定日本語error、security test                   |
 | cleanupログのID漏えい            | 内部ID露出                | 許可field方式、完全なログ引数test                |
 | cleanup自己監査                  | 無限増加                  | `AuditLog.create`を呼ばない                      |
-| soft deleteとの不整合            | プライバシー仕様違反      | 別pre-production blockerとして追跡               |
+| 完全削除のproduction gate未完了  | プライバシー仕様違反      | 別pre-production blockerとして追跡               |
 | raw内部ID保持                    | 再識別可能性              | 目的限定、アクセス非公開、期間限定、承認         |
 | HMACへ途中変更                   | migration・鍵運用事故     | 計画再レビューなしに変更しない                   |
 | 本番基盤未構築                   | 容量alert未設定           | フェーズ12release gate、完了扱い禁止             |
@@ -961,8 +952,8 @@ schema変更・backfillは想定しない。
 - [x] T18: 変更種別ごとにcommitし、実装PRをreview後developへmergeする（PR #90、2026-07-14 merge）
 - [x] T19: stagingでdry-run・cleanup・再実行・停止を確認する（2026-07-14完了）
 - [x] T20: production容量監視・通知・backup確認を完了する（2026-07-14完了）
-- [-] T21: production初回実行と7日baselineを確認する（初回dry-run成功、2026-07-21 22:55 JSTまで観測中）
-- [ ] T22: planとprogressを実装完了へ更新し、docs PRをdevelopへmergeする
+- [x] T21: production初回実行と公開前7日baselineを確認する（2026-07-21完了、増加量0件）
+- [-] T22: planとprogressを実装完了へ更新し、docs PRをdevelopへmergeする（PR #95 review・merge待ち）
 
 ### T19 再開記録（2026-07-14）
 
@@ -1031,14 +1022,17 @@ schema変更・backfillは想定しない。
 - 暗号化backup [#29322979476](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29322979476)が暗号化・復号検証・Artifact uploadまで成功した。
 - backup run IDと期限内Artifactを確認後、migration [#29323085012](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29323085012)で`prisma migrate deploy`が成功した。
 
-### T21 production初回実行（2026-07-14、baseline観測中）
+### T21 production初回実行・公開前baseline（2026-07-14〜2026-07-21、完了）
 
 - productionの手動dry-run [#29338470913](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29338470913)が終了code 0で成功した。
-- cutoff `2025-07-14T13:54:42.591Z`、保持365日、期限超過0件、削除0件、`hasExpiredRows=false`、`minimumRunsRequired=0`を確認した。
+- cutoff `2025-07-14T13:54:42.591Z`、保持365日、期限超過0件、削除0件、`createdLast24HoursCount=0`、`hasExpiredRows=false`、`oldestOccurredAt=null`、`latestOccurredAt=null`、`minimumRunsRequired=0`を確認した。
 - execute stepは実行されず、`AUDIT_LOG_CLEANUP_ENABLED=false`を維持している。
 - logに接続文字列、project ref、publishable key、内部ID、監査ログID、PII、raw errorがないことを確認した。
 - 7日baseline観測期間は2026-07-14 22:54 JSTから2026-07-21 22:55 JSTまでとする。
-- baseline観測後も、productionアプリ公開後の監査回帰とsoft delete不整合は別の未完了gateとして残す。
+- 観測終了後のscheduled run [#29859488507](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29859488507)は終了code 0で成功し、`createdLast24HoursCount=0`、`hasExpiredRows=false`、`oldestOccurredAt=null`、`latestOccurredAt=null`、削除0件を確認した。
+- 観測開始時・終了時とも監査rowは0件で、期間中はcleanup無効を維持して削除がないため、公開前7日間の増加量baselineを0件と確定した。
+- 終了runのlogに接続文字列、project ref、publishable key、内部ID、監査ログID、PII、raw errorがないことを確認した。
+- productionアプリ公開後の監査回帰と実負荷baseline、アカウント完全削除のproduction gateは別の未完了gateとして残す。
 
 ### タブ区切りタスクリスト
 
@@ -1085,7 +1079,7 @@ T22	plan・progress完了更新・docs PR	plan・docs/05_progress.md・git/GitHu
 - [x] concurrencyが安定したgroupで直列化されている。
 - [x] 削除保留手順がある。
 - [x] 誤削除時のbackup・PITR判断手順がある。
-- [x] soft deleteと完全削除の不整合が別タスクで追跡されている。
+- [x] アカウント完全削除のproduction gateが別タスクで追跡されている。
 - [x] プライバシーポリシーへ必要な記載要件が引き継がれている。
 - [x] 公開cleanup APIがない。
 - [x] 監査ログ閲覧権限を今回追加していない。
@@ -1121,8 +1115,8 @@ T22	plan・progress完了更新・docs PR	plan・docs/05_progress.md・git/GitHu
 - [ ] 本人退会・管理者強制退会後も承認した期間中の内部ID相関が維持される。
 - [x] 保持期限経過後は監査rowと内部IDが削除される。
 - [ ] API status・body・Cookieに回帰がない。
-- [ ] 7日間の増加量baselineを記録する。
-- [ ] soft delete不整合の別タスクが本番公開前に完了または明示的にblockされている。
+- [x] 公開前7日間の増加量baselineを記録する。
+- [ ] アカウント完全削除のproduction gateが本番公開前に完了または明示的にblockされている。
 
 ## 実装完了時の更新ルール
 
@@ -1142,7 +1136,7 @@ T22	plan・progress完了更新・docs PR	plan・docs/05_progress.md・git/GitHu
 - integration test、全test、lint、format、build結果を記録する。
 - staging dry-run・実削除・再実行・停止結果を記録する。
 - production初回実行とbaselineを記録する。
-- soft delete不整合の解消状況を記録する。
+- アカウント完全削除のproduction gate状況を記録する。
 - 未確定項目が残る場合は`docs/05_progress.md`を`[x]`にしない。
 - `## 実装完了`セクションを追記する。
 
@@ -1212,7 +1206,7 @@ T22	plan・progress完了更新・docs PR	plan・docs/05_progress.md・git/GitHu
 - 利用目的:
 - アクセス範囲:
 - プライバシーポリシーへの引き継ぎ:
-- soft delete不整合の解消状況:
+- アカウント完全削除のproduction gate状況:
 
 ### 残課題
 

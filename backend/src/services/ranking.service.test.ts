@@ -11,7 +11,9 @@ vi.mock("../lib/prisma.js", () => ({
 }));
 
 import { prisma } from "../lib/prisma.js";
-import { getAllTimeRanking, getWeeklyRanking } from "./ranking.service.js";
+import { createRankingService } from "./ranking.service.js";
+
+const { getAllTimeRanking, getWeeklyRanking } = createRankingService(prisma as never);
 
 const NOW = new Date("2026-06-20T12:00:00.000Z");
 const WEEK_START = new Date("2026-06-14T15:00:00.000Z");
@@ -83,7 +85,7 @@ describe("ranking service", () => {
     expect(prisma.userStats.findMany).toHaveBeenCalledWith({
       where: {
         totalGames: { gt: 0 },
-        user: { isActive: true, deletedAt: null },
+        user: { isActive: true },
         weeklyScoreWeekStart: WEEK_START,
       },
       orderBy: [{ weeklyScore: "desc" }, { userId: "asc" }],
@@ -147,7 +149,7 @@ describe("ranking service", () => {
       weeklyScoreWeekStart: WEEK_START,
       allTimeScore: 70000,
       totalGames: 8,
-      user: { isActive: true, deletedAt: null },
+      user: { isActive: true },
     } as never);
     vi.mocked(prisma.userStats.count).mockResolvedValue(5 as never);
 
@@ -160,13 +162,13 @@ describe("ranking service", () => {
         weeklyScoreWeekStart: true,
         allTimeScore: true,
         totalGames: true,
-        user: { select: { isActive: true, deletedAt: true } },
+        user: { select: { isActive: true } },
       },
     });
     expect(prisma.userStats.count).toHaveBeenCalledWith({
       where: {
         totalGames: { gt: 0 },
-        user: { isActive: true, deletedAt: null },
+        user: { isActive: true },
         weeklyScoreWeekStart: WEEK_START,
         weeklyScore: { gt: 12000 },
       },
@@ -174,7 +176,7 @@ describe("ranking service", () => {
     expect(result.myRank).toBe(6);
   });
 
-  it("ログインユーザーに統計がない、未プレイ、停止中、削除済みの場合は myRank を null にする", async () => {
+  it("ログインユーザーに統計がない、未プレイ、停止中の場合は myRank を null にする", async () => {
     vi.mocked(prisma.userStats.findMany).mockResolvedValue([] as never);
 
     vi.mocked(prisma.userStats.findUnique).mockResolvedValueOnce(null as never);
@@ -185,7 +187,7 @@ describe("ranking service", () => {
       weeklyScoreWeekStart: WEEK_START,
       allTimeScore: 200,
       totalGames: 0,
-      user: { isActive: true, deletedAt: null },
+      user: { isActive: true },
     } as never);
     await expect(getWeeklyRanking("not-played")).resolves.toMatchObject({ myRank: null });
 
@@ -194,18 +196,9 @@ describe("ranking service", () => {
       weeklyScoreWeekStart: WEEK_START,
       allTimeScore: 200,
       totalGames: 1,
-      user: { isActive: false, deletedAt: null },
+      user: { isActive: false },
     } as never);
     await expect(getWeeklyRanking("inactive")).resolves.toMatchObject({ myRank: null });
-
-    vi.mocked(prisma.userStats.findUnique).mockResolvedValueOnce({
-      weeklyScore: 100,
-      weeklyScoreWeekStart: WEEK_START,
-      allTimeScore: 200,
-      totalGames: 1,
-      user: { isActive: true, deletedAt: new Date("2026-06-20T00:00:00.000Z") },
-    } as never);
-    await expect(getWeeklyRanking("deleted")).resolves.toMatchObject({ myRank: null });
 
     expect(prisma.userStats.count).not.toHaveBeenCalled();
   });
@@ -217,7 +210,7 @@ describe("ranking service", () => {
       weeklyScoreWeekStart: new Date("2026-06-07T15:00:00.000Z"),
       allTimeScore: 70000,
       totalGames: 8,
-      user: { isActive: true, deletedAt: null },
+      user: { isActive: true },
     } as never);
 
     await expect(getWeeklyRanking("stale-week-user")).resolves.toMatchObject({ myRank: null });
@@ -233,7 +226,7 @@ describe("ranking service", () => {
       weeklyScoreWeekStart: WEEK_START,
       allTimeScore: 70000,
       totalGames: 8,
-      user: { isActive: true, deletedAt: null },
+      user: { isActive: true },
     } as never);
     vi.mocked(prisma.userStats.count).mockResolvedValue(5 as never);
 
@@ -247,7 +240,7 @@ describe("ranking service", () => {
         weeklyScoreWeekStart: true,
         allTimeScore: true,
         totalGames: true,
-        user: { select: { isActive: true, deletedAt: true } },
+        user: { select: { isActive: true } },
       },
     });
 

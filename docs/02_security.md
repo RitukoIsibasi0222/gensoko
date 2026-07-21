@@ -240,7 +240,7 @@ X-Permitted-Cross-Domain-Policies: none
 - セキュリティ上重要な操作はPostgreSQLの`audit_logs`へ保存し、通常のアプリケーションログと分離する
 - 正式保持期間は365日とし、runtimeのsource of truthは`AUDIT_LOG_RETENTION_DAYS`とする
 - 保持期間・目的・内部ID保持は2026-07-14にプロダクトオーナー`RitukoIsibasi0222`が承認した
-- 7日baseline、soft delete不整合、その他release gateが完了するまで`AUDIT_LOG_CLEANUP_ENABLED=false`を維持する
+- 公開前7日baselineは2026-07-21に完了した。公開後実負荷baseline、アカウント完全削除のproduction gate、その他release gateが完了するまで`AUDIT_LOG_CLEANUP_ENABLED=false`を維持する
 - cleanup対象は`occurredAt < cutoff`だけとし、cutoffと同時刻のrowは保持する
 - 1batch 500件、1回最大10,000件、最大8分の固定上限を設け、上限到達後も残件があれば定期batchを失敗させる
 - cleanupの運用ログには件数、cutoff、実行時間、期限超過有無だけを記録し、監査ログID、`actorId`、`targetId`、メール、username、生DB error、`DATABASE_URL`を含めない
@@ -260,10 +260,13 @@ X-Permitted-Cross-Domain-Policies: none
 
 - 収集する個人情報: **メールアドレス** と **ユーザー名** のみ（最小限）
 - プライバシーポリシーページを設置（公開前に必須）
-- アカウント削除時に個人情報・学習データを完全削除することを目標要件とする
-- 現在の本人退会・管理者強制退会はsoft deleteであり、Userのメール・username・学習データが残るため、この目標要件は未達である
-- physical deleteまたは匿名化、学習データ削除範囲、既存soft-deleted userの移行は、監査ログ内部IDの期間限定保持とは分離した本番公開前ブロッカーとして扱う
-- 監査内部IDを365日保持する目的・期間・問い合わせ先を、本番公開前にプライバシーポリシーへ記載する
+- 本人退会・管理者強制退会の現行codeは、Serializable transactionでUserを物理削除し、認証token・学習dataなどの所有rowをDB cascadeで削除する。共有masterのElementは削除しない
+- 削除成功監査はUser削除と同じtransactionへ保存する。監査rowにはemail・usernameを保存せず、内部User IDと削除前roleだけをSEC-008の例外保持方針に従って残す
+- 物理削除後は旧email・usernameで別User IDとして再登録できる。旧資格情報、学習履歴、監査内部IDを新Userへ自動関連付けしない
+- 既存soft-deleted User向けcleanup CLI・staging/production manual workflowは実装済みだが、実環境では未実行である。通常実行はdry-runとし、production executeは承認済みgateをすべて満たすまで行わない
+- 監査内部IDの保持期間365日・目的・承認者・承認日は2026-07-14に確定済みである。本番公開前に問い合わせ先を含むプライバシーポリシー、backup境界、全損復元時の削除replay方針、本番cleanup体制を承認・記録する
+- 暗号化backupは作成時点の削除済みdataを含む可能性がある。backup Artifactの保持・失効とisolated restore後の削除replayを確認するまで、backupからの復元を完全削除の代替と扱わない
+- T1Bは監査保持承認以外の上記運用gateが未完了であり、production公開・production cleanup・contract migrationのブロッカーである
 
 ---
 

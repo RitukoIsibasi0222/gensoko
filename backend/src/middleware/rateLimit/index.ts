@@ -1,4 +1,8 @@
 import type { Context, MiddlewareHandler } from "hono";
+import {
+  SERVICE_UNAVAILABLE_MESSAGE,
+  SERVICE_UNAVAILABLE_RETRY_AFTER_SEC,
+} from "../../lib/http-error-messages.js";
 import { RATE_LIMIT_POLICIES, type RateLimitPolicyId } from "./policies.js";
 import type {
   RateLimitBucket,
@@ -11,9 +15,6 @@ import type {
 } from "./store.js";
 
 const RATE_LIMIT_EXCEEDED_MESSAGE = "リクエストが多すぎます。しばらく待ってから再試行してください";
-const RATE_LIMIT_STORE_UNAVAILABLE_MESSAGE =
-  "一時的に利用できません。しばらく待ってから再試行してください";
-const STORE_UNAVAILABLE_RETRY_AFTER_SEC = 60;
 
 export type RateLimitOptions = Readonly<{
   getStore: RateLimitStoreFactory;
@@ -47,8 +48,8 @@ function createRateLimitExceededResponse(context: Context, retryAfterSec: number
 }
 
 function createRateLimitStoreUnavailableResponse(context: Context): Response {
-  context.header("Retry-After", String(STORE_UNAVAILABLE_RETRY_AFTER_SEC));
-  return context.json({ error: RATE_LIMIT_STORE_UNAVAILABLE_MESSAGE }, 503);
+  context.header("Retry-After", String(SERVICE_UNAVAILABLE_RETRY_AFTER_SEC));
+  return context.json({ error: SERVICE_UNAVAILABLE_MESSAGE }, 503);
 }
 
 async function evaluateBucket(

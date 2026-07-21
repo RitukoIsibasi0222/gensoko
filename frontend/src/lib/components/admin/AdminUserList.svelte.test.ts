@@ -128,12 +128,13 @@ describe('AdminUserList', () => {
     expect(mobileList?.textContent).toContain('ゲーム回数');
   });
 
-  it('account状態・メール確認・lockを色だけに依存せず別々に表示する', () => {
+  it('current account状態・メール確認・lockを色だけに依存せず別々に表示する', () => {
     const target = renderList();
 
-    expect(target.textContent).toContain('有効（未退会）');
+    expect(target.textContent).toContain('有効');
     expect(target.textContent).toContain('停止中');
-    expect(target.textContent).toContain('退会済み');
+    expect(target.textContent).not.toContain('退会済み');
+    expect(target.textContent).not.toContain('未退会');
     expect(target.textContent).toContain('メール確認済み');
     expect(target.textContent).toContain('メール未確認');
     expect(target.textContent).toContain('ロック中');
@@ -159,10 +160,9 @@ describe('AdminUserList', () => {
     expect(onAction).toHaveBeenCalledWith(USERS[0], 'status', statusButton);
   });
 
-  it('自分自身と退会済みユーザーの管理操作をdisabledにして理由を表示する', () => {
+  it('自分自身の管理操作をdisabledにして理由を表示する', () => {
     const target = renderList({ currentUserId: 'user-1' });
     const selfCard = target.querySelector('[data-user-id="user-1"]') as HTMLElement;
-    const deletedCard = target.querySelector('[data-user-id="user-3"]') as HTMLElement;
 
     expect(
       Array.from(selfCard.querySelectorAll<HTMLButtonElement>('button[data-admin-action]')).every(
@@ -170,12 +170,21 @@ describe('AdminUserList', () => {
       )
     ).toBe(true);
     expect(selfCard.textContent).toContain('自分自身には管理操作を実行できません');
-    expect(
-      Array.from(
-        deletedCard.querySelectorAll<HTMLButtonElement>('button[data-admin-action]')
-      ).every((button) => button.disabled)
-    ).toBe(true);
-    expect(deletedCard.textContent).toContain('退会済みユーザーは変更できません');
+  });
+
+  it('deprecated deletedAtをstatus表示・操作可否の判断に使用しない', () => {
+    const compatibilityUser = { ...USERS[2], isActive: true };
+    const target = renderList({ users: [compatibilityUser], nextCursor: null });
+    const card = target.querySelector('[data-user-id="user-3"]') as HTMLElement;
+    const buttons = Array.from(
+      card.querySelectorAll<HTMLButtonElement>('button[data-admin-action]')
+    );
+
+    expect(card.textContent).toContain('有効');
+    expect(card.textContent).not.toContain('退会済み');
+    expect(card.textContent).not.toContain('未退会');
+    expect(buttons.every((button) => !button.disabled)).toBe(true);
+    expect(card.textContent).not.toContain('退会済みユーザーは変更できません');
   });
 
   it('初期loadingをaria-busyとlive regionで通知する', () => {

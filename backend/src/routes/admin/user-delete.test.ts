@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { adminRouter } from "./index.js";
+import { createAdminTestRouter, forceDeleteAdminUser } from "./test-helpers.js";
 
 vi.mock("../../middleware/auth/index.js", () => ({
   authMiddleware: vi.fn(
@@ -76,9 +76,10 @@ vi.mock("../../services/admin.service.js", () => {
   };
 });
 
-import { AdminServiceError, forceDeleteAdminUser } from "../../services/admin.service.js";
+import { AdminServiceError } from "../../services/admin.service.js";
 
 const app = new Hono();
+const adminRouter = createAdminTestRouter();
 app.route("/admin", adminRouter);
 
 describe("DELETE /admin/users/:id", () => {
@@ -114,5 +115,80 @@ describe("DELETE /admin/users/:id", () => {
 
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: "ユーザーは既に削除されています" });
+  });
+
+  it("未認証の場合は401を返しserviceを呼び出さない", async () => {
+    const res = await app.request("/admin/users/user-1", { method: "DELETE" });
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "認証が必要です" });
+    expect(forceDeleteAdminUser).not.toHaveBeenCalled();
+  });
+
+  it("一般ユーザーの場合は403を返しserviceを呼び出さない", async () => {
+    const res = await app.request("/admin/users/user-1", {
+      method: "DELETE",
+      headers: { Authorization: "Bearer user-token" },
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "管理者権限が必要です" });
+    expect(forceDeleteAdminUser).not.toHaveBeenCalled();
+  });
+
+  it("trim後のtarget IDが空なら400を返しserviceを呼び出さない", async () => {
+    const res = await app.request("/admin/users/%20", {
+      method: "DELETE",
+      headers: { Authorization: "Bearer admin-token" },
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "バリデーションエラー" });
+    expect(forceDeleteAdminUser).not.toHaveBeenCalled();
+  });
+
+  it("物理削除済みtargetの404を日本語メッセージのまま返す", async () => {
+    vi.mocked(forceDeleteAdminUser).mockRejectedValue(
+      new AdminServiceError(404, "ユーザーが見つかりません"),
+    );
+
+    const res = await app.request("/admin/users/user-1", {
+      method: "DELETE",
+      headers: { Authorization: "Bearer admin-token" },
+    });
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "ユーザーが見つかりません" });
+  });
+
+  it.each([
+    ["自分自身", "自分自身には実行できません"],
+    ["最後の管理者", "最後の管理者は変更できません"],
+    ["actor状態競合", "管理者の状態が変更されています。再ログインしてください"],
+    ["Serializable競合", "同時操作により処理できませんでした。再試行してください"],
+  ])("%sのservice errorは409を維持する", async (_label, message) => {
+    vi.mocked(forceDeleteAdminUser).mockRejectedValue(new AdminServiceError(409, message));
+
+    const res = await app.request("/admin/users/user-1", {
+      method: "DELETE",
+      headers: { Authorization: "Bearer admin-token" },
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: message });
+  });
+
+  it("予期しないerrorは内部messageを含まない500へ変換する", async () => {
+    vi.mocked(forceDeleteAdminUser).mockRejectedValue(new Error("database connection details"));
+
+    const res = await app.request("/admin/users/user-1", {
+      method: "DELETE",
+      headers: { Authorization: "Bearer admin-token" },
+    });
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body).toEqual({ error: "サーバーエラーが発生しました" });
+    expect(JSON.stringify(body)).not.toContain("database connection details");
   });
 });

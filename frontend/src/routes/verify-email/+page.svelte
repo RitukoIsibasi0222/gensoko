@@ -233,15 +233,15 @@
 </script>
 
 <div class="mx-auto max-w-md px-4 py-8">
-  <h1 class="text-2xl font-bold text-gray-800">メール認証</h1>
+  <h1 class="text-text text-2xl font-bold">メール認証</h1>
 
-  <div class="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+  <div class="border-border-muted bg-surface mt-6 rounded-lg border p-6 shadow-sm">
     {#if status === 'verifying'}
       <div role="status" aria-live="polite" class="flex flex-col items-center gap-4 py-8">
         <!-- スピナー -->
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          class="h-12 w-12 animate-spin text-blue-600"
+          class="text-action h-12 w-12 animate-spin"
           viewBox="0 0 24 24"
           fill="none"
           aria-hidden="true"
@@ -254,7 +254,7 @@
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
           ></path>
         </svg>
-        <p class="text-gray-700">認証中です。しばらくお待ちください...</p>
+        <p class="text-text">認証中です。しばらくお待ちください...</p>
       </div>
     {:else if status === 'success'}
       <div
@@ -265,7 +265,7 @@
         <!-- チェックマーク（緑） -->
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          class="h-12 w-12 text-green-500"
+          class="text-success-icon h-12 w-12"
           viewBox="0 0 20 20"
           fill="currentColor"
           aria-hidden="true"
@@ -276,13 +276,13 @@
             clip-rule="evenodd"
           />
         </svg>
-        <p class="text-lg font-medium text-gray-800">
+        <p class="text-text text-lg font-medium">
           {alreadyVerified ? '既にメール認証が完了しています' : 'メール認証が完了しました！'}
         </p>
-        <p class="text-sm text-gray-500">{countdown}秒後にログイン画面に移動します</p>
+        <p class="text-text-subtle text-sm">{countdown}秒後にログイン画面に移動します</p>
         <a
           href="/login"
-          class="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+          class="bg-action text-text-inverse hover:bg-action-hover focus:ring-focus rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none"
         >
           今すぐログイン
         </a>
@@ -292,7 +292,7 @@
         <!-- エラーアイコン（赤） -->
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          class="h-12 w-12 text-red-500"
+          class="text-danger-icon h-12 w-12"
           viewBox="0 0 20 20"
           fill="currentColor"
           aria-hidden="true"
@@ -303,27 +303,27 @@
             clip-rule="evenodd"
           />
         </svg>
-        <p class="text-lg font-medium text-gray-800">認証に失敗しました</p>
-        <p class="text-sm text-red-700">{errorMessage}</p>
+        <p class="text-text text-lg font-medium">認証に失敗しました</p>
+        <p class="text-danger-text text-sm">{errorMessage}</p>
         <div class="flex flex-col gap-2 sm:flex-row">
           {#if storedToken}
             <button
               type="button"
               onclick={verify}
-              class="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+              class="bg-action text-text-inverse hover:bg-action-hover focus:ring-focus rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none"
             >
               再試行する
             </button>
           {/if}
           <a
             href="/register"
-            class="rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+            class="border-border text-text hover:bg-surface-muted focus:ring-focus rounded-md border px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none"
           >
             再度ユーザー登録する
           </a>
           <a
             href="/login"
-            class="rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+            class="border-border text-text hover:bg-surface-muted focus:ring-focus rounded-md border px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none"
           >
             ログイン画面へ
           </a>

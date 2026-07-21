@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { authRouter } from "./index.js";
+import { createAuthTestRouter } from "./test-helpers.js";
 
 // Prisma モック
 vi.mock("../../lib/prisma.js", () => ({
@@ -37,6 +37,7 @@ vi.mock("crypto", async (importOriginal) => {
 import { mailer } from "../../lib/mail.js";
 import { PASSWORD_TOO_LONG_MESSAGE } from "../../lib/password.js";
 import { prisma } from "../../lib/prisma.js";
+const authRouter = createAuthTestRouter(prisma as never);
 import {
   STRONG_PASSWORD_72_BYTES,
   STRONG_PASSWORD_73_BYTES,
@@ -75,6 +76,52 @@ describe("POST /auth/register", () => {
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body).toEqual({ message: "確認メールを送信しました" });
+  });
+
+  it("物理削除後: 同じメールアドレス・ユーザー名で新しいUser IDを発行して再登録できる", async () => {
+    const findFirst = vi.fn().mockResolvedValue(null);
+    const createUser = vi.fn().mockResolvedValue({ id: "new-user-id" });
+    const createEmailVerification = vi.fn().mockResolvedValue({});
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+      return fn({
+        user: {
+          findFirst,
+          create: createUser,
+        },
+        emailVerification: { create: createEmailVerification },
+      } as never);
+    });
+    vi.mocked(mailer.sendMail).mockResolvedValue(undefined as never);
+
+    const res = await app.request("/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "taro123",
+        email: "taro@example.com",
+        password: "Pass1234!",
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    expect(findFirst).toHaveBeenCalledOnce();
+    expect(createUser).toHaveBeenCalledWith({
+      data: {
+        username: "taro123",
+        email: "taro@example.com",
+        passwordHash: expect.any(String),
+      },
+      select: { id: true },
+    });
+    expect(createEmailVerification).toHaveBeenCalledWith({
+      data: {
+        userId: "new-user-id",
+        tokenHash: expect.any(String),
+        expiresAt: expect.any(Date),
+      },
+    });
+    expect(mailer.sendMail).toHaveBeenCalledOnce();
   });
 
   it("バリデーション: email が不正な場合は 400 を返す", async () => {
@@ -246,39 +293,6 @@ describe("POST /auth/register", () => {
     expect(create).toHaveBeenCalled();
   });
 
-  it("削除済みアカウントと同じメール/ユーザー名では再登録できず 403 を返す", async () => {
-    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
-      return fn({
-        user: {
-          findFirst: vi.fn().mockResolvedValue({
-            id: "deleted-user",
-            email: "taro@example.com",
-            username: "taro123",
-            emailVerified: true,
-            isActive: false,
-            deletedAt: new Date("2026-05-29T00:00:00.000Z"),
-          }),
-          create: vi.fn(),
-        },
-        emailVerification: { create: vi.fn() },
-      } as never);
-    });
-
-    const res = await app.request("/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: "taro123",
-        email: "taro@example.com",
-        password: "Pass1234!",
-      }),
-    });
-
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toBe("このアカウントは削除済みのため再登録できません");
-  });
-
   it("メール送信失敗: sendMail が throw した場合は user を削除して 500 を返す", async () => {
     vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
       return fn({
@@ -303,7 +317,10 @@ describe("POST /auth/register", () => {
     });
 
     expect(res.status).toBe(500);
-    expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: "user-1" } });
+    expect(prisma.user.delete).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: { id: true },
+    });
   });
 
   it("バリデーション: パスワードにスペースを含む場合は 400 を返す", async () => {

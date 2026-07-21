@@ -90,10 +90,10 @@
 </script>
 
 <div class="mx-auto max-w-md px-4 py-8">
-  <h1 class="text-2xl font-bold text-gray-800">パスワードリセット申請</h1>
+  <h1 class="text-text text-2xl font-bold">パスワードリセット申請</h1>
 
   {#if !isSuccess}
-    <p class="mt-2 text-gray-600">
+    <p class="text-text-muted mt-2">
       登録済みのメールアドレスを入力してください。パスワード再設定用の案内をお送りします。
     </p>
 
@@ -102,14 +102,14 @@
         <div
           id="form-error"
           role="alert"
-          class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          class="border-danger-border bg-danger-surface text-danger-text rounded-md border px-4 py-3 text-sm"
         >
           {formError}
         </div>
       {/if}
 
       <div>
-        <label for="email" class="block text-sm font-medium text-gray-700">メールアドレス</label>
+        <label for="email" class="text-text block text-sm font-medium">メールアドレス</label>
         <input
           id="email"
           type="email"
@@ -118,17 +118,17 @@
           required
           aria-invalid={emailError ? 'true' : undefined}
           aria-describedby={emailError ? 'email-error' : undefined}
-          class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+          class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
         />
         {#if emailError}
-          <p id="email-error" class="mt-1 text-sm text-red-600">{emailError}</p>
+          <p id="email-error" class="text-danger-text mt-1 text-sm">{emailError}</p>
         {/if}
       </div>
 
       <button
         type="submit"
         disabled={isSubmitting}
-        class="w-full rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        class="bg-action text-text-inverse hover:bg-action-hover focus:ring-focus w-full rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isSubmitting ? '送信中...' : '送信する'}
       </button>
@@ -136,10 +136,10 @@
   {:else}
     <div
       role="status"
-      class="mt-6 rounded-md border border-green-200 bg-green-50 px-6 py-8 text-center"
+      class="border-success-border bg-success-surface mt-6 rounded-md border px-6 py-8 text-center"
     >
-      <p class="text-lg font-semibold text-green-800">メール送信を受け付けました</p>
-      <p class="mt-2 text-sm text-green-700">
+      <p class="text-success-text text-lg font-semibold">メール送信を受け付けました</p>
+      <p class="text-success-text mt-2 text-sm">
         ご入力のメールアドレスが登録されている場合、パスワードリセット用のメールをお送りしました。<br
         />
         メールが届かない場合は、入力内容をご確認のうえ再度お試しください。
@@ -148,6 +148,6 @@
   {/if}
 
   <div class="mt-4 text-center text-sm">
-    <a href="/login" class="text-blue-600 hover:underline">ログイン画面へ戻る</a>
+    <a href="/login" class="text-action hover:underline">ログイン画面へ戻る</a>
   </div>
 </div>

@@ -1,3 +1,4 @@
+import { browser } from '$app/environment';
 import { API_BASE_URL } from '$lib/api/config';
 
 /**
@@ -42,6 +43,25 @@ export type AuthState = {
 
 const STORAGE_KEY_TOKEN = 'auth_token';
 const STORAGE_KEY_USER = 'auth_user';
+const ACCOUNT_DELETION_CHANNEL_NAME = 'gensoko-auth';
+const ACCOUNT_DELETION_EVENT_TYPE = 'account-deleted';
+
+type AccountDeletionEvent = Readonly<{
+  type: typeof ACCOUNT_DELETION_EVENT_TYPE;
+}>;
+
+const ACCOUNT_DELETION_EVENT: AccountDeletionEvent = Object.freeze({
+  type: ACCOUNT_DELETION_EVENT_TYPE
+});
+
+function isAccountDeletionEvent(value: unknown): value is AccountDeletionEvent {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return Object.keys(record).length === 1 && record.type === ACCOUNT_DELETION_EVENT_TYPE;
+}
 
 /**
  * 値が AuthUser の形を満たすかチェックする型ガード。
@@ -92,10 +112,35 @@ class AuthStore {
 
   /**
    * 実行中の refresh() を追跡する AbortController。
-   * login() / logout() が呼ばれたとき、または新しい refresh() が始まるときにキャンセルし、
+   * login() / logout() / completeAccountDeletion() が呼ばれたとき、
+   * または新しい refresh() が始まるときにキャンセルし、
    * 遅延完了した古い refresh() が最新の認証状態を上書きするレースコンディションを防ぐ。
    */
   #refreshAbortController: AbortController | null = null;
+
+  /**
+   * 退会完了をPIIなしで他タブへ通知するchannel。
+   * SSR・未対応browser・生成失敗時はnullのままcurrent tabだけをclearする。
+   */
+  #accountDeletionChannel: BroadcastChannel | null = null;
+
+  constructor() {
+    if (!browser || typeof BroadcastChannel === 'undefined') {
+      return;
+    }
+
+    try {
+      const channel = new BroadcastChannel(ACCOUNT_DELETION_CHANNEL_NAME);
+      channel.addEventListener('message', (event: MessageEvent<unknown>) => {
+        if (isAccountDeletionEvent(event.data)) {
+          this.#clearAfterAccountDeletion();
+        }
+      });
+      this.#accountDeletionChannel = channel;
+    } catch {
+      // channelを利用できなくてもserver側token削除とcurrent tab clearを維持する
+    }
+  }
 
   /**
    * 現在の state を sessionStorage に保存する。
@@ -153,13 +198,39 @@ class AuthStore {
 
   /**
    * state を未ログイン状態にリセットし、sessionStorage もクリアする。
-   * logout / refresh 失敗時の共通処理。
+   * logout / refresh失敗 / account deletion時の共通処理。
    */
   #clearAuthState() {
     this.state.user = null;
     this.state.accessToken = null;
     this.state.status = 'anonymous';
     this.#clearStorage();
+  }
+
+  /**
+   * 退会完了後の共通local clear。
+   * 受信tabからも使い、eventの再送を起こさない。
+   */
+  #clearAfterAccountDeletion() {
+    const refreshAbortController = this.#refreshAbortController;
+    this.#refreshAbortController = null;
+    refreshAbortController?.abort();
+    this.#clearAuthState();
+  }
+
+  /**
+   * 本人退会APIの成功後に呼ぶ。
+   * server上のUser/tokenは既に削除済みなのでlogout APIは呼ばず、
+   * current tabを同期clearしてからPIIなしeventだけを他タブへ送る。
+   */
+  completeAccountDeletion() {
+    this.#clearAfterAccountDeletion();
+
+    try {
+      this.#accountDeletionChannel?.postMessage(ACCOUNT_DELETION_EVENT);
+    } catch {
+      // 通知失敗時もcurrent tabのclearは完了済みなので処理を継続する
+    }
   }
 
   /**

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import {
@@ -41,6 +42,12 @@
     | 'error';
   type DialogMode = 'closed' | 'detail' | 'confirmation';
   type ListLoadMode = 'initial' | 'list' | 'page' | 'sync';
+  type AdminListView = 'desktop' | 'mobile';
+  type PendingDeleteFocus = {
+    userId: string;
+    index: number;
+    view: AdminListView;
+  };
   /* eslint-disable no-unused-vars -- Svelte parserがcallback型の引数名を実変数として判定するため */
   type AuthenticatedRequest<T> = (latestAccessToken: string) => Promise<T>;
   /* eslint-enable no-unused-vars */
@@ -59,6 +66,8 @@
   let paginationError = $state<string | null>(null);
   let isPostMutationSyncing = $state(false);
   let postMutationSyncError = $state<string | null>(null);
+  let postMutationSyncKind = $state<'delete' | 'other' | null>(null);
+  let pendingDeleteFocus = $state<PendingDeleteFocus | null>(null);
   let activeQuery = $state<AdminUsersQuery>({});
   let searchDraft = $state('');
 
@@ -369,6 +378,8 @@
   function resetDialogState(): void {
     closeDetail();
     resetConfirmation();
+    pendingDeleteFocus = null;
+    postMutationSyncKind = null;
   }
 
   function closeAdminDialog(): void {
@@ -420,6 +431,50 @@
     if (accessToken !== null) {
       void synchronizeAfterMutation(null, false, accessToken);
     }
+  }
+
+  function getAdminListView(trigger: HTMLElement | null): AdminListView {
+    if (trigger?.dataset.adminView === 'mobile' || trigger?.closest('[data-mobile-admin-list]')) {
+      return 'mobile';
+    }
+    return 'desktop';
+  }
+
+  function findDeleteActionButton(userId: string, view: AdminListView): HTMLButtonElement | null {
+    const buttons = document.querySelectorAll<HTMLButtonElement>(
+      'button[data-admin-action="delete"][data-admin-view="' + view + '"]'
+    );
+    return (
+      Array.from(buttons).find(
+        (button) => button.dataset.adminUserId === userId && !button.disabled
+      ) ?? null
+    );
+  }
+
+  async function closeAfterDeleteAndFocus(): Promise<void> {
+    const pendingFocus = pendingDeleteFocus;
+    await tick();
+
+    const view = pendingFocus?.view ?? 'desktop';
+    const samePositionUser = pendingFocus ? users[pendingFocus.index] : undefined;
+    const nextUser =
+      pendingFocus && samePositionUser?.id === pendingFocus.userId
+        ? users[pendingFocus.index + 1]
+        : samePositionUser;
+    const previousUser =
+      pendingFocus && pendingFocus.index > 0 ? users[pendingFocus.index - 1] : undefined;
+    const nextAction = nextUser ? findDeleteActionButton(nextUser.id, view) : null;
+    const previousAction =
+      !nextAction && previousUser ? findDeleteActionButton(previousUser.id, view) : null;
+    const focusTarget = nextAction ?? previousAction ?? listHeading ?? pageHeading ?? null;
+
+    returnFocus = focusTarget;
+    pendingDeleteFocus = null;
+    postMutationSyncKind = null;
+    resetConfirmation();
+    selectedListUser = null;
+    await tick();
+    focusTarget?.focus();
   }
 
   function buildAdminUrl(searchParams: URLSearchParams): string {
@@ -524,6 +579,8 @@
       const firstPageQuery = { ...activeQuery };
       delete firstPageQuery.cursor;
       resetConfirmation();
+      pendingDeleteFocus = null;
+      postMutationSyncKind = null;
       liveMessage = '一覧の先頭へ戻りました';
       try {
         await navigateList(firstPageQuery);
@@ -533,7 +590,13 @@
       return;
     }
 
+    if (pendingDeleteFocus !== null) {
+      await closeAfterDeleteAndFocus();
+      return;
+    }
+
     if (!shouldRestoreDetail || targetUser === null) {
+      postMutationSyncKind = null;
       resetConfirmation();
       selectedListUser = null;
       return;
@@ -543,6 +606,7 @@
     confirmationAction = null;
     mutationError = null;
     restoreDetailAfterMutation = false;
+    postMutationSyncKind = null;
     dialogMode = 'detail';
     const latestAccessToken = authStore.accessToken ?? accessToken;
     await loadDetail(targetUser, latestAccessToken);
@@ -564,6 +628,8 @@
     const shouldRestoreDetail = restoreDetailAfterMutation;
     isMutationSubmitting = true;
     mutationError = null;
+    postMutationSyncKind = null;
+    pendingDeleteFocus = null;
 
     try {
       const response = await requestWithReauth(accessToken, (latestAccessToken) => {
@@ -587,6 +653,14 @@
         });
       });
 
+      postMutationSyncKind = action.type === 'delete' ? 'delete' : 'other';
+      if (action.type === 'delete') {
+        pendingDeleteFocus = {
+          userId: targetUser.id,
+          index: users.findIndex((user) => user.id === targetUser.id),
+          view: getAdminListView(returnFocus)
+        };
+      }
       liveMessage = response.message;
       toastStore.success(response.message);
       const latestAccessToken = authStore.accessToken ?? accessToken;
@@ -652,23 +726,26 @@
 
   {#if accessState === 'checking'}
     <section aria-busy="true" class="mx-auto max-w-4xl px-4 py-12 text-center">
-      <p aria-live="polite" class="text-gray-600">ログイン状態を確認しています...</p>
+      <p aria-live="polite" class="text-text-muted">ログイン状態を確認しています...</p>
     </section>
   {:else if accessState === 'anonymous'}
     <section class="mx-auto max-w-4xl px-4 py-12 text-center">
-      <h1 class="text-ink text-2xl font-bold">ログインが必要です</h1>
-      <p class="mt-3 text-gray-600">管理者ダッシュボードを利用するにはログインしてください。</p>
+      <h1 class="text-text text-2xl font-bold">ログインが必要です</h1>
+      <p class="text-text-muted mt-3">管理者ダッシュボードを利用するにはログインしてください。</p>
       <a
         href="/login"
-        class="bg-brand hover:bg-brand-hover mt-6 inline-flex rounded-lg px-4 py-2 font-semibold text-white"
+        class="bg-action hover:bg-action-hover text-text-inverse mt-6 inline-flex rounded-lg px-4 py-2 font-semibold"
       >
         ログインへ
       </a>
     </section>
   {:else if accessState === 'forbidden'}
     <section class="mx-auto max-w-4xl px-4 py-12 text-center">
-      <h1 class="text-ink text-2xl font-bold">管理者ダッシュボードを表示できません</h1>
-      <p role="alert" class="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+      <h1 class="text-text text-2xl font-bold">管理者ダッシュボードを表示できません</h1>
+      <p
+        role="alert"
+        class="border-danger-border bg-danger-surface text-danger-text mt-4 rounded-xl border p-4"
+      >
         {authorizationError ?? '管理者権限が必要です'}
       </p>
       <a href="/" class="text-brand mt-6 inline-flex rounded-lg px-3 py-2 font-semibold">
@@ -677,13 +754,16 @@
     </section>
   {:else if accessState === 'error'}
     <section class="mx-auto max-w-4xl px-4 py-12 text-center">
-      <h1 class="text-ink text-2xl font-bold">管理者ダッシュボードを読み込めませんでした</h1>
-      <p role="alert" class="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+      <h1 class="text-text text-2xl font-bold">管理者ダッシュボードを読み込めませんでした</h1>
+      <p
+        role="alert"
+        class="border-danger-border bg-danger-surface text-danger-text mt-4 rounded-xl border p-4"
+      >
         {listError ?? 'ユーザー一覧を表示できませんでした'}
       </p>
       <button
         type="button"
-        class="bg-brand hover:bg-brand-hover mt-6 rounded-lg px-4 py-2 font-semibold text-white"
+        class="bg-action hover:bg-action-hover text-text-inverse mt-6 rounded-lg px-4 py-2 font-semibold"
         onclick={retryAuthorization}
       >
         再読み込み
@@ -691,16 +771,16 @@
     </section>
   {:else if accessState === 'authorizing'}
     <section aria-busy="true" class="mx-auto max-w-4xl px-4 py-12 text-center">
-      <p aria-live="polite" class="text-gray-600">管理者権限とユーザー一覧を確認しています...</p>
+      <p aria-live="polite" class="text-text-muted">管理者権限とユーザー一覧を確認しています...</p>
     </section>
   {:else}
     <main class="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:px-8">
       <header>
         <p class="text-brand text-sm font-semibold">Administration</p>
-        <h1 bind:this={pageHeading} tabindex="-1" class="text-ink mt-1 text-3xl font-bold">
+        <h1 bind:this={pageHeading} tabindex="-1" class="text-text mt-1 text-3xl font-bold">
           管理者ダッシュボード
         </h1>
-        <p class="mt-2 text-gray-600">サービス統計とユーザーアカウントを管理します。</p>
+        <p class="text-text-muted mt-2">サービス統計とユーザーアカウントを管理します。</p>
       </header>
 
       <AdminStatsSection
@@ -722,11 +802,11 @@
       />
 
       {#if listError !== null}
-        <div role="alert" class="rounded-xl border border-red-200 bg-red-50 p-4">
-          <p class="text-sm text-red-700">{listError}</p>
+        <div role="alert" class="border-danger-border bg-danger-surface rounded-xl border p-4">
+          <p class="text-danger-text text-sm">{listError}</p>
           <button
             type="button"
-            class="mt-3 rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100"
+            class="border-danger-border-strong bg-surface text-danger-text hover:bg-danger-surface-strong mt-3 rounded-lg border px-3 py-2 text-sm font-semibold"
             onclick={retryCurrentList}
           >
             ユーザー一覧を再読み込み
@@ -735,22 +815,27 @@
       {/if}
 
       {#if postMutationSyncError !== null}
-        <div role="alert" class="rounded-xl border border-amber-300 bg-amber-50 p-4">
-          <p class="font-semibold text-amber-950">
-            管理操作は完了しましたが、最新情報を取得できませんでした
+        <div
+          role="alert"
+          class="border-warning-border-strong bg-warning-surface rounded-xl border p-4"
+        >
+          <p class="text-warning-text-strong font-semibold">
+            {postMutationSyncKind === 'delete'
+              ? '強制退会は完了しましたが、ユーザー一覧を更新できませんでした'
+              : '管理操作は完了しましたが、最新情報を取得できませんでした'}
           </p>
-          <p class="mt-1 text-sm text-amber-900">{postMutationSyncError}</p>
+          <p class="text-warning-text mt-1 text-sm">{postMutationSyncError}</p>
           <button
             type="button"
             disabled={isPostMutationSyncing}
-            class="mt-3 rounded-lg border border-amber-400 bg-white px-3 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:text-gray-400"
+            class="border-warning-border-strong bg-surface text-warning-text hover:bg-warning-surface-strong disabled:text-text-disabled mt-3 rounded-lg border px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed"
             onclick={retryPostMutationSync}
           >
             {isPostMutationSyncing ? '再読み込み中...' : '最新情報を再読み込み'}
           </button>
         </div>
       {:else if isPostMutationSyncing}
-        <p aria-live="polite" class="text-sm text-gray-600">最新情報を同期しています...</p>
+        <p aria-live="polite" class="text-text-muted text-sm">最新情報を同期しています...</p>
       {/if}
 
       <AdminUserList

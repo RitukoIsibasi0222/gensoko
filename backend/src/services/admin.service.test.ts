@@ -35,17 +35,27 @@ vi.mock("../lib/prisma.js", () => ({
 }));
 
 import { prisma } from "../lib/prisma.js";
+import { createSerializableTransactionRunner } from "../lib/serializable-transaction-core.js";
 import {
   AdminServiceError,
   ADMIN_USERS_DEFAULT_LIMIT,
   ADMIN_USERS_MAX_LIMIT,
+  createAdminService,
+} from "./admin.service.js";
+import { createAuditService } from "./audit.service.js";
+
+const {
   forceDeleteAdminUser,
   getAdminStats,
   getAdminUserDetail,
   getAdminUsers,
   updateAdminUserRole,
   updateAdminUserStatus,
-} from "./admin.service.js";
+} = createAdminService({
+  prisma: prisma as never,
+  runSerializableTransaction: createSerializableTransactionRunner(prisma as never),
+  auditService: createAuditService(prisma as never),
+});
 
 const NOW = new Date("2026-07-09T12:00:00.000Z");
 const BASE_DATE = new Date("2026-06-20T12:00:00.000Z");
@@ -64,7 +74,6 @@ const baseAdminUser = {
   role: "ADMIN" as const,
   emailVerified: true,
   isActive: true,
-  deletedAt: null,
   loginFailCount: 0,
   lockedUntil: null,
   lastLoginAt: BASE_DATE,
@@ -79,7 +88,6 @@ const baseTargetUser = {
   role: "USER" as const,
   emailVerified: true,
   isActive: true,
-  deletedAt: null,
   loginFailCount: 0,
   lockedUntil: null,
   lastLoginAt: BASE_DATE,
@@ -111,6 +119,7 @@ function mockTransaction() {
   const tx = {
     user: {
       count: vi.fn(),
+      delete: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
     },
@@ -199,7 +208,6 @@ describe("getAdminUsers", () => {
         where: expect.objectContaining({
           role: "USER",
           isActive: true,
-          deletedAt: null,
           OR: [{ username: { contains: "taro" } }, { email: { contains: "taro" } }],
           AND: [
             {
@@ -252,6 +260,26 @@ describe("getAdminUsers", () => {
       status: 400,
       message: "カーソルが正しくありません",
     });
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
+  });
+
+  it("status 未指定なら現存する全Userを対象にする", async () => {
+    vi.mocked(prisma.user.findMany).mockResolvedValue([] as never);
+
+    await getAdminUsers();
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {},
+      }),
+    );
+  });
+
+  it("deprecated status=deleted は cursor を参照せず空一覧を返す", async () => {
+    const result = await getAdminUsers({ status: "deleted", cursor: "legacy-cursor" });
+
+    expect(result).toEqual({ users: [], nextCursor: null });
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
     expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
 });
@@ -534,23 +562,31 @@ describe("forceDeleteAdminUser", () => {
     vi.useRealTimers();
   });
 
-  it("対象ユーザーを物理削除せず soft delete し、全 token を削除する", async () => {
+  it("利用可能なactorを再確認し、targetを物理削除して同じtransactionへ成功監査を保存する", async () => {
     const tx = mockTransaction();
-    tx.user.findUnique.mockResolvedValue(baseTargetUser);
-    tx.user.update.mockResolvedValue({ ...baseTargetUser, isActive: false, deletedAt: NOW });
+    tx.user.findUnique.mockResolvedValueOnce(baseAdminUser).mockResolvedValueOnce(baseTargetUser);
+    tx.user.delete.mockResolvedValue({ id: "user-1" });
 
     const result = await forceDeleteAdminUser({ adminUserId: "admin-1", targetUserId: "user-1" });
 
-    expect(tx.user.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "user-1" },
-        data: { isActive: false, deletedAt: NOW, lockedUntil: null },
-        select: { id: true },
-      }),
-    );
-    expect(tx.refreshToken.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
-    expect(tx.passwordResetToken.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
-    expect(tx.emailVerification.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
+    expect(tx.user.findUnique).toHaveBeenNthCalledWith(1, {
+      where: { id: "admin-1" },
+      select: {
+        id: true,
+        role: true,
+        isActive: true,
+        emailVerified: true,
+        lockedUntil: true,
+      },
+    });
+    expect(tx.user.delete).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: { id: true },
+    });
+    expect(tx.user.update).not.toHaveBeenCalled();
+    expect(tx.refreshToken.deleteMany).not.toHaveBeenCalled();
+    expect(tx.passwordResetToken.deleteMany).not.toHaveBeenCalled();
+    expect(tx.emailVerification.deleteMany).not.toHaveBeenCalled();
     expectSuccessAudit(tx.auditLog.create, "ADMIN_USER_FORCE_DELETE");
     expect(result).toEqual({ message: "ユーザーを強制退会しました" });
   });
@@ -566,18 +602,103 @@ describe("forceDeleteAdminUser", () => {
     expectFailureAudit("ADMIN_USER_FORCE_DELETE", "admin-1", "SELF_OPERATION_DENIED");
   });
 
-  it("既に削除済みのユーザーは AdminServiceError(409) にする", async () => {
+  it.each([
+    ["不存在", null],
+    ["USERへ降格", { ...baseAdminUser, role: "USER" }],
+    ["停止", { ...baseAdminUser, isActive: false }],
+    ["メール未確認", { ...baseAdminUser, emailVerified: false }],
+    ["lock中", { ...baseAdminUser, lockedUntil: new Date("2099-01-01T00:00:00.000Z") }],
+  ])("actorが%sなら409でtarget取得前に中止する", async (_label, actor) => {
     const tx = mockTransaction();
-    tx.user.findUnique.mockResolvedValue({ ...baseTargetUser, deletedAt: BASE_DATE });
+    tx.user.findUnique.mockResolvedValueOnce(actor);
 
     await expect(
       forceDeleteAdminUser({ adminUserId: "admin-1", targetUserId: "user-1" }),
     ).rejects.toMatchObject({
       status: 409,
-      message: "ユーザーは既に削除されています",
+      message: "管理者の状態が変更されています。再ログインしてください",
     });
-    expect(tx.user.update).not.toHaveBeenCalled();
-    expectFailureAudit("ADMIN_USER_FORCE_DELETE", "user-1", "TARGET_STATE_CONFLICT");
+    expect(tx.user.findUnique).toHaveBeenCalledOnce();
+    expect(tx.user.delete).not.toHaveBeenCalled();
+    expectFailureAudit("ADMIN_USER_FORCE_DELETE", null, "ACTOR_STATE_CONFLICT");
+  });
+
+  it("targetが存在しない場合は404で失敗監査を記録する", async () => {
+    const tx = mockTransaction();
+    tx.user.findUnique.mockResolvedValueOnce(baseAdminUser).mockResolvedValueOnce(null);
+
+    await expect(
+      forceDeleteAdminUser({ adminUserId: "admin-1", targetUserId: "user-1" }),
+    ).rejects.toMatchObject({
+      status: 404,
+      message: "ユーザーが見つかりません",
+    });
+    expect(tx.user.delete).not.toHaveBeenCalled();
+    expectFailureAudit("ADMIN_USER_FORCE_DELETE", null, "TARGET_NOT_FOUND");
+  });
+
+  it("最後の利用可能なADMIN targetは409で保護する", async () => {
+    const tx = mockTransaction();
+    tx.user.findUnique
+      .mockResolvedValueOnce(baseAdminUser)
+      .mockResolvedValueOnce({ ...baseAdminUser, id: "admin-2" });
+    tx.user.count.mockResolvedValue(1);
+
+    await expect(
+      forceDeleteAdminUser({ adminUserId: "admin-1", targetUserId: "admin-2" }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "最後の管理者は変更できません",
+    });
+    expect(tx.user.delete).not.toHaveBeenCalled();
+    expectFailureAudit("ADMIN_USER_FORCE_DELETE", "admin-2", "LAST_ADMIN_PROTECTED");
+  });
+
+  it("P2034後の再試行成功では物理削除と成功監査を1件だけ実行する", async () => {
+    const tx = mockTransaction();
+    tx.user.findUnique.mockResolvedValueOnce(baseAdminUser).mockResolvedValueOnce(baseTargetUser);
+    tx.user.delete.mockResolvedValue({ id: "user-1" });
+    vi.mocked(prisma.$transaction)
+      .mockReset()
+      .mockRejectedValueOnce(createSerializationConflictError())
+      .mockImplementationOnce(async (fn) => fn(tx as never));
+
+    await expect(
+      forceDeleteAdminUser({ adminUserId: "admin-1", targetUserId: "user-1" }),
+    ).resolves.toEqual({ message: "ユーザーを強制退会しました" });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(tx.user.delete).toHaveBeenCalledOnce();
+    expectSuccessAudit(tx.auditLog.create, "ADMIN_USER_FORCE_DELETE");
+  });
+
+  it("P2034が2回続いた場合は409と分類済み失敗監査を返す", async () => {
+    mockTransaction();
+    vi.mocked(prisma.$transaction)
+      .mockReset()
+      .mockRejectedValue(createSerializationConflictError());
+
+    await expect(
+      forceDeleteAdminUser({ adminUserId: "admin-1", targetUserId: "user-1" }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "同時操作により処理できませんでした。再試行してください",
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expectFailureAudit("ADMIN_USER_FORCE_DELETE", null, "SERIALIZATION_CONFLICT");
+  });
+
+  it("成功監査の保存に失敗した場合はerrorを伝播して成功扱いにしない", async () => {
+    const auditError = new Error("audit insert failed");
+    const tx = mockTransaction();
+    tx.user.findUnique.mockResolvedValueOnce(baseAdminUser).mockResolvedValueOnce(baseTargetUser);
+    tx.user.delete.mockResolvedValue({ id: "user-1" });
+    tx.auditLog.create.mockRejectedValue(auditError);
+
+    await expect(
+      forceDeleteAdminUser({ adminUserId: "admin-1", targetUserId: "user-1" }),
+    ).rejects.toBe(auditError);
+    expect(tx.user.delete).toHaveBeenCalledOnce();
+    expect(prisma.auditLog.create).not.toHaveBeenCalled();
   });
 });
 
@@ -586,11 +707,10 @@ describe("getAdminStats", () => {
     vi.clearAllMocks();
   });
 
-  it("UserStats aggregate を中心にサービス統計を返す", async () => {
+  it("legacy soft-deleted userを除外したcurrent data統計とdeleted互換値0を返す", async () => {
     vi.mocked(prisma.user.count)
-      .mockResolvedValueOnce(100 as never)
+      .mockResolvedValueOnce(95 as never)
       .mockResolvedValueOnce(90 as never)
-      .mockResolvedValueOnce(5 as never)
       .mockResolvedValueOnce(5 as never)
       .mockResolvedValueOnce(2 as never)
       .mockResolvedValueOnce(80 as never);
@@ -608,10 +728,10 @@ describe("getAdminStats", () => {
 
     expect(result).toEqual({
       users: {
-        total: 100,
+        total: 95,
         active: 90,
         suspended: 5,
-        deleted: 5,
+        deleted: 0,
         admins: 2,
         emailVerified: 80,
       },
@@ -625,6 +745,10 @@ describe("getAdminStats", () => {
         totalMasteredCount: 250,
       },
     });
+    expect(prisma.user.count).toHaveBeenNthCalledWith(1);
+    expect(prisma.user.count).toHaveBeenCalledTimes(5);
+    expect(prisma.gameSession.count).toHaveBeenCalledWith();
+    expect(prisma.weakElement.count).toHaveBeenCalledWith();
     expect(prisma.userStats.aggregate).toHaveBeenCalledWith({
       _sum: { totalAnswered: true, totalCorrect: true, masteredCount: true },
     });

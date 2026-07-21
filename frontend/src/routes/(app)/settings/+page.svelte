@@ -21,6 +21,8 @@
 
   const NETWORK_ERROR_MESSAGE = 'ネットワークエラーが発生しました。接続を確認してください';
   const AUTH_REQUIRED_MESSAGE = '認証情報が見つかりません。再ログインしてください。';
+  const DELETE_RESULT_UNKNOWN_MESSAGE =
+    '削除結果を確認できませんでした。再ログインしてアカウントの状態を確認してください。';
 
   let profile = $state<CurrentUserProfile | null>(null);
   let username = $state('');
@@ -34,6 +36,8 @@
 
   let deleteCurrentPassword = $state('');
   let deleteAcknowledged = $state(false);
+  let deleteCurrentPasswordInput = $state<HTMLInputElement>();
+  let deleteAcknowledgementInput = $state<HTMLInputElement>();
 
   let isLoadingProfile = $state(false);
   let hasLoadedProfile = $state(false);
@@ -48,7 +52,19 @@
   let currentPasswordError = $state<string | null>(null);
   let newPasswordError = $state<string | null>(null);
   let confirmPasswordError = $state<string | null>(null);
-  let deleteError = $state<string | null>(null);
+  let deleteCurrentPasswordError = $state<string | null>(null);
+  let deleteAcknowledgementError = $state<string | null>(null);
+  let deleteFormError = $state<string | null>(null);
+
+  let deleteRequestAbortController: AbortController | null = null;
+  let isPageDestroyed = false;
+
+  $effect(() => {
+    return () => {
+      isPageDestroyed = true;
+      deleteRequestAbortController?.abort();
+    };
+  });
 
   $effect(() => {
     if (!authStore.isInitializing && !authStore.isLoggedIn) {
@@ -83,7 +99,7 @@
     } else if (target === 'password') {
       passwordFormError = AUTH_REQUIRED_MESSAGE;
     } else {
-      deleteError = AUTH_REQUIRED_MESSAGE;
+      deleteFormError = AUTH_REQUIRED_MESSAGE;
     }
 
     return null;
@@ -105,6 +121,13 @@
       return '-';
     }
     return date.toLocaleDateString('ja-JP');
+  }
+
+  function isAbortError(error: unknown): boolean {
+    return (
+      (error instanceof DOMException && error.name === 'AbortError') ||
+      (error instanceof Error && error.name === 'AbortError')
+    );
   }
 
   async function loadProfile(force = false): Promise<void> {
@@ -277,11 +300,15 @@
 
     const normalizedCurrentPassword = deleteCurrentPassword.trim();
 
-    deleteError = validateCurrentPassword(normalizedCurrentPassword);
-    if (!deleteError) {
-      deleteError = validateDeleteAcknowledgement(deleteAcknowledged);
-    }
-    if (deleteError) {
+    deleteFormError = null;
+    deleteCurrentPasswordError = validateCurrentPassword(normalizedCurrentPassword);
+    deleteAcknowledgementError = validateDeleteAcknowledgement(deleteAcknowledged);
+    if (deleteCurrentPasswordError || deleteAcknowledgementError) {
+      await tick();
+      const firstInvalidInput = deleteCurrentPasswordError
+        ? deleteCurrentPasswordInput
+        : deleteAcknowledgementInput;
+      firstInvalidInput?.focus();
       return;
     }
 
@@ -290,100 +317,112 @@
       return;
     }
 
+    const controller = new AbortController();
+    deleteRequestAbortController = controller;
     isDeleting = true;
-    deleteError = null;
 
     try {
       await deleteCurrentUser({
         accessToken,
-        currentPassword: normalizedCurrentPassword
+        currentPassword: normalizedCurrentPassword,
+        signal: controller.signal
       });
 
       deleteCurrentPassword = '';
       deleteAcknowledged = false;
       toastStore.success('アカウントを削除しました');
-      await authStore.logout();
+      authStore.completeAccountDeletion();
       await goto('/');
     } catch (error) {
+      if (isAbortError(error)) {
+        if (!isPageDestroyed) {
+          deleteFormError = DELETE_RESULT_UNKNOWN_MESSAGE;
+        }
+        return;
+      }
+
       if (error instanceof ApiError) {
         if (await handleUnauthorized(error)) {
           return;
         }
-        deleteError = error.message;
+        deleteFormError = error.message;
         toastStore.fromApiError(error);
       } else {
-        deleteError = NETWORK_ERROR_MESSAGE;
-        toastStore.error(deleteError);
+        deleteFormError = NETWORK_ERROR_MESSAGE;
+        toastStore.error(deleteFormError);
       }
     } finally {
-      isDeleting = false;
+      if (deleteRequestAbortController === controller) {
+        deleteRequestAbortController = null;
+      }
+      if (!isPageDestroyed) {
+        isDeleting = false;
+      }
     }
   }
 </script>
 
 <div class="mx-auto max-w-3xl space-y-8">
   <section>
-    <h1 class="text-2xl font-bold text-gray-800">プロフィール設定</h1>
-    <p class="mt-2 text-sm text-gray-600">
+    <h1 class="text-text text-2xl font-bold">プロフィール設定</h1>
+    <p class="text-text-muted mt-2 text-sm">
       ユーザー名変更・パスワード変更・アカウント削除を行えます。
     </p>
   </section>
 
   {#if isLoadingProfile}
-    <section class="rounded-lg border border-gray-200 bg-white p-6">
-      <p class="text-sm text-gray-600">プロフィール情報を読み込み中です...</p>
+    <section class="border-border-muted bg-surface rounded-lg border p-6">
+      <p class="text-text-muted text-sm">プロフィール情報を読み込み中です...</p>
     </section>
   {:else if loadError}
-    <section class="rounded-lg border border-red-200 bg-red-50 p-6">
-      <p class="text-sm text-red-700">{loadError}</p>
+    <section class="border-danger-border bg-danger-surface rounded-lg border p-6">
+      <p class="text-danger-text text-sm">{loadError}</p>
       <button
         type="button"
         onclick={() => loadProfile(true)}
-        class="mt-4 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+        class="bg-action text-text-inverse hover:bg-action-hover focus:ring-focus mt-4 rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none"
       >
         再読み込み
       </button>
     </section>
   {:else if profile}
-    <section class="rounded-lg border border-gray-200 bg-white p-6">
-      <h2 class="text-lg font-semibold text-gray-800">現在のプロフィール</h2>
-      <dl class="mt-4 grid gap-3 text-sm text-gray-700 md:grid-cols-2">
+    <section class="border-border-muted bg-surface rounded-lg border p-6">
+      <h2 class="text-text text-lg font-semibold">現在のプロフィール</h2>
+      <dl class="text-text mt-4 grid gap-3 text-sm md:grid-cols-2">
         <div>
-          <dt class="text-gray-500">ユーザーID</dt>
+          <dt class="text-text-subtle">ユーザーID</dt>
           <dd class="break-all">{profile.id}</dd>
         </div>
         <div>
-          <dt class="text-gray-500">メールアドレス</dt>
+          <dt class="text-text-subtle">メールアドレス</dt>
           <dd>{profile.email}</dd>
         </div>
         <div>
-          <dt class="text-gray-500">ユーザー名</dt>
+          <dt class="text-text-subtle">ユーザー名</dt>
           <dd>{profile.username}</dd>
         </div>
         <div>
-          <dt class="text-gray-500">登録日</dt>
+          <dt class="text-text-subtle">登録日</dt>
           <dd>{formatCreatedAt(profile.createdAt)}</dd>
         </div>
       </dl>
     </section>
 
-    <section class="rounded-lg border border-gray-200 bg-white p-6">
-      <h2 class="text-lg font-semibold text-gray-800">ユーザー名変更</h2>
+    <section class="border-border-muted bg-surface rounded-lg border p-6">
+      <h2 class="text-text text-lg font-semibold">ユーザー名変更</h2>
       <form class="mt-4 space-y-4" novalidate onsubmit={handleProfileSubmit}>
         {#if profileError}
           <div
             id="profile-error"
             role="alert"
-            class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+            class="border-danger-border bg-danger-surface text-danger-text rounded-md border px-4 py-3 text-sm"
           >
             {profileError}
           </div>
         {/if}
 
         <div>
-          <label for="username" class="block text-sm font-medium text-gray-700"
-            >新しいユーザー名</label
-          >
+          <label for="username" class="text-text block text-sm font-medium">新しいユーザー名</label>
           <input
             id="username"
             type="text"
@@ -391,23 +430,23 @@
             autocomplete="username"
             aria-invalid={profileError ? 'true' : undefined}
             aria-describedby={profileError ? 'profile-error' : undefined}
-            class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+            class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
           />
         </div>
 
         <button
           type="submit"
           disabled={isProfileSubmitting}
-          class="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          class="bg-action text-text-inverse hover:bg-action-hover focus:ring-focus rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isProfileSubmitting ? '更新中...' : 'ユーザー名を更新する'}
         </button>
       </form>
     </section>
 
-    <section class="rounded-lg border border-gray-200 bg-white p-6">
-      <h2 class="text-lg font-semibold text-gray-800">パスワード変更</h2>
-      <p class="mt-1 text-sm text-gray-600">
+    <section class="border-border-muted bg-surface rounded-lg border p-6">
+      <h2 class="text-text text-lg font-semibold">パスワード変更</h2>
+      <p class="text-text-muted mt-1 text-sm">
         変更後はセキュリティのため再ログインが必要になります。
       </p>
 
@@ -416,14 +455,14 @@
           <div
             id="password-form-error"
             role="alert"
-            class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+            class="border-danger-border bg-danger-surface text-danger-text rounded-md border px-4 py-3 text-sm"
           >
             {passwordFormError}
           </div>
         {/if}
 
         <div>
-          <label for="current-password" class="block text-sm font-medium text-gray-700"
+          <label for="current-password" class="text-text block text-sm font-medium"
             >現在のパスワード</label
           >
           <input
@@ -434,17 +473,17 @@
             autocomplete="current-password"
             aria-invalid={currentPasswordError ? 'true' : undefined}
             aria-describedby={currentPasswordError ? 'current-password-error' : undefined}
-            class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+            class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
           />
           {#if currentPasswordError}
-            <p id="current-password-error" class="mt-1 text-sm text-red-600">
+            <p id="current-password-error" class="text-danger-text mt-1 text-sm">
               {currentPasswordError}
             </p>
           {/if}
         </div>
 
         <div>
-          <label for="new-password" class="block text-sm font-medium text-gray-700"
+          <label for="new-password" class="text-text block text-sm font-medium"
             >新しいパスワード</label
           >
           <input
@@ -457,20 +496,20 @@
             aria-describedby={newPasswordError
               ? 'new-password-hint new-password-error'
               : 'new-password-hint'}
-            class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+            class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
           />
-          <p id="new-password-hint" class="mt-1 text-sm text-gray-600">
+          <p id="new-password-hint" class="text-text-muted mt-1 text-sm">
             {PASSWORD_BYTE_LIMIT_HINT}
           </p>
           {#if newPasswordError}
-            <p id="new-password-error" class="mt-1 text-sm text-red-600">
+            <p id="new-password-error" class="text-danger-text mt-1 text-sm">
               {newPasswordError}
             </p>
           {/if}
         </div>
 
         <div>
-          <label for="confirm-password" class="block text-sm font-medium text-gray-700"
+          <label for="confirm-password" class="text-text block text-sm font-medium"
             >新しいパスワード（確認）</label
           >
           <input
@@ -481,10 +520,10 @@
             autocomplete="new-password"
             aria-invalid={confirmPasswordError ? 'true' : undefined}
             aria-describedby={confirmPasswordError ? 'confirm-password-error' : undefined}
-            class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+            class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
           />
           {#if confirmPasswordError}
-            <p id="confirm-password-error" class="mt-1 text-sm text-red-600">
+            <p id="confirm-password-error" class="text-danger-text mt-1 text-sm">
               {confirmPasswordError}
             </p>
           {/if}
@@ -493,59 +532,77 @@
         <button
           type="submit"
           disabled={isPasswordSubmitting}
-          class="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          class="bg-action text-text-inverse hover:bg-action-hover focus:ring-focus rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPasswordSubmitting ? '更新中...' : 'パスワードを変更する'}
         </button>
       </form>
     </section>
 
-    <section class="rounded-lg border border-red-200 bg-red-50 p-6">
-      <h2 class="text-lg font-semibold text-red-800">アカウント削除</h2>
-      <p id="delete-warning" class="mt-1 text-sm text-red-700">
-        この操作は取り消せません。プロフィール情報と学習データが削除されます。
+    <section class="border-danger-border bg-danger-surface rounded-lg border p-6">
+      <h2 class="text-danger-text text-lg font-semibold">アカウント削除</h2>
+      <p id="delete-warning" class="text-danger-text mt-1 text-sm">
+        この操作は取り消せません。プロフィール情報・認証情報・学習データを稼働DBから物理削除します。
       </p>
 
-      <form class="mt-4 space-y-4" novalidate onsubmit={handleDeleteSubmit}>
-        {#if deleteError}
+      <form class="mt-4 space-y-4" novalidate aria-busy={isDeleting} onsubmit={handleDeleteSubmit}>
+        {#if deleteFormError}
           <div
-            id="delete-error"
+            id="delete-form-error"
             role="alert"
-            class="rounded-md border border-red-300 bg-white px-4 py-3 text-sm text-red-800"
+            class="border-danger-border-strong bg-surface text-danger-text rounded-md border px-4 py-3 text-sm"
           >
-            {deleteError}
+            {deleteFormError}
           </div>
         {/if}
 
         <div>
-          <label for="delete-current-password" class="block text-sm font-medium text-red-900"
-            >現在のパスワード</label
+          <label
+            for="delete-current-password"
+            class="text-danger-text-strong block text-sm font-medium">現在のパスワード</label
           >
           <input
             id="delete-current-password"
             type="password"
             bind:value={deleteCurrentPassword}
+            bind:this={deleteCurrentPasswordInput}
             autocomplete="current-password"
-            aria-invalid={deleteError ? 'true' : undefined}
-            aria-describedby={deleteError ? 'delete-error' : undefined}
-            class="mt-1 w-full rounded-md border border-red-300 bg-white px-3 py-2 focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:outline-none"
+            aria-invalid={deleteCurrentPasswordError ? 'true' : undefined}
+            aria-describedby={deleteCurrentPasswordError
+              ? 'delete-current-password-error'
+              : undefined}
+            class="border-danger-border-strong bg-surface focus:border-danger-border-strong focus:ring-danger-border-strong mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
           />
+          {#if deleteCurrentPasswordError}
+            <p id="delete-current-password-error" class="text-danger-text mt-1 text-sm">
+              {deleteCurrentPasswordError}
+            </p>
+          {/if}
         </div>
 
-        <label class="flex items-start gap-2 text-sm text-red-900">
+        <label class="text-danger-text-strong flex items-start gap-2 text-sm">
           <input
             type="checkbox"
             bind:checked={deleteAcknowledged}
-            aria-describedby="delete-warning"
-            class="mt-0.5 h-4 w-4 rounded border-red-300 text-red-600 focus:ring-red-500"
+            bind:this={deleteAcknowledgementInput}
+            aria-invalid={deleteAcknowledgementError ? 'true' : undefined}
+            aria-describedby={deleteAcknowledgementError
+              ? 'delete-warning delete-acknowledgement-error'
+              : 'delete-warning'}
+            class="border-danger-border-strong text-danger-text focus:ring-danger-border-strong mt-0.5 h-4 w-4 rounded"
           />
           <span>上記の内容を確認し、アカウントを削除することに同意します。</span>
         </label>
+        {#if deleteAcknowledgementError}
+          <p id="delete-acknowledgement-error" class="text-danger-text text-sm">
+            {deleteAcknowledgementError}
+          </p>
+        {/if}
 
         <button
           type="submit"
-          disabled={isDeleting || !deleteAcknowledged}
-          class="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={isDeleting}
+          class="bg-danger-solid text-text-inverse hover:bg-danger-solid-hover focus:ring-danger-border-strong rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isDeleting ? '削除中...' : 'アカウントを削除する'}
         </button>

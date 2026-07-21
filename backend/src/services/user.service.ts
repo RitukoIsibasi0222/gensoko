@@ -8,7 +8,12 @@ import {
   normalizeNonNegativeCount,
 } from "../lib/stats.js";
 import { isUniqueConstraintViolation } from "../lib/prisma-errors.js";
-import { prisma } from "../lib/prisma.js";
+import type { AppPrismaClient } from "../lib/prisma-client.js";
+import {
+  SerializationRetryExhaustedError,
+  type SerializableTransactionRunner,
+} from "../lib/serializable-transaction-core.js";
+import { getUsableAdminWhere, isUsableAccount, isUsableAdmin } from "../lib/usable-admin.js";
 import { getWeeklyScoreWeekStart, isSameWeeklyScoreWeek } from "../lib/weekly-score.js";
 import { AUDIT_ACTIONS, AUDIT_TARGET_TYPES } from "./audit-events.js";
 import { recordAuditEvent } from "./audit.service.js";
@@ -31,7 +36,15 @@ export type CurrentUserProfile = {
   createdAt: Date;
 };
 
-export async function getCurrentUserProfile(userId: string): Promise<CurrentUserProfile> {
+type UserServiceDependencies = Readonly<{
+  prisma: AppPrismaClient;
+  runSerializableTransaction: SerializableTransactionRunner;
+}>;
+
+async function getCurrentUserProfile(
+  { prisma }: UserServiceDependencies,
+  userId: string,
+): Promise<CurrentUserProfile> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -50,7 +63,10 @@ export async function getCurrentUserProfile(userId: string): Promise<CurrentUser
   return user;
 }
 
-export async function updateCurrentUsername(input: { userId: string; username: string }): Promise<{
+async function updateCurrentUsername(
+  { prisma }: UserServiceDependencies,
+  input: { userId: string; username: string },
+): Promise<{
   user: { id: string; username: string; role: Role };
 }> {
   const normalizedUsername = input.username.trim();
@@ -103,11 +119,14 @@ export async function updateCurrentUsername(input: { userId: string; username: s
   return { user: updatedUser };
 }
 
-export async function changeCurrentPassword(input: {
-  userId: string;
-  currentPassword: string;
-  newPassword: string;
-}): Promise<void> {
+async function changeCurrentPassword(
+  { prisma }: UserServiceDependencies,
+  input: {
+    userId: string;
+    currentPassword: string;
+    newPassword: string;
+  },
+): Promise<void> {
   const normalizedCurrentPassword = normalizePassword(input.currentPassword);
   const normalizedNewPassword = normalizePassword(input.newPassword);
 
@@ -156,19 +175,23 @@ export async function changeCurrentPassword(input: {
   });
 }
 
-export async function deleteCurrentUser(input: {
-  userId: string;
-  currentPassword: string;
-}): Promise<void> {
+async function deleteCurrentUser(
+  { prisma, runSerializableTransaction }: UserServiceDependencies,
+  input: {
+    userId: string;
+    currentPassword: string;
+  },
+): Promise<void> {
+  const stateConflictMessage = "アカウントの状態が変更されています。再ログインしてください";
   const normalizedCurrentPassword = normalizePassword(input.currentPassword);
 
   const user = await prisma.user.findUnique({
     where: { id: input.userId },
-    select: { id: true, passwordHash: true },
+    select: { id: true, passwordHash: true, role: true },
   });
 
   if (!user) {
-    throw new UserError(403, "ユーザーが見つかりません");
+    throw new UserError(409, stateConflictMessage);
   }
 
   const isCurrentPasswordValid = await bcrypt.compare(normalizedCurrentPassword, user.passwordHash);
@@ -176,20 +199,55 @@ export async function deleteCurrentUser(input: {
     throw new UserError(400, "現在のパスワードが正しくありません");
   }
 
-  await prisma.$transaction(async (tx) => {
-    // 監査目的のためユーザー行は削除せず、論理削除フラグを立てる
-    await tx.user.update({
-      where: { id: input.userId },
-      data: {
-        isActive: false,
-        deletedAt: new Date(),
-        lockedUntil: null,
-      },
+  try {
+    await runSerializableTransaction(async (tx) => {
+      const currentUser = await tx.user.findUnique({
+        where: { id: input.userId },
+        select: {
+          id: true,
+          passwordHash: true,
+          role: true,
+          isActive: true,
+          emailVerified: true,
+          lockedUntil: true,
+        },
+      });
+
+      const now = new Date();
+      if (
+        !currentUser ||
+        currentUser.passwordHash !== user.passwordHash ||
+        !isUsableAccount(currentUser, now)
+      ) {
+        throw new UserError(409, stateConflictMessage);
+      }
+
+      if (isUsableAdmin(currentUser, now)) {
+        const usableAdminCount = await tx.user.count({ where: getUsableAdminWhere(now) });
+        if (usableAdminCount <= 1) {
+          throw new UserError(409, "最後の管理者は退会できません");
+        }
+      }
+
+      const deletedUserId = currentUser.id;
+      const deletedUserRole = currentUser.role;
+      await tx.user.delete({ where: { id: deletedUserId }, select: { id: true } });
+      await recordAuditEvent(tx, {
+        action: AUDIT_ACTIONS.USER_ACCOUNT_DELETE,
+        result: AuditResult.SUCCESS,
+        actorId: deletedUserId,
+        actorRole: deletedUserRole,
+        targetType: AUDIT_TARGET_TYPES.USER,
+        targetId: deletedUserId,
+        failureReason: null,
+      });
     });
-    await tx.refreshToken.deleteMany({ where: { userId: input.userId } });
-    await tx.passwordResetToken.deleteMany({ where: { userId: input.userId } });
-    await tx.emailVerification.deleteMany({ where: { userId: input.userId } });
-  });
+  } catch (error) {
+    if (error instanceof SerializationRetryExhaustedError) {
+      throw new UserError(409, "同時操作により退会できませんでした。再試行してください");
+    }
+    throw error;
+  }
 }
 
 const RECENT_ACCURACY_TREND_LIMIT = 10;
@@ -235,7 +293,10 @@ function getEmptyCurrentUserStatsSummary(): CurrentUserStatsSummary {
   };
 }
 
-export async function getCurrentUserStats(userId: string): Promise<CurrentUserStats> {
+async function getCurrentUserStats(
+  { prisma }: UserServiceDependencies,
+  userId: string,
+): Promise<CurrentUserStats> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true },
@@ -313,3 +374,21 @@ export async function getCurrentUserStats(userId: string): Promise<CurrentUserSt
     }),
   };
 }
+
+export function createUserService(dependencies: UserServiceDependencies) {
+  return {
+    getCurrentUserProfile: (userId: string) => getCurrentUserProfile(dependencies, userId),
+    updateCurrentUsername: (input: { userId: string; username: string }) =>
+      updateCurrentUsername(dependencies, input),
+    changeCurrentPassword: (input: {
+      userId: string;
+      currentPassword: string;
+      newPassword: string;
+    }) => changeCurrentPassword(dependencies, input),
+    deleteCurrentUser: (input: { userId: string; currentPassword: string }) =>
+      deleteCurrentUser(dependencies, input),
+    getCurrentUserStats: (userId: string) => getCurrentUserStats(dependencies, userId),
+  };
+}
+
+export type UserService = ReturnType<typeof createUserService>;

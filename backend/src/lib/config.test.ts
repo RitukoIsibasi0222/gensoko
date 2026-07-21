@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getAuditLogRetentionConfig, getFrontendUrl, getRateLimitConfig } from "./config.js";
+import {
+  getAccountDataDeletionConfig,
+  getAuditLogRetentionConfig,
+  getDatabaseUrl,
+  getFrontendUrl,
+  getRateLimitConfig,
+  getStagingAccountDeletionPerformanceConfig,
+} from "./config.js";
 
 const DEVELOPMENT_FRONTEND_URL = "http://localhost:5174";
 const PRODUCTION_FRONTEND_URL = "https://gensoko.example";
@@ -7,6 +14,38 @@ const VALID_RATE_LIMIT_KEY_SECRET = Buffer.from("0123456789abcdef0123456789abcde
   "base64",
 );
 const SHORT_RATE_LIMIT_KEY_SECRET = Buffer.from("short-secret").toString("base64");
+
+describe("getDatabaseUrl", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it.each([
+    ["未設定", undefined],
+    ["空文字", ""],
+    ["空白のみ", "   "],
+  ])("DATABASE_URLが%sの場合はfail-fastする", (_caseName, databaseUrl) => {
+    expect(() =>
+      getDatabaseUrl({
+        environment: { DATABASE_URL: databaseUrl },
+      }),
+    ).toThrow("DATABASE_URLの設定が必要です");
+  });
+
+  it("前後空白を除去したDATABASE_URLを返す", () => {
+    expect(
+      getDatabaseUrl({
+        environment: { DATABASE_URL: "  postgresql://localhost:5432/gensoko  " },
+      }),
+    ).toBe("postgresql://localhost:5432/gensoko");
+  });
+
+  it("environment未指定時はprocess.envのDATABASE_URLを使う", () => {
+    vi.stubEnv("DATABASE_URL", "postgresql://localhost:5432/gensoko");
+
+    expect(getDatabaseUrl()).toBe("postgresql://localhost:5432/gensoko");
+  });
+});
 
 describe("getFrontendUrl", () => {
   afterEach(() => {
@@ -38,6 +77,17 @@ describe("getFrontendUrl", () => {
     vi.stubEnv("FRONTEND_URL", "");
 
     expect(() => getFrontendUrl()).toThrow("production環境ではFRONTEND_URLの設定が必要です");
+  });
+
+  it("明示environmentをprocess.envより優先する", () => {
+    vi.stubEnv("FRONTEND_URL", "https://process-env.example");
+
+    expect(
+      getFrontendUrl({
+        isProduction: true,
+        environment: { FRONTEND_URL: PRODUCTION_FRONTEND_URL },
+      }),
+    ).toBe(PRODUCTION_FRONTEND_URL);
   });
 
   it("末尾slashだけを含むURLはoriginへ正規化する", () => {
@@ -242,6 +292,116 @@ describe("getAuditLogRetentionConfig", () => {
           },
         }),
       ).toThrow("AUDIT_LOG_CLEANUP_ENABLEDはtrueまたはfalseで設定してください");
+    },
+  );
+});
+
+describe("getAccountDataDeletionConfig", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("未設定の場合は実行無効・batch size 25を返す", () => {
+    expect(getAccountDataDeletionConfig({ environment: {} })).toEqual({
+      executeEnabled: false,
+      batchSize: 25,
+    });
+  });
+
+  it("前後の空白を除去して実行許可とbatch sizeを返す", () => {
+    expect(
+      getAccountDataDeletionConfig({
+        environment: {
+          ACCOUNT_DATA_DELETION_EXECUTE_ENABLED: " true ",
+          ACCOUNT_DATA_DELETION_BATCH_SIZE: " 100 ",
+        },
+      }),
+    ).toEqual({
+      executeEnabled: true,
+      batchSize: 100,
+    });
+  });
+
+  it("呼び出し側が環境を指定しない場合はprocess.envを使う", () => {
+    vi.stubEnv("ACCOUNT_DATA_DELETION_EXECUTE_ENABLED", "false");
+    vi.stubEnv("ACCOUNT_DATA_DELETION_BATCH_SIZE", "1");
+
+    expect(getAccountDataDeletionConfig()).toEqual({
+      executeEnabled: false,
+      batchSize: 1,
+    });
+  });
+
+  it.each([
+    ["下限", "1", 1],
+    ["上限", "100", 100],
+  ])("ACCOUNT_DATA_DELETION_BATCH_SIZEの%sを受理する", (_caseName, batchSize, expected) => {
+    expect(
+      getAccountDataDeletionConfig({
+        environment: {
+          ACCOUNT_DATA_DELETION_BATCH_SIZE: batchSize,
+        },
+      }),
+    ).toEqual({
+      executeEnabled: false,
+      batchSize: expected,
+    });
+  });
+
+  it.each(["", "TRUE", "1", "yes"])(
+    "不正なACCOUNT_DATA_DELETION_EXECUTE_ENABLED=%sを拒否する",
+    (executeEnabled) => {
+      expect(() =>
+        getAccountDataDeletionConfig({
+          environment: {
+            ACCOUNT_DATA_DELETION_EXECUTE_ENABLED: executeEnabled,
+          },
+        }),
+      ).toThrow("ACCOUNT_DATA_DELETION_EXECUTE_ENABLEDはtrueまたはfalseで設定してください");
+    },
+  );
+
+  it.each(["", "0", "101", "-1", "1.5", "NaN", "Infinity", "25件"])(
+    "不正なACCOUNT_DATA_DELETION_BATCH_SIZE=%sを拒否する",
+    (batchSize) => {
+      expect(() =>
+        getAccountDataDeletionConfig({
+          environment: {
+            ACCOUNT_DATA_DELETION_BATCH_SIZE: batchSize,
+          },
+        }),
+      ).toThrow("ACCOUNT_DATA_DELETION_BATCH_SIZEは1から100までの10進整数で設定してください");
+    },
+  );
+});
+
+describe("getStagingAccountDeletionPerformanceConfig", () => {
+  it("未設定時は性能測定executeを無効化する", () => {
+    expect(getStagingAccountDeletionPerformanceConfig({ environment: {} })).toEqual({
+      executeEnabled: false,
+    });
+  });
+
+  it("前後空白を除去したtrueだけを有効値として受理する", () => {
+    expect(
+      getStagingAccountDeletionPerformanceConfig({
+        environment: {
+          STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED: " true ",
+        },
+      }),
+    ).toEqual({ executeEnabled: true });
+  });
+
+  it.each(["", "TRUE", "1", "yes"])(
+    "不正なSTAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED=%sを拒否する",
+    (executeEnabled) => {
+      expect(() =>
+        getStagingAccountDeletionPerformanceConfig({
+          environment: {
+            STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED: executeEnabled,
+          },
+        }),
+      ).toThrow("STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLEDはtrueまたはfalseで設定してください");
     },
   );
 });

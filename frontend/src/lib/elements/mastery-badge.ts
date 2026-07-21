@@ -9,17 +9,17 @@ export type MasteryBadgeView = {
 const MASTERY_BADGE_VIEW_MAP: Readonly<Record<ElementMasteryStatus, MasteryBadgeView>> = {
   unlearned: {
     label: '未学習',
-    className: 'bg-slate-100 text-slate-700 ring-slate-200',
+    className: 'bg-surface-subtle text-text-muted ring-border',
     ariaLabel: '習得状態: 未学習'
   },
   learning: {
     label: '学習中',
-    className: 'bg-amber-100 text-amber-800 ring-amber-200',
+    className: 'bg-warning-surface-strong text-warning-text ring-warning-border',
     ariaLabel: '習得状態: 学習中'
   },
   mastered: {
     label: '習得',
-    className: 'bg-emerald-100 text-emerald-800 ring-emerald-200',
+    className: 'bg-success-surface-strong text-success-text ring-success-border',
     ariaLabel: '習得状態: 習得'
   }
 };

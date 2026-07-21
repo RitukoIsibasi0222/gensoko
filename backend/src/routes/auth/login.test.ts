@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { authRouter } from "./index.js";
+import { createAuthTestRouter } from "./test-helpers.js";
 
 // Prisma モック
 vi.mock("../../lib/prisma.js", () => ({
@@ -40,6 +40,7 @@ vi.mock("hono/jwt", () => ({
 
 import bcrypt from "bcryptjs";
 import { prisma } from "../../lib/prisma.js";
+const authRouter = createAuthTestRouter(prisma as never);
 import { STRONG_PASSWORD_73_BYTES } from "../../test/password-byte-boundary-fixtures.js";
 
 const app = new Hono();
@@ -52,7 +53,6 @@ const ACTIVE_USER = {
   passwordHash: "$2b$12$hashedpassword",
   emailVerified: true,
   isActive: true,
-  deletedAt: null,
   loginFailCount: 0,
   lockedUntil: null,
 };
@@ -189,7 +189,7 @@ describe("POST /auth/login", () => {
     expect(prisma.auditLog.create).not.toHaveBeenCalled();
   });
 
-  it("異常系: 存在しないメールアドレスの場合は 401 を返す", async () => {
+  it("物理削除後: 旧資格情報は存在しないアカウントと同じ汎用401を返す", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
 
     const res = await app.request("/auth/login", {
@@ -200,7 +200,12 @@ describe("POST /auth/login", () => {
 
     expect(res.status).toBe(401);
     const body = await res.json();
-    expect(body.error).toBeDefined();
+    expect(body).toEqual({
+      error: "メールアドレスまたはパスワードが正しくありません",
+    });
+    expect(bcrypt.compare).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
   });
 
   it("異常系: パスワードが誤りの場合は 401 を返す", async () => {
@@ -315,21 +320,6 @@ describe("POST /auth/login", () => {
     expect(res.status).toBe(403);
     const body = await res.json();
     expect(body.error).toBeDefined();
-  });
-
-  it("異常系: 削除済みアカウントは 403 を返す", async () => {
-    const deletedUser = { ...ACTIVE_USER, deletedAt: new Date("2026-05-29T00:00:00.000Z") };
-    vi.mocked(prisma.user.findUnique).mockResolvedValue(deletedUser as never);
-
-    const res = await app.request("/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "taro@example.com", password: "Pass1234!" }),
-    });
-
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toBe("このアカウントは削除されています");
   });
 
   it("streak: 昨日ログイン済みの場合は currentStreak が +1 になる", async () => {
@@ -449,6 +439,7 @@ describe("POST /auth/login", () => {
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: ACTIVE_USER.id },
       data: { loginFailCount: 1 },
+      select: { id: true },
     });
   });
 
@@ -474,7 +465,6 @@ describe("POST /auth/login", () => {
         role: "USER",
         emailVerified: true,
         isActive: true,
-        deletedAt: null,
         OR: [{ lockedUntil: null }, { lockedUntil: { lte: expect.any(Date) } }],
       },
       data: {
@@ -508,7 +498,6 @@ describe("POST /auth/login", () => {
       role: "USER",
       emailVerified: true,
       isActive: false,
-      deletedAt: null,
       lockedUntil: null,
     });
     const txUserUpdate = vi.fn().mockResolvedValue({});
@@ -555,6 +544,39 @@ describe("POST /auth/login", () => {
     });
   });
 
+  it("物理削除競合: パスワード検証後にUser rowが消えた場合は汎用401で成功副作用を確定しない", async () => {
+    vi.mocked(prisma.user.findUnique)
+      .mockResolvedValueOnce(ACTIVE_USER as never)
+      .mockResolvedValueOnce(null);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "taro@example.com", password: "Pass1234!" }),
+    });
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({
+      error: "メールアドレスまたはパスワードが正しくありません",
+    });
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    expect(prisma.userStats.upsert).not.toHaveBeenCalled();
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
+      data: {
+        action: "LOGIN",
+        result: "FAILURE",
+        actorId: null,
+        actorRole: null,
+        targetType: null,
+        targetId: null,
+        failureReason: "AUTHENTICATION_FAILED",
+      },
+    });
+    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
+  });
+
   it("競合: transaction内の再確認後に状態が変わった場合は409で再試行を求める", async () => {
     vi.mocked(prisma.user.findUnique)
       .mockResolvedValueOnce(ACTIVE_USER as never)
@@ -562,7 +584,6 @@ describe("POST /auth/login", () => {
         role: "USER",
         emailVerified: true,
         isActive: true,
-        deletedAt: null,
         lockedUntil: null,
       } as never);
     vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
@@ -661,11 +682,6 @@ describe("POST /auth/login", () => {
   });
 
   it.each([
-    {
-      name: "削除済み",
-      user: { ...ACTIVE_USER, deletedAt: new Date("2026-05-29T00:00:00.000Z") },
-      status: 403,
-    },
     {
       name: "停止中",
       user: { ...ACTIVE_USER, isActive: false },

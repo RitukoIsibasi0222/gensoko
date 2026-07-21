@@ -80,6 +80,16 @@ docker compose exec -T \
   -e AUDIT_CLEANUP_INTEGRATION_DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_audit_cleanup_test \
   hono npm run test:integration:audit-cleanup
 
+# account deletionの実DB test（専用DBの作成・migration手順はdocs/07_testing_flow.mdを参照）
+docker compose exec -T \
+  -e ACCOUNT_DELETION_INTEGRATION_DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_account_deletion_test \
+  hono npm run test:integration:account-deletion
+
+# account deletion contract migrationの実DB test（専用DBの作成・migration手順はdocs/07_testing_flow.mdを参照）
+docker compose exec -T \
+  -e ACCOUNT_DELETION_CONTRACT_DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko_account_deletion_contract_test \
+  hono npm run test:integration:account-deletion-contract
+
 # Lint チェック
 npm run lint
 
@@ -92,6 +102,32 @@ npm run format:check
 # フォーマット適用
 npm run format
 ```
+
+### フロントエンド開発・Vercel buildコマンド
+
+```bash
+cd ~/labs/Gensoko/frontend
+
+# 全テストを1回実行
+npm run test:run
+
+# Vercel adapter・API URL・Build Output・CI契約testだけを実行
+npm run test:run -- src/build-config.test.ts src/lib/api/base-url.test.ts src/vercel-build-output.test.ts src/frontend-pr-quality.test.ts
+
+# Lint・Svelte/TypeScript check・非破壊フォーマット確認
+npm run lint
+npm run check
+npm run format:check
+
+# 外部接続しないfixtureでPreview buildと成果物契約を確認
+env \
+  VERCEL_ENV=preview \
+  VERCEL_GIT_COMMIT_REF=develop \
+  VITE_API_BASE_URL=https://staging-api.example.invalid/api/v1 \
+  npm run build:preview
+```
+
+`VITE_API_BASE_URL`は`/api/v1`まで含む公開URLで、Vite build時にbrowser bundleへ埋め込まれる。buildでは未設定・空白・credential・query・fragment・契約外pathを拒否し、Vercel Preview/productionではHTTPSを必須にする。secret、token、DB接続文字列を設定しない。Vercel stagingではPreviewかつ`develop` branch scopeだけにstaging API URLを登録し、productionと値を共用しない。実URLの登録やPreview deployは[deployment runbook](11_deployment.md)の承認境界に従う。
 
 ---
 
@@ -128,6 +164,64 @@ npm run format
 - dry-runと本実行のログに監査ログID・内部ID・メール・username・生DB errorは出ない
 - 最大10,000件または8分到達後も期限超過rowが残る場合は終了code 1になる。原因確認後に再実行する
 
+### 既存soft-deleted User完全削除の手動確認
+
+引数なしでは必ずdry-runになり、環境flagが`true`でも削除しない。実削除は旧API instanceのdrain、dry-run確認、承認、backup確認が完了した場合だけ行う。
+
+    cd ~/labs/Gensoko
+
+    # 推奨: dry-run（Userと所有tableの集計だけを行い、削除しない）
+    docker compose exec \
+      -e ACCOUNT_DATA_DELETION_EXECUTE_ENABLED=false \
+      -e ACCOUNT_DATA_DELETION_BATCH_SIZE=25 \
+      hono npm run delete:legacy-soft-deleted-users
+
+    # 実削除: 環境flag・--execute・確認文字列の三重gateが必要
+    docker compose exec \
+      -e ACCOUNT_DATA_DELETION_EXECUTE_ENABLED=true \
+      -e ACCOUNT_DATA_DELETION_BATCH_SIZE=25 \
+      hono npm run delete:legacy-soft-deleted-users -- \
+      --execute \
+      --confirm=DELETE_LEGACY_SOFT_DELETED_USERS
+
+- batch sizeは1〜100だけを許可し、既定値は25
+- execute完了後はCLIがdry-runを再実行し、残件があれば終了code 1になる
+- unknown・位置・重複引数、確認文字列不一致、環境設定不備はDB接続前に拒否する
+- このCLIを`batch:scheduled`へ追加しない。本番実行は承認付きmanual workflowだけで行う
+- ローカルshellからstaging/productionの`DATABASE_URL`を渡して実行しない。実環境では次のGitHub Actionsだけを入口とする
+
+| Environment | workflow                         | operation                                               | 主なgate                                                                                                |
+| ----------- | -------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| staging     | `Staging Account Data Deletion`  | `dry-run` / `execute`                                   | `develop`、staging固定、execute flag、確認文字列                                                        |
+| production  | `Production Database Operations` | `account-deletion-dry-run` / `account-deletion-execute` | `develop`、production固定、24時間以内のbackup・dry-run、execute flag、確認文字列、承認者、change record |
+
+- workflowは実装済みだが実環境では未実行である。staging executeはT35で明示承認を得てから行い、T1Bのprivacy・監査保持・削除replay・本番cleanup体制が承認されるまでproduction executeを行わない
+- staging dry-run/executeはT35、production dry-run/executeはT38のタスク境界で、`docs/11_deployment.md`のrunbookに従って実行する
+
+### T33 staging expand migration・cascade性能確認
+
+T33ではlegacy cleanup workflowを使わず、次の2つのmanual workflowを分離して使う。どちらも`develop`・staging Environment固定で、`gensoko-batch-jobs` concurrencyにより他のDB batchと直列化する。
+
+| workflow                               | 用途                                                                  | DB変更                                 |
+| -------------------------------------- | --------------------------------------------------------------------- | -------------------------------------- |
+| `Staging Database Setup`               | 通常migration適用、対象expand migrationの初回性能測定、Element seed   | migration、計測fixture、Element upsert |
+| `Staging Account Deletion Performance` | 既存Userの最大件数preview、実`deleteCurrentUser`経路のcascade時間測定 | execute時のsynthetic Userだけ          |
+
+実行前にstaging Environmentへ`STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED=false`を登録する。previewは`false`のまま実行できる。migration write probeまたはperformance executeの明示承認中だけ`true`へ変更し、終了・失敗後は直ちに`false`へ戻す。
+
+1. `Staging Account Deletion Performance`の`preview`を実行し、既存Userの最大GameSession・GameAnswer件数、`staleSyntheticFixtureUsers`、`fixtureSourceElementAvailable`だけを記録する。残存fixtureが1件以上、またはfixture元Elementがない場合はcascade executeを開始しない。残存fixtureがある場合は、原因確認と承認済みの後片付けを先に行う。
+2. `fixtureSourceElementAvailable=false`の場合は、`Staging Database Setup`の`seed-elements`へ確認文字列`SEED_STAGING_ELEMENTS`を指定する。対象index migrationだけがpending、または全migration適用済みの場合に限り、既存seedの118元素をPrisma `upsert`し、削除は行わない。完了後にpreviewを再実行し、Element有りを確認する。
+3. 対象migrationが未適用であることを確認する。初回適用後は同じindex作成時間を再測定できないため、計測workflowをmergeする前に適用しない。
+4. flagを`true`へ変更し、`Staging Database Setup`で`measure-account-deletion-indexes`を選び、確認文字列`MEASURE_STAGING_ACCOUNT_DELETION_MIGRATION`と5,000〜120,000msのprobe時間を指定する。
+5. summaryの`migrationResult`、`probeResult`、`migrationDurationMs`、`writeProbeMaxDurationMs`、`fixtureCleanupStatus`と、最終migration status成功を確認する。probe失敗時も最終status確認後にjob全体が失敗する。
+6. preview値以上かつ上限以内（GameSession 5,000、GameAnswer 50,000）の件数、platform request timeout、確認文字列`MEASURE_STAGING_ACCOUNT_DELETION`を指定し、performance `execute`を実行する。
+7. `durationMs <= min(platform timeoutの50%, 5,000ms)`、synthetic fixture cleanup成功を確認する。
+8. flagを`false`へ戻す。
+
+通常または将来のstaging migrationは`Staging Database Setup`の`apply`を使い、性能測定flag・確認文字列を要求しない。ただし対象account deletion index migrationがpendingの間は`apply`が意図的に失敗し、初回性能測定の迂回適用を防ぐ。対象以外も同時にpendingなら計測値を混在させず、対象1件だけをpendingにできる適用順序を再計画する。
+
+既存User ID、email、username、DATABASE_URL、project ref、host、生ErrorをActions log・Issue・PR・チャットへ転記しない。migration/probe失敗時は生ログを表示せず、上記の許可済み分類だけを使う。preview最大値が上限を超える、残存fixtureがある、Elementが0件、または同期削除が基準を超える場合は本番公開を停止し、fixture上限を安易に引き上げず原因確認または非同期削除方式の再設計を行う。T35の`Staging Account Data Deletion` executeはこの手順では実行しない。
+
 backend/.env の DATABASE_URL は Docker Compose 内ホスト名 postgres を使うため、ホスト側の cd backend && npm run reset:weekly-scores は標準手順にしない。
 
 ### 定期バッチ wrapper の手動確認
@@ -157,11 +251,13 @@ T19の期限境界確認はActionsの`Staging Audit Cleanup Fixtures`から`prep
 
 本番DBの容量確認・backup・migrationはローカルshellから接続せず、Actionsの`Production Database Operations`を`develop` branchで実行する。
 
-| operation        | 入力                      | 実行条件                                                         |
-| ---------------- | ------------------------- | ---------------------------------------------------------------- |
-| `capacity-check` | なし                      | 500MB（500,000,000 bytes）quotaに対する70%・85%閾値を確認        |
-| `backup`         | なし                      | production Environmentに`BACKUP_ENCRYPTION_PASSPHRASE`が設定済み |
-| `migrate-deploy` | `confirmed_backup_run_id` | 24時間以内に成功した`backup` run IDを指定                        |
+| operation                  | 入力                                                     | 実行条件                                                         |
+| -------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------- |
+| `capacity-check`           | なし                                                     | 500MB（500,000,000 bytes）quotaに対する70%・85%閾値を確認        |
+| `backup`                   | なし                                                     | production Environmentに`BACKUP_ENCRYPTION_PASSPHRASE`が設定済み |
+| `migrate-deploy`           | `confirmed_backup_run_id`                                | 24時間以内に成功した`backup` run IDを指定                        |
+| `account-deletion-dry-run` | なし                                                     | legacy soft-deleted Userと所有rowの件数をpreviewし、削除しない   |
+| `account-deletion-execute` | backup/dry-run run ID、確認文字列、承認者、change record | 24時間以内の両runと期限内Artifact、execute flagを検証後に削除    |
 
 backup ArtifactにはAES-256暗号化済みarchiveとSHA-256だけが含まれる。平文dump、`DATABASE_URL`、DB password、暗号化passphraseをActions log・Issue・PR・チャットへ貼らない。download・復号・復元手順は`docs/11_deployment.md`の「backupの手動実行と復元」に従う。
 

@@ -2,7 +2,7 @@ import { API_BASE_URL } from '$lib/api/config';
 import { ApiError, parseErrorResponse, parseSuccessJsonResponse } from '$lib/api/errors';
 
 export type AdminUserRole = 'USER' | 'ADMIN';
-export type AdminUserStatus = 'active' | 'suspended' | 'deleted';
+export type AdminUserStatus = 'active' | 'suspended';
 
 export type AdminUserSummary = {
   id: string;

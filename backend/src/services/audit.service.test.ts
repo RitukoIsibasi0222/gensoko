@@ -11,7 +11,9 @@ vi.mock("../lib/prisma.js", () => ({
 
 import { prisma } from "../lib/prisma.js";
 import { AUDIT_ACTIONS, AUDIT_FAILURE_REASONS, AUDIT_TARGET_TYPES } from "./audit-events.js";
-import { recordAuditEvent, recordAuditEventBestEffort } from "./audit.service.js";
+import { createAuditService, recordAuditEvent } from "./audit.service.js";
+
+const { recordAuditEventBestEffort } = createAuditService(prisma as never);
 
 const successEvent = {
   action: AUDIT_ACTIONS.LOGIN,
@@ -31,6 +33,16 @@ const failureEvent = {
   targetType: null,
   targetId: null,
   failureReason: AUDIT_FAILURE_REASONS.AUTHENTICATION_FAILED,
+};
+
+const accountDeletionSuccessEvent = {
+  action: "USER_ACCOUNT_DELETE",
+  result: AuditResult.SUCCESS,
+  actorId: "user-1",
+  actorRole: "USER" as const,
+  targetType: AUDIT_TARGET_TYPES.USER,
+  targetId: "user-1",
+  failureReason: null,
 };
 
 describe("recordAuditEvent", () => {
@@ -57,6 +69,50 @@ describe("recordAuditEvent", () => {
     });
   });
 
+  it("本人退会成功actionを公開する", () => {
+    expect(AUDIT_ACTIONS).toHaveProperty("USER_ACCOUNT_DELETE", "USER_ACCOUNT_DELETE");
+  });
+
+  it("本人退会成功を内部IDとroleだけで保存する", async () => {
+    vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
+
+    await recordAuditEvent(prisma, accountDeletionSuccessEvent as never);
+
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
+      data: {
+        action: "USER_ACCOUNT_DELETE",
+        result: AuditResult.SUCCESS,
+        actorId: "user-1",
+        actorRole: "USER",
+        targetType: "USER",
+        targetId: "user-1",
+        failureReason: null,
+      },
+    });
+  });
+
+  it("本人退会成功のactorIdとtargetIdが異なる場合は拒否する", async () => {
+    await expect(
+      recordAuditEvent(prisma, {
+        ...accountDeletionSuccessEvent,
+        targetId: "user-2",
+      } as never),
+    ).rejects.toThrow();
+
+    expect(prisma.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("本人退会成功へPIIを追加した場合は拒否する", async () => {
+    await expect(
+      recordAuditEvent(prisma, {
+        ...accountDeletionSuccessEvent,
+        email: "secret@example.com",
+      } as never),
+    ).rejects.toThrow();
+
+    expect(prisma.auditLog.create).not.toHaveBeenCalled();
+  });
+
   it("正常系: 操作者と対象を特定できない失敗イベントを保存する", async () => {
     vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
 
@@ -73,6 +129,48 @@ describe("recordAuditEvent", () => {
         failureReason: "AUTHENTICATION_FAILED",
       },
     });
+  });
+
+  it("管理者actor状態競合をtargetなしで保存する", async () => {
+    vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
+
+    await recordAuditEvent(prisma, {
+      action: AUDIT_ACTIONS.ADMIN_USER_FORCE_DELETE,
+      result: AuditResult.FAILURE,
+      actorId: "admin-1",
+      actorRole: "ADMIN",
+      targetType: null,
+      targetId: null,
+      failureReason: AUDIT_FAILURE_REASONS.ACTOR_STATE_CONFLICT,
+    });
+
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
+      data: {
+        action: "ADMIN_USER_FORCE_DELETE",
+        result: AuditResult.FAILURE,
+        actorId: "admin-1",
+        actorRole: "ADMIN",
+        targetType: null,
+        targetId: null,
+        failureReason: "ACTOR_STATE_CONFLICT",
+      },
+    });
+  });
+
+  it("管理者actor状態競合へ未確認targetを指定した場合は拒否する", async () => {
+    await expect(
+      recordAuditEvent(prisma, {
+        action: AUDIT_ACTIONS.ADMIN_USER_FORCE_DELETE,
+        result: AuditResult.FAILURE,
+        actorId: "admin-1",
+        actorRole: "ADMIN",
+        targetType: AUDIT_TARGET_TYPES.USER,
+        targetId: "user-1",
+        failureReason: AUDIT_FAILURE_REASONS.ACTOR_STATE_CONFLICT,
+      }),
+    ).rejects.toThrow();
+
+    expect(prisma.auditLog.create).not.toHaveBeenCalled();
   });
 
   it("異常系: 成功イベントにfailureReasonがある場合はDB書込み前に拒否する", async () => {

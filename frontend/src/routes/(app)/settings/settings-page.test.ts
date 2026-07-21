@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '$lib/api/errors';
 import { mount, tick, unmount } from '$lib/test/svelte-client';
 import { STRONG_PASSWORD_73_BYTES } from '$lib/test/password-byte-boundary-fixtures';
 import { PASSWORD_BYTE_LIMIT_HINT, PASSWORD_TOO_LONG_MESSAGE } from '$lib/validation/password';
@@ -9,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getCurrentUserProfile: vi.fn(),
   updateCurrentUsername: vi.fn(),
   goto: vi.fn(),
+  completeAccountDeletion: vi.fn(),
   logout: vi.fn(),
   updateUser: vi.fn(),
   toastSuccess: vi.fn(),
@@ -28,6 +30,7 @@ vi.mock('$lib/stores/auth.svelte', () => ({
     isInitializing: false,
     isLoggedIn: true,
     accessToken: 'access-token',
+    completeAccountDeletion: mocks.completeAccountDeletion,
     logout: mocks.logout,
     updateUser: mocks.updateUser
   }
@@ -77,6 +80,45 @@ async function submitPasswordForm(
   form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
   await tick();
   await tick();
+}
+
+type DeleteFormControls = {
+  currentPasswordInput: HTMLInputElement;
+  acknowledgement: HTMLInputElement;
+  form: HTMLFormElement;
+  submitButton: HTMLButtonElement;
+};
+
+function getDeleteFormControls(target: HTMLElement): DeleteFormControls {
+  const currentPasswordInput = target.querySelector<HTMLInputElement>('#delete-current-password');
+  const form = currentPasswordInput?.closest('form');
+  const acknowledgement = form?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  const submitButton = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
+
+  if (!currentPasswordInput || !form || !acknowledgement || !submitButton) {
+    throw new Error('アカウント削除フォームのcontrolが見つかりません');
+  }
+
+  return {
+    currentPasswordInput,
+    acknowledgement,
+    form,
+    submitButton
+  };
+}
+
+async function submitDeleteForm(
+  target: HTMLElement,
+  values: { currentPassword: string; acknowledged: boolean }
+): Promise<DeleteFormControls> {
+  const controls = getDeleteFormControls(target);
+  setInputValue(controls.currentPasswordInput, values.currentPassword);
+  controls.acknowledgement.checked = values.acknowledged;
+  controls.acknowledgement.dispatchEvent(new Event('change', { bubbles: true }));
+  controls.form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+  await tick();
+  await tick();
+  return controls;
 }
 
 beforeEach(() => {
@@ -200,24 +242,214 @@ describe('/settings existing-password compatibility', () => {
   it('sends the complete 73-byte current password when deleting the account', async () => {
     mocks.deleteCurrentUser.mockResolvedValue(undefined);
     const target = await renderPage();
-    const currentPasswordInput = target.querySelector(
-      '#delete-current-password'
-    ) as HTMLInputElement;
-    const acknowledgement = target.querySelector('input[type="checkbox"]') as HTMLInputElement;
-    const form = currentPasswordInput.closest('form') as HTMLFormElement;
-
-    setInputValue(currentPasswordInput, STRONG_PASSWORD_73_BYTES);
-    acknowledgement.checked = true;
-    acknowledgement.dispatchEvent(new Event('change', { bubbles: true }));
-    form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+    const { currentPasswordInput } = await submitDeleteForm(target, {
+      currentPassword: STRONG_PASSWORD_73_BYTES,
+      acknowledged: true
+    });
 
     await vi.waitFor(() => {
       expect(mocks.deleteCurrentUser).toHaveBeenCalledTimes(1);
     });
     expect(mocks.deleteCurrentUser).toHaveBeenCalledWith({
       accessToken: 'access-token',
-      currentPassword: STRONG_PASSWORD_73_BYTES
+      currentPassword: STRONG_PASSWORD_73_BYTES,
+      signal: expect.any(AbortSignal)
     });
     expect(currentPasswordInput.hasAttribute('maxlength')).toBe(false);
+  });
+});
+
+describe('/settings account deletion A11Y contract', () => {
+  it('削除成功後はlogout APIを呼ばずaccount deletion専用clearを使う', async () => {
+    mocks.deleteCurrentUser.mockResolvedValue(undefined);
+    const target = await renderPage();
+
+    await submitDeleteForm(target, {
+      currentPassword: 'CurrentPass1!',
+      acknowledged: true
+    });
+
+    await vi.waitFor(() => {
+      expect(mocks.goto).toHaveBeenCalledWith('/');
+    });
+    expect(mocks.completeAccountDeletion).toHaveBeenCalledOnce();
+    expect(mocks.logout).not.toHaveBeenCalled();
+  });
+
+  it('稼働DBのprofile・auth・learning dataを取り消せず削除する警告を表示する', async () => {
+    const target = await renderPage();
+    const warning = target.querySelector('#delete-warning')?.textContent ?? '';
+
+    expect(warning).toContain('稼働DB');
+    expect(warning).toContain('プロフィール');
+    expect(warning).toContain('認証情報');
+    expect(warning).toContain('学習データ');
+    expect(warning).toContain('取り消せません');
+  });
+
+  it('password空欄はpasswordだけをinvalidにしてpasswordへfocusする', async () => {
+    const target = await renderPage();
+    const controls = await submitDeleteForm(target, {
+      currentPassword: '',
+      acknowledged: true
+    });
+
+    expect(target.querySelector('#delete-current-password-error')?.textContent ?? '').toContain(
+      '現在のパスワードを入力してください'
+    );
+    expect(controls.currentPasswordInput.getAttribute('aria-invalid')).toBe('true');
+    expect(controls.currentPasswordInput.getAttribute('aria-describedby')).toBe(
+      'delete-current-password-error'
+    );
+    expect(controls.acknowledgement.hasAttribute('aria-invalid')).toBe(false);
+    expect(controls.acknowledgement.getAttribute('aria-describedby')).toBe('delete-warning');
+    expect(document.activeElement).toBe(controls.currentPasswordInput);
+  });
+
+  it('同意なしはcheckboxだけをinvalidにしてwarning・errorを関連付けてfocusする', async () => {
+    const target = await renderPage();
+    const controls = getDeleteFormControls(target);
+    setInputValue(controls.currentPasswordInput, 'CurrentPass1!');
+
+    expect(controls.submitButton.disabled).toBe(false);
+    controls.submitButton.click();
+    await tick();
+    await tick();
+
+    expect(target.querySelector('#delete-acknowledgement-error')?.textContent ?? '').toContain(
+      'アカウント削除の確認チェックを入れてください'
+    );
+    expect(controls.currentPasswordInput.hasAttribute('aria-invalid')).toBe(false);
+    expect(controls.acknowledgement.getAttribute('aria-invalid')).toBe('true');
+    expect(controls.acknowledgement.getAttribute('aria-describedby')).toBe(
+      'delete-warning delete-acknowledgement-error'
+    );
+    expect(document.activeElement).toBe(controls.acknowledgement);
+  });
+
+  it('passwordと同意が両方invalidなら各errorを表示して最初のpasswordへfocusする', async () => {
+    const target = await renderPage();
+    const controls = await submitDeleteForm(target, {
+      currentPassword: '',
+      acknowledged: false
+    });
+
+    expect(target.querySelector('#delete-current-password-error')).not.toBeNull();
+    expect(target.querySelector('#delete-acknowledgement-error')).not.toBeNull();
+    expect(controls.currentPasswordInput.getAttribute('aria-invalid')).toBe('true');
+    expect(controls.acknowledgement.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(controls.currentPasswordInput);
+  });
+
+  it.each([
+    { status: 400, message: '現在のパスワードが正しくありません' },
+    { status: 409, message: '同時操作により処理できませんでした。再試行してください' },
+    {
+      status: 429,
+      message: 'リクエストが多すぎます。しばらく待ってから再試行してください'
+    },
+    { status: 503, message: 'サービスを一時的に利用できません' }
+  ])('API $statusの具体的な日本語messageをalertで保持する', async ({ status, message }) => {
+    const error = new ApiError(status, message);
+    mocks.deleteCurrentUser.mockRejectedValue(error);
+    const target = await renderPage();
+
+    const controls = await submitDeleteForm(target, {
+      currentPassword: 'CurrentPass1!',
+      acknowledged: true
+    });
+
+    const alert = controls.form.querySelector('[role="alert"]');
+    expect(alert?.textContent ?? '').toContain(message);
+    expect(alert?.getAttribute('role')).toBe('alert');
+    expect(mocks.toastFromApiError).toHaveBeenCalledWith(error);
+  });
+
+  it('network errorは接続確認の共通messageをalertで表示する', async () => {
+    mocks.deleteCurrentUser.mockRejectedValue(new TypeError('Failed to fetch'));
+    const target = await renderPage();
+
+    const controls = await submitDeleteForm(target, {
+      currentPassword: 'CurrentPass1!',
+      acknowledged: true
+    });
+
+    const alert = controls.form.querySelector('[role="alert"]');
+    expect(alert?.textContent ?? '').toContain(
+      'ネットワークエラーが発生しました。接続を確認してください'
+    );
+    expect(alert?.getAttribute('role')).toBe('alert');
+  });
+
+  it('送信中はformをbusyにしてbuttonを無効化し二重submitを防ぐ', async () => {
+    let resolveDelete!: (value: unknown) => void;
+    mocks.deleteCurrentUser.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDelete = resolve;
+        })
+    );
+    const target = await renderPage();
+    const controls = await submitDeleteForm(target, {
+      currentPassword: 'CurrentPass1!',
+      acknowledged: true
+    });
+
+    expect(controls.form.getAttribute('aria-busy')).toBe('true');
+    expect(controls.submitButton.disabled).toBe(true);
+    controls.form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+    await tick();
+    expect(mocks.deleteCurrentUser).toHaveBeenCalledTimes(1);
+
+    resolveDelete(undefined);
+    await vi.waitFor(() => {
+      expect(mocks.goto).toHaveBeenCalledWith('/');
+    });
+  });
+
+  it.each([
+    ['DOMException', new DOMException('aborted', 'AbortError')],
+    ['Error', Object.assign(new Error('aborted'), { name: 'AbortError' })]
+  ])(
+    '%s形式のAbortErrorは削除失敗と断定せず再ログインでの状態確認を案内する',
+    async (_type, error) => {
+      mocks.deleteCurrentUser.mockRejectedValue(error);
+      const target = await renderPage();
+
+      const controls = await submitDeleteForm(target, {
+        currentPassword: 'CurrentPass1!',
+        acknowledged: true
+      });
+
+      const message = controls.form.querySelector('[role="alert"]')?.textContent ?? '';
+      expect(message).toContain('削除結果を確認できませんでした');
+      expect(message).toContain('再ログイン');
+      expect(mocks.toastError).not.toHaveBeenCalled();
+    }
+  );
+
+  it('page破棄時はdelete requestへ渡したsignalをabortする', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    mocks.deleteCurrentUser.mockImplementation(
+      (options: { signal?: AbortSignal }) =>
+        new Promise(() => {
+          capturedSignal = options.signal;
+        })
+    );
+    const target = await renderPage();
+
+    await submitDeleteForm(target, {
+      currentPassword: 'CurrentPass1!',
+      acknowledged: true
+    });
+    await vi.waitFor(() => {
+      expect(mocks.deleteCurrentUser).toHaveBeenCalledTimes(1);
+    });
+
+    await unmount(mounted!);
+    mounted = null;
+
+    expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    expect(capturedSignal?.aborted).toBe(true);
   });
 });

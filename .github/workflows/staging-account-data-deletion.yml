@@ -1,0 +1,143 @@
+name: Staging Account Data Deletion
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: stagingで実行するaccount data deletion操作
+        required: true
+        type: choice
+        default: dry-run
+        options:
+          - dry-run
+          - execute
+      confirmation:
+        description: execute時だけDELETE_LEGACY_SOFT_DELETED_USERSを入力
+        required: false
+        type: string
+
+jobs:
+  staging-account-data-deletion:
+    name: Run staging account data deletion
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    concurrency:
+      group: gensoko-batch-jobs
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
+      ACCOUNT_DATA_DELETION_EXECUTE_ENABLED: ${{ vars.ACCOUNT_DATA_DELETION_EXECUTE_ENABLED }}
+      ACCOUNT_DATA_DELETION_STAGING_FIXTURES_ENABLED: ${{ vars.ACCOUNT_DATA_DELETION_STAGING_FIXTURES_ENABLED }}
+      ACCOUNT_DATA_DELETION_BATCH_SIZE: ${{ vars.ACCOUNT_DATA_DELETION_BATCH_SIZE || '25' }}
+      STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+
+    steps:
+      - name: Validate staging operation
+        env:
+          REQUESTED_OPERATION: ${{ inputs.operation }}
+          REQUESTED_CONFIRMATION: ${{ inputs.confirmation }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_REF_NAME" != "develop" ]; then
+            echo "staging account data deletionはdevelop branchから実行してください"
+            exit 1
+          fi
+          if [ "$BATCH_ENVIRONMENT" != "staging" ]; then
+            echo "staging DB設定が不正です"
+            exit 1
+          fi
+          if [ -z "$DATABASE_URL" ]; then
+            echo "stagingのDATABASE_URL Secretが設定されていません"
+            exit 1
+          fi
+
+          case "$ACCOUNT_DATA_DELETION_EXECUTE_ENABLED" in
+            true|false)
+              ;;
+            *)
+              echo "ACCOUNT_DATA_DELETION_EXECUTE_ENABLEDの設定が不正です"
+              exit 1
+              ;;
+          esac
+
+          case "$REQUESTED_OPERATION" in
+            dry-run)
+              if [ -n "$REQUESTED_CONFIRMATION" ]; then
+                echo "dry-runでは確認文字列を指定しないでください"
+                exit 1
+              fi
+              ;;
+            execute)
+              if [ "$ACCOUNT_DATA_DELETION_EXECUTE_ENABLED" != "true" ]; then
+                echo "staging executeは無効です"
+                exit 1
+              fi
+              if [ "$REQUESTED_CONFIRMATION" != "DELETE_LEGACY_SOFT_DELETED_USERS" ]; then
+                echo "staging executeの確認文字列が一致しません"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "未対応のstaging account data deletion操作です"
+              exit 1
+              ;;
+          esac
+
+          printf 'OPERATION=%s\n' "$REQUESTED_OPERATION" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma generate
+
+      - name: Verify isolated synthetic fixtures
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run staging:account-deletion-cleanup-fixtures -- --operation verify-isolated
+
+      - name: Preview legacy soft-deleted users
+        if: env.OPERATION == 'dry-run'
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ACCOUNT_DATA_DELETION_EXECUTE_ENABLED: "false"
+        run: npm run delete:legacy-soft-deleted-users
+
+      - name: Delete legacy soft-deleted users
+        if: env.OPERATION == 'execute'
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          npm run delete:legacy-soft-deleted-users -- \
+            --execute \
+            --confirm=DELETE_LEGACY_SOFT_DELETED_USERS \
+            --staging-synthetic-only
+
+      - name: Verify synthetic fixtures were cleaned
+        if: env.OPERATION == 'execute'
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run staging:account-deletion-cleanup-fixtures -- --operation verify-cleaned

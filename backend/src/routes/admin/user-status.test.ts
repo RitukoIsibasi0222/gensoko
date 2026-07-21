@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { adminRouter } from "./index.js";
+import { createAdminTestRouter, updateAdminUserStatus } from "./test-helpers.js";
 
 vi.mock("../../middleware/auth/index.js", () => ({
   authMiddleware: vi.fn(
@@ -76,9 +76,10 @@ vi.mock("../../services/admin.service.js", () => {
   };
 });
 
-import { AdminServiceError, updateAdminUserStatus } from "../../services/admin.service.js";
+import { AdminServiceError } from "../../services/admin.service.js";
 
 const app = new Hono();
+const adminRouter = createAdminTestRouter();
 app.route("/admin", adminRouter);
 
 describe("PATCH /admin/users/:id/status", () => {
@@ -96,7 +97,6 @@ describe("PATCH /admin/users/:id/status", () => {
         role: "USER",
         emailVerified: true,
         isActive: false,
-        deletedAt: null,
         lockedUntil: null,
         lastLoginAt: null,
         createdAt: new Date("2026-05-01T00:00:00.000Z"),
@@ -117,6 +117,7 @@ describe("PATCH /admin/users/:id/status", () => {
       isActive: false,
     });
     const body = await res.json();
+    expect(body.user.deletedAt).toBeNull();
     expect(body.user.updatedAt).toBe("2026-06-20T12:00:00.000Z");
   });
 

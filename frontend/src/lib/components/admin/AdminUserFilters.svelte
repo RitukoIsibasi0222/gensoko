@@ -72,9 +72,7 @@
     }
 
     const value = (event.currentTarget as HTMLSelectElement).value;
-    onStatusChange(
-      value === 'active' || value === 'suspended' || value === 'deleted' ? value : undefined
-    );
+    onStatusChange(value === 'active' || value === 'suspended' ? value : undefined);
   }
 
   function handleReset(): void {
@@ -89,13 +87,13 @@
 </script>
 
 <form
-  class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+  class="border-border-muted bg-surface rounded-2xl border p-5 shadow-sm"
   aria-busy={isLoading}
   onsubmit={handleSubmit}
 >
   <div class="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(10rem,1fr)_minmax(11rem,1fr)]">
     <div>
-      <label for="admin-user-search" class="text-ink block text-sm font-semibold">
+      <label for="admin-user-search" class="text-text block text-sm font-semibold">
         ユーザー名またはメールアドレス
       </label>
       <div class="mt-2 flex gap-2">
@@ -108,7 +106,7 @@
           disabled={isLoading}
           aria-describedby={searchError ? 'admin-user-search-error' : undefined}
           aria-invalid={searchError !== null}
-          class="focus:border-brand focus:ring-brand min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-1 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100"
+          class="focus:border-brand focus:ring-brand border-border disabled:bg-surface-subtle min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm focus:ring-1 focus:outline-none disabled:cursor-not-allowed"
           placeholder="検索語を入力"
           oncompositionstart={() => (isComposing = true)}
           oncompositionend={() => (isComposing = false)}
@@ -117,26 +115,26 @@
         <button
           type="submit"
           disabled={isLoading}
-          class="bg-brand hover:bg-brand-hover rounded-lg px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:bg-gray-400"
+          class="bg-action hover:bg-action-hover text-text-inverse focus-visible:outline-focus disabled:bg-disabled-solid rounded-lg px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
         >
           検索
         </button>
       </div>
       {#if searchError}
-        <p id="admin-user-search-error" role="alert" class="mt-2 text-sm text-red-600">
+        <p id="admin-user-search-error" role="alert" class="text-danger-text mt-2 text-sm">
           {searchError}
         </p>
       {/if}
     </div>
 
     <div>
-      <label for="admin-user-role" class="text-ink block text-sm font-semibold">ロール</label>
+      <label for="admin-user-role" class="text-text block text-sm font-semibold">ロール</label>
       <select
         id="admin-user-role"
         value={role ?? ''}
         disabled={isLoading}
         onchange={handleRoleChange}
-        class="focus:border-brand focus:ring-brand mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-1 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100"
+        class="focus:border-brand focus:ring-brand border-border bg-surface disabled:bg-surface-subtle mt-2 w-full rounded-lg border px-3 py-2 text-sm focus:ring-1 focus:outline-none disabled:cursor-not-allowed"
       >
         <option value="">すべてのロール</option>
         <option value="USER">USER</option>
@@ -145,7 +143,7 @@
     </div>
 
     <div>
-      <label for="admin-user-status" class="text-ink block text-sm font-semibold">
+      <label for="admin-user-status" class="text-text block text-sm font-semibold">
         アカウント状態
       </label>
       <select
@@ -153,12 +151,11 @@
         value={status ?? ''}
         disabled={isLoading}
         onchange={handleStatusChange}
-        class="focus:border-brand focus:ring-brand mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-1 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100"
+        class="focus:border-brand focus:ring-brand border-border bg-surface disabled:bg-surface-subtle mt-2 w-full rounded-lg border px-3 py-2 text-sm focus:ring-1 focus:outline-none disabled:cursor-not-allowed"
       >
         <option value="">すべての状態</option>
-        <option value="active">有効（未退会）</option>
+        <option value="active">有効</option>
         <option value="suspended">停止中</option>
-        <option value="deleted">退会済み</option>
       </select>
     </div>
   </div>
@@ -168,7 +165,7 @@
       type="button"
       disabled={isLoading}
       onclick={handleReset}
-      class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+      class="border-border text-text hover:bg-surface-muted focus-visible:outline-focus disabled:bg-surface-subtle rounded-lg border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
     >
       条件をリセット
     </button>

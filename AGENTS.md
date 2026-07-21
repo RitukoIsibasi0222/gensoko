@@ -21,6 +21,17 @@
 
 ---
 
+## Codex 実行待機・停止ルール（必ず守ること）
+
+- ツールが `Script running with cell ID ...` を返した場合は完了扱いにしない。同じ作業ターン内で直ちに状態取得を行い、ユーザーへ何を待っているか説明する。
+- `apply_patch`、短い読み取り、差分確認などのローカル処理を、状態確認なしで60秒以上待機しない。10〜30秒で一度再確認し、60秒まで完了しなければ、対応ツールが許す場合は処理を停止する。
+- timeout、権限承認reviewのtimeout、停止操作の後は、編集が適用されたかを推測しない。`git status --short`、`git diff --check`、`git diff -- <対象ファイル>`、`sed -n`等の読み取り確認を行ってから続行する。
+- 同じ編集コマンドを原因未確認のまま繰り返さない。失敗理由を特定し、文字コード明示、編集単位の縮小、WSL 内での実行などの条件を変えた場合だけ再試行する。
+- test、build、GitHub Actions等の長時間処理は、単に60秒を超えたことを理由に停止しない。ただし、処理中は60秒以内ごとに進捗を説明し、ローカル編集待機と外部workflow実行を明確に区別する。
+- 詳細な監視・停止・復旧手順は `docs/13_codex_editing.md` の「長時間待機を放置しない」を必ず参照する。
+
+---
+
 ## 重要な技術的制約
 
 - **Prisma v7**: `new PrismaClient()` には必ず `PrismaPg` アダプタが必要
@@ -372,20 +383,34 @@ T3	テスト: 正常系	src/routes/auth.test.ts	高
 
 **絶対に守るルール: テストを通すためだけの実装をしてはいけない。仕様に沿った正しい実装をすること。**
 
+#### テスト実行範囲の方針
+
+- Red / Green 中は変更対象の test file だけを実行する
+- Refactor 中は対象 test と直接影響する関連 test だけを実行する
+- 軽微な修正のたびに backend 全テストを繰り返さない
+- 外部 DB 不要の backend 全テスト、Workers test、build、lint、format:check は、実装・再レビュー・文書同期が終わった最終品質ゲートで原則 1 回だけ実行する
+- 最終全テストで失敗した場合は、原因に関係する対象 test へ絞って修正し、最後に必要な全体確認を再実行する
+
 #### Red フェーズ（テスト先行）
 1. `*.test.ts` を先に作成する
-2. テストを実行して「全件失敗」を確認する
+2. 変更対象の test file だけを実行して、追加・変更したテストが意図した理由で失敗することを確認する
    ```bash
-   cd backend && npm run test -- --run
+   cd backend && npm run test -- --run src/path/to/target.test.ts
    ```
 
 #### Green フェーズ（実装）
 1. 実装ファイルを作成・編集する
-2. テストを実行して「全件通過」を確認する
+2. 変更対象の test file だけを実行して通過を確認する
+   ```bash
+   cd backend && npm run test -- --run src/path/to/target.test.ts
+   ```
 
 #### Refactor フェーズ
 1. コードの整理（重複削除・可読性向上）
-2. テストが引き続き通ることを確認する
+2. 対象 test と直接影響する関連 test だけを実行し、引き続き通ることを確認する
+   ```bash
+   cd backend && npm run test -- --run src/path/to/target.test.ts src/path/to/related.test.ts
+   ```
 3. **Prettier でフォーマットを適用**
    ```bash
    # バックエンド
@@ -397,12 +422,17 @@ T3	テスト: 正常系	src/routes/auth.test.ts	高
 
 ### Step 5: 品質チェック
 
+実装・再レビュー・文書同期が完了した後、最終品質ゲートとして原則 1 回だけ実行する。
+最終全テストで失敗した場合は原因に関係する test へ絞って修正し、その後に必要な全体確認を再実行する。
+
 ```bash
 # バックエンドの場合
 cd backend
+npm run test -- --run # 外部 DB 不要の全テスト
+npm run test:workers  # Workers runtime test
+npm run build         # TypeScript / Workers build
 npm run lint          # ESLint
 npm run format:check  # Prettier チェック
-npm run test -- --run # 全テスト
 
 # フロントエンドの場合
 cd frontend

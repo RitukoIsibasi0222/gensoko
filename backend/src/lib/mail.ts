@@ -1,4 +1,9 @@
 import nodemailer from "nodemailer";
+import type { MailMessage, MailSender } from "./mail-sender.js";
+
+type NodeMailTransport = Readonly<{
+  sendMail(message: MailMessage): Promise<unknown>;
+}>;
 
 export const mailer = nodemailer.createTransport({
   host: process.env.MAIL_HOST ?? "mailpit",
@@ -6,3 +11,13 @@ export const mailer = nodemailer.createTransport({
   secure: false,
   auth: undefined,
 });
+
+export function createNodeMailSender(transport: NodeMailTransport): MailSender {
+  return {
+    async send(message) {
+      await transport.sendMail(message);
+    },
+  };
+}
+
+export const nodeMailSender = createNodeMailSender(mailer);

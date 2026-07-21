@@ -148,8 +148,8 @@
 </script>
 
 <div class="mx-auto max-w-md px-4 py-8">
-  <h1 class="text-2xl font-bold text-gray-800">パスワードリセット</h1>
-  <p class="mt-2 text-gray-600">新しいパスワードを入力して再設定してください。</p>
+  <h1 class="text-text text-2xl font-bold">パスワードリセット</h1>
+  <p class="text-text-muted mt-2">新しいパスワードを入力して再設定してください。</p>
 
   {#if !isSuccess}
     <form class="mt-6 space-y-4" novalidate onsubmit={handleSubmit}>
@@ -157,16 +157,14 @@
         <div
           id="form-error"
           role="alert"
-          class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          class="border-danger-border bg-danger-surface text-danger-text rounded-md border px-4 py-3 text-sm"
         >
           {formError}
         </div>
       {/if}
 
       <div>
-        <label for="password" class="block text-sm font-medium text-gray-700">
-          新しいパスワード
-        </label>
+        <label for="password" class="text-text block text-sm font-medium"> 新しいパスワード </label>
         <div class="relative mt-1">
           <input
             id="password"
@@ -177,13 +175,13 @@
             required
             aria-invalid={passwordError ? 'true' : undefined}
             aria-describedby={passwordError ? 'password-hint password-error' : 'password-hint'}
-            class="w-full rounded-md border border-gray-300 px-3 py-2 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+            class="border-border focus:border-focus focus:ring-focus w-full rounded-md border px-3 py-2 pr-10 focus:ring-1 focus:outline-none"
           />
           <button
             type="button"
             onclick={() => (showPassword = !showPassword)}
             aria-label={showPassword ? 'パスワードを隠す' : 'パスワードを表示する'}
-            class="absolute inset-y-0 right-0 flex items-center rounded-md pr-3 text-gray-400 hover:text-gray-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+            class="text-text-disabled hover:text-text-muted focus:ring-focus absolute inset-y-0 right-0 flex items-center rounded-md pr-3 focus:ring-2 focus:ring-offset-2 focus:outline-none"
           >
             {#if showPassword}
               <svg
@@ -220,16 +218,16 @@
             {/if}
           </button>
         </div>
-        <p id="password-hint" class="mt-1 text-sm text-gray-600">
+        <p id="password-hint" class="text-text-muted mt-1 text-sm">
           {PASSWORD_BYTE_LIMIT_HINT}
         </p>
         {#if passwordError}
-          <p id="password-error" class="mt-1 text-sm text-red-600">{passwordError}</p>
+          <p id="password-error" class="text-danger-text mt-1 text-sm">{passwordError}</p>
         {/if}
       </div>
 
       <div>
-        <label for="confirm-password" class="block text-sm font-medium text-gray-700">
+        <label for="confirm-password" class="text-text block text-sm font-medium">
           確認用パスワード
         </label>
         <input
@@ -241,10 +239,10 @@
           required
           aria-invalid={confirmPasswordError ? 'true' : undefined}
           aria-describedby={confirmPasswordError ? 'confirm-password-error' : undefined}
-          class="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+          class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
         />
         {#if confirmPasswordError}
-          <p id="confirm-password-error" class="mt-1 text-sm text-red-600">
+          <p id="confirm-password-error" class="text-danger-text mt-1 text-sm">
             {confirmPasswordError}
           </p>
         {/if}
@@ -253,7 +251,7 @@
       <button
         type="submit"
         disabled={isSubmitting || !storedToken}
-        class="w-full rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        class="bg-action text-text-inverse hover:bg-action-hover focus:ring-focus w-full rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isSubmitting ? '送信中...' : 'パスワードを再設定する'}
       </button>
@@ -261,15 +259,15 @@
   {:else}
     <div
       role="status"
-      class="mt-6 rounded-md border border-green-200 bg-green-50 px-6 py-8 text-center"
+      class="border-success-border bg-success-surface mt-6 rounded-md border px-6 py-8 text-center"
     >
-      <p class="text-lg font-semibold text-green-800">パスワードをリセットしました</p>
-      <p class="mt-2 text-sm text-green-700">
+      <p class="text-success-text text-lg font-semibold">パスワードをリセットしました</p>
+      <p class="text-success-text mt-2 text-sm">
         新しいパスワードでログインしてください。他の端末でも再度ログインが必要です。
       </p>
       <a
         href="/login"
-        class="mt-4 inline-flex rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+        class="bg-action text-text-inverse hover:bg-action-hover focus:ring-focus mt-4 inline-flex rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none"
       >
         ログイン画面へ
       </a>
