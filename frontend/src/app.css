@@ -132,7 +132,6 @@
 }
 
 body {
-  min-width: 320px;
   font-family: var(--font-sans);
   background-color: var(--color-canvas);
   color: var(--color-text);
