@@ -4,50 +4,50 @@ export type CategoryStyle = {
 };
 
 const FALLBACK_STYLE: CategoryStyle = {
-  cardClass: 'border-slate-200 bg-slate-50',
-  badgeClass: 'bg-slate-200 text-slate-700'
+  cardClass: 'border-category-fallback-border bg-category-fallback-surface',
+  badgeClass: 'bg-category-fallback-badge text-category-fallback-text'
 };
 
 export const ELEMENT_CATEGORY_STYLE_MAP: Readonly<Record<string, CategoryStyle>> = {
   非金属: {
-    cardClass: 'border-emerald-200 bg-emerald-50',
-    badgeClass: 'bg-emerald-200 text-emerald-800'
+    cardClass: 'border-category-nonmetal-border bg-category-nonmetal-surface',
+    badgeClass: 'bg-category-nonmetal-badge text-category-nonmetal-text'
   },
   希ガス: {
-    cardClass: 'border-sky-200 bg-sky-50',
-    badgeClass: 'bg-sky-200 text-sky-800'
+    cardClass: 'border-category-noble-gas-border bg-category-noble-gas-surface',
+    badgeClass: 'bg-category-noble-gas-badge text-category-noble-gas-text'
   },
   アルカリ金属: {
-    cardClass: 'border-rose-200 bg-rose-50',
-    badgeClass: 'bg-rose-200 text-rose-800'
+    cardClass: 'border-category-alkali-metal-border bg-category-alkali-metal-surface',
+    badgeClass: 'bg-category-alkali-metal-badge text-category-alkali-metal-text'
   },
   アルカリ土類金属: {
-    cardClass: 'border-orange-200 bg-orange-50',
-    badgeClass: 'bg-orange-200 text-orange-800'
+    cardClass: 'border-category-alkaline-earth-border bg-category-alkaline-earth-surface',
+    badgeClass: 'bg-category-alkaline-earth-badge text-category-alkaline-earth-text'
   },
   遷移金属: {
-    cardClass: 'border-amber-200 bg-amber-50',
-    badgeClass: 'bg-amber-200 text-amber-800'
+    cardClass: 'border-category-transition-metal-border bg-category-transition-metal-surface',
+    badgeClass: 'bg-category-transition-metal-badge text-category-transition-metal-text'
   },
   後遷移金属: {
-    cardClass: 'border-teal-200 bg-teal-50',
-    badgeClass: 'bg-teal-200 text-teal-800'
+    cardClass: 'border-category-post-transition-border bg-category-post-transition-surface',
+    badgeClass: 'bg-category-post-transition-badge text-category-post-transition-text'
   },
   半金属: {
-    cardClass: 'border-lime-200 bg-lime-50',
-    badgeClass: 'bg-lime-200 text-lime-800'
+    cardClass: 'border-category-metalloid-border bg-category-metalloid-surface',
+    badgeClass: 'bg-category-metalloid-badge text-category-metalloid-text'
   },
   ハロゲン: {
-    cardClass: 'border-fuchsia-200 bg-fuchsia-50',
-    badgeClass: 'bg-fuchsia-200 text-fuchsia-800'
+    cardClass: 'border-category-halogen-border bg-category-halogen-surface',
+    badgeClass: 'bg-category-halogen-badge text-category-halogen-text'
   },
   ランタノイド: {
-    cardClass: 'border-violet-200 bg-violet-50',
-    badgeClass: 'bg-violet-200 text-violet-800'
+    cardClass: 'border-category-lanthanide-border bg-category-lanthanide-surface',
+    badgeClass: 'bg-category-lanthanide-badge text-category-lanthanide-text'
   },
   アクチノイド: {
-    cardClass: 'border-indigo-200 bg-indigo-50',
-    badgeClass: 'bg-indigo-200 text-indigo-800'
+    cardClass: 'border-category-actinide-border bg-category-actinide-surface',
+    badgeClass: 'bg-category-actinide-badge text-category-actinide-text'
   }
 };
 

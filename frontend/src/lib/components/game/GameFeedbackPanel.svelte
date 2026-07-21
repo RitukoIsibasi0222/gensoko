@@ -19,8 +19,8 @@
   );
   const panelClass = $derived(
     answer?.isCorrect
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-      : 'border-red-200 bg-red-50 text-red-900'
+      ? 'border-success-border bg-success-surface text-success-text'
+      : 'border-danger-border bg-danger-surface text-danger-text-strong'
   );
 </script>
 

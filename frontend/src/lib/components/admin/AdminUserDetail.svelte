@@ -47,18 +47,18 @@
 
 <div aria-busy={isLoading}>
   {#if isLoading}
-    <p aria-live="polite" class="rounded-xl bg-gray-50 p-4 text-sm text-gray-600">
+    <p aria-live="polite" class="bg-surface-muted text-text-muted rounded-xl p-4 text-sm">
       ユーザー詳細を読み込んでいます...
     </p>
   {:else if errorMessage !== null}
-    <div role="alert" class="rounded-xl border border-red-200 bg-red-50 p-4">
-      <p class="text-sm text-red-700">
+    <div role="alert" class="border-danger-border bg-danger-surface rounded-xl border p-4">
+      <p class="text-danger-text text-sm">
         {errorMessage || 'ユーザー詳細を表示できませんでした'}
       </p>
       {#if onRetry}
         <button
           type="button"
-          class="mt-3 rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500"
+          class="border-danger-border-strong bg-surface text-danger-text hover:bg-danger-surface-strong focus-visible:outline-danger-border-strong mt-3 rounded-lg border px-3 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
           onclick={onRetry}
         >
           詳細を再読み込み
@@ -71,90 +71,102 @@
     {@const deleteBlockReason = getAdminActionBlockReason(user, 'delete', currentUserId)}
     <div class="grid gap-5">
       <section aria-labelledby="admin-user-profile-heading">
-        <h3 id="admin-user-profile-heading" class="font-semibold text-gray-900">アカウント情報</h3>
-        <dl class="mt-3 grid gap-3 rounded-xl bg-gray-50 p-4 text-sm sm:grid-cols-2">
+        <h3 id="admin-user-profile-heading" class="text-text font-semibold">アカウント情報</h3>
+        <dl class="bg-surface-muted mt-3 grid gap-3 rounded-xl p-4 text-sm sm:grid-cols-2">
           <div>
-            <dt class="text-gray-500">ユーザー名</dt>
-            <dd class="mt-1 font-medium text-gray-900">{user.username}</dd>
+            <dt class="text-text-subtle">ユーザー名</dt>
+            <dd class="text-text mt-1 font-medium">{user.username}</dd>
           </div>
           <div>
-            <dt class="text-gray-500">メールアドレス</dt>
-            <dd class="mt-1 font-medium break-all text-gray-900">{user.email}</dd>
+            <dt class="text-text-subtle">メールアドレス</dt>
+            <dd class="text-text mt-1 font-medium break-all">{user.email}</dd>
           </div>
           <div>
-            <dt class="text-gray-500">ロール</dt>
-            <dd class="mt-1 font-medium text-gray-900">{user.role}</dd>
+            <dt class="text-text-subtle">ロール</dt>
+            <dd class="text-text mt-1 font-medium">{user.role}</dd>
           </div>
           <div>
-            <dt class="text-gray-500">アカウント状態</dt>
-            <dd class="mt-1 font-medium text-gray-900">{getAccountStatus(user)}</dd>
+            <dt class="text-text-subtle">アカウント状態</dt>
+            <dd class="text-text mt-1 font-medium">{getAccountStatus(user)}</dd>
           </div>
           <div>
-            <dt class="text-gray-500">メール確認</dt>
-            <dd class="mt-1 font-medium text-gray-900">
+            <dt class="text-text-subtle">メール確認</dt>
+            <dd class="text-text mt-1 font-medium">
               {user.emailVerified ? '確認済み' : '未確認'}
             </dd>
           </div>
           <div>
-            <dt class="text-gray-500">ログイン失敗回数</dt>
-            <dd class="mt-1 font-medium text-gray-900">{formatNumber(user.loginFailCount)}</dd>
+            <dt class="text-text-subtle">ログイン失敗回数</dt>
+            <dd class="text-text mt-1 font-medium">{formatNumber(user.loginFailCount)}</dd>
           </div>
           <div>
-            <dt class="text-gray-500">最終ログイン</dt>
-            <dd class="mt-1 font-medium text-gray-900">{formatDate(user.lastLoginAt)}</dd>
+            <dt class="text-text-subtle">最終ログイン</dt>
+            <dd class="text-text mt-1 font-medium">{formatDate(user.lastLoginAt)}</dd>
           </div>
           <div>
-            <dt class="text-gray-500">ロック期限</dt>
-            <dd class="mt-1 font-medium text-gray-900">{formatDate(user.lockedUntil)}</dd>
+            <dt class="text-text-subtle">ロック期限</dt>
+            <dd class="text-text mt-1 font-medium">{formatDate(user.lockedUntil)}</dd>
           </div>
           <div>
-            <dt class="text-gray-500">登録日時</dt>
-            <dd class="mt-1 font-medium text-gray-900">{formatDate(user.createdAt)}</dd>
+            <dt class="text-text-subtle">登録日時</dt>
+            <dd class="text-text mt-1 font-medium">{formatDate(user.createdAt)}</dd>
           </div>
           <div>
-            <dt class="text-gray-500">更新日時</dt>
-            <dd class="mt-1 font-medium text-gray-900">{formatDate(user.updatedAt)}</dd>
+            <dt class="text-text-subtle">更新日時</dt>
+            <dd class="text-text mt-1 font-medium">{formatDate(user.updatedAt)}</dd>
           </div>
         </dl>
       </section>
 
       <section aria-labelledby="admin-user-learning-heading">
-        <h3 id="admin-user-learning-heading" class="font-semibold text-gray-900">学習統計</h3>
-        <dl class="mt-3 grid grid-cols-2 gap-3 rounded-xl bg-blue-50 p-4 text-sm sm:grid-cols-3">
+        <h3 id="admin-user-learning-heading" class="text-text font-semibold">学習統計</h3>
+        <dl
+          class="bg-info-surface mt-3 grid grid-cols-2 gap-3 rounded-xl p-4 text-sm sm:grid-cols-3"
+        >
           <div>
-            <dt class="text-gray-600">累計ゲーム</dt>
-            <dd class="mt-1 font-bold text-blue-950">{formatNumber(user.stats.totalGames)}</dd>
+            <dt class="text-text-muted">累計ゲーム</dt>
+            <dd class="text-info-text-strong mt-1 font-bold">
+              {formatNumber(user.stats.totalGames)}
+            </dd>
           </div>
           <div>
-            <dt class="text-gray-600">正答率</dt>
-            <dd class="mt-1 font-bold text-blue-950">{user.stats.accuracyRate}%</dd>
+            <dt class="text-text-muted">正答率</dt>
+            <dd class="text-info-text-strong mt-1 font-bold">{user.stats.accuracyRate}%</dd>
           </div>
           <div>
-            <dt class="text-gray-600">累計回答</dt>
-            <dd class="mt-1 font-bold text-blue-950">{formatNumber(user.stats.totalAnswered)}</dd>
+            <dt class="text-text-muted">累計回答</dt>
+            <dd class="text-info-text-strong mt-1 font-bold">
+              {formatNumber(user.stats.totalAnswered)}
+            </dd>
           </div>
           <div>
-            <dt class="text-gray-600">習得元素</dt>
-            <dd class="mt-1 font-bold text-blue-950">{formatNumber(user.stats.masteredCount)}</dd>
+            <dt class="text-text-muted">習得元素</dt>
+            <dd class="text-info-text-strong mt-1 font-bold">
+              {formatNumber(user.stats.masteredCount)}
+            </dd>
           </div>
           <div>
-            <dt class="text-gray-600">現在の連続日数</dt>
-            <dd class="mt-1 font-bold text-blue-950">{formatNumber(user.stats.currentStreak)}</dd>
+            <dt class="text-text-muted">現在の連続日数</dt>
+            <dd class="text-info-text-strong mt-1 font-bold">
+              {formatNumber(user.stats.currentStreak)}
+            </dd>
           </div>
           <div>
-            <dt class="text-gray-600">最終学習日</dt>
-            <dd class="mt-1 font-bold text-blue-950">{formatDate(user.stats.lastActiveDate)}</dd>
+            <dt class="text-text-muted">最終学習日</dt>
+            <dd class="text-info-text-strong mt-1 font-bold">
+              {formatDate(user.stats.lastActiveDate)}
+            </dd>
           </div>
         </dl>
       </section>
 
-      <div class="flex flex-wrap gap-2 border-t border-gray-200 pt-4">
+      <div class="border-border-muted flex flex-wrap gap-2 border-t pt-4">
         <button
           type="button"
           data-action="status"
           aria-describedby={getBlockReasonId(user, 'status')}
           disabled={statusBlockReason !== null}
-          class="rounded-lg border border-amber-300 px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50"
+          class="border-warning-border-strong text-warning-text hover:bg-warning-surface rounded-lg border px-3 py-2 text-sm font-semibold"
           onclick={() => onAction(user, 'status')}
         >
           {user.isActive ? 'アカウントを停止' : '停止を解除'}
@@ -164,7 +176,7 @@
           data-action="role"
           aria-describedby={getBlockReasonId(user, 'role')}
           disabled={roleBlockReason !== null}
-          class="rounded-lg border border-blue-300 px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+          class="border-info-border-strong text-info-text hover:bg-info-surface rounded-lg border px-3 py-2 text-sm font-semibold"
           onclick={() => onAction(user, 'role')}
         >
           ロールを変更
@@ -174,28 +186,28 @@
           data-action="delete"
           aria-describedby={getBlockReasonId(user, 'delete')}
           disabled={deleteBlockReason !== null}
-          class="rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
+          class="border-danger-border-strong text-danger-text hover:bg-danger-surface rounded-lg border px-3 py-2 text-sm font-semibold"
           onclick={() => onAction(user, 'delete')}
         >
           強制退会
         </button>
       </div>
       {#if statusBlockReason}
-        <p id="admin-detail-status-block-reason" class="text-sm text-gray-600">
+        <p id="admin-detail-status-block-reason" class="text-text-muted text-sm">
           {statusBlockReason}
         </p>
       {/if}
       {#if roleBlockReason && roleBlockReason !== statusBlockReason}
-        <p id="admin-detail-role-block-reason" class="text-sm text-gray-600">{roleBlockReason}</p>
+        <p id="admin-detail-role-block-reason" class="text-text-muted text-sm">{roleBlockReason}</p>
       {/if}
       {#if deleteBlockReason && deleteBlockReason !== statusBlockReason}
-        <p id="admin-detail-delete-block-reason" class="text-sm text-gray-600">
+        <p id="admin-detail-delete-block-reason" class="text-text-muted text-sm">
           {deleteBlockReason}
         </p>
       {/if}
     </div>
   {:else}
-    <p class="rounded-xl bg-gray-50 p-4 text-sm text-gray-600">
+    <p class="bg-surface-muted text-text-muted rounded-xl p-4 text-sm">
       ユーザー詳細はまだ読み込まれていません
     </p>
   {/if}

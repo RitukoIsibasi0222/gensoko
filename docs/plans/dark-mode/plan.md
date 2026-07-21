@@ -42,22 +42,28 @@
 
 ## 対象ファイル一覧
 
-| ファイル                                                 | 変更種別 | 内容                                                              |
-| -------------------------------------------------------- | -------- | ----------------------------------------------------------------- |
-| `frontend/src/lib/stores/theme.svelte.ts`                | 新規     | themeのsingle source、OS初期値、保存、media/storage同期           |
-| `frontend/src/lib/stores/theme.svelte.test.ts`           | 新規     | SSR、保存値、OS変更、toggle、不正値のunit test                    |
-| `frontend/src/lib/components/ThemeToggle.svelte`         | 新規     | keyboard操作可能なtheme切替button                                 |
-| `frontend/src/lib/components/ThemeToggle.svelte.test.ts` | 新規     | label、`aria-pressed`、click、focusのcomponent test               |
-| `frontend/src/app.html`                                  | 修正候補 | hydration前の安全なtheme bootstrap。CSPとno-flash検証後に採否確定 |
-| `frontend/src/app.css`                                   | 修正     | light/dark semantic token、`color-scheme`、body背景・前景         |
-| `frontend/src/routes/+layout.svelte`                     | 修正     | theme store初期化をbrowser境界へ接続                              |
-| `frontend/src/lib/components/Header.svelte`              | 修正     | desktop/mobileから到達可能なtoggleとtheme対応色                   |
-| `frontend/src/lib/components/Footer.svelte`              | 修正     | theme対応色                                                       |
-| `frontend/src/routes/**/*.svelte`                        | 修正     | hardcoded light colorをsemantic themeへ移行                       |
-| `frontend/src/lib/components/**/*.svelte`                | 修正     | card、modal、form、chart、toast、admin UIのtheme対応              |
-| `frontend/src/dark-mode-contract.test.ts`                | 新規     | hardcoded色残存、初期化順、主要画面契約のsource test              |
-| `docs/05_progress.md`                                    | 修正     | 実装中/完了状態と計画link                                         |
-| `docs/plans/dark-mode/plan.md`                           | 修正     | TDD、実変更、browser確認、完了記録                                |
+| ファイル                                                 | 変更種別 | 内容                                                      |
+| -------------------------------------------------------- | -------- | --------------------------------------------------------- |
+| `frontend/src/lib/stores/theme.svelte.ts`                | 新規     | themeのsingle source、OS初期値、保存、media/storage同期   |
+| `frontend/src/lib/stores/theme.svelte.test.ts`           | 新規     | SSR、保存値、OS変更、toggle、不正値のunit test            |
+| `frontend/src/lib/components/ThemeToggle.svelte`         | 新規     | keyboard操作可能なtheme切替button                         |
+| `frontend/src/lib/components/ThemeToggle.svelte.test.ts` | 新規     | label、`aria-pressed`、click、focusのcomponent test       |
+| `frontend/src/app.html`                                  | 修正     | CSP nonce付きのhydration前theme bootstrap                 |
+| `frontend/src/app.css`                                   | 修正     | light/dark semantic token、`color-scheme`、body背景・前景 |
+| `frontend/src/routes/+layout.svelte`                     | 修正     | theme store初期化をbrowser境界へ接続                      |
+| `frontend/src/lib/components/Header.svelte`              | 修正     | desktop/mobileから到達可能なtoggleとtheme対応色           |
+| `frontend/src/lib/components/Header.svelte.test.ts`      | 修正     | desktop/mobile toggle配置とmobile inert契約の回帰test     |
+| `frontend/src/lib/components/Footer.svelte`              | 修正     | theme対応色                                               |
+| `frontend/src/routes/**/*.svelte`                        | 修正     | hardcoded light colorをsemantic themeへ移行               |
+| `frontend/src/lib/components/**/*.svelte`                | 修正     | card、modal、form、chart、toast、admin UIのtheme対応      |
+| `frontend/src/lib/elements/category-style.ts`            | 修正     | 元素分類色をsemantic tokenへ移行                          |
+| `frontend/src/lib/elements/category-style.test.ts`       | 修正     | 元素分類styleのtoken契約を更新                            |
+| `frontend/src/lib/elements/mastery-badge.ts`             | 修正     | 習得度badgeをsemantic tokenへ移行                         |
+| `frontend/src/lib/elements/mastery-badge.test.ts`        | 修正     | 習得度badgeのtoken契約を更新                              |
+| `frontend/src/dark-mode-contract.test.ts`                | 新規     | hardcoded色残存、初期化順、主要画面契約のsource test      |
+| `docs/05_progress.md`                                    | 修正     | 実装中/完了状態と計画link                                 |
+| `docs/plans/dark-mode/plan.md`                           | 修正     | TDD、実変更、browser確認、完了記録                        |
+| `docs/plans/portfolio-release-v0-1/plan.md`              | 修正     | release blocker表とR2の状態を同期                         |
 
 対象globは無条件の一括置換を意味しない。`rg`でhardcoded色を棚卸しし、意味のあるsurface/text/border/action/status tokenへ分類して実変更表を確定する。
 
@@ -143,18 +149,18 @@ export const themeStore: {
 | D11      | format/lint/check/build        | frontend                              | 高     | 全品質gate成功                              |
 | D12      | plan/progressを同期            | docs                                  | 中     | 実変更表、TDD、結果、完了mark一致           |
 
-- [ ] D1: 現行色とcontrastを棚卸しする
-- [ ] D2: theme storeのRed testを追加する
-- [ ] D3: theme storeを実装する
-- [ ] D4: theme toggleのRed testを追加する
-- [ ] D5: accessible theme toggleを実装する
-- [ ] D6: no-flash bootstrap契約をRed化する
-- [ ] D7: root初期化とglobal theme tokenを実装する
-- [ ] D8: 主要component/pageをsemantic themeへ移行する
-- [ ] D9: component/全体回帰testを実行する
-- [ ] D10: browser・keyboard・contrastを確認する
-- [ ] D11: format/lint/check/buildを通す
-- [ ] D12: plan/progressを実態へ同期する
+- [x] D1: 現行色とcontrastを棚卸しする
+- [x] D2: theme storeのRed testを追加する
+- [x] D3: theme storeを実装する
+- [x] D4: theme toggleのRed testを追加する
+- [x] D5: accessible theme toggleを実装する
+- [x] D6: no-flash bootstrap契約をRed化する
+- [x] D7: root初期化とglobal theme tokenを実装する
+- [x] D8: 主要component/pageをsemantic themeへ移行する
+- [x] D9: component/全体回帰testを実行する
+- [x] D10: browser・keyboard・contrastを確認する
+- [x] D11: format/lint/check/buildを通す
+- [x] D12: plan/progressを実態へ同期する
 
 ## TDD方針
 
@@ -196,7 +202,7 @@ export const themeStore: {
 
 ## 手動確認
 
-主要画面 `/`、`/register`、`/login`、`/elements`、`/game`、`/game/play`、`/game/result`、`/ranking`、`/weak`、`/mypage`、`/settings`、`/admin`、`/privacy`をlight/dark両方で確認する。
+主要画面 `/`、`/register`、`/login`、`/elements`、`/game`、`/game/play`、`/game/result`、`/ranking`、`/weak`、`/mypage`、`/settings`、`/admin`をlight/dark両方で確認する。`/privacy`はportfolio release計画の別タスクR3で新規実装後に確認する。
 
 - OS light/dark初期値。
 - toggle、reload、別tab同期。
@@ -208,9 +214,76 @@ export const themeStore: {
 
 ## 実装完了条件
 
-- [ ] OS設定追従、明示toggle、保存、reloadがtestとbrowserで成功する。
-- [ ] SSR/hydration errorと大きなtheme flashがない。
-- [ ] 主要画面がlight/dark両方で読め、focusとstatusが色だけに依存しない。
-- [ ] CSP、security header、auth初期化を弱めていない。
-- [ ] frontend全test、lint、format check、Svelte check、production buildが成功する。
-- [ ] 対象ファイルと実差分、TDD記録、手動確認結果が本計画と`docs/05_progress.md`に一致する。
+- [x] OS設定追従、明示toggle、保存、reloadがtestとbrowserで成功する。
+- [x] SSR/hydration errorと大きなtheme flashがない。
+- [x] 主要画面がlight/dark両方で読め、focusとstatusが色だけに依存しない。
+- [x] CSP、security header、auth初期化を弱めていない。
+- [x] frontend全test、lint、format check、Svelte check、production buildが成功する。
+- [x] 対象ファイルと実差分、TDD記録、手動確認結果が本計画と`docs/05_progress.md`に一致する。
+
+## 実装完了
+
+- 完了日: 2026-07-21
+- 実装ブランチ: `feature/dark-mode`
+- PR: #127
+
+### 計画からの変更点
+
+- CSP nonce付きinline bootstrapを`app.html`へ採用し、storage keyとmedia queryはdocument rootのdata属性をsingle sourceとしてstoreと共有した。
+- 元素分類色と習得度badgeもhardcoded palette棚卸しの対象となったため、`category-style.ts`、`mastery-badge.ts`と対応testを実変更へ追加した。
+- browser確認で320px時の`body { min-width: 320px; }`がscrollbarを生むことを検出し、固定最小幅を削除した。
+- 実装後レビューで主要な文字・status・focusのWCAGコントラストを自動検証する契約testを追加した。
+- `/privacy`は本タスクR2では未実装であり、portfolio release計画のR3へ維持した。
+
+### TDD実施記録
+
+| phase      | 対象                                       | 結果                                                                |
+| ---------- | ------------------------------------------ | ------------------------------------------------------------------- |
+| Red        | theme store                                | module未実装により対象testが意図どおり失敗                          |
+| Green      | theme store                                | SSR、OS、保存、toggle、media/storage同期を含む12 test成功           |
+| Red        | ThemeToggle                                | component未実装によりaccessible name・pressed・click testが失敗     |
+| Green      | ThemeToggle / Header                       | toggle 4 testとHeader回帰5 testの計9 test成功                       |
+| Red        | bootstrap / semantic token source contract | bootstrap、初期化順、token、固定palette検出の6 testが意図どおり失敗 |
+| Green      | bootstrap / semantic移行                   | 関連13 files・88 test成功、source contract成功                      |
+| Review     | contrast contract                          | light/dark各9組の文字・status・focus比率を検証し8 contract test成功 |
+| Final gate | frontend全体                               | 54 files・580 test、lint、format、Svelte check、preview build成功   |
+
+### 最終品質gate
+
+| command                 | 結果                                      |
+| ----------------------- | ----------------------------------------- |
+| `npm run test:run`      | 54 files・580 test成功                    |
+| `npm run lint`          | 成功                                      |
+| `npm run format:check`  | 成功                                      |
+| `npm run check`         | 0 errors・0 warnings                      |
+| `npm run build:preview` | Vercel Preview buildとoutput contract成功 |
+
+### browser・アクセシビリティ確認
+
+| 確認項目               | 結果                                                                                                     |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| 初期表示・保存・reload | system lightの初期表示、明示dark切替、reload後dark維持、console error 0件                                |
+| OS設定・別tab同期      | matchMediaのlight/darkとstorage eventをstore/bootstrap testで確認                                        |
+| desktop/mobile Header  | 両方にnative buttonを配置し、mobile menuのinert契約、accessible name、`aria-pressed`、focus可視を確認    |
+| 320px                  | 主要routeで横overflow 0件。mobile toggleがviewport内に収まり、light/dark切替成功                         |
+| 主要route              | `/`、認証、元素、game、ranking、weak、mypage、settings、adminの公開・未認証状態でdark表示とconsoleを確認 |
+| contrast               | body 16.69/17.22、muted 7.56/11.81、action 5.17、surface 17.74/16.12（light/dark、WCAG AA以上）          |
+| focus / reduced motion | focus outline 2pxをdarkで視認。native button testとreduced-motion global ruleを確認                      |
+| scope外                | `/privacy`はR3、認証後のstaging導線とproduction CSP headerはR12/R16で最終確認                            |
+
+### 実際の変更ファイル
+
+| ファイル・範囲                                              | 変更種別 | 内容                                                        |
+| ----------------------------------------------------------- | -------- | ----------------------------------------------------------- |
+| `frontend/src/lib/stores/theme.svelte.{ts,test.ts}`         | 新規     | theme state、browser adapter、unit test                     |
+| `frontend/src/lib/components/ThemeToggle.svelte{,.test.ts}` | 新規     | accessible toggleとcomponent test                           |
+| `frontend/src/app.html`、`app.css`、root layout             | 修正     | no-flash bootstrap、semantic token、初期化                  |
+| `frontend/src/lib/components/Header.svelte{,.test.ts}`      | 修正     | desktop/mobile統合と回帰test                                |
+| `frontend/src/lib/components/**/*.svelte`                   | 修正     | footer、home、game、elements、ranking、mypage、toast、admin |
+| `frontend/src/routes/**/*.svelte`                           | 修正     | 公開・認証後pageのsemantic theme移行                        |
+| `frontend/src/lib/elements/category-style.{ts,test.ts}`     | 修正     | 元素分類semantic token                                      |
+| `frontend/src/lib/elements/mastery-badge.{ts,test.ts}`      | 修正     | 習得度semantic token                                        |
+| `frontend/src/dark-mode-contract.test.ts`                   | 新規     | bootstrap、CSP、palette、token、contrast契約                |
+| `docs/05_progress.md`                                       | 修正     | dark mode状態同期                                           |
+| `docs/plans/dark-mode/plan.md`                              | 修正     | 実装記録と完了状態                                          |
+| `docs/plans/portfolio-release-v0-1/plan.md`                 | 修正     | release blockerとR2状態同期                                 |

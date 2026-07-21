@@ -40,7 +40,7 @@
 </script>
 
 <figure class="space-y-3">
-  <figcaption class="text-sm text-gray-600">
+  <figcaption class="text-text-muted text-sm">
     {#if latestItem}
       最新ゲームの正答率は{formatAccuracyRate(latestItem.accuracyRate)}です。
     {:else}
@@ -49,10 +49,10 @@
   </figcaption>
 
   {#if hasTrend}
-    <div class="overflow-x-auto rounded border border-gray-200 bg-white p-4 shadow-sm">
+    <div class="border-border-muted bg-surface overflow-x-auto rounded border p-4 shadow-sm">
       <svg
         viewBox={'0 0 ' + chartWidth + ' ' + chartHeight}
-        class="h-56 min-w-[520px] text-blue-600"
+        class="text-action h-56 min-w-[520px]"
         role="img"
         aria-labelledby={chartTitleId + ' ' + chartDescriptionId}
       >
@@ -63,7 +63,7 @@
           y1={chartPadding}
           x2={chartPadding}
           y2={chartHeight - chartPadding}
-          class="stroke-gray-300"
+          class="stroke-chart-grid"
           stroke-width="1"
         />
         <line
@@ -71,7 +71,7 @@
           y1={chartHeight - chartPadding}
           x2={chartWidth - chartPadding}
           y2={chartHeight - chartPadding}
-          class="stroke-gray-300"
+          class="stroke-chart-grid"
           stroke-width="1"
         />
         {#each [0, 50, 100] as tick (tick)}
@@ -80,14 +80,14 @@
             y1={chartPadding + chartInnerHeight - (chartInnerHeight * tick) / 100}
             x2={chartWidth - chartPadding}
             y2={chartPadding + chartInnerHeight - (chartInnerHeight * tick) / 100}
-            class="stroke-gray-100"
+            class="stroke-chart-grid-muted"
             stroke-width="1"
           />
           <text
             x={chartPadding - 8}
             y={chartPadding + chartInnerHeight - (chartInnerHeight * tick) / 100 + 4}
             text-anchor="end"
-            class="fill-gray-500 text-[11px]"
+            class="fill-chart-label text-[11px]"
           >
             {tick}%
           </text>
@@ -95,7 +95,7 @@
         <polyline
           points={polylinePoints}
           fill="none"
-          class="stroke-blue-600"
+          class="stroke-chart-line"
           stroke-width="4"
           stroke-linecap="round"
           stroke-linejoin="round"
@@ -105,20 +105,25 @@
             cx={point.x}
             cy={point.y}
             r="5"
-            class="fill-white stroke-blue-600"
+            class="fill-chart-point stroke-chart-line"
             stroke-width="3"
           />
-          <text x={point.x} y={point.y - 10} text-anchor="middle" class="fill-gray-700 text-[11px]">
+          <text
+            x={point.x}
+            y={point.y - 10}
+            text-anchor="middle"
+            class="fill-chart-label text-[11px]"
+          >
             {point.value}%
           </text>
         {/each}
       </svg>
     </div>
 
-    <ol class="grid gap-2 text-sm text-gray-600 sm:grid-cols-2" aria-label="正答率推移の詳細">
+    <ol class="text-text-muted grid gap-2 text-sm sm:grid-cols-2" aria-label="正答率推移の詳細">
       {#each items as item, index (item.sessionId)}
-        <li class="rounded border border-gray-200 bg-white px-3 py-2">
-          <span class="font-semibold text-gray-900">{index + 1}回目</span>
+        <li class="border-border-muted bg-surface rounded border px-3 py-2">
+          <span class="text-text font-semibold">{index + 1}回目</span>
           <span>
             {formatStatsDate(item.playedAt)} / {item.correctCount}/{item.totalCount}問 / {formatAccuracyRate(
               item.accuracyRate
@@ -128,8 +133,8 @@
       {/each}
     </ol>
   {:else}
-    <div class="rounded border border-gray-200 bg-white p-5">
-      <p class="text-sm text-gray-600">
+    <div class="border-border-muted bg-surface rounded border p-5">
+      <p class="text-text-muted text-sm">
         ゲームをプレイすると、直近10ゲームの正答率推移が表示されます。
       </p>
     </div>

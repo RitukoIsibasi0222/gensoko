@@ -18,27 +18,27 @@
 <section
   aria-labelledby="admin-stats-heading"
   aria-busy={isLoading}
-  class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+  class="border-border-muted bg-surface rounded-2xl border p-5 shadow-sm"
 >
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
       <p class="text-brand text-sm font-semibold">Overview</p>
-      <h2 id="admin-stats-heading" class="text-ink mt-1 text-xl font-bold">サービス統計</h2>
+      <h2 id="admin-stats-heading" class="text-text mt-1 text-xl font-bold">サービス統計</h2>
     </div>
     {#if isLoading}
-      <p aria-live="polite" class="text-sm text-gray-600">サービス統計を読み込んでいます...</p>
+      <p aria-live="polite" class="text-text-muted text-sm">サービス統計を読み込んでいます...</p>
     {/if}
   </div>
 
   {#if errorMessage !== null}
-    <div class="mt-4 rounded-xl border border-red-200 bg-red-50 p-4" role="alert">
-      <p class="text-sm text-red-700">
+    <div class="border-danger-border bg-danger-surface mt-4 rounded-xl border p-4" role="alert">
+      <p class="text-danger-text text-sm">
         {errorMessage || '統計情報を表示できませんでした'}
       </p>
       {#if onRetry}
         <button
           type="button"
-          class="mt-3 rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500"
+          class="border-danger-border-strong bg-surface text-danger-text hover:bg-danger-surface-strong focus-visible:outline-danger-border-strong mt-3 rounded-lg border px-3 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
           onclick={onRetry}
           disabled={isLoading}
         >
@@ -50,62 +50,68 @@
 
   {#if stats}
     <div class="mt-5 grid gap-4 lg:grid-cols-3">
-      <article class="rounded-xl bg-blue-50 p-4">
-        <h3 class="font-semibold text-blue-950">ユーザー</h3>
+      <article class="bg-info-surface rounded-xl p-4">
+        <h3 class="text-info-text-strong font-semibold">ユーザー</h3>
         <dl class="mt-3 grid gap-3 text-sm">
           <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">現在の登録ユーザー</dt>
-            <dd class="font-bold text-blue-950">{formatNumber(stats.users.total)}</dd>
+            <dt class="text-text">現在の登録ユーザー</dt>
+            <dd class="text-info-text-strong font-bold">{formatNumber(stats.users.total)}</dd>
           </div>
           <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">有効アカウント</dt>
-            <dd class="font-bold text-blue-950">{formatNumber(stats.users.active)}</dd>
+            <dt class="text-text">有効アカウント</dt>
+            <dd class="text-info-text-strong font-bold">{formatNumber(stats.users.active)}</dd>
           </div>
           <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">停止中</dt>
-            <dd class="font-bold text-blue-950">{formatNumber(stats.users.suspended)}</dd>
+            <dt class="text-text">停止中</dt>
+            <dd class="text-info-text-strong font-bold">{formatNumber(stats.users.suspended)}</dd>
           </div>
           <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">ADMIN</dt>
-            <dd class="font-bold text-blue-950">{formatNumber(stats.users.admins)}</dd>
+            <dt class="text-text">ADMIN</dt>
+            <dd class="text-info-text-strong font-bold">{formatNumber(stats.users.admins)}</dd>
           </div>
           <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">メール確認済み</dt>
-            <dd class="font-bold text-blue-950">{formatNumber(stats.users.emailVerified)}</dd>
+            <dt class="text-text">メール確認済み</dt>
+            <dd class="text-info-text-strong font-bold">
+              {formatNumber(stats.users.emailVerified)}
+            </dd>
           </div>
         </dl>
       </article>
 
-      <article class="rounded-xl bg-amber-50 p-4">
-        <h3 class="font-semibold text-amber-950">ゲーム</h3>
+      <article class="bg-warning-surface rounded-xl p-4">
+        <h3 class="text-warning-text-strong font-semibold">ゲーム</h3>
         <dl class="mt-3 grid gap-3 text-sm">
           <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">総ゲーム回数</dt>
-            <dd class="font-bold text-amber-950">{formatNumber(stats.games.totalSessions)}</dd>
+            <dt class="text-text">総ゲーム回数</dt>
+            <dd class="text-warning-text-strong font-bold">
+              {formatNumber(stats.games.totalSessions)}
+            </dd>
           </div>
           <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">総回答数</dt>
-            <dd class="font-bold text-amber-950">{formatNumber(stats.games.totalAnswered)}</dd>
+            <dt class="text-text">総回答数</dt>
+            <dd class="text-warning-text-strong font-bold">
+              {formatNumber(stats.games.totalAnswered)}
+            </dd>
           </div>
           <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">平均正答率</dt>
-            <dd class="font-bold text-amber-950">{stats.games.averageAccuracyRate}%</dd>
+            <dt class="text-text">平均正答率</dt>
+            <dd class="text-warning-text-strong font-bold">{stats.games.averageAccuracyRate}%</dd>
           </div>
         </dl>
       </article>
 
-      <article class="rounded-xl bg-emerald-50 p-4">
-        <h3 class="font-semibold text-emerald-950">学習</h3>
+      <article class="bg-success-surface rounded-xl p-4">
+        <h3 class="text-success-text-strong font-semibold">学習</h3>
         <dl class="mt-3 grid gap-3 text-sm">
           <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">苦手元素登録数</dt>
-            <dd class="font-bold text-emerald-950">
+            <dt class="text-text">苦手元素登録数</dt>
+            <dd class="text-success-text-strong font-bold">
               {formatNumber(stats.learning.totalWeakElements)}
             </dd>
           </div>
           <div class="flex items-start justify-between gap-3">
-            <dt class="text-gray-700">習得元素数の累計</dt>
-            <dd class="font-bold text-emerald-950">
+            <dt class="text-text">習得元素数の累計</dt>
+            <dd class="text-success-text-strong font-bold">
               {formatNumber(stats.learning.totalMasteredCount)}
             </dd>
           </div>
@@ -113,7 +119,7 @@
       </article>
     </div>
   {:else if !isLoading && errorMessage === null}
-    <p class="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-600">
+    <p class="bg-surface-muted text-text-muted mt-4 rounded-xl p-4 text-sm">
       統計情報はまだ読み込まれていません
     </p>
   {/if}

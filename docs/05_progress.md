@@ -233,7 +233,7 @@
 ### その他の品質タスク
 
 - [ ] エラートラッキング・構造化ログ導入（500通知・requestId・個人情報除外）
-- [ ] ダークモード対応（OS設定追従 + トグルボタン）
+- [x] ダークモード対応（OS設定追従 + トグルボタン）— D1〜D12、browser確認、frontend 580 test・全品質gate成功
 - [ ] レスポンシブデザイン確認・修正（PC/タブレット/スマホ）
 - [ ] アクセシビリティ確認（キーボード操作・スクリーンリーダー）
 - [ ] プライバシーポリシーページ `/privacy`
@@ -265,7 +265,7 @@
 - [-] 一般ユーザー登録・メール認証・login/logout — staging確認済み、production smoke待ち
 - [ ] refresh tokenのproduction same-site構成とreload後refresh確認
 - [-] 本人退会の物理削除 — code・専用DB・staging本人/Admin導線を確認済み、残る移行・production gate待ち
-- [ ] ダークモード（OS設定追従 + 明示toggle） — 計画: [`dark-mode`](plans/dark-mode/plan.md)
+- [x] ダークモード（OS設定追従 + 明示toggle） — D1〜D12完了、計画: [`dark-mode`](plans/dark-mode/plan.md)
 - [ ] プライバシーポリシーページ`/privacy` — 計画: [`privacy-policy`](plans/privacy-policy/plan.md)
 - [-] 基本レスポンシブ・keyboard・focus・live region — 実装済み範囲あり、主要画面のrelease確認待ち
 - [-] 認証系・ゲーム送信APIのアプリレベルrate limit — Hono/DOとstaging binding済み、実HTTP 429/503・production binding待ち

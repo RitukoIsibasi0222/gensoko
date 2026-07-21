@@ -198,8 +198,8 @@
 
   function getResultClass(item: GameSessionResultItem): string {
     return item.isCorrect
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-      : 'border-red-200 bg-red-50 text-red-900';
+      ? 'border-success-border bg-success-surface text-success-text'
+      : 'border-danger-border bg-danger-surface text-danger-text-strong';
   }
 
   function getChosenChoiceLabel(item: GameSessionResultItem): string {
@@ -214,13 +214,13 @@
 <div class="space-y-6">
   {#if result === null || modeConfig === null}
     <section
-      class="space-y-4 rounded border border-gray-200 bg-white p-6"
+      class="border-border-muted bg-surface space-y-4 rounded border p-6"
       aria-busy={isRestoreLoading}
       aria-live={unavailableAriaLive}
       role={unavailableRole}
     >
       <div>
-        <p class="text-sm font-semibold text-gray-500">4択クイズ</p>
+        <p class="text-text-subtle text-sm font-semibold">4択クイズ</p>
         <div class="mt-2 flex items-center gap-3">
           {#if isRestoreLoading}
             <span
@@ -228,16 +228,16 @@
               aria-hidden="true"
             ></span>
           {/if}
-          <h1 class="text-2xl font-bold text-gray-900">{unavailableTitle}</h1>
+          <h1 class="text-text text-2xl font-bold">{unavailableTitle}</h1>
         </div>
-        <p class="mt-2 text-sm leading-6 text-gray-600">{unavailableMessage}</p>
+        <p class="text-text-muted mt-2 text-sm leading-6">{unavailableMessage}</p>
       </div>
       <div class="flex flex-wrap gap-3">
         {#if restoreStatus === 'error'}
           <button
             type="button"
             onclick={retryRestore}
-            class="bg-brand hover:bg-brand-hover focus-visible:outline-brand inline-flex items-center justify-center rounded px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
+            class="bg-action hover:bg-action-hover focus-visible:outline-focus text-text-inverse inline-flex items-center justify-center rounded px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
             disabled={isRestoreLoading}
           >
             再試行
@@ -246,21 +246,21 @@
         {#if restoreStatus === 'unauthenticated'}
           <a
             href="/login"
-            class="bg-brand hover:bg-brand-hover focus-visible:outline-brand inline-flex items-center justify-center rounded px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2"
+            class="bg-action hover:bg-action-hover focus-visible:outline-focus text-text-inverse inline-flex items-center justify-center rounded px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             ログインへ
           </a>
         {:else}
           <a
             href={replayHref}
-            class="bg-brand hover:bg-brand-hover focus-visible:outline-brand inline-flex items-center justify-center rounded px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2"
+            class="bg-action hover:bg-action-hover focus-visible:outline-focus text-text-inverse inline-flex items-center justify-center rounded px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             ゲームへ戻る
           </a>
         {/if}
         <a
           href="/"
-          class="inline-flex items-center justify-center rounded border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+          class="border-border text-text hover:bg-surface-muted focus-visible:outline-focus inline-flex items-center justify-center rounded border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           ホームへ
         </a>
@@ -269,44 +269,44 @@
   {:else}
     <section class="space-y-5">
       <div class="space-y-2">
-        <p class="text-sm font-semibold text-gray-500">4択クイズ</p>
-        <h1 class="text-2xl font-bold text-gray-900">ゲーム結果</h1>
-        <p class="text-sm text-gray-600">
+        <p class="text-text-subtle text-sm font-semibold">4択クイズ</p>
+        <h1 class="text-text text-2xl font-bold">ゲーム結果</h1>
+        <p class="text-text-muted text-sm">
           {modeConfig.title} / {modeConfig.difficultyLabel} / {formatPlayedAt(result.playedAt)}
         </p>
       </div>
 
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="rounded border border-gray-200 bg-white p-4">
-          <p class="text-sm text-gray-600">スコア</p>
-          <p class="mt-1 text-2xl font-bold text-gray-900">{result.totalScore}</p>
+        <div class="border-border-muted bg-surface rounded border p-4">
+          <p class="text-text-muted text-sm">スコア</p>
+          <p class="text-text mt-1 text-2xl font-bold">{result.totalScore}</p>
         </div>
-        <div class="rounded border border-gray-200 bg-white p-4">
-          <p class="text-sm text-gray-600">正解数</p>
-          <p class="mt-1 text-2xl font-bold text-gray-900">
+        <div class="border-border-muted bg-surface rounded border p-4">
+          <p class="text-text-muted text-sm">正解数</p>
+          <p class="text-text mt-1 text-2xl font-bold">
             {result.correctCount} / {result.totalCount}
           </p>
         </div>
-        <div class="rounded border border-gray-200 bg-white p-4">
-          <p class="text-sm text-gray-600">正答率</p>
-          <p class="mt-1 text-2xl font-bold text-gray-900">{accuracy}%</p>
+        <div class="border-border-muted bg-surface rounded border p-4">
+          <p class="text-text-muted text-sm">正答率</p>
+          <p class="text-text mt-1 text-2xl font-bold">{accuracy}%</p>
         </div>
-        <div class="rounded border border-gray-200 bg-white p-4">
-          <p class="text-sm text-gray-600">最大連続正解</p>
-          <p class="mt-1 text-2xl font-bold text-gray-900">{result.maxStreak}</p>
+        <div class="border-border-muted bg-surface rounded border p-4">
+          <p class="text-text-muted text-sm">最大連続正解</p>
+          <p class="text-text mt-1 text-2xl font-bold">{result.maxStreak}</p>
         </div>
       </div>
 
       <div class="flex flex-wrap gap-3">
         <a
           href={replayHref}
-          class="bg-brand hover:bg-brand-hover focus-visible:outline-brand inline-flex items-center justify-center rounded px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2"
+          class="bg-action hover:bg-action-hover focus-visible:outline-focus text-text-inverse inline-flex items-center justify-center rounded px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           もう一度
         </a>
         <a
           href="/game"
-          class="inline-flex items-center justify-center rounded border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+          class="border-border text-text hover:bg-surface-muted focus-visible:outline-focus inline-flex items-center justify-center rounded border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           モード選択へ戻る
         </a>
@@ -315,8 +315,8 @@
 
     <section class="space-y-3" aria-labelledby="game-result-detail-heading">
       <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <h2 id="game-result-detail-heading" class="text-lg font-bold text-gray-900">回答詳細</h2>
-        <p class="text-sm text-gray-600">所要時間: {result.durationSec}秒</p>
+        <h2 id="game-result-detail-heading" class="text-text text-lg font-bold">回答詳細</h2>
+        <p class="text-text-muted text-sm">所要時間: {result.durationSec}秒</p>
       </div>
 
       <ol class="space-y-3">
@@ -349,17 +349,19 @@
     </section>
 
     <section class="space-y-3" aria-labelledby="game-result-missed-heading">
-      <h2 id="game-result-missed-heading" class="text-lg font-bold text-gray-900">復習ポイント</h2>
+      <h2 id="game-result-missed-heading" class="text-text text-lg font-bold">復習ポイント</h2>
       {#if missedResults.length === 0}
         <div
-          class="rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+          class="border-success-border bg-success-surface text-success-text rounded border px-4 py-3 text-sm"
         >
           全問正解です。このモードをもう一度解くか、別のモードに進みましょう。
         </div>
       {:else}
         <ul class="space-y-2">
           {#each missedResults as item (item.questionId)}
-            <li class="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+            <li
+              class="border-danger-border bg-danger-surface text-danger-text-strong rounded border px-4 py-3 text-sm"
+            >
               <span class="font-semibold">{item.prompt}</span>
               <span> は {getResultLabel(item)}。正解は {getCorrectChoiceLabel(item)} です。</span>
             </li>

@@ -11,16 +11,16 @@
   let { title, description, primaryCta, secondaryCta }: Props = $props();
 </script>
 
-<section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
-  <p class="text-sm font-semibold tracking-wide text-gray-500">Gensoko</p>
-  <h1 class="text-ink mt-2 text-3xl font-bold sm:text-4xl">{title}</h1>
-  <p class="mt-4 max-w-2xl text-base leading-relaxed text-gray-700">{description}</p>
+<section class="border-border-muted bg-surface rounded-2xl border p-6 shadow-sm sm:p-8">
+  <p class="text-text-subtle text-sm font-semibold tracking-wide">Gensoko</p>
+  <h1 class="text-text mt-2 text-3xl font-bold sm:text-4xl">{title}</h1>
+  <p class="text-text mt-4 max-w-2xl text-base leading-relaxed">{description}</p>
 
   <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
     <div class="flex flex-col gap-1">
       {#if primaryCta.disabled}
         <span
-          class="inline-flex cursor-not-allowed items-center justify-center rounded bg-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-500"
+          class="bg-surface-disabled text-text-subtle inline-flex cursor-not-allowed items-center justify-center rounded px-5 py-2.5 text-sm font-semibold"
           aria-disabled="true"
         >
           {primaryCta.label}
@@ -28,22 +28,22 @@
       {:else}
         <a
           href={primaryCta.href}
-          class="bg-brand hover:bg-brand-hover focus-visible:outline-brand inline-flex items-center justify-center rounded px-5 py-2.5 text-sm font-semibold text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+          class="bg-action hover:bg-action-hover focus-visible:outline-focus text-text-inverse inline-flex items-center justify-center rounded px-5 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           {primaryCta.label}
         </a>
       {/if}
-      <p class="text-xs text-gray-500">{primaryCta.description}</p>
+      <p class="text-text-subtle text-xs">{primaryCta.description}</p>
     </div>
 
     <div class="flex flex-col gap-1">
       <a
         href={secondaryCta.href}
-        class="hover:border-brand hover:text-brand focus-visible:outline-brand inline-flex items-center justify-center rounded border border-gray-300 px-5 py-2.5 text-sm font-semibold text-gray-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+        class="hover:border-brand hover:text-brand focus-visible:outline-focus border-border text-text inline-flex items-center justify-center rounded border px-5 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         {secondaryCta.label}
       </a>
-      <p class="text-xs text-gray-500">{secondaryCta.description}</p>
+      <p class="text-text-subtle text-xs">{secondaryCta.description}</p>
     </div>
   </div>
 </section>
