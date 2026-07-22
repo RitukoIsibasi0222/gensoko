@@ -36,7 +36,7 @@ on:
         type: string
   schedule:
     - cron: "23 19 * * *"
-    - cron: "41 19 * * 6"
+    - cron: "41 19 * * *"
 
 jobs:
   production-database:
@@ -71,7 +71,7 @@ jobs:
               "23 19 * * *")
                 operation="capacity-check"
                 ;;
-              "41 19 * * 6")
+              "41 19 * * *")
                 operation="backup"
                 ;;
               *)
