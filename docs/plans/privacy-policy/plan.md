@@ -47,7 +47,7 @@ R3 の Green 実装前に、下記「実装入力 gate」の具体値を owner �
 - access token と `id`・`username`・`role` は browser の `sessionStorage` に保存する。refresh token は HttpOnly Cookie、DB では SHA-256 hash と有効期限を保存する。
 - 監査 row は email/username ではなく内部 ID を含み、正式保持期間は 365 日である。
 - 現行の account deletion 計画は、稼働 DB の物理削除、監査内部 ID の期限付き例外、暗号化 backup の最大 7 日境界を分けている。全損時の完全な削除 replayを保証できない境界は2026-07-22に残存リスクとして正式承認し、external replay sourceは未導入のまま明記している。
-- staging では Vercel、Cloudflare Workers/Durable Objects、Supabase、Resend を使用済みである。Vercel、Cloudflare、Supabase、Resend、GitHub Actions・Artifactsをv0.1の外部サービス一覧としてR4で承認したが、production配備済みとは扱わずR14/R15の実環境確認を残す。
+- staging では Vercel、Cloudflare Workers/Durable Objects、Supabase、Resend を使用済みである。Vercel、Cloudflare、Supabase、Resend、GitHub Actions・Artifactsをv0.1の外部サービス一覧としてR4で承認したが、production配備済みとは扱わず、R12のstaging回帰、R14のpreflight、R15のproduction deploy、R16のproduction smokeを残す。
 
 ## 前提条件・依存関係
 
