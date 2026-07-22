@@ -20,19 +20,26 @@ function scheduledOperationCase(cron: string, operation: "backup" | "capacity-ch
                 operation="${operation}"`;
 }
 
+function countOccurrences(source: string, fragment: string): number {
+  return source.split(fragment).length - 1;
+}
+
 describe("production database GitHub Actions workflow", () => {
   const workflow = readFileSync(WORKFLOW_PATH, "utf8");
 
   it("schedules encrypted backups daily at JST 04:41 without changing the capacity schedule", () => {
-    expect(workflow).toContain(scheduleDeclaration(DAILY_BACKUP_CRON));
-    expect(workflow).toContain(scheduledOperationCase(DAILY_BACKUP_CRON, "backup"));
+    expect(countOccurrences(workflow, scheduleDeclaration(DAILY_BACKUP_CRON))).toBe(1);
+    expect(countOccurrences(workflow, scheduledOperationCase(DAILY_BACKUP_CRON, "backup"))).toBe(1);
     expect(workflow).not.toContain(WEEKLY_BACKUP_CRON);
-    expect(workflow).toContain(scheduleDeclaration(CAPACITY_CHECK_CRON));
-    expect(workflow).toContain(scheduledOperationCase(CAPACITY_CHECK_CRON, "capacity-check"));
+    expect(countOccurrences(workflow, scheduleDeclaration(CAPACITY_CHECK_CRON))).toBe(1);
+    expect(
+      countOccurrences(workflow, scheduledOperationCase(CAPACITY_CHECK_CRON, "capacity-check")),
+    ).toBe(1);
   });
 
   it("fixes every operation to production and serializes database jobs", () => {
     expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("          - backup");
     expect(workflow).toContain("schedule:");
     expect(workflow).toContain("environment: production");
     expect(workflow).not.toContain("environment: staging");
