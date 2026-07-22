@@ -48,7 +48,7 @@
 - 監査保持期間、問い合わせ先、運営者表示、発効日、外部provider、backup境界をplaceholderのまま公開しない。
 - password、token、Cookie、Authorization、DB URL、内部ID、provider credentialの値をページやtest fixtureへ書かない。
 - アカウント削除を「即時にすべての媒体から消える」と表現しない。稼働DBの物理削除、監査内部ID例外、暗号化backupの最長保持・restore時再削除境界を分けて説明する。
-- 監査内部IDの保持期間・目的は2026-07-14承認済みとして扱う。問い合わせ先と利用者向けaccess範囲の正式文言が決まらなければreleaseをblockする。
+- 監査内部IDの保持期間・目的は2026-07-14承認済みとして扱う。問い合わせ先と利用者向けアクセス範囲の正式文言が決まらなければreleaseをblockする。
 - analytics、広告、第三者販売を使っていない場合だけ「利用しない」と記載し、将来導入時は先にpolicyを更新する。
 - 本計画は法的助言の代替ではない。個人開発の公開範囲に合わせた事実確認とowner承認を必須にする。
 
@@ -83,7 +83,7 @@
 | 外部サービス                  | Vercel、Cloudflare、Supabase、Resend、GitHub Actions backup。役割と各provider policyへのlink      |
 | 保存期間                      | account継続中、token期限、監査正式期間、backup最長境界。未確定値禁止                              |
 | アカウント削除                | 稼働DBのUser/所有data物理削除、再登録、旧auth拒否、共有Element非対象                              |
-| 監査の例外                    | email/usernameを含まない内部ID・role・event、目的、保持期間、access範囲                           |
+| 監査の例外                    | email/usernameを含まない内部ID・role・event、目的、保持期間、アクセス範囲                         |
 | backup・restore               | AES-256暗号化、Artifact保持、削除済みdataを含み得ること、isolated restoreと再削除                 |
 | 安全管理                      | bcrypt、Zod、CORS、Cookie、rate limit、security headers、秘密非出力                               |
 | 利用者の選択                  | 登録しない選択、退会、問い合わせ、policy変更時の確認方法                                          |
@@ -129,7 +129,7 @@ providerの保持期間、region、subprocessor、問い合わせ先をアプリ
    - 根拠: 応答できない窓口は利用者保護にならないため。
 
 4. **監査内部ID**
-   - 選択: incident/admin操作の相関目的、access範囲、正式保持期間を明記し、email/username非保存と期限後cleanupを区別する。
+   - 選択: incident/admin操作の相関目的、アクセス範囲、正式保持期間を明記し、email/username非保存と期限後cleanupを区別する。
    - 根拠: 完全削除とセキュリティ監査の例外を隠さないため。
 
 5. **backup**
@@ -152,7 +152,7 @@ providerの保持期間、region、subprocessor、問い合わせ先をアプリ
 | 問い合わせ窓口                     | 未確定                            | release block    |
 | 発効日・version                    | 未確定                            | release block    |
 | 監査ログ正式保持期間               | 365日、2026-07-14承認済み         | 確定             |
-| 監査内部IDの目的・access範囲       | 目的は承認済み、公開文言は未確定  | release block    |
+| 監査内部IDの目的・アクセス範囲     | 目的は承認済み、公開文言は未確定  | release block    |
 | backup最長保持とrestore replay説明 | 技術境界あり、正式文言待ち        | release block    |
 | productionで使用するprovider一覧   | staging構成あり、production未配備 | deploy前に再確認 |
 | policy改定の告知方法               | 未確定                            | release block    |

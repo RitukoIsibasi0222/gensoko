@@ -1025,16 +1025,16 @@ schema変更・backfillは想定しない。
 - 暗号化backup [#29322979476](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29322979476)が暗号化・復号検証・Artifact uploadまで成功した。
 - backup run IDと期限内Artifactを確認後、migration [#29323085012](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29323085012)で`prisma migrate deploy`が成功した。
 
-### T21 production初回実行・公開前baseline（2026-07-14〜2026-07-21、完了）
+### T21 production初回実行・公開前baseline（観測: 2026-07-14〜2026-07-21、終了後確認: 2026-07-22、完了）
 
 - productionの手動dry-run [#29338470913](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29338470913)が終了code 0で成功した。
 - cutoff `2025-07-14T13:54:42.591Z`、保持365日、期限超過0件、削除0件、`createdLast24HoursCount=0`、`hasExpiredRows=false`、`oldestOccurredAt=null`、`latestOccurredAt=null`、`minimumRunsRequired=0`を確認した。
 - execute stepは実行されず、`AUDIT_LOG_CLEANUP_ENABLED=false`を維持している。
 - logに接続文字列、project ref、publishable key、内部ID、監査ログID、PII、raw errorがないことを確認した。
 - 7日baseline観測期間は2026-07-14 22:54 JSTから2026-07-21 22:55 JSTまでとする。
-- 観測終了後のscheduled run [#29859488507](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29859488507)は終了code 0で成功し、`createdLast24HoursCount=0`、`hasExpiredRows=false`、`oldestOccurredAt=null`、`latestOccurredAt=null`、削除0件を確認した。
-- 観測開始時・終了時とも監査rowは0件で、期間中はcleanup無効を維持して削除がないため、公開前7日間の増加量baselineを0件と確定した。
-- 終了runのlogに接続文字列、project ref、publishable key、内部ID、監査ログID、PII、raw errorがないことを確認した。
+- 観測終了から5時間3分後の2026-07-22 03:58 JSTに開始したscheduled run [#29859488507](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29859488507)は終了code 0で成功し、`createdLast24HoursCount=0`、`hasExpiredRows=false`、`oldestOccurredAt=null`、`latestOccurredAt=null`、削除0件を確認した。
+- 観測開始時と観測終了後の確認run時はいずれも監査rowが0件で、期間中はcleanup無効を維持して削除がないため、公開前7日間の増加量baselineを0件と確定した。
+- 終了後確認runのlogに接続文字列、project ref、publishable key、内部ID、監査ログID、PII、raw errorがないことを確認した。
 - productionアプリ公開後の監査回帰と実負荷baseline、アカウント完全削除のproduction gateは別の未完了gateとして残す。
 
 ### タブ区切りタスクリスト
