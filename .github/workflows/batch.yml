@@ -20,6 +20,8 @@ on:
           - game-question-set-cleanup
           - audit-log-cleanup-dry-run
           - audit-log-cleanup-execute
+          - refresh-token-cleanup-dry-run
+          - refresh-token-cleanup-execute
   schedule:
     - cron: "7 15 * * 0"
     - cron: "17,47 * * * *"
@@ -41,6 +43,7 @@ jobs:
       BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
       AUDIT_LOG_RETENTION_DAYS: ${{ vars.AUDIT_LOG_RETENTION_DAYS }}
       AUDIT_LOG_CLEANUP_ENABLED: ${{ vars.AUDIT_LOG_CLEANUP_ENABLED }}
+      REFRESH_TOKEN_CLEANUP_ENABLED: ${{ vars.REFRESH_TOKEN_CLEANUP_ENABLED }}
 
     steps:
       - name: Validate batch environment
@@ -126,3 +129,19 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npm run cleanup:audit-logs -- --execute
+
+      - name: Preview refresh token cleanup
+        if: inputs.batch_job == 'refresh-token-cleanup-dry-run'
+        working-directory: backend
+        timeout-minutes: 10
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run cleanup:refresh-tokens -- --dry-run
+
+      - name: Execute refresh token cleanup
+        if: inputs.batch_job == 'refresh-token-cleanup-execute'
+        working-directory: backend
+        timeout-minutes: 10
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run cleanup:refresh-tokens -- --execute

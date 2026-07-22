@@ -143,4 +143,16 @@ describe("Workers staging build設定", () => {
       expect(generatedTypes).toContain(bindingName);
     }
   });
+
+  it("production entrypoint・parameter化dry-runをstaging設定から分離する", () => {
+    const packageJson = readJson("package.json");
+    const scripts = getObject(packageJson.scripts);
+    const productionWorker = readFileSync("src/worker-production.ts", "utf8");
+
+    expect(productionWorker).toContain('expectedTarget: "production"');
+    expect(productionWorker).not.toContain('expectedTarget: "staging"');
+    expect(scripts["workers:production:dry-run"]).toContain("runProductionWranglerDryRun.cli.ts");
+    expect(scripts["workers:production:dry-run"]).not.toContain("deploy");
+    expect(readFileSync("wrangler.jsonc", "utf8")).not.toContain("worker-production.ts");
+  });
 });
