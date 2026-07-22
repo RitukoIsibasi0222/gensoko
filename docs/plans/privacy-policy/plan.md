@@ -442,6 +442,12 @@ npm run build
   - 関連 5 file、45 test が固定 seed `1314750876325` の shuffle 実行で成功した。
   - frontend 全 56 file、594 test が同じ固定 seed の shuffle 実行で成功した。
   - lint、format check、Svelte check 0 error/0 warning、Vercel adapter の production build が成功した。
+- suppressed review 追補:
+  - isolation test 自身が追加した charset meta と title が、保持確認後も head に残る副作用を確認した。
+  - fixture 残留を検出して回収する afterEach 監査を先行追加し、追加した監査だけが 2 node の残留を理由に失敗、既存 10 test は成功した。
+  - fixture の検証全体を `try/finally` で囲み、成功・失敗にかかわらずテスト所有の 2 node を削除するよう修正した。
+  - privacy 11 test と、固定 seed `1314750990508` で shuffle した frontend 全 56 file、594 test が成功した。
+  - lint、format check、Svelte check 0 error/0 warning、Vercel adapter の production build が再度成功した。
 
 ### 計画からの変更点
 
