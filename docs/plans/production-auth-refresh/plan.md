@@ -670,6 +670,14 @@ R5-21	後続taskへhandoff	Handoff	R7/R8/R9/R11A/R11/R12/R18	中
 | hostname             | malformed DNS labelとprovider/bare suffixを受理して失敗             | label単位validationとprovider suffix拒否                 |
 | login A11Y           | alert/inputへfocusせずaria関連付けがなく失敗                        | validation対象inputまたはalertへfocusし属性連動          |
 
+### PR #136 review・CI対応
+
+- Copilot reviewの指摘を妥当と判断した。refresh token cleanup CLIは設定validationをDB dependencyのdynamic importより前に行い、固定された具体的な設定エラーを終了code 2で通知する。cleanup実行時のraw errorは従来どおり汎用文言へ変換し、token・ID・DB URLを出力しない。
+- frontend-qualityで判明した型エラーを修正した。refresh後の一時障害判定はisUnavailable getterを使い、runtime契約を変えずTypeScriptの誤ったnarrowingを避ける。
+- top pageはunavailableをanonymousへ誤分類せず、主CTAを非活性にする。publicな元素一覧への副導線は維持する。
+- Red: 不正cleanup設定が汎用error・終了code 1になりDB moduleをload、top pageのunavailableがanonymousまたはundefinedになった。
+- Green: CLI test 1件、home/auth対象test 38件、svelte-check 0 errors / 0 warnings。最終gateではbackend 1,044件、frontend 635件、frontend preview buildまで成功した。
+
 ### 実際の変更ファイル
 
 | ファイル                                                                                                         | 変更種別  | 内容                                                    |
@@ -699,10 +707,12 @@ R5-21	後続taskへhandoff	Handoff	R7/R8/R9/R11A/R11/R12/R18	中
 | `docs/05_progress.md` / `09_startup_commands.md` / `11_deployment.md`                                            | 修正      | 継続中理由、手順、rollout/rollback                      |
 | `docs/plans/portfolio-release-v0-1/plan.md` / 本計画書                                                           | 修正      | R5とR14〜R16の証拠境界                                  |
 
+| frontend/src/lib/home/content.ts / test / frontend/src/routes/(app)/+page.svelte | 修正 | unavailable audienceと非活性CTA |
+
 ### ローカル品質ゲート
 
-- backend: Vitest 100 files・1,043件成功（既存integration 4 files・10件skip）、Workers 2 files・15件成功、build、lint、format:check成功。
-- frontend: lint、format、Vitest 59 files・632件成功。外部接続なしproduction config/smoke contract 17件を含む。
+- backend: Vitest 101 files・1,044件成功（既存integration 4 files・10件skip）、Workers 2 files・15件成功、build、lint、format:check成功。
+- frontend: lint、check（0 errors / 0 warnings）、format:check、preview build、Vitest 59 files・635件成功。外部接続なしproduction config/smoke contract 17件を含む。
 - Prisma: local Dockerの一時DB `gensoko_r5_review`へ全16 migrationを最初から適用し、concurrent expiry indexの`indisvalid=true`を確認した。一時DBは検証後に削除し、production DBには接続していない。
 - Playwright: local Dockerでlogin画面、health 200、Cookieなしrefresh 401の導線を確認した。trace、screenshot、video、storageState、Cookie一覧は保存していない。
 - 共通: `git diff --check`成功。追加差分のcredential付きDB URL、JWT secret literal、sensitive header log、長いhex literal、Cookie Domain、wildcard CORSは値非表示scanですべて0件を確認した。

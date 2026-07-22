@@ -350,6 +350,23 @@ describe('authStore production refresh coordination', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('401後のrefreshがnetwork errorなら元requestをretryせず503を返す', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network unavailable')));
+    const store = await loadAuthStore();
+    const { ApiError } = await import('$lib/api/errors');
+    store.login(TEST_USER, TEST_ACCESS_TOKEN);
+    const request = vi
+      .fn<(accessToken: string) => Promise<string>>()
+      .mockRejectedValueOnce(new ApiError(401, '認証が必要です'));
+
+    await expect(store.requestWithReauthentication(request)).rejects.toMatchObject({ status: 503 });
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(store.state.status).toBe('unavailable');
+    expect(store.accessToken).toBeNull();
+  });
+
   it('retry後も401ならrefreshも元requestも追加実行しない', async () => {
     vi.stubGlobal(
       'fetch',

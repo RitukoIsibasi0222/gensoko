@@ -43,9 +43,17 @@ export const HOME_OVERVIEW_ITEMS: readonly {
 
 export const HOME_RANKING_PREVIEW_INITIAL: readonly HomeRankingPreviewEntry[] = [];
 
-export function getTopPageAudience(isInitializing: boolean, isLoggedIn: boolean): TopPageAudience {
+export function getTopPageAudience(
+  isInitializing: boolean,
+  isLoggedIn: boolean,
+  isUnavailable = false
+): TopPageAudience {
   if (isInitializing) {
     return 'initializing';
+  }
+
+  if (isUnavailable) {
+    return 'unavailable';
   }
 
   return isLoggedIn ? 'authenticated' : 'anonymous';
@@ -72,6 +80,13 @@ export function getPrimaryCta(audience: TopPageAudience): TopPageCta {
         href: '#',
         label: '準備中...',
         description: '認証状態を確認しています。',
+        disabled: true
+      };
+    case 'unavailable':
+      return {
+        href: '#',
+        label: '認証を確認できません',
+        description: '認証サーバーへ接続できるまでお待ちください。',
         disabled: true
       };
   }

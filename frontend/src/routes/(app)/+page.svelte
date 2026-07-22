@@ -116,7 +116,9 @@
 
   // authStore.state.status の初期値が 'initializing' のため SSR/hydration の整合は store 側で担保される。
   // Header.svelte と同じパターンで authStore を直接参照する（mounted フラグは不要）。
-  const audience = $derived(getTopPageAudience(authStore.isInitializing, authStore.isLoggedIn));
+  const audience = $derived(
+    getTopPageAudience(authStore.isInitializing, authStore.isLoggedIn, authStore.isUnavailable)
+  );
   const primaryCta = $derived(getPrimaryCta(audience));
   const secondaryCta = $derived(getSecondaryCta(audience));
   const isRankingPreviewLoading = $derived(rankingPreviewLoadStatus === 'loading');

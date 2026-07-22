@@ -445,7 +445,7 @@ class AuthStore {
     const refreshed = await this.refresh();
     const refreshedAccessToken = this.state.accessToken;
     if (!refreshed || refreshedAccessToken === null) {
-      if (this.state.status === 'unavailable') {
+      if (this.isUnavailable) {
         throw new ApiError(503, '認証サーバーに接続できません。再試行してください');
       }
       throw new ApiError(401, '認証が必要です');

@@ -18,6 +18,18 @@ async function main(): Promise<void> {
     throw new Error(ARGUMENT_ERROR_MESSAGE);
   }
 
+  let executeEnabled: boolean;
+  try {
+    executeEnabled = getRefreshTokenCleanupConfig().executeEnabled;
+  } catch (error) {
+    console.error({
+      event: "refresh_tokens.cleanup.cli.failed",
+      message: error instanceof Error ? error.message : CLI_FAILED_MESSAGE,
+    });
+    process.exitCode = 2;
+    return;
+  }
+
   const [{ cleanupExpiredRefreshTokens }, { prisma }] = await Promise.all([
     import("./cleanupExpiredRefreshTokens.js"),
     import("../lib/prisma.js"),
@@ -25,7 +37,7 @@ async function main(): Promise<void> {
   try {
     const result = await cleanupExpiredRefreshTokens({
       dryRun: values.execute !== true,
-      executeEnabled: getRefreshTokenCleanupConfig().executeEnabled,
+      executeEnabled,
     });
     if (result.limitReached) process.exitCode = 1;
   } finally {
