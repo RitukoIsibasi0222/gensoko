@@ -13,7 +13,7 @@ Gensokoを、商用サービスではなく技術力を示すポートフォリ�
 - 商用サービスではなく、設計・実装・テスト・セキュリティ・運用判断を示すポートフォリオ公開とする。
 - 一般ユーザーが自分で登録、メール認証、ログイン、学習、退会できる状態にする。
 - インターネット公開サービスとして必要な認証、入力検証、パスワード保護、CORS、Cookie、レート制限、秘密情報管理を省略しない。
-- 高度な監視、完全自動CI/CD、長期baseline、バックアップ耐障害性強化は、安全性を後退させない範囲で初回公開後に段階導入する。
+- バックアップの日次化は初回公開前に完了し、高度な監視、完全自動CI/CD、長期baseline、backupの自動retry・鮮度監視・隔離restore訓練は、安全性を後退させない範囲で初回公開後に段階導入する。
 
 ## ステータスの読み方
 
@@ -56,7 +56,7 @@ Gensokoを、商用サービスではなく技術力を示すポートフォリ�
 - [`account-data-complete-deletion`](../account-data-complete-deletion/plan.md) — 本人・管理者の物理削除とlegacy移行。
 - [`api-rate-limit-production`](../api-rate-limit-production/plan.md) — Hono/DO/WAFの責務と実環境gate。
 - [`audit-log-production-operations`](../audit-log-production-operations/plan.md) — 監査保持、cleanup、通知。
-- [`backup-resilience`](../backup-resilience/plan.md) — 初回公開後のbackup日次化・retry・restore drill強化。
+- [`backup-resilience`](../backup-resilience/plan.md) — v0.1公開前の日次化と、公開後のretry・鮮度監視・restore drill強化。
 - [`dark-mode`](../dark-mode/plan.md) — v0.1必須のダークモード。
 - [`privacy-policy`](../privacy-policy/plan.md) — v0.1必須の`/privacy`。
 
@@ -79,6 +79,7 @@ Gensokoを、商用サービスではなく技術力を示すポートフォリ�
 | `docs/11_deployment.md`                             | 修正     | Admin E2E成功証跡とv0.1計画への参照を追加                         |
 | `docs/plans/staging-app-deployment/plan.md`         | 修正     | SD16成功runとタスク状態を同期                                     |
 | `docs/plans/account-data-complete-deletion/plan.md` | 修正     | T34のstaging Admin E2E成功を同期                                  |
+| `docs/plans/backup-resilience/plan.md`              | 修正     | 日次化をv0.1必須、retry・鮮度監視・restore drillを公開後へ分離    |
 
 ## staging synthetic Admin E2Eの解決記録
 
@@ -107,47 +108,47 @@ Admin role反映待ち、見出し文言、10秒timeout、API停止が原因で�
 
 ## 初回リリース前の必須項目
 
-| 項目                                        | 現在の状態   | 残作業                                                                   | 完了条件                                                                                                  | 確認方法                                       | 関連計画                                          |
-| ------------------------------------------- | ------------ | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------- |
-| staging synthetic Admin E2E                 | 完了         | なし                                                                     | 修正後developでAdmin到達・強制退会・旧credential拒否・cleanup成功                                         | run 29802327100                                | `staging-app-deployment`                          |
-| 一般ユーザー登録                            | 進行中       | production deploy後の登録smoke                                           | 登録201、重複・不正入力・rate limitが安全に処理される                                                     | unit/integration、staging、本番smoke           | `staging-app-deployment`                          |
-| メール認証                                  | 進行中       | production送信元・許可設定とsmoke                                        | 確認メール受信、token認証、再利用拒否                                                                     | staging synthetic、本番smoke                   | `staging-app-deployment`                          |
-| login・refresh・logout                      | 進行中       | production hostname/Cookie構成、reload・期限更新smoke                    | login、token rotation、logout後拒否、reload後refresh成功                                                  | auth tests、browser smoke                      | `staging-app-deployment`                          |
-| 本人退会の物理削除                          | 進行中       | 残るstaging/production gate、production deploy後smoke                    | Userと所有rowを物理削除し、旧auth拒否・再登録契約を満たす                                                 | 専用DB、staging、本番smoke                     | `account-data-complete-deletion`                  |
-| ダークモード                                | 完了         | なし                                                                     | OS設定追従、明示toggle、保存、主要画面で読める                                                            | frontend 580 test、browser、keyboard、contrast | `dark-mode`                                       |
-| `/privacy`                                  | 未着手       | 文言決定、公開route、footer/register/settings導線                        | 未確定事項を残さず公開し、削除・監査・backup境界を正確に説明                                              | content contract、browser、owner確認           | `privacy-policy`                                  |
-| 基本レスポンシブ                            | 進行中       | 主要画面を320px以上で再確認                                              | 横スクロール・操作不能・見切れがない                                                                      | Playwright/manual viewport                     | 本計画                                            |
-| 基本キーボード/A11Y                         | 進行中       | register/login/game/settings/admin/privacy/themeを確認                   | focus可視、操作完結、alert/status、見出し順が成立                                                         | component test、keyboard smoke                 | 各UI計画                                          |
-| 認証・ゲーム送信APIのアプリレベルrate limit | 進行中       | staging実HTTP 429/503、production DO binding/secret                      | productionでmemory fallbackせず、policyどおり制限                                                         | Workers test、staging/prod実HTTP               | `api-rate-limit-production`                       |
-| セキュリティヘッダー                        | 進行中       | production responseの最終確認                                            | API正常/エラー/404/preflightに定義済みheader、production HSTS                                             | test、`curl -I`相当のsmoke                     | [`security-headers`](../security-headers/plan.md) |
-| CORS限定origin                              | 進行中       | production `FRONTEND_URL`設定と実HTTP確認                                | wildcardなし、固定frontend originだけ許可                                                                 | config test、preflight smoke                   | `staging-app-deployment`                          |
-| HttpOnly refresh token Cookie               | 進行中       | productionのSecure/SameSite/site境界確認                                 | HttpOnly・Secure・SameSite・Path、rotation、logout削除が成立                                              | auth tests、browser devtoolsを値非表示で確認   | `docs/04_api.md`                                  |
-| bcryptパスワード保護                        | 完了         | release回帰のみ                                                          | bcryptjs cost 12、72 byte境界、新規平文保存なし                                                           | unit/source review                             | `bcrypt-password-byte-limit`                      |
-| Zod入力検証                                 | 完了         | release回帰のみ                                                          | route入口で未検証値をDB/外部へ渡さない                                                                    | route tests、source review                     | `docs/04_api.md`                                  |
-| 安全なエラーレスポンス                      | 完了         | production proxy errorのUI確認                                           | stack、DB error、内部pathを返さず日本語一般化message                                                      | negative tests、smoke                          | `docs/04_api.md`                                  |
-| 秘密情報・PII非出力                         | 進行中       | production/staging logの最終negative review                              | password、email、token、Cookie、Authorization、DB URL、raw error非出力                                    | tests、Actions/Workers log review              | `audit-log-production-operations`                 |
-| 最低限の暗号化backup                        | 外部確認待ち | 初回production backup Artifactと復号検証                                 | AES-256暗号化Artifactとchecksumのみ、復号検証成功、平文非保存                                             | production workflow、Artifact metadata         | `docs/11_deployment.md`                           |
-| staging主要導線                             | 進行中       | privacy/responsive実装後の最終回帰                                       | 登録、認証、refresh、game、本人/管理者退会、privacy/themeが成功                                           | Playwright/manual                              | `staging-app-deployment`                          |
-| production smoke                            | 未着手       | deploy後に実施                                                           | health、登録、認証、refresh、game、退会、privacy/theme、header/CORSを確認                                 | production smoke checklist                     | `docs/11_deployment.md`                           |
-| npm audit・品質gate                         | 進行中       | backend runtimeのHigh/Moderate依存を更新し全回帰。release候補SHAで再監査 | backend production依存のHigh/Moderate 0件、test/build/lint/format成功。frontend Lowは影響と更新条件を記録 | CIとローカル品質gate                           | 本計画                                            |
+| 項目                                        | 現在の状態 | 残作業                                                                   | 完了条件                                                                                                  | 確認方法                                       | 関連計画                                          |
+| ------------------------------------------- | ---------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------- |
+| staging synthetic Admin E2E                 | 完了       | なし                                                                     | 修正後developでAdmin到達・強制退会・旧credential拒否・cleanup成功                                         | run 29802327100                                | `staging-app-deployment`                          |
+| 一般ユーザー登録                            | 進行中     | production deploy後の登録smoke                                           | 登録201、重複・不正入力・rate limitが安全に処理される                                                     | unit/integration、staging、本番smoke           | `staging-app-deployment`                          |
+| メール認証                                  | 進行中     | production送信元・許可設定とsmoke                                        | 確認メール受信、token認証、再利用拒否                                                                     | staging synthetic、本番smoke                   | `staging-app-deployment`                          |
+| login・refresh・logout                      | 進行中     | production hostname/Cookie構成、reload・期限更新smoke                    | login、token rotation、logout後拒否、reload後refresh成功                                                  | auth tests、browser smoke                      | `staging-app-deployment`                          |
+| 本人退会の物理削除                          | 進行中     | 残るstaging/production gate、production deploy後smoke                    | Userと所有rowを物理削除し、旧auth拒否・再登録契約を満たす                                                 | 専用DB、staging、本番smoke                     | `account-data-complete-deletion`                  |
+| ダークモード                                | 完了       | なし                                                                     | OS設定追従、明示toggle、保存、主要画面で読める                                                            | frontend 580 test、browser、keyboard、contrast | `dark-mode`                                       |
+| `/privacy`                                  | 未着手     | 文言決定、公開route、footer/register/settings導線                        | 未確定事項を残さず公開し、削除・監査・backup境界を正確に説明                                              | content contract、browser、owner確認           | `privacy-policy`                                  |
+| 基本レスポンシブ                            | 進行中     | 主要画面を320px以上で再確認                                              | 横スクロール・操作不能・見切れがない                                                                      | Playwright/manual viewport                     | 本計画                                            |
+| 基本キーボード/A11Y                         | 進行中     | register/login/game/settings/admin/privacy/themeを確認                   | focus可視、操作完結、alert/status、見出し順が成立                                                         | component test、keyboard smoke                 | 各UI計画                                          |
+| 認証・ゲーム送信APIのアプリレベルrate limit | 進行中     | staging実HTTP 429/503、production DO binding/secret                      | productionでmemory fallbackせず、policyどおり制限                                                         | Workers test、staging/prod実HTTP               | `api-rate-limit-production`                       |
+| セキュリティヘッダー                        | 進行中     | production responseの最終確認                                            | API正常/エラー/404/preflightに定義済みheader、production HSTS                                             | test、`curl -I`相当のsmoke                     | [`security-headers`](../security-headers/plan.md) |
+| CORS限定origin                              | 進行中     | production `FRONTEND_URL`設定と実HTTP確認                                | wildcardなし、固定frontend originだけ許可                                                                 | config test、preflight smoke                   | `staging-app-deployment`                          |
+| HttpOnly refresh token Cookie               | 進行中     | productionのSecure/SameSite/site境界確認                                 | HttpOnly・Secure・SameSite・Path、rotation、logout削除が成立                                              | auth tests、browser devtoolsを値非表示で確認   | `docs/04_api.md`                                  |
+| bcryptパスワード保護                        | 完了       | release回帰のみ                                                          | bcryptjs cost 12、72 byte境界、新規平文保存なし                                                           | unit/source review                             | `bcrypt-password-byte-limit`                      |
+| Zod入力検証                                 | 完了       | release回帰のみ                                                          | route入口で未検証値をDB/外部へ渡さない                                                                    | route tests、source review                     | `docs/04_api.md`                                  |
+| 安全なエラーレスポンス                      | 完了       | production proxy errorのUI確認                                           | stack、DB error、内部pathを返さず日本語一般化message                                                      | negative tests、smoke                          | `docs/04_api.md`                                  |
+| 秘密情報・PII非出力                         | 進行中     | production/staging logの最終negative review                              | password、email、token、Cookie、Authorization、DB URL、raw error非出力                                    | tests、Actions/Workers log review              | `audit-log-production-operations`                 |
+| 暗号化backupの日次化                        | 進行中     | 日次cronの契約test・workflow実装、未失効Artifact 2世代の確認             | JST毎日04:41に自動取得し、AES-256暗号化Artifactとchecksumのみを7日保持。未失効の成功Artifactが2世代以上   | workflow contract、production Actions          | `backup-resilience`                               |
+| staging主要導線                             | 進行中     | privacy/responsive実装後の最終回帰                                       | 登録、認証、refresh、game、本人/管理者退会、privacy/themeが成功                                           | Playwright/manual                              | `staging-app-deployment`                          |
+| production smoke                            | 未着手     | deploy後に実施                                                           | health、登録、認証、refresh、game、退会、privacy/theme、header/CORSを確認                                 | production smoke checklist                     | `docs/11_deployment.md`                           |
+| npm audit・品質gate                         | 進行中     | backend runtimeのHigh/Moderate依存を更新し全回帰。release候補SHAで再監査 | backend production依存のHigh/Moderate 0件、test/build/lint/format成功。frontend Lowは影響と更新条件を記録 | CIとローカル品質gate                           | 本計画                                            |
 
 ## 初回リリース後へ回す項目
 
-| 項目                            | v0.1での扱い   | 判断理由                                                            | 残るリスク                            | 着手条件・時期                          |
-| ------------------------------- | -------------- | ------------------------------------------------------------------- | ------------------------------------- | --------------------------------------- |
-| 共通APIクライアントへの全面移行 | 初回リリース後 | 現行個別clientは動作し、安全なerror handlingを回帰test済み          | 重複修正・挙動差の保守コスト          | v0.1安定後、API変更または重複障害発生時 |
-| Hono RPC導入                    | 初回リリース後 | 型共有の改善であり、現行API公開の安全性に必須ではない               | frontend/backend型の手動同期          | 共通client設計確定後                    |
-| ゲームAPIテストの追加補強       | 初回リリース後 | 主要導線と既存テストはある。未実装testを完了扱いにはしない          | rare error/cascade回帰の検出力        | v0.1公開後の最初の品質改善              |
-| 高度なWAFチューニング           | 初回リリース後 | v0.1はHono/DOのアプリ制限を必須とし、WAF最適化はtraffic実績後が妥当 | origin到達前の大量traffic防御が限定的 | 公開hostname確定・traffic/abuse観測後   |
-| 監査ログ7日baseline             | 初回リリース後 | 7日間の実績は公開前には収集できない                                 | 容量閾値の精度が低い                  | 公開直後から収集し7日後にreview         |
-| 高度な容量監視と通知            | 初回リリース後 | 初回はprovider容量確認とfailed workflow通知を必須に限定             | 予兆検知が粗い                        | 利用増加または70%到達前                 |
-| backup最大3回retry              | 初回リリース後 | 初回成功・復号可能な暗号化backupをv0.1必須とする                    | 単発障害時に手動再実行が必要          | 初回backup成功後の次の運用改善          |
-| 7世代backup運用                 | 初回リリース後 | 7日分の運用期間が必要                                               | 初期は利用可能世代が少ない            | 日次化実装後、連続成功を確認            |
-| 四半期ごとの隔離restore訓練     | 初回リリース後 | 初回公開前は初回backupの復号確認までを必須とする                    | DBとしての完全復元可能性は未実証      | 初回backup後、最初の四半期内            |
-| 完全自動CI/CD                   | 初回リリース後 | 承認付き手動rolloutの方が初回公開の不可逆操作を制御しやすい         | 手順漏れ・人的負荷                    | 手動releaseを1回成功後                  |
-| 管理画面Playwright網羅          | 初回リリース後 | v0.1は強制退会の主要1導線を必須とする                               | filter/role/statusのE2E網羅不足       | Admin仕様変更または回帰発生時           |
-| 高度なスクリーンリーダー検証    | 初回リリース後 | 基本keyboard、semantic、live regionはv0.1で確認する                 | 複数AT/browser組合せの未検証          | v0.1後、対象AT matrix決定時             |
-| 本番公開後の追加運用自動化      | 初回リリース後 | 実trafficと障害実績を見て優先順位を決める                           | 手動運用の見落とし                    | 初回運用reviewまたは同一手順2回目       |
+| 項目                                         | v0.1での扱い   | 判断理由                                                              | 残るリスク                            | 着手条件・時期                          |
+| -------------------------------------------- | -------------- | --------------------------------------------------------------------- | ------------------------------------- | --------------------------------------- |
+| 共通APIクライアントへの全面移行              | 初回リリース後 | 現行個別clientは動作し、安全なerror handlingを回帰test済み            | 重複修正・挙動差の保守コスト          | v0.1安定後、API変更または重複障害発生時 |
+| Hono RPC導入                                 | 初回リリース後 | 型共有の改善であり、現行API公開の安全性に必須ではない                 | frontend/backend型の手動同期          | 共通client設計確定後                    |
+| ゲームAPIテストの追加補強                    | 初回リリース後 | 主要導線と既存テストはある。未実装testを完了扱いにはしない            | rare error/cascade回帰の検出力        | v0.1公開後の最初の品質改善              |
+| 高度なWAFチューニング                        | 初回リリース後 | v0.1はHono/DOのアプリ制限を必須とし、WAF最適化はtraffic実績後が妥当   | origin到達前の大量traffic防御が限定的 | 公開hostname確定・traffic/abuse観測後   |
+| 監査ログ7日baseline                          | 初回リリース後 | 7日間の実績は公開前には収集できない                                   | 容量閾値の精度が低い                  | 公開直後から収集し7日後にreview         |
+| 高度な容量監視と通知                         | 初回リリース後 | 初回はprovider容量確認とfailed workflow通知を必須に限定               | 予兆検知が粗い                        | 利用増加または70%到達前                 |
+| backup最大3回retry・recovery・36時間鮮度監視 | 初回リリース後 | v0.1は日次化と未失効2世代を必須とし、自動回復・欠落検知は次段階とする | 単発障害時に手動再実行・確認が必要    | 日次backup 2世代の確認後                |
+| 7世代backup運用                              | 初回リリース後 | 7日分の運用期間が必要                                                 | 初期は利用可能世代が少ない            | 日次化実装後、連続成功を確認            |
+| 四半期ごとの隔離restore訓練                  | 初回リリース後 | v0.1は日次化・未失効2世代・復号確認までを必須とする                   | DBとしての完全復元可能性は未実証      | 日次化後、最初の四半期内                |
+| 完全自動CI/CD                                | 初回リリース後 | 承認付き手動rolloutの方が初回公開の不可逆操作を制御しやすい           | 手順漏れ・人的負荷                    | 手動releaseを1回成功後                  |
+| 管理画面Playwright網羅                       | 初回リリース後 | v0.1は強制退会の主要1導線を必須とする                                 | filter/role/statusのE2E網羅不足       | Admin仕様変更または回帰発生時           |
+| 高度なスクリーンリーダー検証                 | 初回リリース後 | 基本keyboard、semantic、live regionはv0.1で確認する                   | 複数AT/browser組合せの未検証          | v0.1後、対象AT matrix決定時             |
+| 本番公開後の追加運用自動化                   | 初回リリース後 | 実trafficと障害実績を見て優先順位を決める                             | 手動運用の見落とし                    | 初回運用reviewまたは同一手順2回目       |
 
 ## 本番DBが未公開・実利用者なしの場合の簡略化
 
@@ -188,7 +189,7 @@ v0.1で次を維持する。ポートフォリオ用途を理由に無効化し�
 12. password、email、username、PII、token、Cookie、Authorization、DB URL、内部ID、raw errorをapplication/workflow logへ出さない。
 13. 本人退会でUserと所有認証・学習dataを物理削除し、監査内部IDの例外保持・期限・目的を`/privacy`と承認記録に一致させる。
 14. `/privacy`で収集項目、利用目的、外部service、Cookie、監査、削除、backup、問い合わせ先を正確に説明する。
-15. production変更前に復号確認済みの暗号化backupを取得し、平文dumpをArtifactへ保存しない。
+15. production backupをJST毎日04:41に自動取得し、暗号化archiveとchecksumだけを7日保持する。公開前に未失効の成功Artifactを2世代以上確認し、平文dumpをArtifactへ保存しない。
 16. backend/frontendの依存関係監査をrelease候補SHAで実行し、未修正項目は影響、回避策、期限を記録する。
 17. rollout前に旧version、DB互換、feature/execute flagの初期値を確認し、障害時は新規変更を停止してアプリを先にrollbackする。
 
@@ -225,8 +226,8 @@ backendでは少なくともHono、Nodemailer、Prisma toolchain経由の`@hono/
    - 根拠: 公開APIの濫用防止を維持しつつ、traffic実績のない段階の過剰tuningを避けるため。
 
 4. **backup耐障害性計画をすべてv0.1へ含めるか**
-   - 選択: 初回暗号化backup・復号検証を必須とし、retry・7世代・四半期drillは公開後へ分離する。
-   - 根拠: 最低限の復旧手段は必要だが、複数世代や四半期実績は初回公開前に時間上成立しないため。
+   - 選択: 初回暗号化backup・復号検証に加えて日次scheduleと未失効2世代をv0.1必須とし、最大3回retry・recovery・36時間鮮度監視・通常7世代の定常確認・四半期drillは公開後へ分離する。
+   - 根拠: 週次のままでは1回の失敗で有効な世代を失うため日次化は公開前に必要だが、自動回復・定常7世代・四半期実績は日次化後の運用期間を要するため。
 
 5. **本番DB空を前提にmigrationを省略するか**
    - 選択: 証拠が揃うまで省略しない。
@@ -237,7 +238,7 @@ backendでは少なくともHono、Nodemailer、Prisma toolchain経由の`@hono/
 1. release blockerのコード、計画、品質gateをrelease候補SHAへ固定する。
 2. production DB実利用者0件の簡略化を使う場合は、承認付きread-only workflowの証拠を先に記録する。確認できなければ完全削除計画の通常gateを維持する。
 3. production Environment、frontend/API hostname、CORS、Cookie site境界、DO binding、Secrets名、execute flag `false`を値非表示で確認する。
-4. 初回暗号化backupを取得し、Artifactが暗号化archiveとchecksumだけであること、復号検証成功を確認する。
+4. backupの日次scheduleを有効化し、Artifactが暗号化archiveとchecksumだけで7日保持されること、未失効の成功Artifactが2世代以上あることを確認する。
 5. 必要なmigrationをbackup gate付きで適用する。破壊的contract migrationは個別計画の全gate完了前に適用しない。
 6. APIをdeployし、health、security headers、CORS、rate limit、mail、DB targetを確認する。
 7. frontendをdeployし、`/privacy`、theme、登録、認証、refresh、game、settingsを確認する。
@@ -272,12 +273,12 @@ backendでは少なくともHono、Nodemailer、Prisma toolchain経由の`@hono/
 - PR #125とrun 29802327100を確認し、Admin E2Eを重複実装せず完了へ更新した。
 - stagingで登録・メール・login・本人導線は確認済みだが、production smokeの代替にはしない境界を明記した。
 - 完全削除のコード完了と、T33/T35/production/restore等の未完了を分離した。
-- 共通API client、game test補強、backup耐障害性計画の未完了checkboxを保持した。
+- 共通API client、game test補強、backup耐障害性計画の未完了checkboxを保持し、日次化だけをv0.1境界へ分離した。
 
 ### v4 確定
 
 - v0.1必須の安全性と主要体験だけをrelease blockerへ残した。
-- 高度な運用は削除せず「初回リリース後」へ移し、残余リスクと再着手条件を付けた。
+- 日次backupを公開前必須へ移し、retry・recovery・鮮度監視・定常7世代・restore drillは「初回リリース後」に残して、残余リスクと再着手条件を付けた。
 - 実環境作業とローカル実装を分離し、production操作は別承認のままとした。
 
 ## 最終タスクリスト
@@ -292,7 +293,7 @@ backendでは少なくともHono、Nodemailer、Prisma toolchain経由の`@hono/
 | R6       | 完全削除の残るv0.1 gateを完了             | account deletion計画 | 高     | 本人削除、旧auth拒否、必要な移行判断                |
 | R7       | app rate limitの実環境gateを完了          | Cloudflare/API       | 高     | staging/prod DO、429/503、memory fallbackなし       |
 | R8       | headers・CORS・safe error・logを最終確認  | API/環境             | 高     | production smokeとnegative log review成功           |
-| R9       | 最低限の暗号化backupを確認                | production Actions   | 高     | 初回Artifact、checksum、復号、平文なし              |
+| R9       | 暗号化backupを日次化して複数世代を確認    | workflow/Actions     | 高     | 日次cron、7日保持、未失効2世代、平文なし            |
 | R10      | 基本responsive・keyboard/A11Yを確認       | frontend             | 高     | 主要画面の基準を満たす                              |
 | R11A     | backend High/Moderate依存を安全に更新     | backend/package      | 高     | TDD回帰後、production依存High/Moderate 0件          |
 | R11      | release候補SHAの品質gateとnpm audit       | backend/frontend     | 高     | test/build/lint/format/audit結果を記録              |
@@ -312,7 +313,7 @@ backendでは少なくともHono、Nodemailer、Prisma toolchain経由の`@hono/
 - [ ] R6: 完全削除の残るv0.1 gateを完了する
 - [ ] R7: app rate limitの実環境gateを完了する
 - [ ] R8: headers・CORS・safe error・logを最終確認する
-- [ ] R9: 最低限の暗号化backupを確認する
+- [ ] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する
 - [ ] R10: 基本responsive・keyboard/A11Yを確認する
 - [ ] R11A: backend High/Moderate依存を安全に更新する
 - [ ] R11: release候補SHAの品質gateとnpm auditを実行する
@@ -336,7 +337,7 @@ R5	認証・refreshのproduction構成を確定	frontend・API・環境	高
 R6	完全削除の残るv0.1 gateを完了	account deletion計画	高
 R7	app rate limitの実環境gateを完了	Cloudflare・API	高
 R8	headers・CORS・safe error・logを最終確認	API・環境	高
-R9	最低限の暗号化backupを確認	production Actions	高
+R9	暗号化backupを日次化して複数世代を確認	workflow・production Actions	高
 R10	基本responsive・keyboard・A11Yを確認	frontend	高
 R11A	backend High・Moderate依存を安全に更新	backend・package	高
 R11	release候補SHAの品質gateとnpm audit	backend・frontend	高
