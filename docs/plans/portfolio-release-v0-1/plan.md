@@ -314,7 +314,7 @@ backendでは少なくともHono、Nodemailer、Prisma toolchain経由の`@hono/
 - [x] R4: privacy・監査・backup・問い合わせ先を承認する
 - [-] R5: 認証・refreshのproduction構成を確定する
   - code・contract test・migration file・runbookを実装。G1〜G8とR14〜R16のproduction証拠待ちのため完了にしない。
-- [ ] R6: 完全削除の残るv0.1 gateを完了する
+- [-] R6: 完全削除の残るv0.1 gateを完了する — 計画書: [`r6-account-deletion-gates`](../r6-account-deletion-gates/plan.md)
 - [ ] R7: app rate limitの実環境gateを完了する
 - [ ] R8: headers・CORS・safe error・logを最終確認する
 - [-] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する（code実装済み、schedule観測待ち）
