@@ -275,7 +275,7 @@
 - [ ] R6: 完全削除の残るv0.1 gateを完了する
 - [ ] R7: app rate limitの実環境gateを完了する
 - [ ] R8: headers・CORS・safe error・logを最終確認する
-- [ ] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する
+- [-] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する（code・contract test完了。review・merge後の日次schedule 2回と未失効2世代は観測待ち）
 - [ ] R10: 基本responsive・keyboard/A11Yを確認する
 - [ ] R11A: backend High/Moderate依存を安全に更新する
 - [ ] R11: release候補SHAの品質gateとnpm auditを実行する
@@ -303,7 +303,7 @@
 - [-] 認証系・ゲーム送信APIのアプリレベルrate limit — Hono/DOとstaging binding済み、実HTTP 429/503・production binding待ち
 - [ ] production CORS、HttpOnly/Secure/SameSite Cookie、security headersの実HTTP確認
 - [ ] staging/production logでPII・token・Cookie・Authorization・DB URL・raw error非出力を最終確認
-- [-] 暗号化backupの日次化 — 週次workflow・初回Artifact・checksum・復号はrun 29322979476で確認済み。日次cronの契約test・実装と未失効Artifact 2世代の確認待ち
+- [-] 暗号化backupの日次化 — 日次cronのcontract testとworkflowの2行変更はRed→Greenで実装済み。初回Artifact・checksum・復号はrun 29322979476で確認済み。review・`develop`へのmerge後の日次schedule 2回と未失効Artifact 2世代の確認待ち
 - [ ] backend production依存のHigh 2 / Moderate 3を安全に更新し、TDD回帰後にproduction依存High/Moderate 0件を確認
 - [ ] release候補SHAのtest・Workers test・build・lint・format・Prisma validate・npm audit（frontendは全依存Low 3、production依存0を再確認）
 - [ ] dark/privacyを含むstaging主要導線の最終確認

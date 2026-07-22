@@ -260,6 +260,8 @@ T19の期限境界確認はActionsの`Staging Audit Cleanup Fixtures`から`prep
 | `account-deletion-dry-run` | なし                                                     | legacy soft-deleted Userと所有rowの件数をpreviewし、削除しない   |
 | `account-deletion-execute` | backup/dry-run run ID、確認文字列、承認者、change record | 24時間以内の両runと期限内Artifact、execute flagを検証後に削除    |
 
+`backup`の自動scheduleはR9実装branchでUTC毎日19:41（JST毎日04:41）の`41 19 * * *`へ変更済みである。`capacity-check`の`23 19 * * *`とmanual dispatchは維持する。review・`develop`へのmerge後に日次scheduleを2回以上観測し、同一確認時点で未失効Artifact 2世代以上を確認するまでR9は完了扱いにしない。観測を早めるためのmanual dispatchは行わない。
+
 backup ArtifactにはAES-256暗号化済みarchiveとSHA-256だけが含まれる。平文dump、`DATABASE_URL`、DB password、暗号化passphraseをActions log・Issue・PR・チャットへ貼らない。download・復号・復元手順は`docs/11_deployment.md`の「backupの手動実行と復元」に従う。
 
 ---
