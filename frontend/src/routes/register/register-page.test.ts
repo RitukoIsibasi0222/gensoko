@@ -102,23 +102,28 @@ describe('/register password byte limit UI/A11Y', () => {
 describe('/register privacy navigation contract', () => {
   it('登録前に識別できる/privacy導線をform内へ表示する', () => {
     const target = renderPage();
-    const form = target.querySelector('form');
-    const link = form?.querySelector<HTMLAnchorElement>('a[href="/privacy"]');
-    const submitButton = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
+    const form = target.querySelector<HTMLFormElement>('form');
 
+    expect(form).not.toBeNull();
+    if (!form) {
+      throw new Error('登録フォームが見つかりません');
+    }
+
+    const link = form.querySelector<HTMLAnchorElement>('a[href="/privacy"]');
+    const submitButton = form.querySelector<HTMLButtonElement>('button[type="submit"]');
     expect(link).not.toBeNull();
-    expect(link?.textContent).toContain('プライバシーポリシー');
-    expect(link?.classList.contains('text-action-text')).toBe(true);
     expect(submitButton).not.toBeNull();
+    if (!link || !submitButton) {
+      throw new Error('登録フォーム内のprivacy導線または送信ボタンが見つかりません');
+    }
+
+    expect(link.textContent).toContain('プライバシーポリシー');
+    expect(link.classList.contains('text-action-text')).toBe(true);
     expect(
-      Boolean(
-        link &&
-        submitButton &&
-        link.compareDocumentPosition(submitButton) & Node.DOCUMENT_POSITION_FOLLOWING
-      )
+      Boolean(link.compareDocumentPosition(submitButton) & Node.DOCUMENT_POSITION_FOLLOWING)
     ).toBe(true);
 
-    link?.focus();
+    link.focus();
     expect(document.activeElement).toBe(link);
   });
 });

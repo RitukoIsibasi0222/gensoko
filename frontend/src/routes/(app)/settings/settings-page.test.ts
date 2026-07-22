@@ -289,20 +289,33 @@ describe('/settings account deletion A11Y contract', () => {
 
   it('削除警告と同じsectionからaccount deletion説明へ移動できる', async () => {
     const target = await renderPage();
-    const warning = target.querySelector('#delete-warning');
-    const deletionSection = warning?.closest('section');
-    const link = deletionSection?.querySelector<HTMLAnchorElement>(
-      'a[href="/privacy#account-deletion"]'
-    );
+    const warning = target.querySelector<HTMLElement>('#delete-warning');
 
     expect(warning).not.toBeNull();
-    expect(link).not.toBeNull();
-    expect(link?.textContent).toContain('プライバシーポリシー');
-    expect(link?.textContent).toContain('アカウント削除');
-    expect(link?.classList.contains('text-action-text')).toBe(true);
-    expect(link?.classList.contains('text-action')).toBe(false);
+    if (!warning) {
+      throw new Error('アカウント削除警告が見つかりません');
+    }
 
-    link?.focus();
+    const deletionSection = warning.closest<HTMLElement>('section');
+    expect(deletionSection).not.toBeNull();
+    if (!deletionSection) {
+      throw new Error('アカウント削除sectionが見つかりません');
+    }
+
+    const link = deletionSection.querySelector<HTMLAnchorElement>(
+      'a[href="/privacy#account-deletion"]'
+    );
+    expect(link).not.toBeNull();
+    if (!link) {
+      throw new Error('アカウント削除のprivacy導線が見つかりません');
+    }
+
+    expect(link.textContent).toContain('プライバシーポリシー');
+    expect(link.textContent).toContain('アカウント削除');
+    expect(link.classList.contains('text-action-text')).toBe(true);
+    expect(link.classList.contains('text-action')).toBe(false);
+
+    link.focus();
     expect(document.activeElement).toBe(link);
   });
 
