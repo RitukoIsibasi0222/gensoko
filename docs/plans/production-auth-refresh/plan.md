@@ -632,7 +632,7 @@ R5-21	後続taskへhandoff	Handoff	R7/R8/R9/R11A/R11/R12/R18	中
 
 - 実装日: 2026-07-22
 - 実装ブランチ: `feature/r5-production-auth-refresh`
-- PR: 作成前
+- PR: #136
 - 進捗: code・test・migration file・runbookは実装済み。G1〜G8、R14〜R16が未完了のためR5は`[-]`を維持する。
 
 ### 実装済み項目
