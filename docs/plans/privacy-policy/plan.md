@@ -370,7 +370,7 @@ npm run build
 
 - 完了日: 2026-07-22
 - 実装ブランチ: feature/privacy-policy
-- PR: 作成前（本文確認後に作成）
+- PR: #131
 
 ### TDD 記録
 
