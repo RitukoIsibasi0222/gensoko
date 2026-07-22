@@ -109,7 +109,7 @@ R3 の page 実装を開始する前に、次を具体値として決定する�
 | 監査内部 ID の利用者向け説明 | security 目的、access 制限、365 日保持を説明する文案で確定           | 目的、access 範囲、保持期間の文案を受領       | 公開文言を正式承認                 |
 | backup/restore 説明          | 暗号化 backup は最長 7 日保持し、復元時の削除反映境界も説明して確定 | 現時点の制約を隠さない具体文案を受領          | 残余リスクと運用を正式承認         |
 | production provider 一覧     | Vercel / Cloudflare / Supabase / Resend / GitHub Actions・Artifacts | v0.1 で利用予定の一覧と役割を受領             | 配備構成と privacy link を正式承認 |
-| policy 改定の告知方法        | 本ページ上で告知し、制定日・発効日と version を更新する方針で確定   | 実行可能な方法を受領                          | 運用責任を正式承認                 |
+| policy 改定の告知方法        | 本ページで告知し、制定日は維持、改定日・発効日・version は更新する方針で確定 | 実行可能な方法を受領                          | 運用責任を正式承認                 |
 
 ## 対象ファイル一覧
 
