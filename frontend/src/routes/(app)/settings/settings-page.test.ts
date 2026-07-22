@@ -287,6 +287,20 @@ describe('/settings account deletion A11Y contract', () => {
     expect(warning).toContain('取り消せません');
   });
 
+  it('削除警告と同じsectionからaccount deletion説明へ移動できる', async () => {
+    const target = await renderPage();
+    const warning = target.querySelector('#delete-warning');
+    const deletionSection = warning?.closest('section');
+    const link = deletionSection?.querySelector<HTMLAnchorElement>(
+      'a[href="/privacy#account-deletion"]'
+    );
+
+    expect(warning).not.toBeNull();
+    expect(link).not.toBeNull();
+    expect(link?.textContent).toContain('プライバシーポリシー');
+    expect(link?.textContent).toContain('アカウント削除');
+  });
+
   it('password空欄はpasswordだけをinvalidにしてpasswordへfocusする', async () => {
     const target = await renderPage();
     const controls = await submitDeleteForm(target, {
