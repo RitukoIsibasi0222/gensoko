@@ -28,22 +28,76 @@ const PROVIDER_PRIVACY_LINKS = [
 ] as const;
 
 let mounted: ReturnType<typeof mount> | null = null;
+let mountedHeadNodes: Node[] = [];
+let existingTitleContents = new Map<HTMLTitleElement, string | null>();
 
 async function renderPage(): Promise<HTMLElement> {
   const target = document.createElement('div');
+  const existingHeadNodes = new Set(document.head.childNodes);
+  existingTitleContents = new Map(
+    Array.from(document.head.querySelectorAll('title')).map((title) => [title, title.textContent])
+  );
   document.body.appendChild(target);
-  mounted = mount(PrivacyPage, { target });
-  await tick();
+  try {
+    mounted = mount(PrivacyPage, { target });
+    await tick();
+  } finally {
+    mountedHeadNodes = Array.from(document.head.childNodes).filter(
+      (node) => !existingHeadNodes.has(node)
+    );
+  }
   return target;
 }
 
-afterEach(async () => {
+async function cleanupPage(): Promise<void> {
   if (mounted) {
     await unmount(mounted);
     mounted = null;
   }
+  for (const node of mountedHeadNodes) {
+    node.parentNode?.removeChild(node);
+  }
+  mountedHeadNodes = [];
+  for (const [title, content] of existingTitleContents) {
+    title.textContent = content;
+  }
+  existingTitleContents.clear();
   document.body.replaceChildren();
-  document.head.replaceChildren();
+}
+
+afterEach(cleanupPage);
+
+describe('/privacy test isolation', () => {
+  it('page metadataだけを片付け、既存のhead要素を保持する', async () => {
+    const existingMeta = document.createElement('meta');
+    existingMeta.setAttribute('charset', 'utf-8');
+    const existingTitle = document.createElement('title');
+    existingTitle.textContent = '既存タイトル';
+    document.head.append(existingMeta, existingTitle);
+
+    await renderPage();
+    const privacyDescription = Array.from(
+      document.head.querySelectorAll<HTMLMetaElement>('meta[name="description"]')
+    ).find((meta) => meta.content.includes('Gensoko'));
+    const privacyTitle = Array.from(document.head.querySelectorAll('title')).find((title) =>
+      title.textContent?.includes('Gensoko')
+    );
+
+    expect(privacyDescription).toBeDefined();
+    expect(privacyTitle).toBeDefined();
+
+    await cleanupPage();
+
+    expect(document.head.contains(existingMeta)).toBe(true);
+    expect(document.head.contains(existingTitle)).toBe(true);
+    expect(existingTitle.textContent).toBe('既存タイトル');
+    expect(document.head.contains(privacyDescription ?? null)).toBe(false);
+    expect(
+      Array.from(document.head.querySelectorAll('title')).some((title) =>
+        title.textContent?.includes('Gensoko')
+      )
+    ).toBe(false);
+  });
 });
 
 describe('/privacy content contract', () => {
