@@ -453,6 +453,12 @@ npm run build
   - settings test に `text-action-text` 必須、背景色用 `text-action` 禁止の contract を先行追加し、追加した contract だけが失敗、既存 20 test は成功した。
   - settings link を `text-action-text` へ統一し、settings 21 test と dark mode contract 8 test の合計 29 test が成功した。
   - frontend 全 56 file、594 test、lint、format check、Svelte check 0 error/0 warning、Vercel adapter の production build が成功した。
+- test existence review 追補:
+  - register の `form?.querySelector` と settings の `warning?.closest` / `section?.querySelector` が `undefined` を作り得る一方、`not.toBeNull()` だけでは `undefined` を拒否しない不正確さを確認した。
+  - 本番仕様やテスト期待値を変えない Refactor として、form、warning、section、link、submit button を親から順に存在固定し、明示的 guard で型を絞った。
+  - 存在固定後は optional chaining を除去し、欠落した DOM 階層ごとに明確な test error を返すようにした。
+  - register 4 test と settings 21 test の合計 25 test、および frontend 全 56 file、594 test が成功した。
+  - lint、format check、Svelte check 0 error/0 warning、Vercel adapter の production build が成功した。
 
 ### 計画からの変更点
 
