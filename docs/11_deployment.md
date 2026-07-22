@@ -116,7 +116,7 @@ type CreateAppOptions = {
 ### rollout / rollback
 
 1. R14: G1〜G8、review済みSHA、frontend/API URL、resource存在、Environment key名、rollback先をread-only・値非表示で確認する。
-2. R15: 別承認後にexpand-only index → additive API → smoke → frontendの順で配備する。custom domain/CORSを片側だけ切り替えない。
+2. R15: 別承認後に`CREATE INDEX CONCURRENTLY`のexpand-only migration → additive API → smoke → frontendの順で配備する。migration直後に対象indexの`indisvalid=true`を値非表示で確認する。失敗またはinvalid indexが残った場合はcleanup/API rolloutを停止し、承認付きでinvalid indexだけを`DROP INDEX CONCURRENTLY`してからmigrationを再試行する。custom domain/CORSを片側だけ切り替えない。
 3. R16: manual `Production Auth Smoke`でlogin → reload 2回 → logout → refresh 401を確認する。trace/screenshot/video/storageState/Cookie一覧は保存しない。
 4. rollbackはAPIを互換versionへ戻し、health/CORS/authを確認後frontendを戻す。Cookie名/Domain/Pathは変更しない。cleanup scheduleを先に停止し、indexは緊急時に無理にdropしない。
 

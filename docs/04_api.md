@@ -130,6 +130,8 @@ Error:
 ### POST `/auth/refresh`
 
 - HttpOnly Cookieのrefresh tokenをsha256 hashで検索し、旧token削除と新token作成を同一transactionで実行する。
+- `expiresAt <= request時刻`は期限切れとして401にし、rotation transactionとaccess token署名を開始しない。
+- access token署名が成功してからrotation transactionを開始する。署名失敗時に旧refresh tokenだけを失効させない。
 - User物理削除時はrefresh token rowもDB cascadeで削除されるため、旧Cookieによるrefreshは401を返す。
 - token不存在・期限切れ・形式不正は、`/api/v1/auth` と `/api/v1/auth/refresh` の両PathのCookieを削除する。
 - rotation競合は旧rowの`deleteMany.count === 1`をwinnerとする。loserは409を返し、新tokenを作らずwinnerが発行したCookieも削除しない。
