@@ -123,6 +123,7 @@ R3 の page 実装を開始する前に、次を具体値として決定する�
 | `frontend/src/routes/register/register-page.test.ts`       | 修正             | privacy link の accessible name と `href`                                  |
 | `frontend/src/routes/(app)/settings/+page.svelte`          | 修正             | 削除警告近くに `/privacy#account-deletion` link                            |
 | `frontend/src/routes/(app)/settings/settings-page.test.ts` | 修正             | 削除説明 link と既存警告の共存                                             |
+| `frontend/src/dark-mode-contract.test.ts`                  | 修正             | 文字 link token の light/dark contrast contract を追加                     |
 | `docs/05_progress.md`                                      | 修正             | R3 だけを完了へ更新し、R4/R10/R12 は未完了のまま維持                       |
 | `docs/plans/privacy-policy/plan.md`                        | 修正             | TDD記録、実変更、確認結果、R3 完了を同期                                   |
 
@@ -385,7 +386,7 @@ npm run build
   - 対象 4 test file、合計 35/35 が成功。
   - `npm run format` を適用し、`git diff --check` が成功。
 - 最終品質 gate:
-  - `npm run test:run`: 56 file、592 test が成功。
+  - `npm run test:run`: 56 file、593 test が成功。
   - `npm run lint`: 成功。
   - `npm run format:check`: 成功。
   - `npm run check`: 0 error、0 warning。
@@ -400,11 +401,37 @@ npm run build
   - register 内の link が submit より前にあり、Footer link とともに `/privacy` へ遷移することを確認。
   - in-app browser の Tab/Enter 自動操作では focus 移動を再現できなかった。native anchor、`focus-visible` style、component contract は確認し、実 keyboard の横断確認は R10 に残した。
 
+### シニアレビュー改善
+
+- レビュー観点:
+  - DB/API 差分がなく、新規 query、N+1、migration、認証・認可・response contract への影響がないことを再確認した。
+  - 既存の User 物理削除は主キー参照、cascade 対象の index、Serializable transaction、競合時 409 を使用しており、R3 で DB migration を追加しないと判断した。
+  - `text-action` は dark canvas/surface で 3.67:1 / 3.43:1 のため通常文字の WCAG AA 4.5:1 を満たさないことを確認した。
+- Red:
+  - focus target、token 保持の正確な説明、機械可読日付、外部 site 表示、文字 link token を追加し、5 file 中 3 file、合計 8 test が意図どおり失敗した。
+  - 既存 settings 21 test と dark mode contract 8 test は Red 時点でも成功した。
+- Green/Refactor:
+  - privacy 10、Footer 1、register 4、settings 21、dark mode contract 8 の合計 44 test が成功した。
+  - 全 section を見出しで名前付けし、`tabindex="-1"` と共通 focus style を追加した。
+  - 文字 link を `text-action-text` へ変更し、light/dark 双方の 4.5:1 以上を自動検証した。
+  - token は期限切れ後に利用不能となり、利用・再発行・logout・退会等の処理で削除または無効化する実装境界へ文言を修正した。
+  - 制定日は維持し、改定日・発効日・version を更新する説明へ修正した。
+- 最終品質 gate:
+  - repository 全体を参照できる WSL workspace で 56 file、593 test が成功した。
+  - Docker frontend container では `.github/workflows` が mount 対象外のため、`frontend-pr-quality.test.ts` の 2 test だけが `ENOENT` で失敗した。実装 test を含む残り 591 test は成功し、同じ SHA を正しい workspace 境界で再実行して全件成功を確認した。
+  - lint、format check、Svelte check 0 error/0 warning、Vercel adapter の production build が成功した。
+- browser:
+  - 10 section が名前付き region として認識され、`#scope` 遷移後に対象 section が active element となることを確認した。
+  - dark の文字 link は canvas 13.34:1、surface 12.48:1、light は 6.31:1 であることを実 computed color と token test から確認した。
+  - 320px で長い外部 site link を含め横 overflow なし、`h1` 1行、console error/warning なしを確認した。
+  - browser 操作環境では Enter の既定 link 動作が発火しなかった。link への keyboard focus、native anchor、fragment 遷移、遷移後 focus target を個別に確認し、実 keyboard の横断確認は R10 に維持した。
+
 ### 計画からの変更点
 
 - 320px の実表示で見出し末尾が折り返されたため、mobile の `h1` を `text-2xl`、`sm` 以上を `text-3xl` にした。
 - 200% zoom は 640 CSS px の等価 reflow 確認で代替し、制約を確認記録へ明記した。
 - R3 の keyboard 基本確認は native link/focus contract までとし、実 keyboard を使う主要画面横断確認は当初計画どおり R10 に残した。
+- シニアレビューで dark theme の文字 link contrast、fragment focus、token 保持説明、日付 semantics の不足を検出し、追加 TDD で改善した。
 - 作業開始前に `origin/develop` の PR #130 までを取り込み、backup 文書のマージ済み変更を保持した。
 
 ### 実際の変更ファイル
@@ -412,13 +439,14 @@ npm run build
 | ファイル                                                   | 変更種別 | 内容                                                        |
 | ---------------------------------------------------------- | -------- | ----------------------------------------------------------- |
 | `frontend/src/routes/(app)/privacy/+page.svelte`           | 新規     | 公開 privacy page、head metadata、安定 section ID           |
-| `frontend/src/routes/(app)/privacy/privacy-page.test.ts`   | 新規     | 内容、section、head、provider link、placeholder 禁止の 9 test |
+| `frontend/src/routes/(app)/privacy/privacy-page.test.ts`   | 新規     | 内容、A11Y section、head、provider link、placeholder 禁止の 10 test |
 | `frontend/src/lib/components/Footer.svelte`                | 修正     | `/privacy` link を追加                                      |
 | `frontend/src/lib/components/Footer.svelte.test.ts`        | 新規     | Footer の privacy link contract                             |
 | `frontend/src/routes/register/+page.svelte`                | 修正     | submit 前の privacy link を追加                             |
 | `frontend/src/routes/register/register-page.test.ts`       | 修正     | privacy link contract を追加                                |
 | `frontend/src/routes/(app)/settings/+page.svelte`          | 修正     | 退会警告近くへ account deletion の fragment link を追加     |
 | `frontend/src/routes/(app)/settings/settings-page.test.ts` | 修正     | 既存警告と fragment link の共存を検証                       |
+| `frontend/src/dark-mode-contract.test.ts`                  | 修正     | 文字 link token の light/dark contrast contract を追加      |
 | `docs/05_progress.md`                                      | 修正     | R3 と対応する `/privacy` 項目だけを完了へ更新               |
 | `docs/plans/privacy-policy/plan.md`                        | 修正     | 確定入力、TDD、品質 gate、browser、実変更を同期             |
 
