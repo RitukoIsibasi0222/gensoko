@@ -7,8 +7,29 @@ const WORKFLOW_PATH = fileURLToPath(
   new URL("../../../.github/workflows/production-database.yml", import.meta.url),
 );
 
+const DAILY_BACKUP_CRON = "41 19 * * *";
+const WEEKLY_BACKUP_CRON = "41 19 * * 6";
+const CAPACITY_CHECK_CRON = "23 19 * * *";
+
+function scheduleDeclaration(cron: string): string {
+  return `- cron: "${cron}"`;
+}
+
+function scheduledOperationCase(cron: string, operation: "backup" | "capacity-check"): string {
+  return `"${cron}")
+                operation="${operation}"`;
+}
+
 describe("production database GitHub Actions workflow", () => {
   const workflow = readFileSync(WORKFLOW_PATH, "utf8");
+
+  it("schedules encrypted backups daily at JST 04:41 without changing the capacity schedule", () => {
+    expect(workflow).toContain(scheduleDeclaration(DAILY_BACKUP_CRON));
+    expect(workflow).toContain(scheduledOperationCase(DAILY_BACKUP_CRON, "backup"));
+    expect(workflow).not.toContain(WEEKLY_BACKUP_CRON);
+    expect(workflow).toContain(scheduleDeclaration(CAPACITY_CHECK_CRON));
+    expect(workflow).toContain(scheduledOperationCase(CAPACITY_CHECK_CRON, "capacity-check"));
+  });
 
   it("fixes every operation to production and serializes database jobs", () => {
     expect(workflow).toContain("workflow_dispatch:");
@@ -51,6 +72,8 @@ describe("production database GitHub Actions workflow", () => {
     expect(workflow).toContain("--passphrase-fd 0");
     expect(workflow).toContain("gpg --decrypt");
     expect(workflow).toContain("tar -tzf");
+    expect(workflow).toContain("sha256sum");
+    expect(workflow).toContain("trap cleanup_plaintext EXIT");
     expect(workflow).toContain("actions/upload-artifact@v4");
     expect(workflow).toContain("retention-days: 7");
     expect(workflow).toContain("path: ${{ runner.temp }}/production-db-artifacts");
@@ -59,8 +82,11 @@ describe("production database GitHub Actions workflow", () => {
     expect(workflow).not.toContain("path: data.sql");
   });
 
-  it("requires a successful unexpired backup artifact before applying migrations", () => {
+  it("requires a successful unexpired backup artifact before protected database operations", () => {
     expect(workflow).toContain("confirmed_backup_run_id:");
+    expect(workflow).toContain(
+      "if: env.OPERATION == 'migrate-deploy' || env.OPERATION == 'account-deletion-execute'",
+    );
     expect(workflow).toContain("if: env.OPERATION == 'migrate-deploy'");
     expect(workflow).toContain("production-db-backup-${BACKUP_RUN_ID}");
     expect(workflow).toContain("artifacts");
