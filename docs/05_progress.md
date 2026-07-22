@@ -1,6 +1,6 @@
 # Gensoko 実装タスク一覧
 
-> 更新日: 2026-07-21
+> 更新日: 2026-07-22
 > ステータス: `[ ]` 未実装 / `[-]` 実装中 / `[x]` 完了
 
 ---
@@ -242,7 +242,7 @@
 - [x] ダークモード対応（OS設定追従 + トグルボタン）— D1〜D12、browser確認、frontend 580 test・全品質gate成功
 - [ ] レスポンシブデザイン確認・修正（PC/タブレット/スマホ）
 - [ ] アクセシビリティ確認（キーボード操作・スクリーンリーダー）
-- [ ] プライバシーポリシーページ `/privacy`
+- [ ] プライバシーポリシーページ `/privacy` — リリースタスク: R3 / 個別計画: [`privacy-policy`](plans/privacy-policy/plan.md)
 
 ## フェーズ12: デプロイ
 
@@ -262,8 +262,34 @@
 > リリース範囲の正本: [`docs/plans/portfolio-release-v0-1/plan.md`](plans/portfolio-release-v0-1/plan.md)
 >
 > 個別計画の未完了項目をこの区分だけで完了扱いにしない。本番DBに実利用者がいないことは未確認であり、証拠なしの簡略化を適用しない。
+>
+> R1〜R18の詳細・完了条件はリリース計画を正本とし、この一覧には全体進捗を同期する。P1〜P12など個別機能のサブタスクは各個別計画だけで管理する。
 
-### ポートフォリオ版 v0.1 公開前に必須
+### リリース実行タスク（R1〜R18）
+
+- [x] R1: Admin E2E修正後runを記録する
+- [x] R2: ダークモードをTDD実装する
+- [ ] R3: `/privacy`をTDD実装する
+- [ ] R4: privacy・監査・backup・問い合わせ先を承認する
+- [ ] R5: 認証・refreshのproduction構成を確定する
+- [ ] R6: 完全削除の残るv0.1 gateを完了する
+- [ ] R7: app rate limitの実環境gateを完了する
+- [ ] R8: headers・CORS・safe error・logを最終確認する
+- [ ] R9: 最低限の暗号化backupを確認する
+- [ ] R10: 基本responsive・keyboard/A11Yを確認する
+- [ ] R11A: backend High/Moderate依存を安全に更新する
+- [ ] R11: release候補SHAの品質gateとnpm auditを実行する
+- [ ] R12: staging主要導線を最終確認する
+- [ ] R13: 本番DB簡略化の適用可否を証拠で判断する
+- [ ] R14: rollout/rollback preflightを完了する
+- [ ] R15: production deployを別承認で実施する
+- [ ] R16: production smokeを実施する
+- [ ] R17: release recordと進捗を同期する
+- [ ] R18: 公開後タスクを引き継ぐ
+
+### 公開前リリースゲート
+
+> 以下はR1〜R18を完了するための横断的な公開条件であり、実行順は上のリリース実行タスクで管理する。
 
 - [x] staging synthetic Admin E2Eの`/admin`到達・強制退会・旧credential拒否・cleanup — run 29802327100
 - [x] bcryptjsハッシュ、UTF-8 72バイト境界、Zod入力検証、安全な日本語errorのコード契約
@@ -272,7 +298,7 @@
 - [ ] refresh tokenのproduction same-site構成とreload後refresh確認
 - [-] 本人退会の物理削除 — code・専用DB・staging本人/Admin導線を確認済み、残る移行・production gate待ち
 - [x] ダークモード（OS設定追従 + 明示toggle） — D1〜D12完了、計画: [`dark-mode`](plans/dark-mode/plan.md)
-- [ ] プライバシーポリシーページ`/privacy` — 計画: [`privacy-policy`](plans/privacy-policy/plan.md)
+- [ ] プライバシーポリシーページ`/privacy` — R3 / 計画: [`privacy-policy`](plans/privacy-policy/plan.md)
 - [-] 基本レスポンシブ・keyboard・focus・live region — 実装済み範囲あり、主要画面のrelease確認待ち
 - [-] 認証系・ゲーム送信APIのアプリレベルrate limit — Hono/DOとstaging binding済み、実HTTP 429/503・production binding待ち
 - [ ] production CORS、HttpOnly/Secure/SameSite Cookie、security headersの実HTTP確認
