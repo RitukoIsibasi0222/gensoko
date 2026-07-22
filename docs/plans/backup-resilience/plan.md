@@ -288,7 +288,7 @@ Supabase Free planで運用するproduction DBの暗号化論理backupを、週�
 ## v0.1公開完了条件
 
 - [x] 初回production backupのArtifact・暗号化・復号検証が成功している（run 29322979476）。
-- [ ] 日次cronの契約testがRedからGreenになり、JST毎日04:41へ解決される。
+- [ ] 日次cronの契約testがRedからGreenになり、JST毎日04:41に設定される。
 - [ ] 暗号化archiveとchecksumだけを7日保持し、平文dump非保存の既存契約が回帰している。
 - [ ] 未失効の成功Artifactを2世代以上確認している。
 - [ ] `docs/11_deployment.md`、v0.1公開計画、`docs/05_progress.md`が実装と実環境証拠に一致している。
