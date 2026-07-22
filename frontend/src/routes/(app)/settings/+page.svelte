@@ -544,6 +544,16 @@
       <p id="delete-warning" class="text-danger-text mt-1 text-sm">
         この操作は取り消せません。プロフィール情報・認証情報・学習データを稼働DBから物理削除します。
       </p>
+      <p class="text-danger-text mt-2 text-sm">
+        削除時のデータの取扱いは
+        <a
+          href="/privacy#account-deletion"
+          class="text-action-text focus:ring-focus rounded-sm underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+        >
+          プライバシーポリシーのアカウント削除
+        </a>
+        をご確認ください。
+      </p>
 
       <form class="mt-4 space-y-4" novalidate aria-busy={isDeleting} onsubmit={handleDeleteSubmit}>
         {#if deleteFormError}

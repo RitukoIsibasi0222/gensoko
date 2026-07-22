@@ -240,6 +240,17 @@
         {/if}
       </div>
 
+      <p class="text-text-muted text-sm">
+        登録前に
+        <a
+          href="/privacy"
+          class="text-action-text focus:ring-focus rounded-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+        >
+          プライバシーポリシー
+        </a>
+        をご確認ください。
+      </p>
+
       <!-- 登録ボタン -->
       <button
         type="submit"

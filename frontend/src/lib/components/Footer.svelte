@@ -7,6 +7,12 @@
 
 <footer class="border-border-muted bg-surface border-t">
   <div class="text-text-muted mx-auto max-w-5xl px-4 py-4 text-center text-sm">
-    &copy; {year} Gensoko
+    <div>&copy; {year} Gensoko</div>
+    <a
+      href="/privacy"
+      class="text-action-text focus:ring-focus mt-2 inline-block rounded-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+    >
+      プライバシーポリシー
+    </a>
   </div>
 </footer>
