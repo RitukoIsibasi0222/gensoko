@@ -107,6 +107,7 @@ export const createApp = ({
     createUsersRouter({
       authMiddleware: dependencies.auth.authMiddleware,
       service: dependencies.services.users,
+      isProduction,
     }),
   );
   app.route(

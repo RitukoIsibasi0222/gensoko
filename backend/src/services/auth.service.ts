@@ -185,13 +185,13 @@ async function refreshAccessToken(
 ): Promise<{
   accessToken: string;
   newRefreshToken: string;
-  user: { id: string; role: Role };
+  user: { id: string; username: string; role: Role };
 }> {
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
 
   const record = await prisma.refreshToken.findUnique({
     where: { tokenHash },
-    include: { user: { select: { id: true, role: true, isActive: true } } },
+    include: { user: { select: { id: true, username: true, role: true, isActive: true } } },
   });
 
   if (!record) {
@@ -218,7 +218,7 @@ async function refreshAccessToken(
     // count=0 の場合は並行リクエストで既に使用済み → 旧トークンの単回使用を担保
     const { count } = await tx.refreshToken.deleteMany({ where: { tokenHash } });
     if (count === 0) {
-      throw new AuthError(401, "無効なリフレッシュトークンです");
+      throw new AuthError(409, "リフレッシュトークンは既に更新されています");
     }
     await tx.refreshToken.create({
       data: { userId: record.user.id, tokenHash: newTokenHash, expiresAt: newExpiresAt },
@@ -235,7 +235,7 @@ async function refreshAccessToken(
   return {
     accessToken,
     newRefreshToken: newRawToken,
-    user: { id: record.user.id, role: record.user.role },
+    user: { id: record.user.id, username: record.user.username, role: record.user.role },
   };
 }
 

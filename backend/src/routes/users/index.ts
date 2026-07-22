@@ -51,9 +51,14 @@ function handleUserError(err: unknown, c: { json: (body: unknown, status: number
 export type UsersRouterDependencies = Readonly<{
   authMiddleware: MiddlewareHandler<{ Variables: AppVariables }>;
   service: UserService;
+  isProduction: boolean;
 }>;
 
-export function createUsersRouter({ authMiddleware, service }: UsersRouterDependencies) {
+export function createUsersRouter({
+  authMiddleware,
+  service,
+  isProduction,
+}: UsersRouterDependencies) {
   const usersRouter = new Hono<{ Variables: AppVariables }>();
 
   usersRouter.get("/me/stats", authMiddleware, async (c) => {
@@ -123,7 +128,7 @@ export function createUsersRouter({ authMiddleware, service }: UsersRouterDepend
           newPassword: payload.newPassword,
         });
 
-        clearRefreshTokenCookies(c, c.req.path);
+        clearRefreshTokenCookies(c, c.req.path, isProduction);
         return c.json({ message: "パスワードを変更しました" }, 200);
       } catch (err) {
         return handleUserError(err, c);
@@ -154,7 +159,7 @@ export function createUsersRouter({ authMiddleware, service }: UsersRouterDepend
           currentPassword,
         });
 
-        clearRefreshTokenCookies(c, c.req.path);
+        clearRefreshTokenCookies(c, c.req.path, isProduction);
         return c.json({ message: "アカウントを削除しました" }, 200);
       } catch (err) {
         return handleUserError(err, c);

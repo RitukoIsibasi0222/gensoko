@@ -53,6 +53,8 @@ describe("app rate limit route matrix", () => {
     "/api/v1/users/me",
     "/api/v1/admin/stats",
     "/api/v1/game/sessions",
+    "/api/v1/auth/refresh",
+    "/api/v1/auth/logout",
   ])("applies GENERAL_API_IP to %s", async (path) => {
     const { app, consume } = createPolicyApp("GENERAL_API_IP");
 

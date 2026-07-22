@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { getCookie, setCookie } from "hono/cookie";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
@@ -10,6 +10,8 @@ import {
 import { rateLimit } from "../../middleware/rateLimit/index.js";
 import { emailSchema, strongPasswordSchema, usernameSchema } from "../../lib/validation/auth.js";
 import {
+  clearLegacyRefreshTokenCookie,
+  clearRefreshTokenCookies,
   getRefreshTokenCookieBasePath,
   getRefreshTokenCookieOptions,
 } from "../../lib/refresh-token-cookie.js";
@@ -124,7 +126,7 @@ export function createAuthRouter({ service, isProduction }: AuthRouterDependenci
           getRefreshTokenCookieOptions(isProduction, authBase),
         );
         // 旧 Path（authBase/refresh）に残存する Cookie も削除して 1 本に収束させる
-        deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
+        clearLegacyRefreshTokenCookie(c, c.req.path, isProduction);
         return c.json({ accessToken: result.accessToken, user: result.user }, 200);
       } catch (err) {
         if (err instanceof AuthError) {
@@ -146,8 +148,7 @@ export function createAuthRouter({ service, isProduction }: AuthRouterDependenci
     // randomBytes(32).toString("hex") は 64 文字の hex 文字列
     const authBase = getRefreshTokenCookieBasePath(c.req.path);
     if (!/^[0-9a-f]{64}$/.test(rawToken)) {
-      deleteCookie(c, "refreshToken", { path: authBase });
-      deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
+      clearRefreshTokenCookies(c, c.req.path, isProduction);
       return c.json({ error: "リフレッシュトークンの形式が不正です" }, 401);
     }
 
@@ -160,13 +161,14 @@ export function createAuthRouter({ service, isProduction }: AuthRouterDependenci
         getRefreshTokenCookieOptions(isProduction, authBase),
       );
       // 旧 Path（authBase/refresh）に残存する Cookie も削除して 1 本に収束させる
-      deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
-      return c.json({ accessToken: result.accessToken }, 200);
+      clearLegacyRefreshTokenCookie(c, c.req.path, isProduction);
+      return c.json({ accessToken: result.accessToken, user: result.user }, 200);
     } catch (err) {
-      // エラー時はクライアントの壊れた Cookie を削除する（両 Path）
-      deleteCookie(c, "refreshToken", { path: authBase });
-      deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
       if (err instanceof AuthError) {
+        // 競合(409)や一時障害では、別requestが発行した有効なCookieを削除しない。
+        if (err.status === 401 || err.status === 403) {
+          clearRefreshTokenCookies(c, c.req.path, isProduction);
+        }
         return c.json({ error: err.message }, err.status);
       }
       return c.json({ error: "サーバーエラーが発生しました" }, 500);
@@ -176,20 +178,16 @@ export function createAuthRouter({ service, isProduction }: AuthRouterDependenci
   authRouter.post("/logout", async (c) => {
     const rawToken = getCookie(c, "refreshToken");
 
-    const authBase = getRefreshTokenCookieBasePath(c.req.path);
-
     // Cookie が来ない場合（旧 Path 残存を含む）でも両 Path の削除ヘッダーを返す（冪等）
     // 空文字（refreshToken=）は形式不正として後続処理へ進む
     if (rawToken == null) {
-      deleteCookie(c, "refreshToken", { path: authBase });
-      deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
+      clearRefreshTokenCookies(c, c.req.path, isProduction);
       return c.body(null, 204);
     }
 
     // refreshToken Cookie の Path は authBase ベースに設定されているため logout でも Cookie が届く
     // 旧 Path（authBase/refresh）に残存する Cookie も同時に削除して収束させる
-    deleteCookie(c, "refreshToken", { path: authBase });
-    deleteCookie(c, "refreshToken", { path: `${authBase}/refresh` });
+    clearRefreshTokenCookies(c, c.req.path, isProduction);
 
     // 形式チェック（randomBytes(32).toString("hex") は 64 文字の hex 文字列）
     if (!/^[0-9a-f]{64}$/.test(rawToken)) {

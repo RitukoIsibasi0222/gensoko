@@ -3,7 +3,10 @@ import { createAuditService } from "../../services/audit.service.js";
 import { createAuthService } from "../../services/auth.service.js";
 import { createAuthRouter } from "./index.js";
 
-export function createAuthTestRouter(prisma: AppPrismaClient) {
+export function createAuthTestRouter(
+  prisma: AppPrismaClient,
+  options: { isProduction?: boolean } = {},
+) {
   const mailSender = {
     async send(message: Parameters<(typeof import("../../lib/mail.js"))["mailer"]["sendMail"]>[0]) {
       const { mailer } = await import("../../lib/mail.js");
@@ -12,7 +15,7 @@ export function createAuthTestRouter(prisma: AppPrismaClient) {
   };
 
   return createAuthRouter({
-    isProduction: false,
+    isProduction: options.isProduction ?? false,
     service: createAuthService({
       prisma,
       mailSender,

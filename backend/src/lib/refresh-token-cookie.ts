@@ -42,8 +42,32 @@ export function getRefreshTokenCookieOptions(secure: boolean, path: string) {
 export function clearRefreshTokenCookies(
   c: Parameters<typeof deleteCookie>[0],
   requestPath: string,
+  secure: boolean,
 ) {
   for (const path of getRefreshTokenCookiePaths(requestPath)) {
-    deleteCookie(c, REFRESH_TOKEN_COOKIE_NAME, { path });
+    clearRefreshTokenCookie(c, secure, path);
   }
+}
+
+export function clearLegacyRefreshTokenCookie(
+  c: Parameters<typeof deleteCookie>[0],
+  requestPath: string,
+  secure: boolean,
+) {
+  const [, legacyPath] = getRefreshTokenCookiePaths(requestPath);
+  clearRefreshTokenCookie(c, secure, legacyPath);
+}
+
+function clearRefreshTokenCookie(
+  c: Parameters<typeof deleteCookie>[0],
+  secure: boolean,
+  path: string,
+) {
+  const options = getRefreshTokenCookieOptions(secure, path);
+  deleteCookie(c, REFRESH_TOKEN_COOKIE_NAME, {
+    httpOnly: options.httpOnly,
+    secure: options.secure,
+    sameSite: options.sameSite,
+    path: options.path,
+  });
 }
