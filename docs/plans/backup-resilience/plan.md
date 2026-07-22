@@ -8,10 +8,13 @@ Supabase Free planで運用するproduction DBの暗号化論理backupを、週�
 
 個人情報を含み得るbackupの保持上限は、アカウント完全削除計画との整合を優先して7日のまま維持する。長期保持によって削除済みデータの残存期間を延ばさず、頻度を日次化することで通常時は最大7世代を確保する。
 
+ポートフォリオ版v0.1では、週次の単一障害点を解消する日次schedule、既存の暗号化・7日保持契約、未失効Artifact 2世代の確認までを公開前必須とする。最大3回retry、2時間後recovery、36時間鮮度監視、通常7世代の定常確認、四半期restore drillは、日次化後の運用強化として公開後へ分離する。
+
 ## 背景と現状
 
 - `.github/workflows/production-database.yml`はUTC土曜19:41（JST日曜04:41）の週次backupを実行する。
 - backupはroles・schema・dataをdumpし、AES-256で暗号化して復号後の内容を検査してからGitHub Actions Artifactへ保存する。
+- 初回production backupは2026-07-14のrun 29322979476でArtifact・暗号化・復号検証まで成功している。
 - Artifactの保持期間は7日であり、週次backupが1回失敗すると有効な世代がなくなる可能性がある。
 - `migrate-deploy`とaccount deletion executeは、24時間以内の成功backup runと期限内Artifactがなければ停止する。
 - GitHub Actionsのfailed workflowメール通知は設定済みだが、backup失敗通知を意図的に検証した実績と、schedule欠落を検知する鮮度監視は未記録である。
@@ -25,6 +28,24 @@ Supabase Free planで運用するproduction DBの暗号化論理backupを、週�
 3. 成功runだけでなく、期限内・未失効Artifactの鮮度を別scheduleで確認する。
 4. 四半期ごとに隔離Supabase projectへ復元し、実際に利用可能なbackupであることを確認する。
 5. backup・通知・復元の証跡に個人情報、内部ID、DB接続情報、passphraseを残さない。
+
+## v0.1公開境界
+
+### 公開前に完了する項目
+
+- T2: 日次scheduleの契約testをRedで追加する。
+- T3: backup cronをJST毎日04:41へ変更し、暗号化・7日保持・手動実行・migration gateを回帰させる。
+- T6: 日次runを連続成功させ、未失効Artifactが2世代以上あることを確認する。
+- T10・T11のうち、日次化に関するrunbook・リリース計画・進捗を実態へ同期する。
+
+### 初回公開後に継続する項目
+
+- 最大3回retry、当日Artifact欠落時の2時間後recovery、36時間鮮度監視。
+- failed workflow通知の意図的な安全性・受信検証。
+- 通常7世代の定常運用と7日失効境界の確認。
+- 手動restore drill workflow、四半期ごとの隔離restore、隔離data削除確認。
+
+公開後項目を未実装のまま日次化だけを完了しても、本計画全体は完了扱いにしない。v0.1のR9だけを、本セクションの公開前項目と証拠が揃った時点で完了できる。
 
 ## 対象外
 
@@ -168,26 +189,28 @@ Supabase Free planで運用するproduction DBの暗号化論理backupを、週�
 
 ## タスクリスト（進捗管理）
 
-| タスクID | 内容                                          | ファイル                                               | 優先度 | 完了条件                                                                |
-| -------- | --------------------------------------------- | ------------------------------------------------------ | ------ | ----------------------------------------------------------------------- |
-| T1       | 現行backupの初回成功Artifactと通知受信を確認  | Actions / runbook                                      | 高     | Secret値を出さずrun URLと受信結果を記録                                 |
-| T2       | 日次schedule・retry・鮮度gateのRed testを追加 | `productionDatabaseWorkflow.test.ts`                   | 高     | 現行workflowに対して新規testが失敗                                      |
-| T3       | backupを日次化し最大3回retryを実装            | `production-database.yml`                              | 高     | retry後成功または最終failureが一意に判定可能                            |
-| T4       | recovery・backup鮮度確認を実装                | `production-database.yml`                              | 高     | 当日Artifact欠落時だけ再実行し、36時間超過・Artifact失効をfailureにする |
-| T5       | 失敗通知の安全性と受信を検証                  | Actions / runbook                                      | 高     | 固定文言のみのsafe failureで登録メール受信を確認                        |
-| T6       | 日次backupを連続実行し複数世代を確認          | Actions                                                | 高     | 未失効Artifact 2世代以上、最終目標は通常7世代                           |
-| T7       | restore drill workflowのRed testを追加        | `productionDatabaseRestoreDrillWorkflow.test.ts`       | 高     | manual限定・環境分離・production拒否testが失敗                          |
-| T8       | 手動restore drill workflowを実装              | `production-database-restore-drill.yml`                | 高     | checksumから隔離restore・検証・平文cleanupまで成功                      |
-| T9       | 隔離projectで初回restore drillを実施          | Actions / Supabase                                     | 高     | 復元成功と隔離data削除を証跡化                                          |
-| T10      | startup・deployment runbookを更新             | `docs/09_startup_commands.md`, `docs/11_deployment.md` | 高     | 日次運用、再試行、通知、世代、drill、障害対応が整合                     |
-| T11      | 計画書・進捗を実態へ同期                      | 本計画、`docs/05_progress.md`                          | 中     | 対象ファイル・判断・結果・完了markが実態と一致                          |
+| タスクID | 内容                                            | フェーズ     | ファイル                                               | 優先度 | 完了条件                                                            |
+| -------- | ----------------------------------------------- | ------------ | ------------------------------------------------------ | ------ | ------------------------------------------------------------------- |
+| T1       | 現行backupの初回成功Artifactを記録              | v0.1確認済み | Actions / runbook                                      | 高     | run 29322979476、暗号化・復号・平文非保存の証拠を記録               |
+| T2       | 日次scheduleのRed testを追加                    | v0.1公開前   | `productionDatabaseWorkflow.test.ts`                   | 高     | 週次cronに対し日次cronを要求するtestが意図した理由で失敗            |
+| T3       | backupを日次化                                  | v0.1公開前   | `production-database.yml`                              | 高     | JST毎日04:41、手動実行、7日保持、既存backup gateが成立              |
+| T4       | 最大3回retry・recovery・36時間鮮度確認をTDD実装 | 初回公開後   | workflow / contract test                               | 高     | 一時失敗を回復し、当日欠落・36時間超過・Artifact失効をfailureにする |
+| T5       | 失敗通知の安全性と受信を検証                    | 初回公開後   | Actions / runbook                                      | 高     | 固定文言のみのsafe failureで登録メール受信を確認                    |
+| T6       | 日次backupを連続実行し最低2世代を確認           | v0.1公開前   | Actions                                                | 高     | 未失効Artifactが2世代以上                                           |
+| T6A      | 通常7世代と7日失効境界を確認                    | 初回公開後   | Actions                                                | 高     | 日次run 7回と、保持上限を超えたArtifactの失効を確認                 |
+| T7       | restore drill workflowのRed testを追加          | 初回公開後   | `productionDatabaseRestoreDrillWorkflow.test.ts`       | 高     | manual限定・環境分離・production拒否testが失敗                      |
+| T8       | 手動restore drill workflowを実装                | 初回公開後   | `production-database-restore-drill.yml`                | 高     | checksumから隔離restore・検証・平文cleanupまで成功                  |
+| T9       | 隔離projectで初回restore drillを実施            | 初回公開後   | Actions / Supabase                                     | 高     | 復元成功と隔離data削除を証跡化                                      |
+| T10      | startup・deployment runbookを更新               | フェーズごと | `docs/09_startup_commands.md`, `docs/11_deployment.md` | 高     | 実装済みの日次運用と公開後強化を混同せず、実態と一致                |
+| T11      | 計画書・進捗を実態へ同期                        | フェーズごと | 本計画、`docs/05_progress.md`                          | 中     | v0.1境界、対象ファイル、判断、結果、完了markが実態と一致            |
 
-- [ ] T1: 現行backupの初回成功Artifactと通知受信を確認する
-- [ ] T2: 日次schedule・retry・鮮度gateのRed testを追加する
-- [ ] T3: backupを日次化し最大3回retryを実装する
-- [ ] T4: 当日Artifact欠落時のrecoveryとbackup鮮度確認を実装する
+- [x] T1: 現行backupの初回成功Artifactを記録する（run 29322979476）
+- [ ] T2: 日次scheduleのRed testを追加する
+- [ ] T3: backupをJST毎日04:41へ日次化する
+- [ ] T4: 最大3回retry・当日Artifact欠落時のrecovery・36時間鮮度確認をTDD実装する
 - [ ] T5: 失敗通知の安全性と受信を検証する
-- [ ] T6: 日次backupを連続実行し複数世代を確認する
+- [ ] T6: 日次backupを連続実行し未失効Artifact 2世代以上を確認する
+- [ ] T6A: 通常7世代と7日失効境界を確認する
 - [ ] T7: restore drill workflowのRed testを追加する
 - [ ] T8: 手動restore drill workflowを実装する
 - [ ] T9: 隔離projectで初回restore drillを実施し、隔離dataを削除する
@@ -198,25 +221,26 @@ Supabase Free planで運用するproduction DBの暗号化論理backupを、週�
 
 ### Red
 
-- 現行の週次cronに対し、日次cronを要求する契約testが失敗することを確認する。
-- retry回数上限、attempt間cleanup、当日Artifact欠落時だけのrecovery、鮮度36時間、7日保持を要求するtestが失敗することを確認する。
+- v0.1: 現行の週次cronに対し、日次cronを要求する契約testが失敗することを確認する。
+- 初回公開後: retry回数上限、attempt間cleanup、当日Artifact欠落時だけのrecovery、鮮度36時間を要求するtestが失敗することを確認する。
 - restore drill workflow未存在により、manual限定・Environment分離・production拒否のtestが失敗することを確認する。
 
 ### Green
 
-- workflowを実装し、対象契約testを通す。
+- v0.1では日次cronだけを実装し、既存の暗号化・7日保持・manual・backup gateを含む対象契約testを通す。
+- 初回公開後はretry・recovery・鮮度監視・restore drillを各Red testに対応して実装する。
 - 既存のmigration前backup gateとaccount deletion gateのtestを回帰させる。
 - workflow YAMLをPrettierで検証する。
 
 ### 実環境
 
-1. 手動backupを成功させ、暗号化Artifactとchecksumだけが存在することを確認する。
-2. 接続前に失敗する安全な条件で通知testを行い、固定文言のメール受信を確認する。
-3. 日次runを2回以上成功させ、複数世代と7日失効境界を確認する。
-4. 期限内Artifactを隔離projectへrestoreする。
-5. Prisma migration整合性、主要table、参照整合性を確認する。
-6. logとArtifactにPII・接続情報・passphrase・平文dumpがないことを確認する。
-7. 隔離projectまたは復元dataを削除し、削除日時と担当者だけを記録する。
+1. 確認済み: run 29322979476で暗号化Artifactとchecksumだけが存在し、復号検証に成功している。
+2. v0.1: 日次runを2回以上成功させ、未失効Artifact 2世代と7日保持を確認する。
+3. v0.1: logとArtifactにPII・接続情報・passphrase・平文dumpがないことを再確認する。
+4. 初回公開後: 接続前に失敗する安全な条件で通知testを行い、固定文言のメール受信を確認する。
+5. 初回公開後: 日次run 7回と7日失効境界を確認する。
+6. 初回公開後: 期限内Artifactを隔離projectへrestoreし、Prisma migration・主要table・参照整合性を確認する。
+7. 初回公開後: 隔離projectまたは復元dataを削除し、削除日時と担当者だけを記録する。
 
 ## テストケース一覧
 
@@ -261,7 +285,17 @@ Supabase Free planで運用するproduction DBの暗号化論理backupを、週�
 - restore drill workflowはproduction Secretを参照しないため、問題時はworkflowを無効化してrunbookによる承認付き手動検証へ戻す。
 - 既存の24時間以内backup gateと7日保持は後退させない。
 
-## 実装完了条件
+## v0.1公開完了条件
+
+- [x] 初回production backupのArtifact・暗号化・復号検証が成功している（run 29322979476）。
+- [ ] 日次cronの契約testがRedからGreenになり、JST毎日04:41へ解決される。
+- [ ] 暗号化archiveとchecksumだけを7日保持し、平文dump非保存の既存契約が回帰している。
+- [ ] 未失効の成功Artifactを2世代以上確認している。
+- [ ] `docs/11_deployment.md`、v0.1公開計画、`docs/05_progress.md`が実装と実環境証拠に一致している。
+
+最大3回retry、recovery、36時間鮮度監視、通常7世代、restore drillは本計画全体の完了条件だが、v0.1公開完了条件には含めない。
+
+## 本計画全体の実装完了条件
 
 - [ ] 日次backup、最大3回retry、当日Artifact欠落時のrecovery、36時間鮮度確認の契約testと実装が一致している。
 - [ ] 暗号化Artifactは7日保持で、平文dumpが保存・出力されない。
@@ -276,16 +310,17 @@ Supabase Free planで運用するproduction DBの暗号化論理backupを、週�
 ## 最終タスクリスト（タブ区切り）
 
 ```text
-タスクID	タスク内容	ファイル	優先度
-T1	現行backupの初回成功Artifactと通知受信を確認	Actions・runbook	高
-T2	日次schedule・retry・鮮度gateのRed testを追加	backend/src/jobs/productionDatabaseWorkflow.test.ts	高
-T3	backupを日次化し最大3回retryを実装	.github/workflows/production-database.yml	高
-T4	当日Artifact欠落時のrecoveryとbackup鮮度確認を実装	.github/workflows/production-database.yml	高
-T5	失敗通知の安全性と受信を検証	Actions・runbook	高
-T6	日次backupを連続実行し複数世代を確認	Actions	高
-T7	restore drill workflowのRed testを追加	backend/src/jobs/productionDatabaseRestoreDrillWorkflow.test.ts	高
-T8	手動restore drill workflowを実装	.github/workflows/production-database-restore-drill.yml	高
-T9	隔離projectで初回restore drillとdata削除を実施	Actions・Supabase	高
-T10	startup・deployment runbookを更新	docs/09_startup_commands.md・docs/11_deployment.md	高
-T11	計画書・進捗を実態へ同期	docs/plans/backup-resilience/plan.md・docs/05_progress.md	中
+タスクID	タスク内容	フェーズ	ファイル	優先度
+T1	現行backupの初回成功Artifactを記録	v0.1確認済み	Actions・runbook	高
+T2	日次scheduleのRed testを追加	v0.1公開前	backend/src/jobs/productionDatabaseWorkflow.test.ts	高
+T3	backupをJST毎日04:41へ日次化	v0.1公開前	.github/workflows/production-database.yml	高
+T4	最大3回retry・recovery・36時間鮮度確認をTDD実装	初回公開後	workflow・contract test	高
+T5	失敗通知の安全性と受信を検証	初回公開後	Actions・runbook	高
+T6	日次backupを連続実行し最低2世代を確認	v0.1公開前	Actions	高
+T6A	通常7世代と7日失効境界を確認	初回公開後	Actions	高
+T7	restore drill workflowのRed testを追加	初回公開後	backend/src/jobs/productionDatabaseRestoreDrillWorkflow.test.ts	高
+T8	手動restore drill workflowを実装	初回公開後	.github/workflows/production-database-restore-drill.yml	高
+T9	隔離projectで初回restore drillとdata削除を実施	初回公開後	Actions・Supabase	高
+T10	startup・deployment runbookを更新	フェーズごと	docs/09_startup_commands.md・docs/11_deployment.md	高
+T11	計画書・進捗を実態へ同期	フェーズごと	docs/plans/backup-resilience/plan.md・docs/05_progress.md	中
 ```

@@ -248,7 +248,7 @@
 
 - [x] Supabase staging・production project作成、東京region・Session pooler接続設定
 - [x] 本番DBバックアップ・Prismaマイグレーション運用（Free plan容量確認・暗号化backup・migration gateをproductionで確認済み） — 計画書: [`docs/plans/audit-log-production-operations/plan.md`](plans/audit-log-production-operations/plan.md)
-- [ ] 本番DBバックアップ耐障害性強化（日次化・最大3回再試行・36時間鮮度監視・最大7世代・四半期隔離復元訓練） — 計画書: [`docs/plans/backup-resilience/plan.md`](plans/backup-resilience/plan.md)
+- [-] 本番DBバックアップ耐障害性強化 — v0.1公開前は日次化・未失効2世代を必須とし、最大3回retry・recovery・36時間鮮度監視・通常7世代・四半期隔離restoreは公開後に継続 — 計画書: [`docs/plans/backup-resilience/plan.md`](plans/backup-resilience/plan.md)
 - [-] staging frontend/API配備基盤（Workers専用entrypoint・Prisma/mail runtime境界・Wrangler・Vercel Preview・T34実機確認） — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md) / PR: #117 — SD1〜SD13・SD15完了。Vercel `develop` Preview、Cloudflare staging Worker/DO/Hyperdrive/secret、Supabase migration、health/CORS/OPTIONS、元素118件、synthetic登録・認証・ゲーム・password reset・本人退会を確認済み。production resource・deploy・DB操作は未実施
   - [x] SD16実環境検証: PR #125で管理者linkのSPA遷移をTDD固定し、run 29802327100でAdmin login、`/admin` dashboard、強制退会、旧credential 401、main cleanupが成功した。flagは`false`へ復旧済み。production・migration・実メール・再配備・追加の直接DB queryは未実行
 - [-] Cloudflare Workers Wrangler + Prisma `@prisma/adapter-pg`/接続binding設定・デプロイ — stagingはHyperdrive方式で設定・配備・実機確認済み。production resource・binding・deployは未実施
@@ -275,7 +275,7 @@
 - [ ] R6: 完全削除の残るv0.1 gateを完了する
 - [ ] R7: app rate limitの実環境gateを完了する
 - [ ] R8: headers・CORS・safe error・logを最終確認する
-- [ ] R9: 最低限の暗号化backupを確認する
+- [ ] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する
 - [ ] R10: 基本responsive・keyboard/A11Yを確認する
 - [ ] R11A: backend High/Moderate依存を安全に更新する
 - [ ] R11: release候補SHAの品質gateとnpm auditを実行する
@@ -303,7 +303,7 @@
 - [-] 認証系・ゲーム送信APIのアプリレベルrate limit — Hono/DOとstaging binding済み、実HTTP 429/503・production binding待ち
 - [ ] production CORS、HttpOnly/Secure/SameSite Cookie、security headersの実HTTP確認
 - [ ] staging/production logでPII・token・Cookie・Authorization・DB URL・raw error非出力を最終確認
-- [-] 最低限の暗号化backup — workflow実装済み、初回Artifact・checksum・復号確認待ち
+- [-] 暗号化backupの日次化 — 週次workflow・初回Artifact・checksum・復号はrun 29322979476で確認済み。日次cronの契約test・実装と未失効Artifact 2世代の確認待ち
 - [ ] backend production依存のHigh 2 / Moderate 3を安全に更新し、TDD回帰後にproduction依存High/Moderate 0件を確認
 - [ ] release候補SHAのtest・Workers test・build・lint・format・Prisma validate・npm audit（frontendは全依存Low 3、production依存0を再確認）
 - [ ] dark/privacyを含むstaging主要導線の最終確認
@@ -317,7 +317,7 @@
 - [ ] 高度なWAF tuning
 - [ ] 本番公開後の監査ログ実負荷7日baseline（公開前0件baselineは2026-07-21完了）
 - [ ] 高度な容量監視・通知
-- [ ] backup最大3回retry・日次最大7世代・四半期隔離restore — 計画: [`backup-resilience`](plans/backup-resilience/plan.md)
+- [ ] backup最大3回retry・2時間後recovery・36時間鮮度監視・通常7世代・四半期隔離restore — 計画: [`backup-resilience`](plans/backup-resilience/plan.md)
 - [ ] 完全自動CI/CD
 - [ ] 管理画面Playwright網羅
 - [ ] 複数screen reader/browserの高度検証
@@ -333,6 +333,6 @@
 
 - [ ] privacyの運営主体、問い合わせ先、監査正式保持期間・目的、backup/replay説明、発効日をowner承認する
 - [ ] production hostname、same-site Cookie、CORS origin、Cloudflare DO binding/secret、rollback先を値非表示で確認する
-- [ ] production初回暗号化backupを実行し、期限内Artifactと復号成功を確認する
+- [ ] 日次backup実装後にschedule runを連続成功させ、未失効Artifact 2世代以上と平文非保存を確認する
 - [ ] T33/T35とproduction完全削除gateのうち、DB空証拠で対象外にできない項目を承認付きで実行する
 - [ ] review済みrelease候補SHAをproductionへ配備し、smokeとrollback記録を残す
