@@ -123,11 +123,11 @@
    - 改善案: `USER_ACCOUNT_DELETE / SUCCESS` を追加し、`actorId = targetId`、削除前role、PIIなしで削除transactionへ含める。監査insert失敗時は削除全体をrollbackする。
    - 優先度: **High**
 
-2. **監査内部ID保持は正式承認済みではない**
-   - 指摘内容: 365日と退会後raw内部ID保持は文書上の暫定案で、本番承認者・通知先が未確定。
-   - 根拠: **確認できた事実**。`docs/02_security.md` と監査運用計画に未承認gateが残る。
-   - 影響・リスク: 再識別可能な内部IDを承認なしで本番保持し、利用者説明とも不一致になる。
-   - 改善案: プライバシー責任者またはプロダクトオーナーの承認者・日付・期間・目的・問い合わせ先を記録するまで本番公開をblockする。
+2. **監査内部ID保持の運用説明が未完了**
+   - 指摘内容: 365日と退会後raw内部ID保持の期間・目的・承認者・承認日は2026-07-14に確定したが、利用者向け問い合わせ先とprivacy文言は未確定。
+   - 根拠: **確認できた事実**。`docs/02_security.md`、監査運用計画、`docs/11_deployment.md`に承認記録があり、privacy公開gateが残る。
+   - 影響・リスク: 再識別可能な内部IDの保持を利用者へ十分説明しないまま本番公開すると、承認済みの内部運用と対外説明が不一致になる。
+   - 改善案: 承認済みの期間・目的を変更せず、問い合わせ先を含むprivacy文言を確定・公開するまで本番公開をblockする。
    - 優先度: **High**
 
 3. **backupからの復元で削除済み個人情報が復活し得る**
@@ -234,16 +234,16 @@
 
 ### 未確認・承認待ち
 
-| 項目                                                          | 状態                 | releaseへの影響                                 |
-| ------------------------------------------------------------- | -------------------- | ----------------------------------------------- |
-| production/stagingのlegacy soft-deleted user件数と子row数     | 未計測               | execute前dry-run必須                            |
-| 最大ユーザーのGameSession / GameAnswer件数とcascade所要時間   | 未計測               | 同期削除可否のperformance gate                  |
-| 監査保持365日・退会後raw内部ID・承認者・問い合わせ先          | 正式承認未完了       | 本番公開block                                   |
-| `BACKUP_ENCRYPTION_PASSPHRASE` 登録、初回backup/migration実績 | 監査運用計画上未完了 | production migration/cleanup block              |
-| 現行DB全損時のbackup後削除ID replay source                    | 未導入               | 完全削除の対外表明blockまたは残余リスク承認必須 |
-| メール配送事業者・アプリログ・ブラウザcacheの保持期間         | 未確認               | privacy policy文言確定block                     |
-| frontend asset/cacheの互換期間                                | 未確認               | v1互換fieldは本タスクでは削除せずdeprecated維持 |
-| username再利用のプロダクト承認                                | 未確認               | 公開前承認必須                                  |
+| 項目                                                          | 状態               | releaseへの影響                                 |
+| ------------------------------------------------------------- | ------------------ | ----------------------------------------------- |
+| production/stagingのlegacy soft-deleted user件数と子row数     | 未計測             | execute前dry-run必須                            |
+| 最大ユーザーのGameSession / GameAnswer件数とcascade所要時間   | 未計測             | 同期削除可否のperformance gate                  |
+| 監査保持365日・退会後raw内部ID・承認者・承認日                | 2026-07-14承認済み | privacy問い合わせ先・公開文言は引き続きblock    |
+| `BACKUP_ENCRYPTION_PASSPHRASE` 登録、初回backup/migration実績 | 2026-07-14確認済み | 値は非公開。以後もbackup gateを維持             |
+| 現行DB全損時のbackup後削除ID replay source                    | 未導入             | 完全削除の対外表明blockまたは残余リスク承認必須 |
+| メール配送事業者・アプリログ・ブラウザcacheの保持期間         | 未確認             | privacy policy文言確定block                     |
+| frontend asset/cacheの互換期間                                | 未確認             | v1互換fieldは本タスクでは削除せずdeprecated維持 |
+| username再利用のプロダクト承認                                | 未確認             | 公開前承認必須                                  |
 
 ## 削除対象データ
 
@@ -333,7 +333,8 @@
 
 #### T1B: 本番公開前に確定する運用gate
 
-- [ ] 監査内部ID保持期間、目的、承認者、承認日、問い合わせ先。
+- [x] 監査内部ID保持期間365日、目的、承認者、承認日（2026-07-14）。
+- [ ] 監査内部ID保持に関する利用者向け問い合わせ先。
 - [ ] backup最長7日と復元時再削除をprivacy policy/UIへ記載する正式文言。
 - [ ] 現行DB全損時の削除replay sourceを導入するか、残余リスクを承認するかの最終判断。
 - [ ] production cleanupの実行者・承認者・実行時間帯・通知先。

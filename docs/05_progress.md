@@ -172,12 +172,18 @@
 - [x] bcrypt 72バイト上限の入力検証統一（UTF-8バイト数、登録・変更・リセット・管理者CLI、既存ユーザー互換性、フロント表示、72/73バイト境界テスト） — 計画書: [`docs/plans/bcrypt-password-byte-limit/plan.md`](plans/bcrypt-password-byte-limit/plan.md) / PR: #82
 - [x] セキュリティヘッダーミドルウェア（CSP/HSTS/X-Frame-Options/nosniff等） — 計画書: [`docs/plans/security-headers/plan.md`](plans/security-headers/plan.md) / PR: #84
 - [-] APIレート制限の本番設計・適用（認証系 / 一般API / `POST /game/sessions`） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md) — Hono・フロントエンド、SQLite-backed Durable Object/store adapter、local Workers runtime test、staging namespace/binding稼働まで確認済み。staging実HTTP 429/503、WAF、監視、production namespace/binding・実機確認は未実施
-- [-] 監査ログ本番運用設計（保持期間・容量監視・cleanup・退会後の内部ID保持方針） — 計画書: [docs/plans/audit-log-production-operations/plan.md](plans/audit-log-production-operations/plan.md)
+- [-] 監査ログ本番運用設計（保持期間365日・退会後内部IDの同期間保持は2026-07-14承認済み。T20・公開前T21完了、T22進行中） — 計画書: [docs/plans/audit-log-production-operations/plan.md](plans/audit-log-production-operations/plan.md)
+  - [x] T20: production容量監視・通知先・暗号化backup・migration gateを実環境で確認
+  - [x] T21: 2026-07-14 22:54 JST〜2026-07-21 22:55 JSTの公開前baselineを確認。観測開始時と2026-07-22 03:58 JSTの終了後確認run時はいずれも監査row 0件、7日増加量0件
+  - [x] 自動test: 10,000件上限、上限後の残件通知、stable concurrency group、cleanup失敗時の非0終了
+  - [ ] 実環境運用確認: schedule/manualのqueue動作、Actions失敗通知の受信、retention変更前dry-run
+  - [ ] 本番アプリ公開後の監査回帰・実負荷baseline: LOGIN success/failure、password change/reset、admin操作、本人・管理者退会、API status/body/Cookie
+  - [-] T22: 7日baselineと残課題を記録済み。完了記録用docs PR #95のreview・develop merge待ち
 - [-] 退会時の個人情報・学習データ完全削除方針（本人退会・管理者強制退会・既存soft-deleted userの移行） — 計画書: [docs/plans/account-data-complete-deletion/plan.md](plans/account-data-complete-deletion/plan.md) — 監査ログ保持とは分離した本番公開前ブロッカー（実装中・本番公開gate未完了）
   - [x] 実装計画・現行soft delete・User配下のcascade対象・不足indexを確認
   - [-] Phase 0: privacy・監査内部ID・backup・再登録・削除replay・性能基準・本番cleanup体制を決定（T1A確定、T1B継続）
     - [x] T1A: 物理削除、監査成功action、再登録、backup境界、replay block、同期削除性能基準の実装契約を確定
-    - [-] T1B: 監査保持の正式承認、本番cleanup体制、全損時replayの最終判断を本番公開前gateとして継続
+    - [-] T1B: 監査保持365日・内部ID同期間保持は2026-07-14承認済み。privacy問い合わせ先、本番cleanup体制、全損時replayの最終判断を本番公開前gateとして継続
   - [-] Phase 1: cascade/index契約test、expand index migration、専用DB・staging検証
   - [x] Phase 2: 共通Serializable transaction、本人退会・管理者強制退会の物理削除、成功監査、cleanup CLI・workflow
     - [x] T5〜T9: 共通Serializable transaction、本人退会の物理削除、last-admin、成功監査
@@ -213,7 +219,7 @@
   - [ ] Phase 6: cleanup後backup、旧Artifactの7日失効、isolated restore drill・削除replay
   - [-] Phase 7: T43のtable lock付き隔離guard SQL・contract test・ローカル専用DB fail/success/並行insert/drop後Prisma writeを完了。staging/production適用はT44として未実施
   - [x] 2026-07-18 PR #107 review follow-up品質check: backend 887件成功・10件skip、ESLint・Prettier・TypeScript build・Prisma validate成功。deleteOnlyUserIds空配列拒否とshorthand select許容を含み、専用cascade 5件とcontract migration 5件も成功
-  - [ ] Release gate: privacy policy、監査保持承認、全損時replay方針、本番cleanup体制、integration・Playwright・smoke testを完了
+  - [ ] Release gate: privacy policyの問い合わせ先・backup説明、全損時replay方針、本番cleanup体制、integration・Playwright・smoke testを完了
 
 ### 完全削除から切り出した関連タスクの着手タイミング
 
@@ -241,7 +247,7 @@
 ## フェーズ12: デプロイ
 
 - [x] Supabase staging・production project作成、東京region・Session pooler接続設定
-- [-] 本番DBバックアップ・Prismaマイグレーション運用（Free plan暗号化backup・容量監視workflow実装中） — 計画書: [`docs/plans/audit-log-production-operations/plan.md`](plans/audit-log-production-operations/plan.md)
+- [x] 本番DBバックアップ・Prismaマイグレーション運用（Free plan容量確認・暗号化backup・migration gateをproductionで確認済み） — 計画書: [`docs/plans/audit-log-production-operations/plan.md`](plans/audit-log-production-operations/plan.md)
 - [ ] 本番DBバックアップ耐障害性強化（日次化・最大3回再試行・36時間鮮度監視・最大7世代・四半期隔離復元訓練） — 計画書: [`docs/plans/backup-resilience/plan.md`](plans/backup-resilience/plan.md)
 - [-] staging frontend/API配備基盤（Workers専用entrypoint・Prisma/mail runtime境界・Wrangler・Vercel Preview・T34実機確認） — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md) / PR: #117 — SD1〜SD13・SD15完了。Vercel `develop` Preview、Cloudflare staging Worker/DO/Hyperdrive/secret、Supabase migration、health/CORS/OPTIONS、元素118件、synthetic登録・認証・ゲーム・password reset・本人退会を確認済み。production resource・deploy・DB操作は未実施
   - [x] SD16実環境検証: PR #125で管理者linkのSPA遷移をTDD固定し、run 29802327100でAdmin login、`/admin` dashboard、強制退会、旧credential 401、main cleanupが成功した。flagは`false`へ復旧済み。production・migration・実メール・再配備・追加の直接DB queryは未実行
@@ -283,7 +289,7 @@
 - [ ] Hono RPC導入
 - [ ] ゲームAPIテスト追加補強 — 計画: [`game-api-tests`](plans/game-api-tests/plan.md)
 - [ ] 高度なWAF tuning
-- [ ] 監査ログ7日baseline
+- [ ] 本番公開後の監査ログ実負荷7日baseline（公開前0件baselineは2026-07-21完了）
 - [ ] 高度な容量監視・通知
 - [ ] backup最大3回retry・日次最大7世代・四半期隔離restore — 計画: [`backup-resilience`](plans/backup-resilience/plan.md)
 - [ ] 完全自動CI/CD

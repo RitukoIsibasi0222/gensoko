@@ -585,7 +585,7 @@ GitHub の Settings > Environments で`staging`と`production`を分離し、そ
 | production  | Secret   | `DATABASE_URL`                       | production専用DB接続文字列。stagingと共用しない                                     |
 | production  | Secret   | `BACKUP_ENCRYPTION_PASSPHRASE`       | 20文字以上のbackup暗号化専用値。password managerにも保存し、DB passwordと共用しない |
 | production  | Variable | `BATCH_ENVIRONMENT`                  | `production`                                                                        |
-| production  | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 正式承認後の保持日数                                                                |
+| production  | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 2026-07-14承認済みの正式保持期間`365`                                               |
 | production  | Variable | `AUDIT_LOG_CLEANUP_ENABLED`          | 全release gate完了までは`false`                                                     |
 
 workflow jobは選択されたEnvironmentを参照する。手動実行は`staging`が既定で、scheduleは`production`を参照する。`BATCH_ENVIRONMENT`が選択環境と一致しない場合、または`DATABASE_URL`が未登録の場合は、DB処理や依存関係installの前に失敗する。
@@ -648,18 +648,18 @@ T19では次の順序を変更しない。
 
 次の全項目を記録するまで、productionの`AUDIT_LOG_CLEANUP_ENABLED`を`true`にしない。
 
-| 項目         | 現在の記録                                                      | 状態               |
-| ------------ | --------------------------------------------------------------- | ------------------ |
-| 正式保持期間 | 365日を暫定推奨                                                 | 未承認             |
-| 保持目的     | セキュリティインシデント・管理者操作の相関調査                  | 承認待ち           |
-| 内部ID保持   | 監査rowと同期間だけ`actorId`・`targetId`を保持                  | 承認待ち           |
-| 承認者       | プロダクトオーナーまたはプライバシー責任者                      | 担当者未確定       |
-| 一次対応者   | `RitukoIsibasi0222`                                             | 2026-07-14設定     |
-| 通知先       | GitHub Actions failureの登録メール（failed workflowのみ）       | 2026-07-14設定     |
-| 容量         | Supabase Free 500MB、警告350MB、重大425MB                       | workflow実行待ち   |
-| backup/PITR  | Freeの自動backup・PITRなし。暗号化論理backupをArtifactへ7日保持 | 初回backup成功待ち |
+| 項目         | 現在の記録                                                      | 状態                  |
+| ------------ | --------------------------------------------------------------- | --------------------- |
+| 正式保持期間 | 365日                                                           | 2026-07-14承認        |
+| 保持目的     | セキュリティインシデント・管理者操作の相関調査                  | 2026-07-14承認        |
+| 内部ID保持   | 監査rowと同じ365日だけ`actorId`・`targetId`を保持               | 2026-07-14承認        |
+| 承認者       | プロダクトオーナー`RitukoIsibasi0222`                           | 2026-07-14記録        |
+| 一次対応者   | `RitukoIsibasi0222`                                             | 2026-07-14設定        |
+| 通知先       | GitHub Actions failureの登録メール（failed workflowのみ）       | 2026-07-14設定        |
+| 容量         | Supabase Free 500MB、警告350MB、重大425MB                       | 初回run成功・Disk 13% |
+| backup/PITR  | Freeの自動backup・PITRなし。暗号化論理backupをArtifactへ7日保持 | 2026-07-14初回成功    |
 
-正式決定時は値、目的、承認者、承認日、適用者、適用日時をこの表へ追記する。未確定欄を残したままcleanupを有効化しない。
+保持期間・目的・承認者は上表をsource of truthとし、変更時は変更前dry-runと再承認を記録する。公開前7日baselineは2026-07-21に完了した。公開後実負荷baseline、アカウント完全削除のproduction gate、その他release gateが完了するまでcleanupを有効化しない。
 
 ### 監査ログcleanupの監視
 
@@ -685,9 +685,9 @@ T19では次の順序を変更しない。
 ### 監査ログcleanup runbook
 
 1. 初回・保持期間変更前は`audit-log-cleanup-dry-run`を実行し、cutoff、期限超過件数、最古日時、最低実行回数を記録する。
-2. backup/PITR、承認者、通知先を確認する。
-3. Actions Variableの保持期間を承認値へ更新する。
-4. 日次schedule直前を避けてmanual実行の時間を確保し、`AUDIT_LOG_CLEANUP_ENABLED=true`へ変更する。
+2. backup/PITR、承認者、通知先を確認する。productionでは公開後実負荷baseline、アカウント完全削除のproduction gate、削除保留承認者など残るrelease gateがすべて完了済みであることも確認する。
+3. Actions Variableの保持期間が承認値`365`であることを確認する。保持期間を変更する場合は、変更前dry-runとプロダクトオーナーまたはプライバシー責任者の再承認を行う。
+4. 全release gateの完了記録と承認内容を再確認した後だけ、日次schedule直前を避けてmanual実行の時間を確保し、`AUDIT_LOG_CLEANUP_ENABLED=true`へ変更する。
 5. `audit-log-cleanup-execute`を1回実行し、削除件数・実行時間・残件を確認する。
 6. 日次scheduleの次回成功を確認する。
 
@@ -823,11 +823,11 @@ T19では次の順序を変更しない。
 [ ] 本番API hostnameが対象zoneのWAFを通り、直接到達・迂回経路がないことを確認
 [x] GitHub Actions production Environmentの DATABASE_URL Secret を設定（migrate deploy 用）
 [x] GitHub Actions Variables に AUDIT_LOG_RETENTION_DAYS と AUDIT_LOG_CLEANUP_ENABLED=false を設定
-[-] 本番DB暗号化backup workflowを実装し、初回Artifact・checksum・復号成功を確認
-[ ] 監査ログの正式保持期間・内部ID保持・承認者・通知先を記録
-[-] DB容量70%/85% workflowを実装し、GitHub Actions failureの受信者を設定（初回run待ち）
-[ ] production dry-runと初回executeの結果を記録
-[ ] prisma migrate deploy の実行タイミングを確認
+[x] 本番DB暗号化backup workflowを実装し、初回Artifact・暗号化・復号検証を確認（run #29322979476）
+[x] 監査ログの正式保持期間・内部ID保持・承認者・通知先を記録
+[x] DB容量70%/85% workflowを実装し、初回capacity run成功・Disk 13%・GitHub Actions failureの受信者を確認（run #29322946812）
+[-] production dry-runと公開前7日baselineは成功。初回executeは全release gate完了後に実施
+[x] 24時間以内のbackup成功後にprisma migrate deployを実行する順序と初回成功を確認（run #29323085012）
 [ ] wrangler deploy で初回デプロイ
 [ ] GitHub Actions の Secrets 設定（CI/CD）
 [ ] エラートラッキングまたは構造化ログの通知先を設定

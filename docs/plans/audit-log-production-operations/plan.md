@@ -33,23 +33,25 @@
 
 正確な期限超過総件数は手動dry-runでだけ取得し、総row数・table容量・index容量は本番DBプロバイダーのmetricsをsource of truthとする。これにより、容量監視のためのjobが大規模tableの新たな定常負荷になることを避ける。
 
-### 観点別レビュー
+### 観点別レビュー（計画作成時点）
 
-| 観点       | 確認できた事実                                                                                  | 未確定・推測                                         | 影響                                        | 改善方針                                                                                      | 優先度 |
-| ---------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------- | ------ |
-| 保持期間   | `AuditLog`に削除期限列はなく、現在は無期限に蓄積する                                            | 必要な調査期間、プライバシー上の保持期間は未決定     | DB容量が増え続ける                          | 暫定推奨365日を提示し、承認後に環境変数をruntime source of truthとして有効化する              | High   |
-| cleanup    | 監査ログ用job・CLI・Cronは存在しない                                                            | 1日当たりの期限超過件数は未計測                      | 大量一括削除によるlock・負荷、削除漏れ      | indexを使ったID限定取得と分割`deleteMany`を採用し、1回の上限を固定する                        | High   |
-| 容量監視   | 本番Supabaseは未構築。構造化ログ基盤も未実装                                                    | DB plan、quota、table容量取得手段、通知先は未確定    | 閾値や通知方法をコードだけでは確定できない  | 日次増加監視はリポジトリで実装し、容量アラートはフェーズ12のrelease gateとする                | High   |
-| 集計負荷   | `occurredAt, id` indexは存在する                                                                | 正確な全件countはtable増加に比例して重くなる         | 監視job自体がDB負荷になる                   | 定期実行では範囲countと存在確認だけにし、正確な総数はprovider metricsまたは手動確認へ分離する | High   |
-| 定期実行   | GitHub Actions scheduleと共通`runScheduledBatch()`が実装済み                                    | 将来Cloudflare Workers Cronへ移行する可能性がある    | 別系統のbatch基盤を作ると運用が分裂する     | 既存scheduled batchと`.github/workflows/batch.yml`へ追加する                                  | High   |
-| 同時実行   | 現在のworkflow concurrency groupはschedule値またはinput値に依存する                             | scheduleと手動実行が重なる可能性がある               | 同じrowを複数実行が選択する                 | workflow全体を安定したgroupで直列化し、service自体も重複削除に安全な構造にする                | High   |
-| ID保持     | `actorId`・`targetId`はUser relationなしのsnapshot                                              | 内部ID保持がプライバシーポリシー上許容されるか未承認 | 退会後もユーザーとの相関が残る              | 監査rowと同じ期間だけ保持する案を推奨し、承認を有効化条件にする                               | High   |
-| 退会処理   | `deleteCurrentUser()`と管理者強制退会はsoft deleteで、User行のemail・username・学習データが残る | 将来のphysical deleteまたは匿名化方針は未決定        | `docs/02_security.md`の完全削除記載と不整合 | 本タスクで矛盾を隠さず、本番公開前の別ブロッカーとして進捗管理する                            | High   |
-| DB index   | `@@index([occurredAt(sort: Desc), id(sort: Desc)])`が存在する                                   | 本番件数での実行計画は未確認                         | cleanupが遅くなる可能性                     | 既存indexを使用し、stagingで実行時間・query timeout・削除件数を確認する                       | Medium |
-| schema     | raw内部IDを保持したまま監査rowごと削除する場合、追加列は不要                                    | 匿名化・個別legal holdを採用する場合はschemaが必要   | 不要なmigrationでリスクが増える             | 初期案はschema変更なし。方針変更時は計画を再レビューする                                      | Medium |
-| API        | cleanupは公開APIではなく内部運用処理                                                            | 管理画面から実行したい要望は未確認                   | 認可漏れ・攻撃面増加                        | HTTP endpointを作らず、CLIとCronだけに限定する                                                | High   |
-| A11Y       | UI・公開API・frontend変更はない                                                                 | なし                                                 | 新規A11Y欠陥は発生しない                    | A11Y実装は対象外。UI変更が発生した場合のみ計画を再レビューする                                | Low    |
-| エラー監視 | job失敗はGitHub Actions failureで検出可能                                                       | 通知先と当番は未設定                                 | 失敗に気づかず期限超過ログが蓄積する        | workflow失敗通知の受信者をrelease gateとして設定する                                          | High   |
+「確認できた事実」と「未確定・推測」は計画作成時点の記録である。現在の確定値と残るgateは「確認事項・リリースゲート」以降をsource of truthとする。
+
+| 観点       | 計画作成時点で確認できた事実                                                                    | 計画作成時点の未確定・推測                                   | 影響                                        | 改善方針                                                                                      | 優先度 |
+| ---------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------- | --------------------------------------------------------------------------------------------- | ------ |
+| 保持期間   | 計画作成時は`AuditLog`に削除期限列がなく、無期限に蓄積していた                                  | 計画作成時は必要な調査期間、プライバシー上の保持期間が未決定 | DB容量が増え続ける                          | 推奨365日を2026-07-14に正式承認し、環境変数をruntime source of truthとして設定した            | High   |
+| cleanup    | 監査ログ用job・CLI・Cronは存在しない                                                            | 1日当たりの期限超過件数は未計測                              | 大量一括削除によるlock・負荷、削除漏れ      | indexを使ったID限定取得と分割`deleteMany`を採用し、1回の上限を固定する                        | High   |
+| 容量監視   | 本番Supabaseは未構築。構造化ログ基盤も未実装                                                    | DB plan、quota、table容量取得手段、通知先は未確定            | 閾値や通知方法をコードだけでは確定できない  | 日次増加監視はリポジトリで実装し、容量アラートはフェーズ12のrelease gateとする                | High   |
+| 集計負荷   | `occurredAt, id` indexは存在する                                                                | 正確な全件countはtable増加に比例して重くなる                 | 監視job自体がDB負荷になる                   | 定期実行では範囲countと存在確認だけにし、正確な総数はprovider metricsまたは手動確認へ分離する | High   |
+| 定期実行   | GitHub Actions scheduleと共通`runScheduledBatch()`が実装済み                                    | 将来Cloudflare Workers Cronへ移行する可能性がある            | 別系統のbatch基盤を作ると運用が分裂する     | 既存scheduled batchと`.github/workflows/batch.yml`へ追加する                                  | High   |
+| 同時実行   | 現在のworkflow concurrency groupはschedule値またはinput値に依存する                             | scheduleと手動実行が重なる可能性がある                       | 同じrowを複数実行が選択する                 | workflow全体を安定したgroupで直列化し、service自体も重複削除に安全な構造にする                | High   |
+| ID保持     | `actorId`・`targetId`はUser relationなしのsnapshot                                              | 内部ID保持がプライバシーポリシー上許容されるか未承認         | 退会後もユーザーとの相関が残る              | 監査rowと同じ期間だけ保持する案を推奨し、承認を有効化条件にする                               | High   |
+| 退会処理   | `deleteCurrentUser()`と管理者強制退会はsoft deleteで、User行のemail・username・学習データが残る | 将来のphysical deleteまたは匿名化方針は未決定                | `docs/02_security.md`の完全削除記載と不整合 | 本タスクで矛盾を隠さず、本番公開前の別ブロッカーとして進捗管理する                            | High   |
+| DB index   | `@@index([occurredAt(sort: Desc), id(sort: Desc)])`が存在する                                   | 本番件数での実行計画は未確認                                 | cleanupが遅くなる可能性                     | 既存indexを使用し、stagingで実行時間・query timeout・削除件数を確認する                       | Medium |
+| schema     | raw内部IDを保持したまま監査rowごと削除する場合、追加列は不要                                    | 匿名化・個別legal holdを採用する場合はschemaが必要           | 不要なmigrationでリスクが増える             | 初期案はschema変更なし。方針変更時は計画を再レビューする                                      | Medium |
+| API        | cleanupは公開APIではなく内部運用処理                                                            | 管理画面から実行したい要望は未確認                           | 認可漏れ・攻撃面増加                        | HTTP endpointを作らず、CLIとCronだけに限定する                                                | High   |
+| A11Y       | UI・公開API・frontend変更はない                                                                 | なし                                                         | 新規A11Y欠陥は発生しない                    | A11Y実装は対象外。UI変更が発生した場合のみ計画を再レビューする                                | Low    |
+| エラー監視 | job失敗はGitHub Actions failureで検出可能                                                       | 通知先と当番は未設定                                         | 失敗に気づかず期限超過ログが蓄積する        | workflow失敗通知の受信者をrelease gateとして設定する                                          | High   |
 
 ## スコープ
 
@@ -85,7 +87,7 @@
 
 ## 現状調査結果
 
-### 確認できた事実
+### 計画作成時点で確認できた事実
 
 - `docs/05_progress.md`の本タスクは`[ ]`である。
 - 監査ログ記録基盤はPR #80で実装済みである。
@@ -106,7 +108,7 @@
 - `backend/src/lib/config.ts`がバックエンド共通設定の取得とvalidationを担当する。
 - `backend/.env.example`がローカル環境変数のテンプレートである。
 
-### 推測・未確定事項
+### 計画作成時点の推測・未確定事項
 
 - 本番の1日当たり監査ログ生成数。
 - LOGIN FAILUREが全体に占める割合。
@@ -145,11 +147,11 @@
 
 **`backend/src/services/user.service.ts`**
 
-- `deleteCurrentUser(input): Promise<void>` — Userをsoft deleteし、関連tokenを削除する。
+- `deleteCurrentUser(input): Promise<void>` — Serializable transactionでUserを物理削除し、所有rowをcascade削除して成功監査を保存する。
 
 **`backend/src/services/admin.service.ts`**
 
-- `forceDeleteAdminUser(input): Promise<{ message: string }>` — 対象Userをsoft deleteし、成功監査を同一transactionへ保存する。
+- `forceDeleteAdminUser(input): Promise<{ message: string }>` — 対象Userを物理削除し、成功監査を同一transactionへ保存する。
 
 ### 重要な制約
 
@@ -175,30 +177,32 @@
 
 実装開始前に以下を記録する。
 
-| 確認事項                      | 推奨案                                         | 承認者・確定値     |
-| ----------------------------- | ---------------------------------------------- | ------------------ |
-| 保持期間                      | 365日                                          | 未確定             |
-| cleanup Cron                  | 毎日UTC 18:37（JST 03:37）                     | 未確定             |
-| 退会後内部ID                  | 監査rowと同じ期間保持し、監査row cleanupで削除 | 未確定             |
-| cleanup実行主体               | GitHub Actions schedule                        | 未確定             |
-| cleanup失敗通知先             | GitHub Actions失敗通知を開発担当へ送る         | 未確定             |
-| DB容量警告                    | 契約quotaの70%                                 | 本番DB作成後に確定 |
-| DB容量重大                    | 契約quotaの85%                                 | 本番DB作成後に確定 |
-| cleanup一次対応者             | 開発・運用担当者                               | 未確定             |
-| 保持期間変更承認者            | プロダクトオーナーまたはプライバシー責任者     | 未確定             |
-| 削除保留承認者                | インシデント責任者                             | 未確定             |
-| soft delete不整合の解消タスク | 本番公開前の別タスクとして追加                 | 未確定             |
+| 確認事項                     | 推奨案                                      | 承認者・確定値                      |
+| ---------------------------- | ------------------------------------------- | ----------------------------------- |
+| 保持期間                     | 365日                                       | `RitukoIsibasi0222`が2026-07-14承認 |
+| cleanup Cron                 | 毎日UTC 18:37（JST 03:37）                  | 2026-07-14確定                      |
+| 退会後内部ID                 | 監査rowと同じ365日保持し、row cleanupで削除 | `RitukoIsibasi0222`が2026-07-14承認 |
+| cleanup実行主体              | GitHub Actions schedule                     | 2026-07-14確定                      |
+| cleanup失敗通知先            | GitHub Actions失敗通知を登録メールへ送る    | 2026-07-14設定                      |
+| DB容量警告                   | Supabase Free 500MBの70%=350MB              | 2026-07-14確定                      |
+| DB容量重大                   | Supabase Free 500MBの85%=425MB              | 2026-07-14確定                      |
+| cleanup一次対応者            | `RitukoIsibasi0222`                         | 2026-07-14設定                      |
+| 保持期間変更承認者           | プロダクトオーナー`RitukoIsibasi0222`       | 2026-07-14設定                      |
+| 削除保留承認者               | インシデント責任者                          | 未確定                              |
+| アカウント完全削除の運用gate | 別計画で物理削除を実装し、本番公開前に検証  | production gate未完了               |
 
-これらが未確定の状態では`AUDIT_LOG_CLEANUP_ENABLED=true`を本番へ設定しない。
+削除保留承認者、アカウント完全削除のproduction gate、公開後実負荷baselineなど残るrelease gateが完了するまで`AUDIT_LOG_CLEANUP_ENABLED=true`を本番へ設定しない。
 
 ## 保持期間・削除保留方針
 
-### 推奨値
+### 正式値
 
-- 暫定推奨保持期間: 365日。
-- 法的義務を断定する値ではなく、インシデント調査能力と容量制御の初期バランスとして提案する。
-- プロダクトオーナーまたはプライバシー責任者の承認後に正式値とする。
-- 承認されない場合はcleanupを有効化せず、本計画を更新する。
+- 正式保持期間: 365日。
+- 利用目的: セキュリティインシデントおよび管理者操作の相関調査。
+- 承認者: プロダクトオーナー`RitukoIsibasi0222`。
+- 承認日: 2026-07-14。
+- 法的義務を断定する値ではなく、期間・目的をプライバシーポリシーへ記載して運用する。
+- 将来変更する場合は、変更前dry-runとプロダクトオーナーまたはプライバシー責任者の再承認を必須とする。
 
 ### source of truth
 
@@ -419,7 +423,7 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 
 ## 退会後の内部ID保持方針
 
-### 推奨案
+### 正式方針
 
 - `actorId`・`targetId`は監査ログの保持期間中だけ保持する。
 - 退会時に監査ログの内部IDを即時変更・削除しない。
@@ -428,7 +432,7 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 - User relationを追加しない。
 - 監査ログからUserを自動joinしない。
 - 利用目的をセキュリティインシデントと管理者操作の調査に限定する。
-- 保持期間は監査ログ本体と同じ365日を暫定推奨とする。
+- 保持期間は監査ログ本体と同じ365日とし、2026-07-14にプロダクトオーナー`RitukoIsibasi0222`が承認した。
 
 ### 選択肢比較
 
@@ -439,39 +443,30 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 | keyed HMACへ変換             | 相関は維持可能             | 元IDの直接保持を避けられる | 鍵管理、rotation、migrationが必要 | 別計画が必要               |
 | 監査ログを即時削除           | 調査不能                   | 最も少ない保持             | cleanupは簡単                     | 監査要件を満たさない可能性 |
 
-### soft deleteとの不整合
+### アカウント完全削除との境界
 
-現在のUser rowにはsoft delete後もemail・username・学習データが残る。内部IDだけを監査ログに保持する問題とは別に、`docs/02_security.md`の完全削除要件を満たしていない。
+計画作成時点のsoft delete不整合は、`docs/plans/account-data-complete-deletion/plan.md`へ分離した。現在は本人退会・管理者強制退会の物理削除、所有rowのcascade、成功監査まで実装済みである。
 
-本計画では、退会処理全体を無断でphysical deleteへ変更しない。以下を本番公開前の別タスクとして追加する。
-
-- User個人情報の匿名化またはphysical delete方針。
-- 学習データの削除範囲。
-- 管理者強制退会と本人退会の整合。
-- 監査ログ内部IDを例外保持する場合のプライバシーポリシー記載。
-- 既存soft-deleted userへの移行。
-- cascade deleteと監査証跡の非連動確認。
-
-この別タスクが未解決でもcleanup codeは実装できるが、本番運用タスクを完了扱いにしない。
+ただし、既存soft-deleted Userのcleanup、privacy問い合わせ先・backup説明、全損時replay方針、本番cleanup体制、production配備・smokeは未完了である。監査ログcleanup codeはこれらと独立して安全停止できるが、残るproduction gateが完了するまで`AUDIT_LOG_CLEANUP_ENABLED=false`を維持する。
 
 ## 運用責任・runbook
 
 詳細な運用手順は`docs/11_deployment.md`へ追加する。
 
-| 項目             | 手順                                                         |
-| ---------------- | ------------------------------------------------------------ |
-| 通常実行         | GitHub Actions scheduleで日次実行                            |
-| dry-run          | workflow_dispatchまたはDocker CLIで実行                      |
-| 手動実削除       | 承認後に`--execute`とcleanup有効設定で実行                   |
-| 失敗確認         | Actions summaryと安全ログを確認                              |
-| 再実行           | 原因解消後、workflow_dispatchで同じjobを実行                 |
-| cleanup停止      | `AUDIT_LOG_CLEANUP_ENABLED=false`へ変更                      |
-| Cron停止         | workflow scheduleをdisableまたは対象cronを削除               |
-| 保持期間変更     | 承認、dry-run、件数確認、文書更新後に反映                    |
-| 削除保留         | cleanupを無効化し、理由・期限・承認者を記録                  |
-| 容量警告         | 増加量、期限超過残件、cleanup失敗、DB quotaを確認            |
-| 誤削除           | cleanup停止、書込み継続可否判断、backup/PITRからの復旧を検討 |
-| backend rollback | 監査tableと収集済みログは残し、cleanupだけ停止可能にする     |
+| 項目             | 手順                                                                       |
+| ---------------- | -------------------------------------------------------------------------- |
+| 通常実行         | GitHub Actions scheduleで日次実行                                          |
+| dry-run          | workflow_dispatchまたはDocker CLIで実行                                    |
+| 手動実削除       | 全release gate完了と承認内容の再確認後に`--execute`とcleanup有効設定で実行 |
+| 失敗確認         | Actions summaryと安全ログを確認                                            |
+| 再実行           | 原因解消後、workflow_dispatchで同じjobを実行                               |
+| cleanup停止      | `AUDIT_LOG_CLEANUP_ENABLED=false`へ変更                                    |
+| Cron停止         | workflow scheduleをdisableまたは対象cronを削除                             |
+| 保持期間変更     | 承認、dry-run、件数確認、文書更新後に反映                                  |
+| 削除保留         | cleanupを無効化し、理由・期限・承認者を記録                                |
+| 容量警告         | 増加量、期限超過残件、cleanup失敗、DB quotaを確認                          |
+| 誤削除           | cleanup停止、書込み継続可否判断、backup/PITRからの復旧を検討               |
+| backend rollback | 監査tableと収集済みログは残し、cleanupだけ停止可能にする                   |
 
 本番有効化前に、一次対応者、通知先、承認者を実名またはチーム名で記録する。
 
@@ -542,6 +537,7 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 | `docs/07_testing_flow.md`                                      | 修正     | cleanup実DBintegration test手順                                         |
 | `docs/09_startup_commands.md`                                  | 修正     | dry-run、手動実行、integration test手順                                 |
 | `docs/11_deployment.md`                                        | 修正     | retention、Cron、監視、通知、停止、再実行runbook                        |
+| `docs/plans/privacy-policy/plan.md`                            | 修正     | 正式保持期間・目的の承認状態と残る公開前blockerを同期                   |
 
 ### 確認のみ
 
@@ -569,8 +565,8 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
    - 根拠: 環境ごとに設定でき、code・Cron・docsへの重複定義を避けられるため。
 
 3. **初期保持期間**
-   - 選択: 365日を暫定推奨し、承認前はcleanupを有効化しない。
-   - 根拠: 調査期間を確保しつつ無期限保持を避けるため。法的根拠は別途確認する。
+   - 選択: 計画時は365日を推奨値とし、正式値は2026-07-14に365日で承認した。cleanupは全release gate完了と承認内容の再確認まで有効化しない。
+   - 根拠: 調査期間を確保しつつ無期限保持を避け、保持期間の承認と実削除の安全gateを分離するため。法的根拠は別途確認する。
 
 4. **削除境界**
    - 選択: `occurredAt < cutoff`。
@@ -620,9 +616,9 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
     - 選択: 初期スコープでは採用しない。
     - 根拠: 鍵rotation、既存row移行、transaction変更が必要で、独立レビューなしに安全に追加できないため。
 
-16. **soft delete不整合**
-    - 選択: 本タスクで無断修正せず、本番公開前の別ブロッカーとして追跡する。
-    - 根拠: 学習データcascade、認証、監査、管理者操作へ広範囲な影響があるため。
+16. **アカウント完全削除**
+    - 選択: 本タスクから完全削除計画へ分離する。物理削除実装後もproduction gateを独立追跡する。
+    - 根拠: 学習データcascade、認証、監査、管理者操作、backup/replayへ広範囲な影響があるため。
 
 17. **cleanup自身の監査**
     - 選択: `AuditLog`へ保存しない。
@@ -863,10 +859,10 @@ export function cleanupExpiredAuditLogs(
 14. 本番DBのbackup・PITR状態を確認する。
 15. 本番DB容量の警告・重大閾値と通知先を設定する。
 16. productionでdry-runし、対象件数と最古日時を記録する。
-17. 承認後にAUDIT_LOG_CLEANUP_ENABLED=trueを設定する。
-18. 初回はActionsを監視し、削除件数、残件、DB負荷を確認する。
-19. 7日間の増加量baselineを記録し、増加率の閾値を確定する。
-20. docsとplanを実態へ合わせ、全release gate完了後だけ進捗を完了へ更新する。
+17. 公開前7日間の増加量baselineを記録する。
+18. 公開後実負荷baseline、アカウント完全削除のproduction gate、削除保留承認者など残るrelease gateを完了し、増加率の閾値を確定する。
+19. 全release gate完了と承認内容を再確認した後だけ、AUDIT_LOG_CLEANUP_ENABLED=trueを設定する。
+20. 初回はActionsを監視し、削除件数、残件、DB負荷を確認してdocsとplanを実態へ合わせる。
 21. 完了記録用docs PRのreviewと必須checkを完了し、developへmergeする。
 
 schema変更・backfillは想定しない。
@@ -901,7 +897,7 @@ schema変更・backfillは想定しない。
 | raw error漏えい                  | 接続情報・内部情報漏えい  | 固定日本語error、security test                   |
 | cleanupログのID漏えい            | 内部ID露出                | 許可field方式、完全なログ引数test                |
 | cleanup自己監査                  | 無限増加                  | `AuditLog.create`を呼ばない                      |
-| soft deleteとの不整合            | プライバシー仕様違反      | 別pre-production blockerとして追跡               |
+| 完全削除のproduction gate未完了  | プライバシー仕様違反      | 別pre-production blockerとして追跡               |
 | raw内部ID保持                    | 再識別可能性              | 目的限定、アクセス非公開、期間限定、承認         |
 | HMACへ途中変更                   | migration・鍵運用事故     | 計画再レビューなしに変更しない                   |
 | 本番基盤未構築                   | 容量alert未設定           | フェーズ12release gate、完了扱い禁止             |
@@ -940,7 +936,7 @@ schema変更・backfillは想定しない。
 | T22 | plan・progress完了更新とdocs PR     | plan、docs/05_progress.md、git/GitHub                | 実変更・決定値・検証・PR・完了状態を整合しdevelopへmerge  | T21             | High   |
 
 - [x] T1: 既存監査・batch・本番基盤を再確認する
-- [-] T2: 保持期間・退会後ID保持・担当者・通知先を承認する（実装用暫定値は合意済み。本番承認者・通知先は未確定）
+- [x] T2: 保持期間365日・利用目的・退会後IDの同期間保持・担当者・通知先を承認する（`RitukoIsibasi0222`、2026-07-14承認）
 - [x] T3: `docs/05_progress.md`を実装中へ更新する
 - [x] T4: retention config testをRed化する
 - [x] T5: retention configと環境変数例を実装する
@@ -958,9 +954,9 @@ schema変更・backfillは想定しない。
 - [x] T17: Docker PostgreSQLで境界・分割・冪等性を確認する
 - [x] T18: 変更種別ごとにcommitし、実装PRをreview後developへmergeする（PR #90、2026-07-14 merge）
 - [x] T19: stagingでdry-run・cleanup・再実行・停止を確認する（2026-07-14完了）
-- [-] T20: production容量監視・通知・backup確認を完了する
-- [ ] T21: production初回実行と7日baselineを確認する
-- [ ] T22: planとprogressを実装完了へ更新し、docs PRをdevelopへmergeする
+- [x] T20: production容量監視・通知・backup確認を完了する（2026-07-14完了）
+- [x] T21: production初回実行と公開前7日baselineを確認する（2026-07-21完了、増加量0件）
+- [-] T22: planとprogressを実装完了へ更新し、docs PRをdevelopへmergeする（PR #95 review・merge待ち）
 
 ### T19 再開記録（2026-07-14）
 
@@ -1009,7 +1005,7 @@ schema変更・backfillは想定しない。
 - 後片付けとして期限内fixtureを削除し、staging Variablesを`AUDIT_LOG_CLEANUP_ENABLED=false`、`AUDIT_LOG_STAGING_FIXTURES_ENABLED=false`へ戻した。
 - `actions/checkout@v4`と`actions/setup-node@v4`のNode.js 20 deprecation警告は全Batch Jobs runで確認したが、job結果には影響しなかった。Actions major version更新はcleanup検証とは分離して対応する。
 
-### T20 production Free plan運用設定（2026-07-14、実装中）
+### T20 production Free plan運用設定（2026-07-14、完了）
 
 - production専用のFree organization`Gensoko Production`とSupabase project`gensoko-production`を東京regionへ作成し、Healthyであることを確認した。
 - Data APIとautomatic RLSは無効とし、PrismaからPostgreSQLへだけ接続する構成にした。
@@ -1023,7 +1019,23 @@ schema変更・backfillは想定しない。
 - Redでは`production-database.yml`未存在を確認し、Greenではproduction固定・Secret・容量閾値・暗号化backup・migration gateの契約test 5件が通過した。
 - backend lint、format check、build、全test（663件成功・2件skip）、workflow・関連docsのPrettier check、YAML parseが通過した。実project ref、接続文字列、publishable keyのrepository混入がないことも確認した。
 - Prisma schema・migration、公開API、frontendは変更していないため、`docs/04_api.md`更新とPlaywright回帰は不要と判断した。
-- T20完了には`BACKUP_ENCRYPTION_PASSPHRASE`登録、workflowのdevelopへのmerge、初回capacity check・backup・migration成功、Dashboard容量確認が残っている。
+- PR #94をreview後にdevelopへmergeした（merge commit: `b1f1e00cc7bc63bc92f952aac4edef413872326b`）。
+- production Environment Secretへ`BACKUP_ENCRYPTION_PASSPHRASE`の値を公開せず登録した。復元用passphraseはpassword managerでの保管を必須とする。
+- capacity check [#29322946812](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29322946812)が成功し、Supabase DashboardでもHealthy・Disk 13%を確認した。
+- 暗号化backup [#29322979476](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29322979476)が暗号化・復号検証・Artifact uploadまで成功した。
+- backup run IDと期限内Artifactを確認後、migration [#29323085012](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29323085012)で`prisma migrate deploy`が成功した。
+
+### T21 production初回実行・公開前baseline（観測: 2026-07-14〜2026-07-21、終了後確認: 2026-07-22、完了）
+
+- productionの手動dry-run [#29338470913](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29338470913)が終了code 0で成功した。
+- cutoff `2025-07-14T13:54:42.591Z`、保持365日、期限超過0件、削除0件、`createdLast24HoursCount=0`、`hasExpiredRows=false`、`oldestOccurredAt=null`、`latestOccurredAt=null`、`minimumRunsRequired=0`を確認した。
+- execute stepは実行されず、`AUDIT_LOG_CLEANUP_ENABLED=false`を維持している。
+- logに接続文字列、project ref、publishable key、内部ID、監査ログID、PII、raw errorがないことを確認した。
+- 7日baseline観測期間は2026-07-14 22:54 JSTから2026-07-21 22:55 JSTまでとする。
+- 観測終了から5時間3分後の2026-07-22 03:58 JSTに開始したscheduled run [#29859488507](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29859488507)は終了code 0で成功し、`createdLast24HoursCount=0`、`hasExpiredRows=false`、`oldestOccurredAt=null`、`latestOccurredAt=null`、削除0件を確認した。
+- 観測開始時と観測終了後の確認run時はいずれも監査rowが0件で、期間中はcleanup無効を維持して削除がないため、公開前7日間の増加量baselineを0件と確定した。
+- 終了後確認runのlogに接続文字列、project ref、publishable key、内部ID、監査ログID、PII、raw errorがないことを確認した。
+- productionアプリ公開後の監査回帰と実負荷baseline、アカウント完全削除のproduction gateは別の未完了gateとして残す。
 
 ### タブ区切りタスクリスト
 
@@ -1055,8 +1067,8 @@ T22	plan・progress完了更新・docs PR	plan・docs/05_progress.md・git/GitHu
 
 ## セキュリティ・プライバシー確認項目
 
-- [ ] 保持期間と利用目的が承認されている。
-- [ ] 退会後内部ID保持が承認されている。
+- [x] 保持期間と利用目的が承認されている。
+- [x] 退会後内部ID保持が承認されている。
 - [x] cleanup無効が安全側の既定値である。
 - [x] retention未設定・不正時に削除しない。
 - [x] dry-runが既定である。
@@ -1070,19 +1082,19 @@ T22	plan・progress完了更新・docs PR	plan・docs/05_progress.md・git/GitHu
 - [x] concurrencyが安定したgroupで直列化されている。
 - [x] 削除保留手順がある。
 - [x] 誤削除時のbackup・PITR判断手順がある。
-- [x] soft deleteと完全削除の不整合が別タスクで追跡されている。
+- [x] アカウント完全削除のproduction gateが別タスクで追跡されている。
 - [x] プライバシーポリシーへ必要な記載要件が引き継がれている。
 - [x] 公開cleanup APIがない。
 - [x] 監査ログ閲覧権限を今回追加していない。
-- [ ] 本番通知先と一次対応者が設定されている。
-- [ ] 本番容量閾値がDB planと整合している。
+- [x] 本番通知先と一次対応者が設定されている。
+- [x] 本番容量閾値がDB planと整合している。
 
 ## 手動確認項目
 
 - [x] Docker内CLIを引数なしで実行し、dry-runになる。
 - [x] `--dry-run`でDBが変更されない。
 - [x] cleanup無効状態の`--execute`でDBが変更されない。
-- [ ] cleanup有効状態の`--execute`で期限超過rowだけが削除される。
+- [x] cleanup有効状態の`--execute`で期限超過rowだけが削除される。
 - [x] cutoffと同時刻のrowが残る。
 - [x] cutoffより新しいrowが残る。
 - [x] 500件超を複数batchで処理する。
@@ -1091,23 +1103,23 @@ T22	plan・progress完了更新・docs PR	plan・docs/05_progress.md・git/GitHu
 - [x] 二重実行しても結果が壊れない。
 - [ ] scheduleとmanual dispatchが同時実行されない。
 - [ ] cleanup失敗時にActionsが失敗する。
-- [ ] workflow_dispatchで再実行できる。
-- [ ] cleanup停止手順が機能する。
+- [x] workflow_dispatchで再実行できる。
+- [x] cleanup停止手順が機能する。
 - [ ] retention変更前にdry-runできる。
 - [ ] 定期health checkが正確な全件countを実行しない。
-- [ ] 状態logから24時間増加、期限超過有無、最古・最新日時を確認できる。
-- [ ] logに内部ID・監査ログID・PII・秘密情報がない。
-- [ ] 本番DBの使用量をprovider metricsで確認できる。
-- [ ] 70%・85%閾値の通知先が設定されている。
-- [ ] backupまたはPITR状態を確認できる。
+- [x] 状態logから24時間増加、期限超過有無、最古・最新日時を確認できる。
+- [x] logに内部ID・監査ログID・PII・秘密情報がない。
+- [x] 本番DBの使用量をprovider metricsで確認できる。
+- [x] 70%・85%閾値の通知先が設定されている。
+- [x] backupまたはPITR状態を確認できる。
 - [ ] LOGIN success/failure監査が継続する。
 - [ ] password change/reset監査が継続する。
 - [ ] admin操作監査が継続する。
 - [ ] 本人退会・管理者強制退会後も承認した期間中の内部ID相関が維持される。
 - [x] 保持期限経過後は監査rowと内部IDが削除される。
 - [ ] API status・body・Cookieに回帰がない。
-- [ ] 7日間の増加量baselineを記録する。
-- [ ] soft delete不整合の別タスクが本番公開前に完了または明示的にblockされている。
+- [x] 公開前7日間の増加量baselineを記録する。
+- [ ] アカウント完全削除のproduction gateが本番公開前に完了または明示的にblockされている。
 
 ## 実装完了時の更新ルール
 
@@ -1127,7 +1139,7 @@ T22	plan・progress完了更新・docs PR	plan・docs/05_progress.md・git/GitHu
 - integration test、全test、lint、format、build結果を記録する。
 - staging dry-run・実削除・再実行・停止結果を記録する。
 - production初回実行とbaselineを記録する。
-- soft delete不整合の解消状況を記録する。
+- アカウント完全削除のproduction gate状況を記録する。
 - 未確定項目が残る場合は`docs/05_progress.md`を`[x]`にしない。
 - `## 実装完了`セクションを追記する。
 
@@ -1197,7 +1209,7 @@ T22	plan・progress完了更新・docs PR	plan・docs/05_progress.md・git/GitHu
 - 利用目的:
 - アクセス範囲:
 - プライバシーポリシーへの引き継ぎ:
-- soft delete不整合の解消状況:
+- アカウント完全削除のproduction gate状況:
 
 ### 残課題
 
