@@ -35,21 +35,23 @@
 
 ### 観点別レビュー
 
-| 観点       | 確認できた事実                                                                                  | 未確定・推測                                         | 影響                                        | 改善方針                                                                                      | 優先度 |
-| ---------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------- | ------ |
-| 保持期間   | `AuditLog`に削除期限列はなく、現在は無期限に蓄積する                                            | 必要な調査期間、プライバシー上の保持期間は未決定     | DB容量が増え続ける                          | 暫定推奨365日を提示し、承認後に環境変数をruntime source of truthとして有効化する              | High   |
-| cleanup    | 監査ログ用job・CLI・Cronは存在しない                                                            | 1日当たりの期限超過件数は未計測                      | 大量一括削除によるlock・負荷、削除漏れ      | indexを使ったID限定取得と分割`deleteMany`を採用し、1回の上限を固定する                        | High   |
-| 容量監視   | 本番Supabaseは未構築。構造化ログ基盤も未実装                                                    | DB plan、quota、table容量取得手段、通知先は未確定    | 閾値や通知方法をコードだけでは確定できない  | 日次増加監視はリポジトリで実装し、容量アラートはフェーズ12のrelease gateとする                | High   |
-| 集計負荷   | `occurredAt, id` indexは存在する                                                                | 正確な全件countはtable増加に比例して重くなる         | 監視job自体がDB負荷になる                   | 定期実行では範囲countと存在確認だけにし、正確な総数はprovider metricsまたは手動確認へ分離する | High   |
-| 定期実行   | GitHub Actions scheduleと共通`runScheduledBatch()`が実装済み                                    | 将来Cloudflare Workers Cronへ移行する可能性がある    | 別系統のbatch基盤を作ると運用が分裂する     | 既存scheduled batchと`.github/workflows/batch.yml`へ追加する                                  | High   |
-| 同時実行   | 現在のworkflow concurrency groupはschedule値またはinput値に依存する                             | scheduleと手動実行が重なる可能性がある               | 同じrowを複数実行が選択する                 | workflow全体を安定したgroupで直列化し、service自体も重複削除に安全な構造にする                | High   |
-| ID保持     | `actorId`・`targetId`はUser relationなしのsnapshot                                              | 内部ID保持がプライバシーポリシー上許容されるか未承認 | 退会後もユーザーとの相関が残る              | 監査rowと同じ期間だけ保持する案を推奨し、承認を有効化条件にする                               | High   |
-| 退会処理   | `deleteCurrentUser()`と管理者強制退会はsoft deleteで、User行のemail・username・学習データが残る | 将来のphysical deleteまたは匿名化方針は未決定        | `docs/02_security.md`の完全削除記載と不整合 | 本タスクで矛盾を隠さず、本番公開前の別ブロッカーとして進捗管理する                            | High   |
-| DB index   | `@@index([occurredAt(sort: Desc), id(sort: Desc)])`が存在する                                   | 本番件数での実行計画は未確認                         | cleanupが遅くなる可能性                     | 既存indexを使用し、stagingで実行時間・query timeout・削除件数を確認する                       | Medium |
-| schema     | raw内部IDを保持したまま監査rowごと削除する場合、追加列は不要                                    | 匿名化・個別legal holdを採用する場合はschemaが必要   | 不要なmigrationでリスクが増える             | 初期案はschema変更なし。方針変更時は計画を再レビューする                                      | Medium |
-| API        | cleanupは公開APIではなく内部運用処理                                                            | 管理画面から実行したい要望は未確認                   | 認可漏れ・攻撃面増加                        | HTTP endpointを作らず、CLIとCronだけに限定する                                                | High   |
-| A11Y       | UI・公開API・frontend変更はない                                                                 | なし                                                 | 新規A11Y欠陥は発生しない                    | A11Y実装は対象外。UI変更が発生した場合のみ計画を再レビューする                                | Low    |
-| エラー監視 | job失敗はGitHub Actions failureで検出可能                                                       | 通知先と当番は未設定                                 | 失敗に気づかず期限超過ログが蓄積する        | workflow失敗通知の受信者をrelease gateとして設定する                                          | High   |
+「確認できた事実」と「未確定・推測」は計画作成時点の記録である。現在の確定値と残るgateは「確認事項・リリースゲート」以降をsource of truthとする。
+
+| 観点       | 確認できた事実                                                                                  | 未確定・推測                                                 | 影響                                        | 改善方針                                                                                      | 優先度 |
+| ---------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------- | --------------------------------------------------------------------------------------------- | ------ |
+| 保持期間   | 計画作成時は`AuditLog`に削除期限列がなく、無期限に蓄積していた                                  | 計画作成時は必要な調査期間、プライバシー上の保持期間が未決定 | DB容量が増え続ける                          | 推奨365日を2026-07-14に正式承認し、環境変数をruntime source of truthとして設定した            | High   |
+| cleanup    | 監査ログ用job・CLI・Cronは存在しない                                                            | 1日当たりの期限超過件数は未計測                              | 大量一括削除によるlock・負荷、削除漏れ      | indexを使ったID限定取得と分割`deleteMany`を採用し、1回の上限を固定する                        | High   |
+| 容量監視   | 本番Supabaseは未構築。構造化ログ基盤も未実装                                                    | DB plan、quota、table容量取得手段、通知先は未確定            | 閾値や通知方法をコードだけでは確定できない  | 日次増加監視はリポジトリで実装し、容量アラートはフェーズ12のrelease gateとする                | High   |
+| 集計負荷   | `occurredAt, id` indexは存在する                                                                | 正確な全件countはtable増加に比例して重くなる                 | 監視job自体がDB負荷になる                   | 定期実行では範囲countと存在確認だけにし、正確な総数はprovider metricsまたは手動確認へ分離する | High   |
+| 定期実行   | GitHub Actions scheduleと共通`runScheduledBatch()`が実装済み                                    | 将来Cloudflare Workers Cronへ移行する可能性がある            | 別系統のbatch基盤を作ると運用が分裂する     | 既存scheduled batchと`.github/workflows/batch.yml`へ追加する                                  | High   |
+| 同時実行   | 現在のworkflow concurrency groupはschedule値またはinput値に依存する                             | scheduleと手動実行が重なる可能性がある                       | 同じrowを複数実行が選択する                 | workflow全体を安定したgroupで直列化し、service自体も重複削除に安全な構造にする                | High   |
+| ID保持     | `actorId`・`targetId`はUser relationなしのsnapshot                                              | 内部ID保持がプライバシーポリシー上許容されるか未承認         | 退会後もユーザーとの相関が残る              | 監査rowと同じ期間だけ保持する案を推奨し、承認を有効化条件にする                               | High   |
+| 退会処理   | `deleteCurrentUser()`と管理者強制退会はsoft deleteで、User行のemail・username・学習データが残る | 将来のphysical deleteまたは匿名化方針は未決定                | `docs/02_security.md`の完全削除記載と不整合 | 本タスクで矛盾を隠さず、本番公開前の別ブロッカーとして進捗管理する                            | High   |
+| DB index   | `@@index([occurredAt(sort: Desc), id(sort: Desc)])`が存在する                                   | 本番件数での実行計画は未確認                                 | cleanupが遅くなる可能性                     | 既存indexを使用し、stagingで実行時間・query timeout・削除件数を確認する                       | Medium |
+| schema     | raw内部IDを保持したまま監査rowごと削除する場合、追加列は不要                                    | 匿名化・個別legal holdを採用する場合はschemaが必要           | 不要なmigrationでリスクが増える             | 初期案はschema変更なし。方針変更時は計画を再レビューする                                      | Medium |
+| API        | cleanupは公開APIではなく内部運用処理                                                            | 管理画面から実行したい要望は未確認                           | 認可漏れ・攻撃面増加                        | HTTP endpointを作らず、CLIとCronだけに限定する                                                | High   |
+| A11Y       | UI・公開API・frontend変更はない                                                                 | なし                                                         | 新規A11Y欠陥は発生しない                    | A11Y実装は対象外。UI変更が発生した場合のみ計画を再レビューする                                | Low    |
+| エラー監視 | job失敗はGitHub Actions failureで検出可能                                                       | 通知先と当番は未設定                                         | 失敗に気づかず期限超過ログが蓄積する        | workflow失敗通知の受信者をrelease gateとして設定する                                          | High   |
 
 ## スコープ
 
@@ -451,20 +453,20 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 
 詳細な運用手順は`docs/11_deployment.md`へ追加する。
 
-| 項目             | 手順                                                         |
-| ---------------- | ------------------------------------------------------------ |
-| 通常実行         | GitHub Actions scheduleで日次実行                            |
-| dry-run          | workflow_dispatchまたはDocker CLIで実行                      |
-| 手動実削除       | 承認後に`--execute`とcleanup有効設定で実行                   |
-| 失敗確認         | Actions summaryと安全ログを確認                              |
-| 再実行           | 原因解消後、workflow_dispatchで同じjobを実行                 |
-| cleanup停止      | `AUDIT_LOG_CLEANUP_ENABLED=false`へ変更                      |
-| Cron停止         | workflow scheduleをdisableまたは対象cronを削除               |
-| 保持期間変更     | 承認、dry-run、件数確認、文書更新後に反映                    |
-| 削除保留         | cleanupを無効化し、理由・期限・承認者を記録                  |
-| 容量警告         | 増加量、期限超過残件、cleanup失敗、DB quotaを確認            |
-| 誤削除           | cleanup停止、書込み継続可否判断、backup/PITRからの復旧を検討 |
-| backend rollback | 監査tableと収集済みログは残し、cleanupだけ停止可能にする     |
+| 項目             | 手順                                                                       |
+| ---------------- | -------------------------------------------------------------------------- |
+| 通常実行         | GitHub Actions scheduleで日次実行                                          |
+| dry-run          | workflow_dispatchまたはDocker CLIで実行                                    |
+| 手動実削除       | 全release gate完了と承認内容の再確認後に`--execute`とcleanup有効設定で実行 |
+| 失敗確認         | Actions summaryと安全ログを確認                                            |
+| 再実行           | 原因解消後、workflow_dispatchで同じjobを実行                               |
+| cleanup停止      | `AUDIT_LOG_CLEANUP_ENABLED=false`へ変更                                    |
+| Cron停止         | workflow scheduleをdisableまたは対象cronを削除                             |
+| 保持期間変更     | 承認、dry-run、件数確認、文書更新後に反映                                  |
+| 削除保留         | cleanupを無効化し、理由・期限・承認者を記録                                |
+| 容量警告         | 増加量、期限超過残件、cleanup失敗、DB quotaを確認                          |
+| 誤削除           | cleanup停止、書込み継続可否判断、backup/PITRからの復旧を検討               |
+| backend rollback | 監査tableと収集済みログは残し、cleanupだけ停止可能にする                   |
 
 本番有効化前に、一次対応者、通知先、承認者を実名またはチーム名で記録する。
 
@@ -535,6 +537,7 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 | `docs/07_testing_flow.md`                                      | 修正     | cleanup実DBintegration test手順                                         |
 | `docs/09_startup_commands.md`                                  | 修正     | dry-run、手動実行、integration test手順                                 |
 | `docs/11_deployment.md`                                        | 修正     | retention、Cron、監視、通知、停止、再実行runbook                        |
+| `docs/plans/privacy-policy/plan.md`                            | 修正     | 正式保持期間・目的の承認状態と残る公開前blockerを同期                   |
 
 ### 確認のみ
 
@@ -562,8 +565,8 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
    - 根拠: 環境ごとに設定でき、code・Cron・docsへの重複定義を避けられるため。
 
 3. **初期保持期間**
-   - 選択: 365日を暫定推奨し、承認前はcleanupを有効化しない。
-   - 根拠: 調査期間を確保しつつ無期限保持を避けるため。法的根拠は別途確認する。
+   - 選択: 計画時は365日を推奨値とし、正式値は2026-07-14に365日で承認した。cleanupは全release gate完了と承認内容の再確認まで有効化しない。
+   - 根拠: 調査期間を確保しつつ無期限保持を避け、保持期間の承認と実削除の安全gateを分離するため。法的根拠は別途確認する。
 
 4. **削除境界**
    - 選択: `occurredAt < cutoff`。
@@ -856,10 +859,10 @@ export function cleanupExpiredAuditLogs(
 14. 本番DBのbackup・PITR状態を確認する。
 15. 本番DB容量の警告・重大閾値と通知先を設定する。
 16. productionでdry-runし、対象件数と最古日時を記録する。
-17. 承認後にAUDIT_LOG_CLEANUP_ENABLED=trueを設定する。
-18. 初回はActionsを監視し、削除件数、残件、DB負荷を確認する。
-19. 7日間の増加量baselineを記録し、増加率の閾値を確定する。
-20. docsとplanを実態へ合わせ、全release gate完了後だけ進捗を完了へ更新する。
+17. 公開前7日間の増加量baselineを記録する。
+18. 公開後実負荷baseline、アカウント完全削除のproduction gate、削除保留承認者など残るrelease gateを完了し、増加率の閾値を確定する。
+19. 全release gate完了と承認内容を再確認した後だけ、AUDIT_LOG_CLEANUP_ENABLED=trueを設定する。
+20. 初回はActionsを監視し、削除件数、残件、DB負荷を確認してdocsとplanを実態へ合わせる。
 21. 完了記録用docs PRのreviewと必須checkを完了し、developへmergeする。
 
 schema変更・backfillは想定しない。

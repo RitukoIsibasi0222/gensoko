@@ -153,13 +153,14 @@ env \
       -e AUDIT_LOG_CLEANUP_ENABLED=false \
       hono npm run cleanup:audit-logs -- --dry-run
 
-    # 実削除: 保持期間・承認者・通知先・backup確認後だけ実行する
+    # 実削除: productionでは全release gate完了と承認内容の再確認後だけ実行する
     docker compose exec \
       -e AUDIT_LOG_RETENTION_DAYS=365 \
       -e AUDIT_LOG_CLEANUP_ENABLED=true \
       hono npm run cleanup:audit-logs -- --execute
 
-- 365日は暫定値であり、本番の正式承認前に`AUDIT_LOG_CLEANUP_ENABLED=true`へ変更しない
+- 正式保持期間は2026-07-14承認済みの365日で、runtimeのsource of truthは`AUDIT_LOG_RETENTION_DAYS`とする
+- productionでは、公開後実負荷baseline、アカウント完全削除のproduction gate、削除保留承認者など全release gateの完了を記録し、承認内容を再確認するまで`AUDIT_LOG_CLEANUP_ENABLED=false`を維持する
 - `--execute`を指定してもcleanup有効設定が`false`なら削除せずskipする
 - dry-runと本実行のログに監査ログID・内部ID・メール・username・生DB errorは出ない
 - 最大10,000件または8分到達後も期限超過rowが残る場合は終了code 1になる。原因確認後に再実行する

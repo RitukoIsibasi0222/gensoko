@@ -585,7 +585,7 @@ GitHub の Settings > Environments で`staging`と`production`を分離し、そ
 | production  | Secret   | `DATABASE_URL`                       | production専用DB接続文字列。stagingと共用しない                                     |
 | production  | Secret   | `BACKUP_ENCRYPTION_PASSPHRASE`       | 20文字以上のbackup暗号化専用値。password managerにも保存し、DB passwordと共用しない |
 | production  | Variable | `BATCH_ENVIRONMENT`                  | `production`                                                                        |
-| production  | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 正式承認後の保持日数                                                                |
+| production  | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 2026-07-14承認済みの正式保持期間`365`                                               |
 | production  | Variable | `AUDIT_LOG_CLEANUP_ENABLED`          | 全release gate完了までは`false`                                                     |
 
 workflow jobは選択されたEnvironmentを参照する。手動実行は`staging`が既定で、scheduleは`production`を参照する。`BATCH_ENVIRONMENT`が選択環境と一致しない場合、または`DATABASE_URL`が未登録の場合は、DB処理や依存関係installの前に失敗する。
@@ -685,9 +685,9 @@ T19では次の順序を変更しない。
 ### 監査ログcleanup runbook
 
 1. 初回・保持期間変更前は`audit-log-cleanup-dry-run`を実行し、cutoff、期限超過件数、最古日時、最低実行回数を記録する。
-2. backup/PITR、承認者、通知先を確認する。
-3. Actions Variableの保持期間を承認値へ更新する。
-4. 日次schedule直前を避けてmanual実行の時間を確保し、`AUDIT_LOG_CLEANUP_ENABLED=true`へ変更する。
+2. backup/PITR、承認者、通知先を確認する。productionでは公開後実負荷baseline、アカウント完全削除のproduction gate、削除保留承認者など残るrelease gateがすべて完了済みであることも確認する。
+3. Actions Variableの保持期間が承認値`365`であることを確認する。保持期間を変更する場合は、変更前dry-runとプロダクトオーナーまたはプライバシー責任者の再承認を行う。
+4. 全release gateの完了記録と承認内容を再確認した後だけ、日次schedule直前を避けてmanual実行の時間を確保し、`AUDIT_LOG_CLEANUP_ENABLED=true`へ変更する。
 5. `audit-log-cleanup-execute`を1回実行し、削除件数・実行時間・残件を確認する。
 6. 日次scheduleの次回成功を確認する。
 
