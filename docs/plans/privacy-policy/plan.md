@@ -386,7 +386,7 @@ npm run build
   - 対象 4 test file、合計 35/35 が成功。
   - `npm run format` を適用し、`git diff --check` が成功。
 - 最終品質 gate:
-  - `npm run test:run`: 56 file、593 test が成功。
+  - 初回実装時の `npm run test:run`: 56 file、593 test が成功。
   - `npm run lint`: 成功。
   - `npm run format:check`: 成功。
   - `npm run check`: 0 error、0 warning。
@@ -417,7 +417,7 @@ npm run build
   - token は期限切れ後に利用不能となり、利用・再発行・logout・退会等の処理で削除または無効化する実装境界へ文言を修正した。
   - 制定日は維持し、改定日・発効日・version を更新する説明へ修正した。
 - 最終品質 gate:
-  - repository 全体を参照できる WSL workspace で 56 file、593 test が成功した。
+  - シニアレビュー改善時、repository 全体を参照できる WSL workspace で 56 file、593 test が成功した。
   - Docker frontend container では `.github/workflows` が mount 対象外のため、`frontend-pr-quality.test.ts` の 2 test だけが `ENOENT` で失敗した。実装 test を含む残り 591 test は成功し、同じ SHA を正しい workspace 境界で再実行して全件成功を確認した。
   - lint、format check、Svelte check 0 error/0 warning、Vercel adapter の production build が成功した。
 - browser:
@@ -425,6 +425,23 @@ npm run build
   - dark の文字 link は canvas 13.34:1、surface 12.48:1、light は 6.31:1 であることを実 computed color と token test から確認した。
   - 320px で長い外部 site link を含め横 overflow なし、`h1` 1行、console error/warning なしを確認した。
   - browser 操作環境では Enter の既定 link 動作が発火しなかった。link への keyboard focus、native anchor、fragment 遷移、遷移後 focus target を個別に確認し、実 keyboard の横断確認は R10 に維持した。
+
+### PR レビュー追補
+
+- 指摘と Red:
+  - `privacy-page.test.ts` の `document.head.replaceChildren()` がテスト所有外の head 要素まで削除する副作用を確認した。
+  - 既存 charset meta を配置する isolation test を先行追加し、追加した 1 test だけが意図どおり失敗、既存 10 test は成功した。
+  - head 全削除を除去すると Svelte が既存 title の内容を書き換えたまま残すことも追加確認し、単純な削除では不十分と判断した。
+- Green/Refactor:
+  - mount 前後で追加された head node だけを追跡して削除し、既存 title の内容は保存・復元する cleanup へ変更した。
+  - mount または `tick()` が失敗した場合も head 差分を回収できるよう、追跡処理を `finally` に配置した。
+  - 既存 charset meta と title の node identity・内容を保持し、privacy 固有 title/description だけが消える 11 test が成功した。
+- 副作用・整合性の再確認:
+  - backend、Prisma、API、認証 route に差分がなく、DB query、index、N+1、migration、既存 data への新規影響がないことを再確認した。
+  - `(app)` layout は Header/Footer のみで認証 guard を持たず、`/privacy` が未認証公開のままであることを再確認した。
+  - 関連 5 file、45 test が固定 seed `1314750876325` の shuffle 実行で成功した。
+  - frontend 全 56 file、594 test が同じ固定 seed の shuffle 実行で成功した。
+  - lint、format check、Svelte check 0 error/0 warning、Vercel adapter の production build が成功した。
 
 ### 計画からの変更点
 
@@ -439,7 +456,7 @@ npm run build
 | ファイル                                                   | 変更種別 | 内容                                                        |
 | ---------------------------------------------------------- | -------- | ----------------------------------------------------------- |
 | `frontend/src/routes/(app)/privacy/+page.svelte`           | 新規     | 公開 privacy page、head metadata、安定 section ID           |
-| `frontend/src/routes/(app)/privacy/privacy-page.test.ts`   | 新規     | 内容、A11Y section、head、provider link、placeholder 禁止の 10 test |
+| `frontend/src/routes/(app)/privacy/privacy-page.test.ts`   | 新規     | 内容、A11Y section、head isolation、provider link、placeholder 禁止の 11 test |
 | `frontend/src/lib/components/Footer.svelte`                | 修正     | `/privacy` link を追加                                      |
 | `frontend/src/lib/components/Footer.svelte.test.ts`        | 新規     | Footer の privacy link contract                             |
 | `frontend/src/routes/register/+page.svelte`                | 修正     | submit 前の privacy link を追加                             |
