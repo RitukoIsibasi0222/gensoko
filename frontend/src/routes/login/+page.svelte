@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { authStore } from '$lib/stores/auth.svelte';
+  import { authStore, parseAuthSuccessResponse } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import { goto } from '$app/navigation';
   import { ApiError, parseErrorBody } from '$lib/api/errors';
@@ -131,8 +131,16 @@
         throw new ApiError(response.status, message, errorBody);
       }
 
-      // 成功レスポンスの場合は JSON をパース
-      const data = await response.json();
+      let responseBody: unknown;
+      try {
+        responseBody = await response.json();
+      } catch {
+        throw new ApiError(502, '認証応答を確認できません。しばらく経ってから再試行してください');
+      }
+      const data = parseAuthSuccessResponse(responseBody);
+      if (data === null) {
+        throw new ApiError(502, '認証応答を確認できません。しばらく経ってから再試行してください');
+      }
 
       // ログイン成功: authStore.login() を呼ぶと state が変化し、
       // $effect が自動的にリダイレクトするため、ここでは goto() を呼ばない

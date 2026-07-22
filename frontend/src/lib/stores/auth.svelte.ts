@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import { API_BASE_URL } from '$lib/api/config';
+import { ApiError } from '$lib/api/errors';
 
 /**
  * ログイン中のユーザー情報。
@@ -24,7 +25,8 @@ export type AuthUser = {
  *
  * UI は initializing 中は認証エリアを非表示にしてフリッカーを防ぐ。
  */
-export type AuthStatus = 'initializing' | 'authenticated' | 'anonymous';
+export type AuthStatus = 'initializing' | 'authenticated' | 'anonymous' | 'unavailable';
+export type AuthenticatedRequest<T> = (latestAccessToken: string) => Promise<T>;
 
 /**
  * Auth Store が持つ状態全体の形。
@@ -68,7 +70,7 @@ function isAccountDeletionEvent(value: unknown): value is AccountDeletionEvent {
  * sessionStorage からの復元時など、型が不明な値の検証に使う。
  * フィールドを追加・変更する際はここだけ修正すれば済む。
  */
-function isAuthUser(value: unknown): value is AuthUser {
+export function isAuthUser(value: unknown): value is AuthUser {
   return (
     value !== null &&
     typeof value === 'object' &&
@@ -80,6 +82,28 @@ function isAuthUser(value: unknown): value is AuthUser {
     ((value as Record<string, unknown>).role === 'USER' ||
       (value as Record<string, unknown>).role === 'ADMIN')
   );
+}
+
+type AuthSuccessResponse = Readonly<{
+  accessToken: string;
+  user: AuthUser;
+}>;
+
+export function parseAuthSuccessResponse(value: unknown): AuthSuccessResponse | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.accessToken !== 'string' ||
+    record.accessToken.length === 0 ||
+    !isAuthUser(record.user)
+  ) {
+    return null;
+  }
+
+  return { accessToken: record.accessToken, user: record.user };
 }
 
 class AuthStore {
@@ -110,6 +134,10 @@ class AuthStore {
     return this.state.status === 'initializing';
   }
 
+  get isUnavailable() {
+    return this.state.status === 'unavailable';
+  }
+
   /**
    * 実行中の refresh() を追跡する AbortController。
    * login() / logout() / completeAccountDeletion() が呼ばれたとき、
@@ -117,6 +145,8 @@ class AuthStore {
    * 遅延完了した古い refresh() が最新の認証状態を上書きするレースコンディションを防ぐ。
    */
   #refreshAbortController: AbortController | null = null;
+  #refreshPromise: Promise<boolean> | null = null;
+  #authGeneration = 0;
 
   /**
    * 退会完了をPIIなしで他タブへ通知するchannel。
@@ -156,30 +186,21 @@ class AuthStore {
   }
 
   /**
-   * sessionStorage から状態を読み込んで state に反映する。
-   * トークンまたはユーザー情報が存在しない・不正な場合は何もしない。
+   * additive rollout中の旧refresh response互換用に、検証済みuserだけを読み込む。
+   * access tokenは期限・失効を確認できないため復元せず、refresh完了まで利用不能にする。
    */
-  #loadFromStorage() {
+  #loadUserFromStorage() {
     try {
-      const token = sessionStorage.getItem(STORAGE_KEY_TOKEN);
       const userRaw = sessionStorage.getItem(STORAGE_KEY_USER);
-      if (token && userRaw) {
+      if (userRaw) {
         const parsed: unknown = JSON.parse(userRaw);
-        // isAuthUser 型ガードで検証してから state に反映する（フィールド検証は1箇所に集約）
         if (isAuthUser(parsed)) {
-          this.state.accessToken = token;
           this.state.user = parsed;
         } else {
-          // 形が不正なデータが残り続けると次回起動でも失敗を繰り返すため、即座にクリアする
           this.#clearStorage();
         }
-      } else if (token || userRaw) {
-        // 片方だけ残っている場合（古い実装の残骸・手動削除・書き込み途中等）は
-        // XSS リスク軽減のため両方クリアして整合性を保つ
-        this.#clearStorage();
       }
     } catch {
-      // JSON.parse に失敗した場合も壊れたデータが残るのを防ぐためクリアする
       this.#clearStorage();
     }
   }
@@ -207,14 +228,25 @@ class AuthStore {
     this.#clearStorage();
   }
 
+  #enterUnavailableState() {
+    this.state.accessToken = null;
+    this.state.status = 'unavailable';
+    this.#clearStorage();
+  }
+
+  #cancelRefresh() {
+    this.#authGeneration += 1;
+    this.#refreshAbortController?.abort();
+    this.#refreshAbortController = null;
+    this.#refreshPromise = null;
+  }
+
   /**
    * 退会完了後の共通local clear。
    * 受信tabからも使い、eventの再送を起こさない。
    */
   #clearAfterAccountDeletion() {
-    const refreshAbortController = this.#refreshAbortController;
-    this.#refreshAbortController = null;
-    refreshAbortController?.abort();
+    this.#cancelRefresh();
     this.#clearAuthState();
   }
 
@@ -238,8 +270,7 @@ class AuthStore {
    * state を更新し、sessionStorage にも保存する。
    */
   login(user: AuthUser, accessToken: string) {
-    // 実行中の refresh があればキャンセルして最新のログイン状態が上書きされるのを防ぐ
-    this.#refreshAbortController?.abort();
+    this.#cancelRefresh();
     this.state.user = user;
     this.state.accessToken = accessToken;
     this.state.status = 'authenticated';
@@ -269,67 +300,79 @@ class AuthStore {
    * クロスサイト（eTLD+1 が異なる）構成では Cookie は送信されず logout API は失敗する
    * が、クライアント側のクリアは先に行うため認証状態は必ず消える。
    */
-  async logout() {
-    // 実行中の refresh があればキャンセルして logout 後に状態が復元されるのを防ぐ
-    this.#refreshAbortController?.abort();
+  async logout(): Promise<boolean> {
+    this.#cancelRefresh();
     // fetch より先にクリアする。ネットワークがハングしても state/sessionStorage が
     // 残り続けるリスクをなくす（API 失敗・タイムアウトでもクライアント側は必ずログアウト）。
     this.#clearAuthState();
     try {
-      await fetch(`${API_BASE_URL}/auth/logout`, {
+      const response = await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
         credentials: 'include'
       });
+      return response.ok;
     } catch {
-      // ネットワークエラー等は無視する（既にクリア済み）
+      return false;
     }
   }
 
-  /**
-   * リフレッシュトークン（HttpOnly Cookie）を使って accessToken を更新する。
-   * 成功: 新しい accessToken を state と sessionStorage に保存する。
-   * 失敗: 期限切れ・不正トークンとみなし、state と sessionStorage をクリアする。
-   * 戻り値: 更新に成功したか否かの boolean。
-   */
-  async refresh(): Promise<boolean> {
-    // 前の refresh があればキャンセルし、最新の呼び出しだけが state を更新できるようにする
-    this.#refreshAbortController?.abort();
-    const controller = new AbortController();
-    this.#refreshAbortController = controller;
-
+  async #performRefresh(generation: number, controller: AbortController): Promise<boolean> {
     try {
       const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: 'POST',
-        // HttpOnly Cookie（refreshToken）を自動送信する。
-        // 【前提】バックエンド Cookie が SameSite=None; Secure または
-        // フロントと同一 site（同一 eTLD+1）構成でなければ Cookie は送信されず常に失敗する。
-        // クロスサイト（eTLD+1 が異なる）構成では SameSite=Strict/Lax の Cookie は送信されない。
         credentials: 'include',
         signal: controller.signal
       });
-      // fetch 完了後にキャンセルされていたら state を変更しない
-      if (controller.signal.aborted) return false;
+
+      if (controller.signal.aborted || generation !== this.#authGeneration) {
+        return false;
+      }
+
+      if (res.status === 401 || res.status === 403) {
+        this.#clearAuthState();
+        return false;
+      }
+
       if (!res.ok) {
+        this.#enterUnavailableState();
+        return false;
+      }
+
+      let value: unknown;
+      try {
+        value = await res.json();
+      } catch {
         this.#clearAuthState();
         return false;
       }
-      const data = (await res.json()) as { accessToken?: unknown };
-      // JSON パース後にもキャンセルを確認する
-      if (controller.signal.aborted) return false;
-      // バックエンドが 200 を返しつつ accessToken が欠損・非文字列の場合を弾く。
-      // 型キャストだけでは実行時に undefined が混入するため、ランタイム検証を行う。
-      if (typeof data.accessToken !== 'string' || data.accessToken.length === 0) {
+
+      if (controller.signal.aborted || generation !== this.#authGeneration) {
+        return false;
+      }
+
+      let response = parseAuthSuccessResponse(value);
+      if (
+        response === null &&
+        this.state.user !== null &&
+        value !== null &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        !('user' in value) &&
+        'accessToken' in value &&
+        typeof value.accessToken === 'string' &&
+        value.accessToken.length > 0
+      ) {
+        // API先行rollout中の旧response互換。user fieldが存在する不正responseはfallbackしない。
+        response = { accessToken: value.accessToken, user: this.state.user };
+      }
+
+      if (response === null) {
         this.#clearAuthState();
         return false;
       }
-      this.state.accessToken = data.accessToken;
-      // user が null のまま authenticated にすると isLoggedIn が true なのに
-      // ユーザー名が表示できない等の状態不整合が起きるため、user がない場合はクリアする。
-      // （refresh() は initialize() 以外から単独で呼ばれる可能性もあるため）
-      if (this.state.user === null) {
-        this.#clearAuthState();
-        return false;
-      }
+
+      this.state.accessToken = response.accessToken;
+      this.state.user = response.user;
       this.state.status = 'authenticated';
       this.#saveToStorage();
       return true;
@@ -338,26 +381,95 @@ class AuthStore {
       if (err instanceof DOMException && err.name === 'AbortError') {
         return false;
       }
-      this.#clearAuthState();
+      if (generation === this.#authGeneration) {
+        this.#enterUnavailableState();
+      }
       return false;
     }
   }
 
-  /**
-   * アプリ起動時に呼ぶ。
-   * 1. status を 'initializing' にして初期化中であることを示す（フリッカー防止）
-   * 2. sessionStorage から状態を読み込む
-   * 3. sessionStorage にユーザー情報があればリフレッシュトークンで有効性を確認する
-   * 4. sessionStorage に情報がなければ 'anonymous' にして終了する
-   */
-  async initialize() {
-    this.state.status = 'initializing';
-    this.#loadFromStorage();
-    if (this.state.user !== null) {
-      await this.refresh(); // 成功→status='authenticated'、失敗→status='anonymous'
-    } else {
-      this.state.status = 'anonymous';
+  async #performRefreshWithBrowserLock(
+    generation: number,
+    controller: AbortController
+  ): Promise<boolean> {
+    if (!browser || navigator.locks === undefined) {
+      return this.#performRefresh(generation, controller);
     }
+
+    return navigator.locks.request('gensoko-auth-refresh', () =>
+      this.#performRefresh(generation, controller)
+    );
+  }
+
+  /**
+   * HttpOnly refresh Cookieから認証状態を再構築する。同一tab内は必ずsingle-flightにし、
+   * Web Locks対応browserでは同一originのtab間も直列化する。
+   */
+  refresh(): Promise<boolean> {
+    if (this.#refreshPromise !== null) {
+      return this.#refreshPromise;
+    }
+
+    this.state.accessToken = null;
+    this.state.status = 'initializing';
+    this.#clearStorage();
+
+    const generation = this.#authGeneration;
+    const controller = new AbortController();
+    this.#refreshAbortController = controller;
+    const operation = this.#performRefreshWithBrowserLock(generation, controller);
+    const tracked = operation.finally(() => {
+      if (this.#refreshPromise === tracked) {
+        this.#refreshPromise = null;
+        this.#refreshAbortController = null;
+      }
+    });
+    this.#refreshPromise = tracked;
+    return tracked;
+  }
+
+  async requestWithReauthentication<T>(request: AuthenticatedRequest<T>): Promise<T> {
+    const currentAccessToken = this.state.accessToken;
+    if (this.state.status !== 'authenticated' || currentAccessToken === null) {
+      throw new ApiError(401, '認証が必要です');
+    }
+
+    try {
+      return await request(currentAccessToken);
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 401) {
+        throw error;
+      }
+    }
+
+    const refreshed = await this.refresh();
+    const refreshedAccessToken = this.state.accessToken;
+    if (!refreshed || refreshedAccessToken === null) {
+      if (this.state.status === 'unavailable') {
+        throw new ApiError(503, '認証サーバーに接続できません。再試行してください');
+      }
+      throw new ApiError(401, '認証が必要です');
+    }
+
+    try {
+      return await request(refreshedAccessToken);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        this.#clearAuthState();
+      }
+      throw error;
+    }
+  }
+
+  async initialize(): Promise<void> {
+    this.state.status = 'initializing';
+    this.state.accessToken = null;
+    this.#loadUserFromStorage();
+    await this.refresh();
+  }
+
+  async retryInitialize(): Promise<void> {
+    await this.initialize();
   }
 }
 

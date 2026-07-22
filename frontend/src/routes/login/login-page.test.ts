@@ -12,6 +12,22 @@ const mocks = vi.hoisted(() => ({
 vi.mock('$app/navigation', () => ({ goto: mocks.goto }));
 vi.mock('$lib/api/config', () => ({ API_BASE_URL: 'http://localhost:3000/api/v1' }));
 vi.mock('$lib/stores/auth.svelte', () => ({
+  parseAuthSuccessResponse: (value: unknown) => {
+    if (value === null || typeof value !== 'object') return null;
+    const record = value as Record<string, unknown>;
+    const user = record.user as Record<string, unknown> | undefined;
+    if (
+      typeof record.accessToken !== 'string' ||
+      record.accessToken.length === 0 ||
+      user === undefined ||
+      typeof user.id !== 'string' ||
+      typeof user.username !== 'string' ||
+      (user.role !== 'USER' && user.role !== 'ADMIN')
+    ) {
+      return null;
+    }
+    return { accessToken: record.accessToken, user };
+  },
   authStore: {
     isInitializing: false,
     isLoggedIn: false,
@@ -156,5 +172,43 @@ describe('/login rate-limit error handling', () => {
         'ネットワークエラーが発生しました。接続を確認してください'
       );
     });
+  });
+});
+
+describe('/login success response validation', () => {
+  it('200でもuserが不正ならloginせず安全なrole=alertを表示する', async () => {
+    mocks.fetch.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        user: { id: 'user-1' },
+        accessToken: 'new-access-token'
+      })
+    });
+
+    const target = mountAndSubmitLogin();
+
+    await vi.waitFor(() => {
+      expect(target.querySelector('[role="alert"]')?.textContent).toContain(
+        '認証応答を確認できません'
+      );
+    });
+    expect(mocks.login).not.toHaveBeenCalled();
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it('200でも非JSONならnetwork errorと混同せず安全なrole=alertを表示する', async () => {
+    mocks.fetch.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockRejectedValue(new SyntaxError('Unexpected token'))
+    });
+
+    const target = mountAndSubmitLogin();
+
+    await vi.waitFor(() => {
+      expect(target.querySelector('[role="alert"]')?.textContent).toContain(
+        '認証応答を確認できません'
+      );
+    });
+    expect(mocks.login).not.toHaveBeenCalled();
   });
 });
