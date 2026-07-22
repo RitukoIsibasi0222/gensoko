@@ -501,7 +501,7 @@ npm run build
 - 初版バージョン: `1.0`
 - 外部サービス: Vercel、Cloudflare、Supabase、Resend、GitHub Actions・Artifacts
 - 監査ログ: セキュリティインシデントと管理者操作の相関調査を目的とし、公開API・UIへ提供せずアクセスを運用上必要な担当者に限定して365日保持する。
-- backup: AES-256暗号化backupとchecksumだけをArtifactへ保存し、最大7日保持する。復元時は削除済みdataが一時的に含まれ得るため、隔離環境で確認できる削除記録を再適用する。
+- backup: AES-256暗号化backupとSHA-256 checksumだけをArtifactへ保存し、最大7日保持する。復元時は削除済みdataが一時的に含まれ得るため、隔離環境で確認できる削除記録を再適用する。
 - 全損時replay: 現行production DBも全損した場合のexternal replay sourceは未導入で、完全な再削除を保証できない。この境界を残存リスクとして正式承認する。
 - 改定: 制定日は維持し、改定日・発効日・バージョンを更新して本ページで告知する。
 
