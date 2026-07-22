@@ -47,7 +47,7 @@ Hono API が生成する正常・エラー・404・CORS preflight レスポン�
 | POST     | `/auth/verify-email`    | メール認証                             | なし   |
 | POST     | `/auth/login`           | ログイン                               | なし   |
 | POST     | `/auth/refresh`         | アクセストークン更新                   | Cookie |
-| POST     | `/auth/logout`          | ログアウト（リフレッシュトークン削除） | 🔒     |
+| POST     | `/auth/logout`          | ログアウト（リフレッシュトークン削除） | Cookie |
 | POST     | `/auth/forgot-password` | パスワードリセットメール送信           | なし   |
 | POST     | `/auth/reset-password`  | パスワードリセット実行                 | なし   |
 
@@ -104,9 +104,9 @@ Response 200:
     "role": "USER"
   }
 }
-Set-Cookie: refreshToken=xxx; HttpOnly; SameSite=Strict; Path=/api/v1/auth
+Set-Cookie: refreshToken=xxx; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth; Max-Age=604800
 
-※ production環境では`Secure`も付与する。
+※ 上記はproduction契約。Domain属性を付けないhost-only Cookieとする。development/testでは`Secure`だけを外す。
 
 Error:
 401 メールアドレスまたはパスワードが正しくありません
@@ -131,13 +131,34 @@ Error:
 
 - HttpOnly Cookieのrefresh tokenをsha256 hashで検索し、旧token削除と新token作成を同一transactionで実行する。
 - User物理削除時はrefresh token rowもDB cascadeで削除されるため、旧Cookieによるrefreshは401を返す。
-- token不存在・期限切れ・形式不正・単回使用済みの場合は、`/api/v1/auth` と `/api/v1/auth/refresh` の両PathのCookieを削除する。
+- token不存在・期限切れ・形式不正は、`/api/v1/auth` と `/api/v1/auth/refresh` の両PathのCookieを削除する。
+- rotation競合は旧rowの`deleteMany.count === 1`をwinnerとする。loserは409を返し、新tokenを作らずwinnerが発行したCookieも削除しない。
+
+```json
+{
+  "accessToken": "eyJhb...",
+  "user": {
+    "id": "cuid",
+    "username": "taro123",
+    "role": "USER"
+  }
+}
+```
+
+responseへの`user`追加はadditive変更であり、full reload時はclientがsessionStorageのuserを信頼せずserver応答から認証状態を再構築する。
 
 Error:
 
 - 401: リフレッシュトークンがありません / リフレッシュトークンの形式が不正です / 無効なリフレッシュトークンです / リフレッシュトークンの有効期限が切れています
 - 403: アカウントが停止されています
+- 409: リフレッシュトークンは既に更新されています
 - 500: サーバーエラーが発生しました
+
+### POST `/auth/logout`
+
+- access token認証middlewareは不要。host-only refresh Cookieだけでrevokeする。
+- DB hash row削除成功後に204を返し、現行/legacy両PathのCookieを削除する。token不存在でも冪等に204とする。
+- DB revoke失敗はCookieをlocal削除しつつ500を返す。clientはlocal stateをclearするがserver revoke未確認として扱う。
 
 ### POST `/auth/forgot-password`
 

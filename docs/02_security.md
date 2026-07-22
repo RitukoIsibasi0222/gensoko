@@ -39,16 +39,17 @@
 ## SEC-002: 認証
 
 > **hono/jwt** を使用します。
-> Vercel（フロントエンド）と Cloudflare Workers（API）が別ドメインのため、Cookie方式は使えずトークン方式を採用します。
+> access tokenはBearer JWT、refresh tokenはhost-only HttpOnly Cookieとする。productionではfrontendとAPIを同一registrable domain配下の別hostへ置き、cross-originかつsame-siteの構成にする。
 
 ### hono/jwtトークン認証フロー
 
-| 項目             | 値                                                  |
-| ---------------- | --------------------------------------------------- |
-| 認証方式         | Bearer Token（Personal Access Token）               |
-| トークン保存場所 | SvelteKitのメモリ（Svelteストア）+ `sessionStorage` |
-| トークン送信方法 | リクエストヘッダー `Authorization: Bearer <token>`  |
-| トークン有効期限 | 7日（DBで管理。ログアウト時に即時削除）             |
+| 項目                  | 値                                                   |
+| --------------------- | ---------------------------------------------------- |
+| 認証方式              | access: Bearer JWT / refresh: 単回使用rotation token |
+| access token保存場所  | SvelteKitのメモリ + `sessionStorage`                 |
+| refresh token保存場所 | host-only HttpOnly Cookie。JS・body・URLへ複製しない |
+| access token有効期限  | 15分                                                 |
+| refresh token有効期限 | 7日。DBにはSHA-256 hashだけを保存                    |
 
 ### トークンの保管について
 
@@ -63,8 +64,10 @@
 
 ### ログアウト
 
-- `POST /api/v1/auth/logout` → HonoサイドでDBのトークンを削除
-- SvelteKit側のストアと `sessionStorage` もクリア
+- `POST /api/v1/auth/logout`はCookieのraw tokenをhash化してDB rowを削除し、成功時204を返す。
+- clientは先にメモリと`sessionStorage`を消す。DB revoke失敗は500/falseで検知し、旧tokenが無効化済みと誤認しない。
+- login/refresh/logoutのproduction Cookie契約は`HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth; Max-Age=604800`、`Domain`なし。
+- legacy `Path=/api/v1/auth/refresh`は新規発行せず削除だけ継続する。
 
 ---
 
@@ -187,7 +190,8 @@ X-Permitted-Cross-Domain-Policies: none
 
 ### CSRF対策
 
-- リフレッシュトークンCookieの `SameSite=Strict` で対策
+- リフレッシュトークンCookieの `SameSite=Strict`、host-only、auth限定Pathで対策する。Lax/Noneへ弱めずDomain属性を追加しない
+- production frontend/APIは同一registrable domain配下に置き、`FRONTEND_URL`の完全一致originだけをCORS許可する
 - 状態変更APIはすべてJSONボディを必須とし、フォームからの直接送信を防ぐ
 
 ---

@@ -627,3 +627,82 @@ R5-19	security・log negative review	R8/R16	response/log/Artifacts	高
 R5-20	証拠・進捗・計画完了を同期	Docs	plan/progress/release	高
 R5-21	後続taskへhandoff	Handoff	R7/R8/R9/R11A/R11/R12/R18	中
 ```
+
+## ローカル実装完了（R5はproduction証拠待ち）
+
+- 実装日: 2026-07-22
+- 実装ブランチ: `feature/r5-production-auth-refresh`
+- PR: 作成前
+- 進捗: code・test・migration file・runbookは実装済み。G1〜G8、R14〜R16が未完了のためR5は`[-]`を維持する。
+
+### 実装済み項目
+
+- production Cookieをhost-only、HttpOnly、Secure、SameSite=Strict、`Path=/api/v1/auth`、`Max-Age=604800`へ固定し、login/refresh/logoutとlegacy Path削除を共通helperへ集約した。
+- refresh responseへ`user { id, username, role }`をadditiveに追加した。DB winnerは旧hash削除count=1、loserは409かつCookie削除なしとした。
+- frontendは同一tab single-flightとWeb Locks対応browserのtab間直列化、401後の論理refresh 1回・元request retry 1回、401/403と一時障害の分離、stale access token即時無効化を実装した。
+- 管理画面の局所single-flightをauth store共通coordinationへ置換し、login response runtime validationと`unavailable` alert/retry/focusを追加した。
+- production専用Worker entrypointと、実在値をcommitしない一時Wrangler config validator/dry-runを追加した。
+- `RefreshToken(expiresAt, tokenHash)` indexとexpand-only migration file、default無効・dry-run既定の固定batch cleanupを追加した。
+- production auth smokeのparameter validator、Playwright設定、Cookie属性boolean、login→reload rotation 2回→同時refresh 200/409→競合後refresh成功→logout→refresh 401 spec、manual production Environment workflowを追加した。workflowは実行していない。
+
+### 計画から変更した設計判断
+
+- `wrangler.jsonc env.production`へ実在resource IDを置く案は採用せず、R14で与える非秘密parameterからstandalone configを一時生成してdry-run後に削除する方式へ変更した。committed `wrangler.jsonc`はstaging専用のまま維持する。
+- refresh token cleanupは既存scheduleへ自動接続せず、Batch Jobsのmanual dry-run/execute選択肢だけを追加した。production自動cleanupの有効化はR16のauth smokeとR18の運用承認後へ送る。
+- 既存`worker-config.ts`はproduction target/CORS/secret/binding fail-fastを既に実装済みだったため変更せず、production固有hostname/resource混同は新しいconfig builderで検証した。
+- frontend build URL validatorは既存契約を再利用し、`frontend/scripts/*vercel*`は変更しなかった。approved frontend/API pairはproduction Playwright/Worker config validatorで追加検証する。
+
+### 実際の変更ファイル
+
+| ファイル                                                                                                         | 変更種別  | 内容                                                    |
+| ---------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------- |
+| `backend/src/lib/refresh-token-cookie.ts` / test                                                                 | 修正      | 発行・現行/legacy削除Cookie契約                         |
+| `backend/src/routes/auth/index.ts` / login・refresh・logout tests / test helper                                  | 修正      | user応答、409 loser、production Cookie、revoke          |
+| `backend/src/services/auth.service.ts`                                                                           | 修正      | username取得、rotation loser 409                        |
+| `backend/src/app.rate-limit-route-matrix.test.ts`                                                                | 修正      | refresh/logoutの`GENERAL_API_IP`固定                    |
+| `backend/src/app.ts` / `backend/src/routes/users/index.ts` / test helper                                         | 修正      | production Cookie削除属性をusers routeまで伝播          |
+| `backend/src/lib/production-worker-config.ts` / test                                                             | 新規      | URL/resource/target fail-fast、一時config生成           |
+| `backend/src/worker-production.ts`                                                                               | 新規      | production専用entrypoint                                |
+| `backend/src/scripts/runProductionWranglerDryRun.cli.ts`                                                         | 新規      | 値非表示local dry-run                                   |
+| `backend/src/worker-config-files.test.ts` / `tsconfig.json` / `tsconfig.workers.json` / `package.json`           | 修正      | production build分離contract/script                     |
+| `backend/prisma/schema.prisma` / `prisma/migrations/20260722194000_add_refresh_token_expiry_index/migration.sql` | 修正/新規 | cleanup複合index                                        |
+| `backend/src/jobs/cleanupExpiredRefreshTokens.ts` / test / CLI / schema test                                     | 新規      | fixed batch、dry-run、guard、機密非log                  |
+| `backend/src/lib/config.ts`                                                                                      | 修正      | cleanup execute flag一元化                              |
+| `.github/workflows/batch.yml`                                                                                    | 修正      | refresh cleanupのmanual選択肢。schedule未接続           |
+| `frontend/src/lib/stores/auth.svelte.ts` / test                                                                  | 修正      | response validation、single-flight、障害分類、共通retry |
+| `frontend/src/routes/(app)/admin/+page.svelte` / test                                                            | 修正      | 共通再認証へ統合                                        |
+| `frontend/src/routes/+layout.svelte` / `layout-auth-contract.test.ts`                                            | 修正/新規 | unavailable alert/retry/focus                           |
+| `frontend/src/routes/login/+page.svelte` / test                                                                  | 修正      | success response runtime validation                     |
+| `frontend/e2e/production-config.ts` / test                                                                       | 新規      | approved production target fail-fast                    |
+| `frontend/e2e/production-auth.spec.ts` / `playwright.production.config.ts`                                       | 新規      | 値非表示auth smoke、Artifact禁止                        |
+| `frontend/src/production-playwright-contract.test.ts` / `frontend/package.json`                                  | 新規/修正 | source contractと専用script                             |
+| `.github/workflows/production-auth-smoke.yml`                                                                    | 新規      | manual production Environment smoke。未実行             |
+| `docs/02_security.md` / `03_data_model.md` / `04_api.md`                                                         | 修正      | auth・Cookie・rotation・index・cleanup契約              |
+| `docs/05_progress.md` / `09_startup_commands.md` / `11_deployment.md`                                            | 修正      | 継続中理由、手順、rollout/rollback                      |
+| `docs/plans/portfolio-release-v0-1/plan.md` / 本計画書                                                           | 修正      | R5とR14〜R16の証拠境界                                  |
+
+### ローカル品質ゲート
+
+- backend: Vitest 100 files・1,035件成功（既存integration 4 files・10件skip）、Workers 2 files・15件成功、build、lint、format:check成功。
+- frontend: lint、format、Vitest 59 files・626件成功。外部接続なしproduction smoke contract 13件を含む。
+- Prisma: local Docker `postgres:5432/gensoko`だけを対象に`prisma migrate deploy`を実行し、`20260722194000_add_refresh_token_expiry_index`の適用成功を確認した。production DBには接続していない。
+- Playwright: local Dockerでlogin画面、health 200、Cookieなしrefresh 401の導線を確認した。trace、screenshot、video、storageState、Cookie一覧は保存していない。
+- 共通: `git diff --check`成功。追加差分のcredential付きDB URL、JWT secret literal、sensitive header log、長いhex literal、Cookie Domain、wildcard CORSは値非表示scanですべて0件を確認した。
+
+### productionで未実施の項目
+
+- production deploy/promotion、production workflow実行
+- DNS/custom domain、Vercel、Cloudflare、GitHub Environmentの外部設定変更
+- Secretの参照・表示・登録・更新
+- production DB接続、migration適用、cleanup実行
+- approved hostnameでのCORS/login/reload/rotation/logout/smoke
+
+### G1〜G8の未確定事項
+
+G1 所有registrable domain、G2 frontend hostname、G3 API hostname、G4 Vercel project/Production scope、G5 Worker名/custom domain/production Hyperdrive/DO、G6 GitHub production Environmentとkey存在、G7 smoke account責任者、G8 rollback version/deployment/schemaはすべて未確定である。値を推測・hardcodeしていない。
+
+### R14〜R16への引き継ぎ
+
+- R14: G1〜G8、review済みSHA、URL pair、resource非共有、Environment key存在、rollback先をread-only・値非表示で確認する。
+- R15: 別承認後にexpand-only migration → additive API → frontendを配備し、version/run IDだけを記録する。
+- R16: manual production auth smokeを直前承認後に実行し、statusと属性booleanだけを証拠化する。Cookie/token/header/trace/storageStateを保存しない。
