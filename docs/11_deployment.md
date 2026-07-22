@@ -326,12 +326,25 @@ productionはSupabase Free planで運用する。[Supabase pricing](https://supa
 | operation        | schedule                     | 内容                                                                                     |
 | ---------------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
 | `capacity-check` | UTC毎日19:23（JST毎日04:23） | `pg_database_size(current_database())`でDB容量を取得し、500MBに対する使用率を確認        |
-| `backup`         | UTC土曜19:41（JST日曜04:41） | roles・schema・dataをdumpし、AES-256で暗号化・復号検証してArtifactへ7日保存              |
+| `backup`         | UTC毎日19:41（JST毎日04:41） | roles・schema・dataをdumpし、AES-256で暗号化・復号検証してArtifactへ7日保存              |
 | `migrate-deploy` | 手動のみ                     | 24時間以内に成功したbackup run IDと期限内Artifactを確認後、`prisma migrate deploy`を実行 |
 
-上表は2026-07-22時点の実装済み運用であり、backupはまだ週次である。ポートフォリオ版v0.1の公開前に、[`backup-resilience`](plans/backup-resilience/plan.md)のT2・T3・T6に従ってbackupをJST毎日04:41へ変更し、暗号化・7日保持・手動実行・24時間以内backup gateを回帰させる。日次scheduleの連続成功で未失効Artifact 2世代以上を確認するまで、v0.1のR9と本番公開を完了扱いにしない。
+上表の日次cronは2026-07-22にR9実装branchでcode・contract testまで完了した。capacity-check、暗号化・復号検証・7日保持・手動実行・24時間以内backup gateは維持している。review・`develop`へのmerge後の日次scheduleを2回以上観測し、未失効Artifact 2世代以上を確認するまで、v0.1のR9と本番公開を完了扱いにしない。
 
 最大3回retry、2時間後recovery、36時間鮮度監視、通常7世代の定常確認、四半期restore drillは初回公開後の強化とする。これらを日次化の完了条件へ混在させず、未実装項目は同計画で継続管理する。
+
+### R9日次scheduleの観測とrollback
+
+実装PRのreview・`develop`へのmerge後、原則として自動scheduleを待ち、次を2回以上確認する。
+
+1. eventが`schedule`、head branchが`develop`で、head SHAが日次化commitを含む。
+2. `Resolve requested operation`が`backup`を解決し、暗号化backup作成・復号検証・uploadが成功する。
+3. 各runに`production-db-backup-{run ID}`が1件あり、同一確認時点で未失効Artifactが2世代以上ある。
+4. `retention-days: 7`の保持境界をmetadataで確認し、run ID、head SHA、実行日時、Artifact名、expiry、確認日時だけを記録する。
+
+Artifactをdownload・復号せず、Secret、DB情報、Artifact内容、digest、download URL、個人dataを記録しない。観測を早めるためのmanual dispatchも行わない。
+
+日次化でDB負荷、Actions使用量、schedule競合に問題が出た場合は、新規migration・cleanupを停止して有効な最新Artifactを確認する。原因と影響をreviewしたうえで、schedule宣言とoperation解決caseの両方を既知の週次値`41 19 * * 6`へ戻す。manual `operation=backup`、capacity-check、暗号化、7日保持、24時間以内backup gateは維持し、既存Artifactを手動削除しない。
 
 容量閾値はFree quotaの70%=350MBを警告、85%=425MBを重大とする。どちらもworkflowを失敗させ、GitHub Actionsのfailed workflowメール通知へ接続する。workflowの値はDB本体の論理容量であり、最終確認はSupabase Dashboardのdatabase usageをsource of truthとする。
 
@@ -848,7 +861,7 @@ T19では次の順序を変更しない。
 [x] GitHub Actions production Environmentの DATABASE_URL Secret を設定（migrate deploy 用）
 [x] GitHub Actions Variables に AUDIT_LOG_RETENTION_DAYS と AUDIT_LOG_CLEANUP_ENABLED=false を設定
 [x] 本番DB暗号化backup workflowを実装し、初回Artifact・暗号化・復号検証を確認（run #29322979476）
-[ ] backupをJST毎日04:41へ日次化し、暗号化・7日保持の回帰と未失効Artifact 2世代以上を確認
+[-] backupをJST毎日04:41へ日次化し、暗号化・7日保持をcodeで回帰済み。review・merge後の日次schedule 2回と未失効Artifact 2世代は観測待ち
 [x] 監査ログの正式保持期間・内部ID保持・承認者・通知先を記録
 [x] DB容量70%/85% workflowを実装し、初回capacity run成功・Disk 13%・GitHub Actions failureの受信者を確認（run #29322946812）
 [-] production dry-runと公開前7日baselineは成功。初回executeは全release gate完了後に実施

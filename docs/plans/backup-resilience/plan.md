@@ -12,7 +12,7 @@ Supabase Free planで運用するproduction DBの暗号化論理backupを、週�
 
 ## 背景と現状
 
-- `.github/workflows/production-database.yml`はUTC土曜19:41（JST日曜04:41）の週次backupを実行する。
+- `.github/workflows/production-database.yml`はR9実装branchでUTC毎日19:41（JST毎日04:41）へ変更済みである。`develop`へのmergeと日次scheduleの実run確認は未完了である。
 - backupはroles・schema・dataをdumpし、AES-256で暗号化して復号後の内容を検査してからGitHub Actions Artifactへ保存する。
 - 初回production backupは2026-07-14の手動run 29322979476でArtifact・暗号化・復号検証まで成功したが、Artifactは2026-07-21 09:48 UTCに7日保持どおり失効した。
 - 2026-07-18の週次schedule run 29658935594でも暗号化・復号検証・Artifact uploadが成功し、Artifact `production-db-backup-29658935594`は2026-07-25 20:03 UTCまで未失効である。
@@ -55,27 +55,29 @@ Supabase Free planで運用するproduction DBの暗号化論理backupを、週�
 
 R9は本計画のT2・T3・T6と、T10・T11の日次化に関する部分を実行する作業単位である。重複する新規計画書は作成せず、本計画をR9の実装・実環境証拠の正本として更新する。retry・recovery・鮮度監視・通常7世代・restore drillは本計画に残すが、R9の完了条件へ混在させない。
 
-### 現状の実装契約
+### R9実装PR時点の契約
 
-| 項目                    | 現在値・構成                                                     | R9での扱い                                        |
-| ----------------------- | ---------------------------------------------------------------- | ------------------------------------------------- |
-| backup schedule         | `41 19 * * 6`（UTC土曜19:41、JST日曜04:41）                      | `41 19 * * *`（UTC毎日19:41、JST毎日04:41）へ変更 |
-| capacity-check schedule | `23 19 * * *`（UTC毎日19:23、JST毎日04:23）                      | 変更しない                                        |
-| manual実行              | `workflow_dispatch`の`operation=backup`                          | 維持する                                          |
-| Environment             | `production`固定                                                 | 維持する                                          |
-| concurrency             | `gensoko-batch-jobs`、`cancel-in-progress: false`                | 維持する                                          |
-| operation分岐           | event schedule文字列またはmanual inputから解決                   | backup cronのcaseラベルだけを日次値へ変更         |
-| backup対象              | `roles.sql`、`schema.sql`、`data.sql`                            | 維持する                                          |
-| 暗号化                  | GnuPG symmetric AES-256、passphraseはSecret                      | 維持する                                          |
-| 復号検証                | 同一run内で復号し、期待する3ファイル名と非空dumpを確認           | 維持する                                          |
-| checksum                | 暗号化archiveのSHA-256                                           | 維持する                                          |
-| Artifact                | 暗号化`.tar.gz.gpg`と`.sha256`を含む専用directoryだけをupload    | 維持する                                          |
-| retention               | `retention-days: 7`                                              | 維持する                                          |
-| 平文cleanup             | `trap`と明示cleanupで平文・検証用archiveを削除                   | 維持する                                          |
-| migration前gate         | 24時間以内の成功backup run IDと未失効Artifact 1件                | 維持し、2世代要求へ変更しない                     |
-| 既存成功run             | 手動run 29322979476、週次schedule run 29658935594                | 実装前baselineとして記録                          |
-| 現在の未失効世代        | 2026-07-22調査時点で1世代                                        | 日次化後に2世代以上を確認するまでR9未完了         |
-| 現時点で未確認          | 日次cronの実run、日次schedule 2回連続成功、日次化後の未失効2世代 | R9の実環境gateで確認                              |
+| 項目                    | 現在値・構成                                                     | R9での扱い                                |
+| ----------------------- | ---------------------------------------------------------------- | ----------------------------------------- |
+| backup schedule         | `41 19 * * *`（UTC毎日19:41、JST毎日04:41）                      | code・contract test完了、実run観測待ち    |
+| capacity-check schedule | `23 19 * * *`（UTC毎日19:23、JST毎日04:23）                      | 変更しない                                |
+| manual実行              | `workflow_dispatch`の`operation=backup`                          | 維持する                                  |
+| Environment             | `production`固定                                                 | 維持する                                  |
+| concurrency             | `gensoko-batch-jobs`、`cancel-in-progress: false`                | 維持する                                  |
+| operation分岐           | event schedule文字列またはmanual inputから解決                   | backup cronのcaseラベルを日次値へ変更済み |
+| backup対象              | `roles.sql`、`schema.sql`、`data.sql`                            | 維持する                                  |
+| 暗号化                  | GnuPG symmetric AES-256、passphraseはSecret                      | 維持する                                  |
+| 復号検証                | 同一run内で復号し、期待する3ファイル名と非空dumpを確認           | 維持する                                  |
+| checksum                | 暗号化archiveのSHA-256                                           | 維持する                                  |
+| Artifact                | 暗号化`.tar.gz.gpg`と`.sha256`を含む専用directoryだけをupload    | 維持する                                  |
+| retention               | `retention-days: 7`                                              | 維持する                                  |
+| 平文cleanup             | `trap`と明示cleanupで平文・検証用archiveを削除                   | 維持する                                  |
+| migration前gate         | 24時間以内の成功backup run IDと未失効Artifact 1件                | 維持し、2世代要求へ変更しない             |
+| 既存成功run             | 手動run 29322979476、週次schedule run 29658935594                | 実装前baselineとして記録                  |
+| 現在の未失効世代        | 2026-07-22調査時点で1世代                                        | 日次化後に2世代以上を確認するまでR9未完了 |
+| 現時点で未確認          | 日次cronの実run、日次schedule 2回連続成功、日次化後の未失効2世代 | R9の実環境gateで確認                      |
+
+2026-07-22に`feature/r9-daily-backup`で日次cronのcontract testをRedからGreenへ更新した。production Actionsは実行しておらず、review・`develop`へのmerge後に日次scheduleを2回以上観測するまでR9は実装中とする。
 
 GitHub ActionsのscheduleはUTCで解釈され、default branch `develop`の最新commitで実行される。高負荷時の遅延があり得るため、JST 04:41はcron契約の時刻とし、実行証拠には予定時刻と実際の開始日時を分けて記録する。
 
@@ -100,34 +102,48 @@ GitHub ActionsのscheduleはUTCで解釈され、default branch `develop`の最�
 
 ### R9完了条件
 
-- [ ] 日次cronのcontract testが存在し、現行週次cronを理由に意図したRedを確認している。
-- [ ] workflowのschedule宣言とoperation解決だけを必要最小限変更してGreenになっている。
-- [ ] `41 19 * * *`がUTC毎日19:41、JST毎日04:41の契約としてtest・workflow・文書で一致している。
-- [ ] `workflow_dispatch`、capacity-check cron、concurrency、operation分岐が維持されている。
-- [ ] migration・account deletion execute前のbackup gateが維持されている。
-- [ ] AES-256、復号検証、SHA-256、平文cleanupが維持されている。
-- [ ] Artifactは暗号化archiveとchecksumだけで、`retention-days: 7`が維持されている。
+- [x] 日次cronのcontract testが存在し、現行週次cronを理由に意図したRedを確認している。
+- [x] workflowのschedule宣言とoperation解決だけを必要最小限変更してGreenになっている。
+- [x] `41 19 * * *`がUTC毎日19:41、JST毎日04:41の契約としてtest・workflow・文書で一致している。
+- [x] `workflow_dispatch`、capacity-check cron、concurrency、operation分岐が維持されている。
+- [x] migration・account deletion execute前のbackup gateが維持されている。
+- [x] AES-256、復号検証、SHA-256、平文cleanupが維持されている。
+- [x] Artifactは暗号化archiveとchecksumだけで、`retention-days: 7`が維持されている。
 - [ ] review済み変更がdefault branch `develop`へmergeされ、対象commit SHAが記録されている。
 - [ ] merge後の日次schedule runが2回以上成功し、各runのoperationがbackupであることを確認している。
 - [ ] 同一確認時点で未失効のproduction backup Artifactが2世代以上ある。
 - [ ] run ID、実行日時、Artifact名、失効境界、確認日時を秘密情報なしで記録している。
 - [ ] `docs/05_progress.md`、release計画、本計画、startup・deployment runbookが実装と証拠に一致している。
-- [ ] 実際の変更ファイルと本節の対象ファイル・実変更ファイルが一致している。
-- [ ] retry・recovery・鮮度監視・通常7世代・restore drill等を完了扱いにしていない。
+- [x] 実際の変更ファイルと本節の対象ファイル・実変更ファイルが一致している。
+- [x] retry・recovery・鮮度監視・通常7世代・restore drill等を完了扱いにしていない。
 
 ### R9対象ファイル一覧
 
-| ファイル                                              | 変更種別 | 内容                                                       |
-| ----------------------------------------------------- | -------- | ---------------------------------------------------------- |
-| `backend/src/jobs/productionDatabaseWorkflow.test.ts` | 修正     | 日次cron、旧週次cron不在、capacity cron維持のcontract test |
-| `.github/workflows/production-database.yml`           | 修正     | backup schedule宣言とoperation解決caseを日次化             |
-| `docs/plans/backup-resilience/plan.md`                | 修正     | R9の計画、実装記録、実環境証拠、実変更ファイル             |
-| `docs/05_progress.md`                                 | 修正     | R9を実装中へ更新し、2世代確認後だけ完了へ更新              |
-| `docs/plans/portfolio-release-v0-1/plan.md`           | 修正     | R9の実装・観測状態とrelease完了条件を同期                  |
-| `docs/09_startup_commands.md`                         | 修正     | 日次backupの運用入口と確認境界を同期                       |
-| `docs/11_deployment.md`                               | 修正     | schedule表、2世代確認、証拠記録、rollback runbookを同期    |
+| ファイル                                                    | 変更種別 | 内容                                                         |
+| ----------------------------------------------------------- | -------- | ------------------------------------------------------------ |
+| `backend/src/jobs/productionDatabaseWorkflow.test.ts`       | 修正     | 日次cron、旧週次cron不在、capacity cron維持のcontract test   |
+| `backend/src/jobs/deleteLegacySoftDeletedUsers.cli.test.ts` | 修正     | CIのNode 22で発生したPrisma import失敗mockのフレークを安定化 |
+| `.github/workflows/production-database.yml`                 | 修正     | backup schedule宣言とoperation解決caseを日次化               |
+| `docs/plans/backup-resilience/plan.md`                      | 修正     | R9の計画、実装記録、実環境証拠、実変更ファイル               |
+| `docs/05_progress.md`                                       | 修正     | R9を実装中へ更新し、2世代確認後だけ完了へ更新                |
+| `docs/plans/portfolio-release-v0-1/plan.md`                 | 修正     | R9の実装・観測状態とrelease完了条件を同期                    |
+| `docs/09_startup_commands.md`                               | 修正     | 日次backupの運用入口と確認境界を同期                         |
+| `docs/11_deployment.md`                                     | 修正     | schedule表、2世代確認、証拠記録、rollback runbookを同期      |
 
-計画作成段階の実変更は本ファイルだけとする。workflow、test、progress、release計画、runbookはR9実装時に変更し、計画作成だけで実装済み・実装中へ更新しない。
+R9実装PRでは上記の対象ファイルを変更する。実環境のrun ID・Artifact metadata・完了markは、実装PRのreview・`develop`へのmerge後に別の証拠docs PRで同期する。
+
+### R9実装記録（schedule観測前）
+
+- 実装日: 2026-07-22
+- 実装branch: `feature/r9-daily-backup`
+- 状態: code・contract test完了、review・mergeと日次schedule 2回・未失効Artifact 2世代の観測待ち
+- Red: 対象test 6件中、追加した日次cron契約1件だけが現行週次cronを理由に失敗し、既存5件は成功
+- Green: workflowのschedule宣言とoperation解決caseの2行だけを変更し、対象test 6件が成功
+- CI follow-up: Node 22で既存CLI testのPrisma import失敗mockが稀に旧factoryを参照するフレークを再現したため、mock export参照時に失敗条件を評価するgetter方式へ安定化。production codeへの変更はない
+- production Actions: 未実行。manual dispatch、Artifact download・復号、production DB接続、deploy、migration、cleanupは行っていない
+- 公開後task: retry・recovery・36時間鮮度監視・通常7世代・通知失敗検証・restore drillは未完了のまま維持
+- 最終品質gate: 対象test 6件、backend 97 files・1014 tests、Workers 15 tests、Workers build、backend build、lint、format、Prisma validate、変更ファイルのPrettier check、`git diff --check`が成功。専用DB test 10件は既定どおりskip
+- 横断確認: 日次cron宣言・operation case、capacity cron、manual dispatch、concurrency、AES-256、復号、SHA-256、平文cleanup、暗号化Artifact path、7日保持、migration・account deletion execute前backup gateを確認。旧週次cronはworkflowに存在しない
 
 ### 設計上の決定事項（R9）
 
@@ -501,8 +517,8 @@ R9-10	実変更・公開後task・rollback境界を最終照合	完了確認	Git
 | T11      | 計画書・進捗を実態へ同期                        | フェーズごと | 本計画、`docs/05_progress.md`                          | 中     | v0.1境界、対象ファイル、判断、結果、完了markが実態と一致            |
 
 - [x] T1: 現行backupの初回成功Artifactを記録する（run 29322979476）
-- [ ] T2: 日次scheduleのRed testを追加する
-- [ ] T3: backupをJST毎日04:41へ日次化する
+- [x] T2: 日次scheduleのRed testを追加する
+- [x] T3: backupをJST毎日04:41へ日次化する
 - [ ] T4: 最大3回retry・当日Artifact欠落時のrecovery・36時間鮮度確認をTDD実装する
 - [ ] T5: 失敗通知の安全性と受信を検証する
 - [ ] T6: 日次backupを連続実行し未失効Artifact 2世代以上を確認する
@@ -510,8 +526,8 @@ R9-10	実変更・公開後task・rollback境界を最終照合	完了確認	Git
 - [ ] T7: restore drill workflowのRed testを追加する
 - [ ] T8: 手動restore drill workflowを実装する
 - [ ] T9: 隔離projectで初回restore drillを実施し、隔離dataを削除する
-- [ ] T10: startup・deployment runbookを更新する
-- [ ] T11: 計画書・進捗を実態へ同期する
+- [-] T10: startup・deployment runbookを更新する（実装時点を同期済み、実run証拠待ち）
+- [-] T11: 計画書・進捗を実態へ同期する（実装時点を同期済み、実run証拠待ち）
 
 ## TDD・検証方針
 
@@ -584,8 +600,8 @@ R9-10	実変更・公開後task・rollback境界を最終照合	完了確認	Git
 ## v0.1公開完了条件
 
 - [x] 初回production backupのArtifact・暗号化・復号検証が成功している（run 29322979476）。
-- [ ] 日次cronの契約testがRedからGreenになり、JST毎日04:41に設定される。
-- [ ] 暗号化archiveとchecksumだけを7日保持し、平文dump非保存の既存契約が回帰している。
+- [x] 日次cronの契約testがRedからGreenになり、JST毎日04:41に設定される。
+- [x] 暗号化archiveとchecksumだけを7日保持し、平文dump非保存の既存契約が回帰している。
 - [ ] 未失効の成功Artifactを2世代以上確認している。
 - [ ] `docs/11_deployment.md`、v0.1公開計画、`docs/05_progress.md`が実装と実環境証拠に一致している。
 
@@ -613,7 +629,7 @@ R9-10	実変更・公開後task・rollback境界を最終照合	完了確認	Git
 - 現行production DBが読める場合は、backup取得後の削除成功監査を信頼できる情報源として、対象内部IDをmemory上で取得し復元DBへ再削除を適用する。
 - 現行production DBも全損した場合のexternal replay sourceは未導入で、backup取得後に削除された対象IDを完全には再構成できない。この完全な再削除を保証できない境界を残存リスクとして正式承認する。
 
-本承認は方針の承認であり、実装・実環境証拠の代替ではない。現行workflowのbackupは週次であり、日次化、未失効Artifact 2世代、retry・recovery・36時間鮮度監視、通常7世代、restore drillは各taskの完了条件を満たすまで未完了とする。
+本承認は方針の承認であり、実装・実環境証拠の代替ではない。R9実装branchではbackupを日次化済みだが、review・`develop`へのmergeと未失効Artifact 2世代の観測は未完了である。retry・recovery・36時間鮮度監視、通常7世代、restore drillも各taskの完了条件を満たすまで未完了とする。
 
 ## 最終タスクリスト（タブ区切り）
 
