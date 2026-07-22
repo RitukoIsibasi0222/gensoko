@@ -242,7 +242,7 @@
 - [x] ダークモード対応（OS設定追従 + トグルボタン）— D1〜D12、browser確認、frontend 580 test・全品質gate成功
 - [ ] レスポンシブデザイン確認・修正（PC/タブレット/スマホ）
 - [ ] アクセシビリティ確認（キーボード操作・スクリーンリーダー）
-- [ ] プライバシーポリシーページ `/privacy` — リリースタスク: R3 / 個別計画: [`privacy-policy`](plans/privacy-policy/plan.md)
+- [x] プライバシーポリシーページ `/privacy` — リリースタスク: R3 / 個別計画: [`privacy-policy`](plans/privacy-policy/plan.md)
 
 ## フェーズ12: デプロイ
 
@@ -269,7 +269,7 @@
 
 - [x] R1: Admin E2E修正後runを記録する
 - [x] R2: ダークモードをTDD実装する
-- [ ] R3: `/privacy`をTDD実装する
+- [x] R3: `/privacy`をTDD実装する
 - [ ] R4: privacy・監査・backup・問い合わせ先を承認する
 - [ ] R5: 認証・refreshのproduction構成を確定する
 - [ ] R6: 完全削除の残るv0.1 gateを完了する
@@ -298,7 +298,7 @@
 - [ ] refresh tokenのproduction same-site構成とreload後refresh確認
 - [-] 本人退会の物理削除 — code・専用DB・staging本人/Admin導線を確認済み、残る移行・production gate待ち
 - [x] ダークモード（OS設定追従 + 明示toggle） — D1〜D12完了、計画: [`dark-mode`](plans/dark-mode/plan.md)
-- [ ] プライバシーポリシーページ`/privacy` — R3 / 計画: [`privacy-policy`](plans/privacy-policy/plan.md)
+- [x] プライバシーポリシーページ`/privacy` — R3 / 計画: [`privacy-policy`](plans/privacy-policy/plan.md)
 - [-] 基本レスポンシブ・keyboard・focus・live region — 実装済み範囲あり、主要画面のrelease確認待ち
 - [-] 認証系・ゲーム送信APIのアプリレベルrate limit — Hono/DOとstaging binding済み、実HTTP 429/503・production binding待ち
 - [ ] production CORS、HttpOnly/Secure/SameSite Cookie、security headersの実HTTP確認

@@ -101,15 +101,15 @@ R3 の Green 実装前に、下記「実装入力 gate」の具体値を owner �
 
 R3 の page 実装を開始する前に、次を具体値として決定する。値を決めずに仮実装して完了扱いにしない。
 
-| 決定事項                     | 現状                                          | R3 の開始条件                                 | R4 の役割                          |
-| ---------------------------- | --------------------------------------------- | --------------------------------------------- | ---------------------------------- |
-| 運営主体の表示名             | 未確定                                        | 公開可能な具体名を受領                        | 表示の妥当性を正式承認             |
-| 問い合わせ窓口               | 未確定                                        | 実際に受信・対応できる URL またはメールを受領 | 対応責任者・運用を正式承認         |
-| 発効日・version              | 未確定                                        | 実日付と version を受領                       | release 日程との整合を正式承認     |
-| 監査内部 ID の利用者向け説明 | 目的・365 日は承認済み、公開文言は未確定      | 目的、access 範囲、保持期間の文案を受領       | 公開文言を正式承認                 |
-| backup/restore 説明          | 最長 7 日境界あり、全損時 replay 方針は未決定 | 現時点の制約を隠さない具体文案を受領          | 残余リスクと運用を正式承認         |
-| production provider 一覧     | staging 実績あり、production 未配備           | v0.1 で利用予定の一覧と役割を受領             | 配備構成と privacy link を正式承認 |
-| policy 改定の告知方法        | 未確定                                        | 実行可能な方法を受領                          | 運用責任を正式承認                 |
+| 決定事項                     | 現状                                                                 | R3 の開始条件                                 | R4 の役割                          |
+| ---------------------------- | -------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------- |
+| 運営主体の表示名             | `rituko.llink` で確定                                                | 公開可能な具体名を受領                        | 表示の妥当性を正式承認             |
+| 問い合わせ窓口               | `isibasiwork@gmail.com` で確定                                       | 実際に受信・対応できる URL またはメールを受領 | 対応責任者・運用を正式承認         |
+| 発効日・version              | 制定日・発効日 `2026年8月1日`、version `1.0` で確定                  | 実日付と version を受領                       | release 日程との整合を正式承認     |
+| 監査内部 ID の利用者向け説明 | security 目的、access 制限、365 日保持を説明する文案で確定           | 目的、access 範囲、保持期間の文案を受領       | 公開文言を正式承認                 |
+| backup/restore 説明          | 暗号化 backup は最長 7 日保持し、復元時の削除反映境界も説明して確定 | 現時点の制約を隠さない具体文案を受領          | 残余リスクと運用を正式承認         |
+| production provider 一覧     | Vercel / Cloudflare / Supabase / Resend / GitHub Actions・Artifacts | v0.1 で利用予定の一覧と役割を受領             | 配備構成と privacy link を正式承認 |
+| policy 改定の告知方法        | 本ページ上で告知し、制定日・発効日と version を更新する方針で確定   | 実行可能な方法を受領                          | 運用責任を正式承認                 |
 
 ## 対象ファイル一覧
 
@@ -123,7 +123,7 @@ R3 の page 実装を開始する前に、次を具体値として決定する�
 | `frontend/src/routes/register/register-page.test.ts`       | 修正             | privacy link の accessible name と `href`                                  |
 | `frontend/src/routes/(app)/settings/+page.svelte`          | 修正             | 削除警告近くに `/privacy#account-deletion` link                            |
 | `frontend/src/routes/(app)/settings/settings-page.test.ts` | 修正             | 削除説明 link と既存警告の共存                                             |
-| `docs/05_progress.md`                                      | 実装完了時に修正 | R3 だけを完了へ更新し、R4/R10/R12 は未完了のまま維持                       |
+| `docs/05_progress.md`                                      | 修正             | R3 だけを完了へ更新し、R4/R10/R12 は未完了のまま維持                       |
 | `docs/plans/privacy-policy/plan.md`                        | 修正             | TDD記録、実変更、確認結果、R3 完了を同期                                   |
 
 `docs/02_security.md`、`docs/11_deployment.md`、`docs/04_api.md` は R3 の page/link 追加だけでは変更しない。事実差分や承認値を同期する場合は R4 の `docs:` 変更として分離する。API、DB schema、認証 store は変更対象外である。
@@ -242,16 +242,18 @@ provider 独自の保持期間、region、subprocessor を Gensoko が保証で�
 | P9       | frontend 最終品質 gate                          | frontend               | 高     | 全 test、lint、format check、Svelte check、build が成功 |
 | P10      | plan/progress を実態へ同期                      | docs                   | 中     | R3 のみ完了、R4/R10/R12 は未完了を維持                  |
 
-- [ ] P1: 実装入力 gate と data/provider inventory を確定する
-- [ ] P2: privacy page の Red test を追加する
-- [ ] P3: `/privacy` page を Green 実装する
-- [ ] P4: Footer link を Red/Green 実装する
-- [ ] P5: register link を Red/Green 実装する
-- [ ] P6: settings link を Red/Green 実装する
-- [ ] P7: Refactor と対象 test を実行する
-- [ ] P8: 新規画面固有の browser/A11Y を確認する
-- [ ] P9: frontend 最終品質 gate を実行する
-- [ ] P10: plan/progress を実態へ同期する
+- [x] P1: 実装入力 gate と data/provider inventory を確定する
+- [x] P2: privacy page の Red test を追加する
+- [x] P3: `/privacy` page を Green 実装する
+- [x] P4: Footer link を Red/Green 実装する
+- [x] P5: register link を Red/Green 実装する
+- [x] P6: settings link を Red/Green 実装する
+- [x] P7: Refactor と対象 test を実行する
+- [x] P8: 新規画面固有の browser/A11Y を確認する
+- [x] P9: frontend 最終品質 gate を実行する
+- [x] P10: plan/progress を実態へ同期する
+
+P8 では未認証 direct navigation、320px、desktop、200% zoom 相当の 640 CSS px、light/dark、見出し構造、fragment 到達を確認した。in-app browser の Tab/Enter 自動操作では focus 移動を再現できなかったため、native anchor と `focus-visible` の実装・component contract を確認し、実 keyboard による横断確認は R10 へ残す。
 
 ```text
 タスクID	タスク内容	ファイル・対象	優先度
@@ -354,43 +356,71 @@ npm run build
 
 ## R3 完了条件
 
-- [ ] `/privacy` が `(app)` 共通 layout 配下の認証不要 route として実装される。
-- [ ] account、利用目的、browser storage/Cookie、外部 service、保持、削除、監査、backup、問い合わせ、改定を実態どおり説明する。
-- [ ] 運営主体、問い合わせ先、発効日/version、provider、監査/backup 文言に placeholder がない。
-- [ ] Footer、register、settings の導線が component test で固定される。
-- [ ] privacy page と新規 link の responsive・keyboard・theme 基本確認が成功する。
-- [ ] frontend 全 test、lint、format check、Svelte check、production build が成功する。
-- [ ] 対象ファイル一覧、task checkbox、実変更、TDD結果を本計画へ同期する。
-- [ ] `docs/05_progress.md` の R3 だけを完了へ更新し、R4/R10/R12/R16 を未完了のまま維持する。
+- [x] `/privacy` が `(app)` 共通 layout 配下の認証不要 route として実装される。
+- [x] account、利用目的、browser storage/Cookie、外部 service、保持、削除、監査、backup、問い合わせ、改定を実態どおり説明する。
+- [x] 運営主体、問い合わせ先、発効日/version、provider、監査/backup 文言に placeholder がない。
+- [x] Footer、register、settings の導線が component test で固定される。
+- [x] privacy page と新規 link の responsive・native link/focus contract・theme 基本確認が成功する。実 keyboard の横断確認は R10 で行う。
+- [x] frontend 全 test、lint、format check、Svelte check、production build が成功する。
+- [x] 対象ファイル一覧、task checkbox、実変更、TDD結果を本計画へ同期する。
+- [x] `docs/05_progress.md` の R3 だけを完了へ更新し、R4/R10/R12/R16 を未完了のまま維持する。
 
-## 実装完了時の記録
-
-R3 完了時に次を追記する。
-
-```markdown
 ## 実装完了
 
-- 完了日: YYYY-MM-DD
+- 完了日: 2026-07-22
 - 実装ブランチ: feature/privacy-policy
-- PR: #N
+- PR: 作成前（本文確認後に作成）
 
 ### TDD 記録
 
-- Red: 対象 test と意図した失敗理由
-- Green: 対象 test の成功件数
-- Refactor: 関連 test と format 結果
-- 最終品質 gate: test/lint/format:check/check/build の結果
-- browser: viewport、zoom、theme、keyboard、direct navigation の結果
+- Red:
+  - privacy page: `+page.svelte` が存在しないため意図どおり失敗。
+  - Footer: `/privacy` link が存在しないため追加した 1 test が失敗。
+  - register: 既存 3 test は成功し、privacy link の追加 test だけが失敗。
+  - settings: 既存 20 test は成功し、削除説明 link の追加 test だけが失敗。
+- Green:
+  - privacy page 9/9、Footer 1/1、register 4/4、settings 21/21 が成功。
+- Refactor:
+  - 利用者向け表現、見出し階層、focus style、mobile 見出しを整理。
+  - 対象 4 test file、合計 35/35 が成功。
+  - `npm run format` を適用し、`git diff --check` が成功。
+- 最終品質 gate:
+  - `npm run test:run`: 56 file、592 test が成功。
+  - `npm run lint`: 成功。
+  - `npm run format:check`: 成功。
+  - `npm run check`: 0 error、0 warning。
+  - `npm run build`: Vercel adapter を含む production build が成功。
+- browser:
+  - 未認証で `/privacy` を直接開き、HTTP 200、認証 redirect なしを確認。
+  - 1280x720 と 320x720 で横 overflow なし、`h1` 1つと論理的な `h2` 順序を確認。
+  - 320px で見出し末尾が改行されたため `text-2xl sm:text-3xl` へ修正し、1行表示を再確認。
+  - 200% zoom は in-app browser で倍率操作できなかったため、1280px の 200% 相当となる 640 CSS px で reflow と横 overflow なしを確認。
+  - light/dark の両 theme で表示と横 overflow、console error/warning なしを確認。
+  - `/privacy#scope` と `/privacy#account-deletion` の fragment 到達、および見出しが固定 Header に隠れないことを確認。
+  - register 内の link が submit より前にあり、Footer link とともに `/privacy` へ遷移することを確認。
+  - in-app browser の Tab/Enter 自動操作では focus 移動を再現できなかった。native anchor、`focus-visible` style、component contract は確認し、実 keyboard の横断確認は R10 に残した。
 
 ### 計画からの変更点
 
-- 変更がなければ「なし」
+- 320px の実表示で見出し末尾が折り返されたため、mobile の `h1` を `text-2xl`、`sm` 以上を `text-3xl` にした。
+- 200% zoom は 640 CSS px の等価 reflow 確認で代替し、制約を確認記録へ明記した。
+- R3 の keyboard 基本確認は native link/focus contract までとし、実 keyboard を使う主要画面横断確認は当初計画どおり R10 に残した。
+- 作業開始前に `origin/develop` の PR #130 までを取り込み、backup 文書のマージ済み変更を保持した。
 
 ### 実際の変更ファイル
 
-| ファイル | 変更種別  | 内容 |
-| -------- | --------- | ---- |
-| `...`    | 新規/修正 | ...  |
+| ファイル                                                   | 変更種別 | 内容                                                        |
+| ---------------------------------------------------------- | -------- | ----------------------------------------------------------- |
+| `frontend/src/routes/(app)/privacy/+page.svelte`           | 新規     | 公開 privacy page、head metadata、安定 section ID           |
+| `frontend/src/routes/(app)/privacy/privacy-page.test.ts`   | 新規     | 内容、section、head、provider link、placeholder 禁止の 9 test |
+| `frontend/src/lib/components/Footer.svelte`                | 修正     | `/privacy` link を追加                                      |
+| `frontend/src/lib/components/Footer.svelte.test.ts`        | 新規     | Footer の privacy link contract                             |
+| `frontend/src/routes/register/+page.svelte`                | 修正     | submit 前の privacy link を追加                             |
+| `frontend/src/routes/register/register-page.test.ts`       | 修正     | privacy link contract を追加                                |
+| `frontend/src/routes/(app)/settings/+page.svelte`          | 修正     | 退会警告近くへ account deletion の fragment link を追加     |
+| `frontend/src/routes/(app)/settings/settings-page.test.ts` | 修正     | 既存警告と fragment link の共存を検証                       |
+| `docs/05_progress.md`                                      | 修正     | R3 と対応する `/privacy` 項目だけを完了へ更新               |
+| `docs/plans/privacy-policy/plan.md`                        | 修正     | 確定入力、TDD、品質 gate、browser、実変更を同期             |
 
 ### 後続 task
 
@@ -398,4 +428,3 @@ R3 完了時に次を追記する。
 - R10: 横断 responsive/A11Y
 - R12: staging 主要導線
 - R16: production smoke
-```
