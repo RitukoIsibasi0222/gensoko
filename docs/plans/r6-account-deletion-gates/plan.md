@@ -60,7 +60,7 @@ R6 は次のすべてを満たした時点で完了とする。
 **`backend/src/jobs/stagingAccountDeletionPerformance.ts`**
 
 - `getStagingAccountDeletionPreview(...)` — 最大 session/answer 件数、残存 fixture、Element 前提を read-only 取得する。
-- `calculateAccountDeletionPerformanceThresholdMs(platformTimeoutMs): number` — `min(timeout * 0.5, 5,000)` の基準を返す。
+- `calculateAccountDeletionPerformanceThresholdMs(platformRequestTimeoutMs): number` — `Math.min(Math.floor(platformRequestTimeoutMs * 0.5), 5_000)` の基準を返す。
 - `runStagingAccountDeletionPerformance(...)` — synthetic 所有 row を使って実 service 経路の削除時間を測る。
 
 **`frontend/e2e/production-config.ts`**
