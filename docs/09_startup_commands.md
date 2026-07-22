@@ -196,7 +196,7 @@ env \
 | staging     | `Staging Account Data Deletion`  | `dry-run` / `execute`                                   | `develop`、staging固定、execute flag、確認文字列                                                        |
 | production  | `Production Database Operations` | `account-deletion-dry-run` / `account-deletion-execute` | `develop`、production固定、24時間以内のbackup・dry-run、execute flag、確認文字列、承認者、change record |
 
-- workflowは実装済みだが実環境では未実行である。staging executeはT35で明示承認を得てから行い、T1Bのprivacy・監査保持・削除replay・本番cleanup体制が承認されるまでproduction executeを行わない
+- workflowは実装済みだが実環境では未実行である。privacy・監査保持・backup境界・全損時replayの残存リスクはR4で2026-07-22に承認済みである。staging executeはT35で明示承認を得てから行い、production cleanupの実行者・承認者・実行時間帯・通知先など残るT1B gateが確定するまでproduction executeを行わない
 - staging dry-run/executeはT35、production dry-run/executeはT38のタスク境界で、`docs/11_deployment.md`のrunbookに従って実行する
 
 ### T33 staging expand migration・cascade性能確認

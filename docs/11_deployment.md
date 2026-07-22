@@ -395,7 +395,8 @@ DBを即時に巻き戻す前提にはしない。まず直前のアプリケー
 - stagingでexpand migration、削除性能、本人退会・管理者強制退会・削除後auth・管理UIを確認している
 - staging legacy cleanupでdry-run、execute、実行後0件、再実行0件を確認している
 - Phase 2 backendとPhase 4 frontendを同じrelease windowで切り替え、旧soft-delete instanceをdrainできる
-- T1Bのプライバシーポリシー、監査内部IDの正式保持、backup境界、全損時の削除replay方針、本番cleanup担当者・承認者・通知先が承認済みである
+- R4のプライバシーポリシー、監査内部IDの正式保持、backup境界、全損時の削除replay残存リスクが2026-07-22に承認済みである
+- production cleanupの実行者・承認者・実行時間帯・通知先など、残るT1B gateが実行前に別途確定・承認されている
 - production cleanup前の24時間以内の暗号化backupとdry-run Artifactを確認できる
 
 ### Environment設定
@@ -490,9 +491,28 @@ guard SQLは`backend/prisma/contract-migrations`へ隔離され、通常の`pris
 
 - アプリケーションを旧versionへ戻しても、commit済みの物理削除User・所有rowは復元されない。障害時は新規削除を停止し、未処理batchだけを保留する
 - backup復元は現在のproductionへ直接上書きせず、isolated projectで行う。復元dataにはbackup取得時点の削除対象Userが含まれる可能性がある
-- isolated restore後に削除済みUserを再削除するreplay sourceと手順はT1Bで未承認である。T42のrestore drill完了前に、復元を完全削除保証済みと判断しない
+- 現行production DBが読める場合は、backup取得後の削除成功監査をreplay sourceとして削除済みUserを再削除する。現行production DBも全損した場合のexternal replay sourceは未導入で、完全な再削除を保証できない残存リスクを2026-07-22に正式承認した
+- T42のrestore drill完了前に復元を完全削除保証済みと判断しない。削除済みdataが一時的に復元され得ることを前提に、再削除と切替前承認が完了するまでtrafficを流さない
 - cleanup後backupの取得とcleanup前Artifactの7日失効確認はT41で行う。期限前のArtifactを手動削除せず、保持境界を運用記録へ残す
 - 誤実行時はflagを`false`へ戻し、対象件数・実行時刻・run URL・承認記録だけを保存する。無承認のDB復元や、削除済み個人情報の別DBへの抽出を行わない
+
+### R4 privacy・監査・backup承認記録
+
+| 項目           | 正式値・承認内容                                                                                                                          |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 承認者         | プロダクトオーナー `RitukoIsibasi0222`                                                                                                    |
+| 承認日         | 2026-07-22                                                                                                                                |
+| 運営主体       | `rituko.llink`                                                                                                                            |
+| 問い合わせ先   | `isibasiwork@gmail.com`                                                                                                                   |
+| 制定日・発効日 | 2026年8月1日                                                                                                                              |
+| 初版バージョン | `1.0`                                                                                                                                     |
+| 外部サービス   | Vercel、Cloudflare、Supabase、Resend、GitHub Actions・Artifacts                                                                           |
+| 監査           | セキュリティインシデント・管理者操作の相関調査、公開API・UIへの非提供、運用上必要な担当者へのアクセス限定、365日保持                      |
+| backup         | AES-256暗号化archiveとSHA-256 checksumだけをArtifactへ保存し、最大7日保持。平文dumpは保存しない                                           |
+| 全損時replay   | external replay sourceは未導入で完全な再削除を保証できない。隔離復元、確認できる削除記録の再適用、最大7日の失効境界を残存リスクとして承認 |
+| 改定           | 制定日は維持し、改定日・発効日・バージョンを更新して `/privacy` で告知                                                                    |
+
+この承認はproduction deploy、backup日次化、restore drill、production cleanupの実行許可ではない。各操作は対応するRタスクと個別承認を満たしてから実施する。
 
 ---
 

@@ -68,18 +68,21 @@ Gensokoを、商用サービスではなく技術力を示すポートフォリ�
 - productionでrefresh tokenを利用するには、frontend/APIのsite境界と`SameSite=Strict` Cookieが両立するhostname構成を確認する。stagingの`vercel.app`→`workers.dev` cross-site構成でSPA遷移が通ることを、reload後のrefresh成功証拠の代替にしない。
 - 秘密値、PII、token、Cookie、Authorization、DB URLを文書、PR、logへ記録しない。
 
-## 対象ファイル一覧
+## 対象ファイル一覧（release計画全体）
 
-| ファイル                                            | 変更種別 | 内容                                                              |
-| --------------------------------------------------- | -------- | ----------------------------------------------------------------- |
-| `docs/plans/portfolio-release-v0-1/plan.md`         | 新規     | v0.1範囲、release blocker、deferred、rollout/rollback、最終タスク |
-| `docs/plans/dark-mode/plan.md`                      | 新規     | ダークモードのTDD実装計画                                         |
-| `docs/plans/privacy-policy/plan.md`                 | 新規     | `/privacy`と導線・承認の実装計画                                  |
-| `docs/05_progress.md`                               | 修正     | 公開前、公開後、条件付き対象外、外部確認待ちの4区分を追加         |
-| `docs/11_deployment.md`                             | 修正     | Admin E2E成功証跡とv0.1計画への参照を追加                         |
-| `docs/plans/staging-app-deployment/plan.md`         | 修正     | SD16成功runとタスク状態を同期                                     |
-| `docs/plans/account-data-complete-deletion/plan.md` | 修正     | T34のstaging Admin E2E成功を同期                                  |
-| `docs/plans/backup-resilience/plan.md`              | 修正     | 日次化をv0.1必須、retry・鮮度監視・restore drillを公開後へ分離    |
+| ファイル                                             | 変更種別 | 内容                                                              |
+| ---------------------------------------------------- | -------- | ----------------------------------------------------------------- |
+| `docs/plans/portfolio-release-v0-1/plan.md`          | 新規     | v0.1範囲、release blocker、deferred、rollout/rollback、最終タスク |
+| `docs/plans/dark-mode/plan.md`                       | 新規     | ダークモードのTDD実装計画                                         |
+| `docs/plans/privacy-policy/plan.md`                  | 新規     | `/privacy`と導線・承認の実装計画                                  |
+| `docs/05_progress.md`                                | 修正     | 公開前、公開後、条件付き対象外、外部確認待ちの4区分を追加         |
+| `docs/02_security.md`                                | 修正     | R4の監査・backup・全損時replay承認をsecurity方針へ同期            |
+| `docs/09_startup_commands.md`                        | 修正     | R4承認後も残るproduction cleanup gateを同期                       |
+| `docs/11_deployment.md`                              | 修正     | Admin E2E成功証跡とv0.1計画への参照を追加                         |
+| `docs/plans/audit-log-production-operations/plan.md` | 修正     | 監査公開文面のR4再承認とPR #95 mergeを同期                        |
+| `docs/plans/staging-app-deployment/plan.md`          | 修正     | SD16成功runとタスク状態を同期                                     |
+| `docs/plans/account-data-complete-deletion/plan.md`  | 修正     | T34のstaging Admin E2E成功を同期                                  |
+| `docs/plans/backup-resilience/plan.md`               | 修正     | 日次化をv0.1必須、retry・鮮度監視・restore drillを公開後へ分離    |
 
 ## staging synthetic Admin E2Eの解決記録
 
@@ -116,7 +119,7 @@ Admin role反映待ち、見出し文言、10秒timeout、API停止が原因で�
 | login・refresh・logout                      | 進行中     | production hostname/Cookie構成、reload・期限更新smoke                    | login、token rotation、logout後拒否、reload後refresh成功                                                  | auth tests、browser smoke                      | `staging-app-deployment`                          |
 | 本人退会の物理削除                          | 進行中     | 残るstaging/production gate、production deploy後smoke                    | Userと所有rowを物理削除し、旧auth拒否・再登録契約を満たす                                                 | 専用DB、staging、本番smoke                     | `account-data-complete-deletion`                  |
 | ダークモード                                | 完了       | なし                                                                     | OS設定追従、明示toggle、保存、主要画面で読める                                                            | frontend 580 test、browser、keyboard、contrast | `dark-mode`                                       |
-| `/privacy`                                  | 未着手     | 文言決定、公開route、footer/register/settings導線                        | 未確定事項を残さず公開し、削除・監査・backup境界を正確に説明                                              | content contract、browser、owner確認           | `privacy-policy`                                  |
+| `/privacy`                                  | 完了       | R12のstaging回帰とR16のproduction smokeは別タスクで実施                  | 未確定事項を残さず公開し、削除・監査・backup境界を正確に説明                                              | content contract、browser、owner確認           | `privacy-policy`                                  |
 | 基本レスポンシブ                            | 進行中     | 主要画面を320px以上で再確認                                              | 横スクロール・操作不能・見切れがない                                                                      | Playwright/manual viewport                     | 本計画                                            |
 | 基本キーボード/A11Y                         | 進行中     | register/login/game/settings/admin/privacy/themeを確認                   | focus可視、操作完結、alert/status、見出し順が成立                                                         | component test、keyboard smoke                 | 各UI計画                                          |
 | 認証・ゲーム送信APIのアプリレベルrate limit | 進行中     | staging実HTTP 429/503、production DO binding/secret                      | productionでmemory fallbackせず、policyどおり制限                                                         | Workers test、staging/prod実HTTP               | `api-rate-limit-production`                       |
@@ -307,8 +310,8 @@ backendでは少なくともHono、Nodemailer、Prisma toolchain経由の`@hono/
 
 - [x] R1: Admin E2E修正後runを記録する
 - [x] R2: ダークモードをTDD実装する
-- [ ] R3: `/privacy`をTDD実装する
-- [ ] R4: privacy・監査・backup・問い合わせ先を承認する
+- [x] R3: `/privacy`をTDD実装する
+- [x] R4: privacy・監査・backup・問い合わせ先を承認する
 - [ ] R5: 認証・refreshのproduction構成を確定する
 - [ ] R6: 完全削除の残るv0.1 gateを完了する
 - [ ] R7: app rate limitの実環境gateを完了する
@@ -349,6 +352,66 @@ R16	production smokeを実施	production	高
 R17	release recordと進捗を同期	docs	中
 R18	公開後タスクをissue・計画へ引き継ぐ	docs・issues	中
 ```
+
+## R4 正式承認記録
+
+- 承認者: プロダクトオーナー `RitukoIsibasi0222`
+- 承認日: 2026-07-22
+- 承認対象: R3で実装した `/privacy` の公開文面、監査ログ、backup・restore、問い合わせ先、改定方針
+
+### R4 対象ファイル一覧
+
+| ファイル                                             | 変更種別 | 内容                                            |
+| ---------------------------------------------------- | -------- | ----------------------------------------------- |
+| `docs/05_progress.md`                                | 修正     | R3、R4、PR #95、T1Bの進捗を同期                 |
+| `docs/02_security.md`                                | 修正     | 監査、backup、全損時replayの正式承認を同期      |
+| `docs/09_startup_commands.md`                        | 修正     | R4後も残るproduction cleanup gateを同期         |
+| `docs/11_deployment.md`                              | 修正     | R4の正式値、restore境界、残存リスクを記録       |
+| `docs/plans/portfolio-release-v0-1/plan.md`          | 修正     | R3/R4完了、正式承認、対象・実変更を同期         |
+| `docs/plans/privacy-policy/plan.md`                  | 修正     | `/privacy`公開文面の正式承認を記録              |
+| `docs/plans/audit-log-production-operations/plan.md` | 修正     | 監査公開文面の再承認とPR #95 mergeを同期        |
+| `docs/plans/backup-resilience/plan.md`               | 修正     | backup正式方針と未完了の実装境界を記録          |
+| `docs/plans/account-data-complete-deletion/plan.md`  | 修正     | 問い合わせ、backup、全損時replayのT1B判断を同期 |
+
+| 項目           | 正式値・承認内容                                                                                                                                          |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 運営主体       | `rituko.llink`                                                                                                                                            |
+| 問い合わせ先   | `isibasiwork@gmail.com`                                                                                                                                   |
+| 制定日         | 2026年8月1日                                                                                                                                              |
+| 発効日         | 2026年8月1日                                                                                                                                              |
+| 初版バージョン | `1.0`                                                                                                                                                     |
+| 外部サービス   | Vercel、Cloudflare、Supabase、Resend、GitHub Actions・Artifacts                                                                                           |
+| 監査ログ       | セキュリティインシデントと管理者操作の相関調査に利用する。公開API・UIへ提供せず、運用上必要な担当者にアクセスを限定し、内部IDを含む監査rowを365日保持する |
+| backup         | AES-256で暗号化した論理backupとSHA-256 checksumだけをGitHub Actions Artifactへ保存し、最大7日保持する。平文dumpはArtifactへ保存しない                     |
+| 改定           | 制定日は維持し、改定日・発効日・バージョンを更新して本ページで告知する                                                                                    |
+
+### backup・restoreと全損時replayの承認境界
+
+- 復元は現在のproductionを直接上書きせず、隔離環境で行う。
+- 現行production DBが読める場合は、backup取得後の削除成功監査から対象内部IDをmemory上で取得し、復元DBへ再削除を適用する。内部IDをfileやlogへ出さない。
+- 現行production DBも全損した場合、backup取得後に削除された対象IDを再構成する外部replay sourceは未導入であり、完全な再削除を保証できない。
+- 復元内容には削除済みdataが一時的に含まれ得る。最大7日のArtifact失効、隔離、確認できる削除記録の再適用、切替前承認で影響を限定する。
+- 上記の完全保証できない境界を残存リスクとして2026-07-22に正式承認し、未実装のexternal ledgerを実装済みとは扱わない。
+
+### R4で完了扱いにしない項目
+
+- backupの日次化と未失効Artifact 2世代確認はR9で実施する。現時点の実装は週次backupである。
+- 全損時のexternal replay source、restore drill、通常7世代、retry・recovery・鮮度監視は未実装または未検証である。
+- production cleanup担当体制、staging/production cleanup、production deploy・smokeはR4の完了に含めない。
+
+### R4 実際の変更ファイル
+
+| ファイル                                             | 変更種別 | 内容                                            |
+| ---------------------------------------------------- | -------- | ----------------------------------------------- |
+| `docs/05_progress.md`                                | 修正     | R3、R4、PR #95、T1Bの進捗を同期                 |
+| `docs/02_security.md`                                | 修正     | 監査、backup、全損時replayの正式承認を同期      |
+| `docs/09_startup_commands.md`                        | 修正     | R4後も残るproduction cleanup gateを同期         |
+| `docs/11_deployment.md`                              | 修正     | R4の正式値、restore境界、残存リスクを記録       |
+| `docs/plans/portfolio-release-v0-1/plan.md`          | 修正     | R3/R4完了、正式承認、対象・実変更を同期         |
+| `docs/plans/privacy-policy/plan.md`                  | 修正     | `/privacy`公開文面の正式承認を記録              |
+| `docs/plans/audit-log-production-operations/plan.md` | 修正     | 監査公開文面の再承認とPR #95 mergeを同期        |
+| `docs/plans/backup-resilience/plan.md`               | 修正     | backup正式方針と未完了の実装境界を記録          |
+| `docs/plans/account-data-complete-deletion/plan.md`  | 修正     | 問い合わせ、backup、全損時replayのT1B判断を同期 |
 
 ## 品質確認
 

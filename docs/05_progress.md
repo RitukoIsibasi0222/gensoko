@@ -172,18 +172,18 @@
 - [x] bcrypt 72バイト上限の入力検証統一（UTF-8バイト数、登録・変更・リセット・管理者CLI、既存ユーザー互換性、フロント表示、72/73バイト境界テスト） — 計画書: [`docs/plans/bcrypt-password-byte-limit/plan.md`](plans/bcrypt-password-byte-limit/plan.md) / PR: #82
 - [x] セキュリティヘッダーミドルウェア（CSP/HSTS/X-Frame-Options/nosniff等） — 計画書: [`docs/plans/security-headers/plan.md`](plans/security-headers/plan.md) / PR: #84
 - [-] APIレート制限の本番設計・適用（認証系 / 一般API / `POST /game/sessions`） — 計画書: [`docs/plans/api-rate-limit-production/plan.md`](plans/api-rate-limit-production/plan.md) — Hono・フロントエンド、SQLite-backed Durable Object/store adapter、local Workers runtime test、staging namespace/binding稼働まで確認済み。staging実HTTP 429/503、WAF、監視、production namespace/binding・実機確認は未実施
-- [-] 監査ログ本番運用設計（保持期間365日・退会後内部IDの同期間保持は2026-07-14承認済み。T20・公開前T21完了、T22進行中） — 計画書: [docs/plans/audit-log-production-operations/plan.md](plans/audit-log-production-operations/plan.md)
+- [-] 監査ログ本番運用設計（保持期間365日・退会後内部IDの同期間保持は2026-07-14承認済み。T20・公開前T21・T22完了。公開後回帰と残るrelease gateを継続） — 計画書: [docs/plans/audit-log-production-operations/plan.md](plans/audit-log-production-operations/plan.md)
   - [x] T20: production容量監視・通知先・暗号化backup・migration gateを実環境で確認
   - [x] T21: 2026-07-14 22:54 JST〜2026-07-21 22:55 JSTの公開前baselineを確認。観測開始時と2026-07-22 03:58 JSTの終了後確認run時はいずれも監査row 0件、7日増加量0件
   - [x] 自動test: 10,000件上限、上限後の残件通知、stable concurrency group、cleanup失敗時の非0終了
   - [ ] 実環境運用確認: schedule/manualのqueue動作、Actions失敗通知の受信、retention変更前dry-run
   - [ ] 本番アプリ公開後の監査回帰・実負荷baseline: LOGIN success/failure、password change/reset、admin操作、本人・管理者退会、API status/body/Cookie
-  - [-] T22: 7日baselineと残課題を記録済み。完了記録用docs PR #95のreview・develop merge待ち
+  - [x] T22: 7日baselineと残課題を記録したdocs PR #95が2026-07-22にdevelopへmerge済み
 - [-] 退会時の個人情報・学習データ完全削除方針（本人退会・管理者強制退会・既存soft-deleted userの移行） — 計画書: [docs/plans/account-data-complete-deletion/plan.md](plans/account-data-complete-deletion/plan.md) — 監査ログ保持とは分離した本番公開前ブロッカー（実装中・本番公開gate未完了）
   - [x] 実装計画・現行soft delete・User配下のcascade対象・不足indexを確認
   - [-] Phase 0: privacy・監査内部ID・backup・再登録・削除replay・性能基準・本番cleanup体制を決定（T1A確定、T1B継続）
     - [x] T1A: 物理削除、監査成功action、再登録、backup境界、replay block、同期削除性能基準の実装契約を確定
-    - [-] T1B: 監査保持365日・内部ID同期間保持は2026-07-14承認済み。privacy問い合わせ先、本番cleanup体制、全損時replayの最終判断を本番公開前gateとして継続
+    - [-] T1B: 監査保持365日・内部ID同期間保持は2026-07-14承認済み。privacy問い合わせ先、backup境界、全損時replayの残存リスクは2026-07-22承認済み。本番cleanup体制など残るgateを継続
   - [-] Phase 1: cascade/index契約test、expand index migration、専用DB・staging検証
   - [x] Phase 2: 共通Serializable transaction、本人退会・管理者強制退会の物理削除、成功監査、cleanup CLI・workflow
     - [x] T5〜T9: 共通Serializable transaction、本人退会の物理削除、last-admin、成功監査
@@ -219,22 +219,22 @@
   - [ ] Phase 6: cleanup後backup、旧Artifactの7日失効、isolated restore drill・削除replay
   - [-] Phase 7: T43のtable lock付き隔離guard SQL・contract test・ローカル専用DB fail/success/並行insert/drop後Prisma writeを完了。staging/production適用はT44として未実施
   - [x] 2026-07-18 PR #107 review follow-up品質check: backend 887件成功・10件skip、ESLint・Prettier・TypeScript build・Prisma validate成功。deleteOnlyUserIds空配列拒否とshorthand select許容を含み、専用cascade 5件とcontract migration 5件も成功
-  - [ ] Release gate: privacy policyの問い合わせ先・backup説明、全損時replay方針、本番cleanup体制、integration・Playwright・smoke testを完了
+  - [ ] Release gate: 本番cleanup担当者・承認者・実施時間帯・通知方法、integration・Playwright・smoke testを完了（privacy・backup・全損時replay残存リスクはR4で承認済み）
 
 ### 完全削除から切り出した関連タスクの着手タイミング
 
 > Phase番号は作業パッケージを表し、そのまま本番公開順を意味しない。Phase 2のバックエンドを先に実装・staging検証してもよいが、下表の「完了期限」を満たすまで本番公開・不可逆cleanupへ進まない。
 
-| 切り出しタスク                                   | 着手タイミング                                                  | 完了期限・合流点                                                                  | 進捗管理先                                                                         |
-| ------------------------------------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| 監査ログ保持期間・退会後内部IDの承認             | Phase 0で既存案の確認を開始し、本体と並行                       | Phase 2の物理削除backendを本番公開する前                                          | [`audit-log-production-operations`](plans/audit-log-production-operations/plan.md) |
-| プライバシーポリシー `/privacy`                  | Phase 0で文言案を作り、Phase 4のUI文言確定後に実装              | Phase 2の物理削除backendを本番公開する前                                          | フェーズ11「プライバシーポリシーページ」                                           |
-| 現行DB全損時の外部削除replay source              | Phase 0で「実装」または「残余リスク承認」を決定                 | 方針決定・承認はPhase 2本番公開前。実装を選ぶ場合はPhase 6のrestore drill前に完成 | 新規計画を作成する場合は本計画からlink                                             |
-| 監査内部IDのHMAC化・退会時null化・legal hold     | 監査保持方針で必要と判断した時点                                | 必要と判断した場合はPhase 2本番公開前                                             | 監査ログ本番運用の追加計画                                                         |
-| 非同期削除queue                                  | Phase 1〜3のstaging性能計測が基準超過した場合だけ着手           | 同期削除を本番公開する前。超過時は本計画を再設計                                  | 新規計画                                                                           |
-| 匿名化済みhistorical KPI                         | 完全削除後も退会者を含む統計が必要と決まった時点                | 本機能のrelease blockerではない。Phase 7後でも可                                  | 新規計画                                                                           |
-| 管理API v2・deprecated field廃止                 | Phase 5の非参照codeが安定し、旧frontend退役条件を定義できた時点 | Phase 7のDB contract migrationとは分離し、旧asset失効後                           | 新規API version計画                                                                |
-| メール配送事業者・外部log・browser保持期間の確認 | Phase 0で調査開始                                               | `/privacy` 文言確定・本番公開前                                                   | security/privacy運用記録                                                           |
+| 切り出しタスク                                   | 着手タイミング                                                  | 完了期限・合流点                                                  | 進捗管理先                                                                         |
+| ------------------------------------------------ | --------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 監査ログ保持期間・退会後内部IDの承認             | 2026-07-14に正式承認、公開文面は2026-07-22に再承認              | R4完了。公開後回帰と残るproduction gateは継続                     | [`audit-log-production-operations`](plans/audit-log-production-operations/plan.md) |
+| プライバシーポリシー `/privacy`                  | R3で実装し、正式値を2026-07-22にR4で承認                        | R4完了。staging回帰とproduction smokeはR12/R16で実施              | [`privacy-policy`](plans/privacy-policy/plan.md)                                   |
+| 現行DB全損時の外部削除replay source              | 未導入。完全なreplayを保証できない残存リスクを2026-07-22に承認  | 方針決定はR4で完了。外部source導入とrestore drillは未実装・未検証 | [`account-data-complete-deletion`](plans/account-data-complete-deletion/plan.md)   |
+| 監査内部IDのHMAC化・退会時null化・legal hold     | 監査保持方針で必要と判断した時点                                | 必要と判断した場合はPhase 2本番公開前                             | 監査ログ本番運用の追加計画                                                         |
+| 非同期削除queue                                  | Phase 1〜3のstaging性能計測が基準超過した場合だけ着手           | 同期削除を本番公開する前。超過時は本計画を再設計                  | 新規計画                                                                           |
+| 匿名化済みhistorical KPI                         | 完全削除後も退会者を含む統計が必要と決まった時点                | 本機能のrelease blockerではない。Phase 7後でも可                  | 新規計画                                                                           |
+| 管理API v2・deprecated field廃止                 | Phase 5の非参照codeが安定し、旧frontend退役条件を定義できた時点 | Phase 7のDB contract migrationとは分離し、旧asset失効後           | 新規API version計画                                                                |
+| メール配送事業者・外部log・browser保持期間の確認 | Phase 0で調査開始                                               | `/privacy` 文言確定・本番公開前                                   | security/privacy運用記録                                                           |
 
 ### その他の品質タスク
 
@@ -270,7 +270,7 @@
 - [x] R1: Admin E2E修正後runを記録する
 - [x] R2: ダークモードをTDD実装する
 - [x] R3: `/privacy`をTDD実装する
-- [ ] R4: privacy・監査・backup・問い合わせ先を承認する
+- [x] R4: privacy・監査・backup・問い合わせ先を承認する（プロダクトオーナー `RitukoIsibasi0222`、2026-07-22承認）
 - [ ] R5: 認証・refreshのproduction構成を確定する
 - [ ] R6: 完全削除の残るv0.1 gateを完了する
 - [ ] R7: app rate limitの実環境gateを完了する
@@ -331,7 +331,7 @@
 
 ### 外部承認・実環境確認待ち
 
-- [ ] privacyの運営主体、問い合わせ先、監査正式保持期間・目的、backup/replay説明、発効日をowner承認する
+- [x] privacyの運営主体、問い合わせ先、監査正式保持期間・目的、backup/replay説明、発効日をowner承認する（2026-07-22。全損時replayの完全保証がない残存リスクを含む）
 - [ ] production hostname、same-site Cookie、CORS origin、Cloudflare DO binding/secret、rollback先を値非表示で確認する
 - [ ] 日次backup実装後にschedule runを連続成功させ、未失効Artifact 2世代以上と平文非保存を確認する
 - [ ] T33/T35とproduction完全削除gateのうち、DB空証拠で対象外にできない項目を承認付きで実行する

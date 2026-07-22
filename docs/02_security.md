@@ -264,9 +264,10 @@ X-Permitted-Cross-Domain-Policies: none
 - 削除成功監査はUser削除と同じtransactionへ保存する。監査rowにはemail・usernameを保存せず、内部User IDと削除前roleだけをSEC-008の例外保持方針に従って残す
 - 物理削除後は旧email・usernameで別User IDとして再登録できる。旧資格情報、学習履歴、監査内部IDを新Userへ自動関連付けしない
 - 既存soft-deleted User向けcleanup CLI・staging/production manual workflowは実装済みだが、実環境では未実行である。通常実行はdry-runとし、production executeは承認済みgateをすべて満たすまで行わない
-- 監査内部IDの保持期間365日・目的・承認者・承認日は2026-07-14に確定済みである。本番公開前に問い合わせ先を含むプライバシーポリシー、backup境界、全損復元時の削除replay方針、本番cleanup体制を承認・記録する
-- 暗号化backupは作成時点の削除済みdataを含む可能性がある。backup Artifactの保持・失効とisolated restore後の削除replayを確認するまで、backupからの復元を完全削除の代替と扱わない
-- T1Bは監査保持承認以外の上記運用gateが未完了であり、production公開・production cleanup・contract migrationのブロッカーである
+- 監査内部IDの保持期間365日・目的・承認者・承認日は2026-07-14に確定済みである。問い合わせ先 `isibasiwork@gmail.com`、privacy公開文面、backup最大7日、復元時再削除、全損時replayの残存リスクは2026-07-22にプロダクトオーナー `RitukoIsibasi0222`が正式承認した
+- 暗号化backupは作成時点の削除済みdataを含む可能性がある。復元は隔離環境で行い、現行DBから確認できる削除記録を再適用する。現行DBも全損した場合のexternal replay sourceは未導入で、完全な再削除を保証できない
+- 全損時replayの完全保証がない境界は残存リスクとして承認済みだが、external ledgerやrestore drillを実装・検証済みとは扱わない。backupからの復元を完全削除の代替とせず、削除済みdataが一時的に復元され得ることを開示する
+- T1Bはproduction cleanupの実行者・承認者・実行時間帯・通知先などが未確定であり、production公開・production cleanup・contract migrationのブロッカーとして継続する
 
 ---
 

@@ -307,6 +307,18 @@ Supabase Free planで運用するproduction DBの暗号化論理backupを、週�
 - [ ] `docs/09_startup_commands.md`と`docs/11_deployment.md`が実装済み運用に一致する。
 - [ ] 本計画の対象ファイル、task、設計判断、実測結果が実態に更新される。
 
+## R4 正式承認記録
+
+2026-07-22にプロダクトオーナー `RitukoIsibasi0222`が、R3の `/privacy` と本計画で定義した次のbackup・restore方針を正式承認した。
+
+- Supabaseの論理backupはAES-256で暗号化し、暗号化archiveとSHA-256 checksumだけをGitHub Actions Artifactへ保存する。
+- Artifact保持上限は7日とし、個人dataを含み得るbackupの残存期間を延長しない。
+- 復元は現在のproductionへ直接上書きせず、隔離環境で行う。復元内容には削除済みdataが一時的に含まれ得る。
+- 現行production DBが読める場合は、backup取得後の削除成功監査を信頼できる情報源として、対象内部IDをmemory上で取得し復元DBへ再削除を適用する。
+- 現行production DBも全損した場合のexternal replay sourceは未導入で、backup取得後に削除された対象IDを完全には再構成できない。この完全な再削除を保証できない境界を残存リスクとして正式承認する。
+
+本承認は方針の承認であり、実装・実環境証拠の代替ではない。現行workflowのbackupは週次であり、日次化、未失効Artifact 2世代、retry・recovery・36時間鮮度監視、通常7世代、restore drillは各taskの完了条件を満たすまで未完了とする。
+
 ## 最終タスクリスト（タブ区切り）
 
 ```text

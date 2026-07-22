@@ -204,6 +204,18 @@
 - 法的義務を断定する値ではなく、期間・目的をプライバシーポリシーへ記載して運用する。
 - 将来変更する場合は、変更前dry-runとプロダクトオーナーまたはプライバシー責任者の再承認を必須とする。
 
+### R4 公開文面の再承認
+
+2026-07-22にプロダクトオーナー `RitukoIsibasi0222`が、R3で実装した `/privacy` の監査説明を正式承認した。2026-07-14の保持期間・内部ID保持の原承認日は変更しない。
+
+- 利用目的: セキュリティインシデントおよび管理者操作の相関調査。
+- アクセス制限: 公開API・UIへ監査ログや内部IDを返さず、運用上必要な担当者に限定する。
+- 保持期間: 監査rowと内部IDを365日保持し、retention cleanupでrowごと削除する。
+- 問い合わせ先: `isibasiwork@gmail.com`。
+- backup境界: 暗号化backupに監査rowが最大7日残る場合があり、全損時replayを完全保証できない残存リスクを開示する。
+
+このR4承認は、`AUDIT_LOG_CLEANUP_ENABLED=true`への変更、公開後実負荷baseline、削除保留承認者、アカウント完全削除のproduction gateを完了させるものではない。
+
 ### source of truth
 
 - runtime値: `AUDIT_LOG_RETENTION_DAYS`。
@@ -447,7 +459,7 @@ job timeoutにはcheckout・依存関係install・Prisma Client生成も含ま�
 
 計画作成時点のsoft delete不整合は、`docs/plans/account-data-complete-deletion/plan.md`へ分離した。現在は本人退会・管理者強制退会の物理削除、所有rowのcascade、成功監査まで実装済みである。
 
-ただし、既存soft-deleted Userのcleanup、privacy問い合わせ先・backup説明、全損時replay方針、本番cleanup体制、production配備・smokeは未完了である。監査ログcleanup codeはこれらと独立して安全停止できるが、残るproduction gateが完了するまで`AUDIT_LOG_CLEANUP_ENABLED=false`を維持する。
+privacy問い合わせ先、backup説明、全損時replayの残存リスクは2026-07-22にR4で承認済みである。ただし、既存soft-deleted Userのcleanup、本番cleanup体制、production配備・smokeは未完了である。監査ログcleanup codeはこれらと独立して安全停止できるが、残るproduction gateが完了するまで`AUDIT_LOG_CLEANUP_ENABLED=false`を維持する。
 
 ## 運用責任・runbook
 
@@ -956,7 +968,7 @@ schema変更・backfillは想定しない。
 - [x] T19: stagingでdry-run・cleanup・再実行・停止を確認する（2026-07-14完了）
 - [x] T20: production容量監視・通知・backup確認を完了する（2026-07-14完了）
 - [x] T21: production初回実行と公開前7日baselineを確認する（2026-07-21完了、増加量0件）
-- [-] T22: planとprogressを実装完了へ更新し、docs PRをdevelopへmergeする（PR #95 review・merge待ち）
+- [x] T22: planとprogressを更新したdocs PR #95をdevelopへmergeする（2026-07-22 merge）
 
 ### T19 再開記録（2026-07-14）
 
