@@ -271,7 +271,7 @@
 - [x] R2: ダークモードをTDD実装する
 - [x] R3: `/privacy`をTDD実装する
 - [x] R4: privacy・監査・backup・問い合わせ先を承認する（プロダクトオーナー `RitukoIsibasi0222`、2026-07-22承認）
-- [ ] R5: 認証・refreshのproduction構成を確定する
+- [ ] R5: 認証・refreshのproduction構成を確定する — 計画書: [`production-auth-refresh`](plans/production-auth-refresh/plan.md)
 - [ ] R6: 完全削除の残るv0.1 gateを完了する
 - [ ] R7: app rate limitの実環境gateを完了する
 - [ ] R8: headers・CORS・safe error・logを最終確認する
