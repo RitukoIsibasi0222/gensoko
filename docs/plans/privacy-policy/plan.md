@@ -448,6 +448,11 @@ npm run build
   - fixture の検証全体を `try/finally` で囲み、成功・失敗にかかわらずテスト所有の 2 node を削除するよう修正した。
   - privacy 11 test と、固定 seed `1314750990508` で shuffle した frontend 全 56 file、594 test が成功した。
   - lint、format check、Svelte check 0 error/0 warning、Vercel adapter の production build が再度成功した。
+- settings link contrast review 追補:
+  - settings の privacy fragment link だけが親の `text-danger-text` を継承し、他の privacy 導線で統一した `text-action-text` を持たない不整合を確認した。
+  - settings test に `text-action-text` 必須、背景色用 `text-action` 禁止の contract を先行追加し、追加した contract だけが失敗、既存 20 test は成功した。
+  - settings link を `text-action-text` へ統一し、settings 21 test と dark mode contract 8 test の合計 29 test が成功した。
+  - frontend 全 56 file、594 test、lint、format check、Svelte check 0 error/0 warning、Vercel adapter の production build が成功した。
 
 ### 計画からの変更点
 
@@ -467,8 +472,8 @@ npm run build
 | `frontend/src/lib/components/Footer.svelte.test.ts`        | 新規     | Footer の privacy link contract                             |
 | `frontend/src/routes/register/+page.svelte`                | 修正     | submit 前の privacy link を追加                             |
 | `frontend/src/routes/register/register-page.test.ts`       | 修正     | privacy link contract を追加                                |
-| `frontend/src/routes/(app)/settings/+page.svelte`          | 修正     | 退会警告近くへ account deletion の fragment link を追加     |
-| `frontend/src/routes/(app)/settings/settings-page.test.ts` | 修正     | 既存警告と fragment link の共存を検証                       |
+| `frontend/src/routes/(app)/settings/+page.svelte`          | 修正     | 退会警告近くへ文字link用contrast tokenを使うaccount deletionのfragment linkを追加 |
+| `frontend/src/routes/(app)/settings/settings-page.test.ts` | 修正     | 既存警告、fragment link、文字link用contrast tokenの共存を検証 |
 | `frontend/src/dark-mode-contract.test.ts`                  | 修正     | 文字 link token の light/dark contrast contract を追加      |
 | `docs/05_progress.md`                                      | 修正     | R3 と対応する `/privacy` 項目だけを完了へ更新               |
 | `docs/plans/privacy-policy/plan.md`                        | 修正     | 確定入力、TDD、品質 gate、browser、実変更を同期             |
