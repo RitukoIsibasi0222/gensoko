@@ -4,7 +4,7 @@
 
 ## 概要
 
-Release Task R5「認証・refreshのproduction構成を確定する」では、Vercel frontendとCloudflare Workers APIをCookie上のsame-site、HTTP上のcross-originとして配備し、`HttpOnly`・`Secure`・`SameSite=Strict`を維持したままlogin、full reload後のrefresh、rotation、logout、旧token拒否を成立させる。
+Release Task R5「認証・refreshのproduction構成を確定する」では、Vercel frontendとCloudflare Workers APIをCookie上のsame-site、HTTPS上のcross-originとして配備し、`HttpOnly`・`Secure`・`SameSite=Strict`を維持したままlogin、full reload後のrefresh、rotation、logout、旧token拒否を成立させる。
 
 本計画は、コード変更、外部設定、production deploy、production smokeを明確に分離する。実装PRではproduction resource・DNS・Secret・DBへ触れず、review済みコードと非秘密の設定契約だけを作る。R5はコードがmergeされただけでは完了にせず、R14のpreflight、R15の承認付きdeploy、R16のproduction smokeから必要な証拠が揃った時点で完了へ更新する。
 
