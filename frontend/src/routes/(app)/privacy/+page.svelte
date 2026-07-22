@@ -45,6 +45,9 @@
     { href: '#contact', label: 'お問い合わせ' },
     { href: '#changes', label: 'ポリシーの改定' }
   ] as const;
+
+  const sectionClass =
+    'scroll-mt-24 space-y-3 rounded-sm focus:ring-2 focus:ring-focus focus:ring-offset-4 focus:outline-none';
 </script>
 
 <svelte:head>
@@ -72,7 +75,7 @@
       {#each tableOfContents as item (item.href)}
         <li>
           <a
-            class="text-action focus:ring-focus inline-block rounded-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+            class="text-action-text focus:ring-focus inline-block rounded-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
             href={item.href}
           >
             {item.label}
@@ -82,8 +85,8 @@
     </ul>
   </nav>
 
-  <section id="scope" class="scroll-mt-24 space-y-3">
-    <h2 class="text-text text-2xl font-semibold">1. 適用範囲</h2>
+  <section id="scope" tabindex="-1" aria-labelledby="scope-heading" class={sectionClass}>
+    <h2 id="scope-heading" class="text-text text-2xl font-semibold">1. 適用範囲</h2>
     <p class="text-text-muted leading-7">
       本ポリシーは、rituko.llinkが運営する元素記号学習Webアプリ「Gensoko」に適用されます。
     </p>
@@ -100,13 +103,20 @@
       </div>
       <div>
         <dt class="text-text-subtle">制定日・発効日</dt>
-        <dd class="text-text mt-1 font-medium">2026年8月1日</dd>
+        <dd class="text-text mt-1 font-medium">
+          <time datetime="2026-08-01">2026年8月1日</time>
+        </dd>
       </div>
     </dl>
   </section>
 
-  <section id="data-collected" class="scroll-mt-24 space-y-3">
-    <h2 class="text-text text-2xl font-semibold">2. 取り扱う情報</h2>
+  <section
+    id="data-collected"
+    tabindex="-1"
+    aria-labelledby="data-collected-heading"
+    class={sectionClass}
+  >
+    <h2 id="data-collected-heading" class="text-text text-2xl font-semibold">2. 取り扱う情報</h2>
     <p class="text-text-muted leading-7">Gensokoでは、次の情報を取り扱います。</p>
     <ul class="text-text-muted list-disc space-y-3 pl-6 leading-7">
       <li>
@@ -132,8 +142,8 @@
     </ul>
   </section>
 
-  <section id="purposes" class="scroll-mt-24 space-y-3">
-    <h2 class="text-text text-2xl font-semibold">3. 利用目的</h2>
+  <section id="purposes" tabindex="-1" aria-labelledby="purposes-heading" class={sectionClass}>
+    <h2 id="purposes-heading" class="text-text text-2xl font-semibold">3. 利用目的</h2>
     <ul class="text-text-muted list-disc space-y-2 pl-6 leading-7">
       <li>アカウントの登録、本人確認、ログイン状態の維持</li>
       <li>メール確認、パスワード再設定、セキュリティ上必要な連絡</li>
@@ -143,13 +153,20 @@
     </ul>
   </section>
 
-  <section id="browser-storage" class="scroll-mt-24 space-y-3">
-    <h2 class="text-text text-2xl font-semibold">4. ブラウザ保存・Cookie</h2>
+  <section
+    id="browser-storage"
+    tabindex="-1"
+    aria-labelledby="browser-storage-heading"
+    class={sectionClass}
+  >
+    <h2 id="browser-storage-heading" class="text-text text-2xl font-semibold">
+      4. ブラウザ保存・Cookie
+    </h2>
     <div class="space-y-4">
       <div class="border-border-muted bg-surface rounded-lg border p-5">
         <h3 class="text-text font-semibold">sessionStorage</h3>
         <p class="text-text-muted mt-2 leading-7">
-          ログイン中のアクセストークンと、内部ID・ユーザー名・権限をブラウザのsessionStorageへ保存します。タブを閉じたとき、ログアウト、認証更新の失敗、アカウント削除時に削除されます。
+          ログイン中のアクセストークンと、内部ID・ユーザー名・権限をブラウザのsessionStorageへ保存します。sessionStorageはページセッション単位で管理され、通常は対象のタブまたはウィンドウを閉じたときに削除されます。また、ログアウト、認証更新の失敗、アカウント削除時にも削除します。
         </p>
       </div>
       <div class="border-border-muted bg-surface rounded-lg border p-5">
@@ -162,8 +179,13 @@
     </div>
   </section>
 
-  <section id="service-providers" class="scroll-mt-24 space-y-3">
-    <h2 class="text-text text-2xl font-semibold">5. 外部サービス</h2>
+  <section
+    id="service-providers"
+    tabindex="-1"
+    aria-labelledby="service-providers-heading"
+    class={sectionClass}
+  >
+    <h2 id="service-providers-heading" class="text-text text-2xl font-semibold">5. 外部サービス</h2>
     <p class="text-text-muted leading-7">
       Gensokoの提供に必要な範囲で、次の外部サービスを利用します。各社が独自に定める保持期間や処理については、リンク先のポリシーもご確認ください。
     </p>
@@ -177,21 +199,21 @@
           <p class="text-text-muted mt-1 text-sm leading-6">{provider.data}</p>
           <a
             href={provider.privacyUrl}
-            class="text-action focus:ring-focus mt-3 inline-block rounded-sm text-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+            class="text-action-text focus:ring-focus mt-3 inline-block rounded-sm text-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
           >
-            {provider.name}のプライバシーポリシー
+            {provider.name}のプライバシーポリシー（外部サイト）
           </a>
         </li>
       {/each}
     </ul>
   </section>
 
-  <section id="retention" class="scroll-mt-24 space-y-3">
-    <h2 class="text-text text-2xl font-semibold">6. 保持期間</h2>
+  <section id="retention" tabindex="-1" aria-labelledby="retention-heading" class={sectionClass}>
+    <h2 id="retention-heading" class="text-text text-2xl font-semibold">6. 保持期間</h2>
     <ul class="text-text-muted list-disc space-y-3 pl-6 leading-7">
       <li>アカウントと学習データは、サービス利用中またはアカウント削除まで保持します。</li>
       <li>
-        認証用トークンのハッシュは、有効期限、利用、無効化、アカウント削除に応じて削除します。
+        認証用トークンには有効期限を設けており、期限切れ後は認証に使用できません。トークンのハッシュは、利用、再発行、ログアウト、アカウント削除などの処理に応じて削除または無効化します。
       </li>
       <li>
         セキュリティ上重要な操作の監査記録は、メールアドレスやユーザー名ではなく内部識別子を含む形で、アクセスを制限したうえで365日間保持します。
@@ -203,8 +225,15 @@
     </ul>
   </section>
 
-  <section id="account-deletion" class="scroll-mt-24 space-y-3">
-    <h2 class="text-text text-2xl font-semibold">7. アカウント削除</h2>
+  <section
+    id="account-deletion"
+    tabindex="-1"
+    aria-labelledby="account-deletion-heading"
+    class={sectionClass}
+  >
+    <h2 id="account-deletion-heading" class="text-text text-2xl font-semibold">
+      7. アカウント削除
+    </h2>
     <p class="text-text-muted leading-7">
       設定画面からアカウントを削除すると、プロフィール情報、認証情報、学習・ゲームデータを稼働DBから物理削除し、削除前の認証情報ではログインできなくなります。削除後は、同じメールアドレスやユーザー名が利用可能であれば再登録できます。共有の元素マスターデータは削除対象ではありません。
     </p>
@@ -213,20 +242,20 @@
     </p>
   </section>
 
-  <section id="security" class="scroll-mt-24 space-y-3">
-    <h2 class="text-text text-2xl font-semibold">8. 安全管理措置</h2>
+  <section id="security" tabindex="-1" aria-labelledby="security-heading" class={sectionClass}>
+    <h2 id="security-heading" class="text-text text-2xl font-semibold">8. 安全管理措置</h2>
     <p class="text-text-muted leading-7">
       Gensokoでは、パスワードの一方向ハッシュ化、認証用トークンのハッシュ保存、権限に基づくアクセス制御、暗号化バックアップなど、取り扱う情報に応じた安全管理措置を実施します。ただし、インターネット通信や電子的な保存について、絶対的な安全を保証するものではありません。
     </p>
   </section>
 
-  <section id="contact" class="scroll-mt-24 space-y-3">
-    <h2 class="text-text text-2xl font-semibold">9. お問い合わせ</h2>
+  <section id="contact" tabindex="-1" aria-labelledby="contact-heading" class={sectionClass}>
+    <h2 id="contact-heading" class="text-text text-2xl font-semibold">9. お問い合わせ</h2>
     <p class="text-text-muted leading-7">
       本ポリシーやデータの取扱いに関するお問い合わせは、
       <a
         href="mailto:isibasiwork@gmail.com"
-        class="text-action focus:ring-focus rounded-sm break-all hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+        class="text-action-text focus:ring-focus rounded-sm break-all hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
       >
         isibasiwork@gmail.com
       </a>
@@ -237,10 +266,10 @@
     </p>
   </section>
 
-  <section id="changes" class="scroll-mt-24 space-y-3">
-    <h2 class="text-text text-2xl font-semibold">10. ポリシーの改定</h2>
+  <section id="changes" tabindex="-1" aria-labelledby="changes-heading" class={sectionClass}>
+    <h2 id="changes-heading" class="text-text text-2xl font-semibold">10. ポリシーの改定</h2>
     <p class="text-text-muted leading-7">
-      本ポリシーを改定する場合は本ページを更新し、制定日・発効日とバージョンを更新して告知します。改定後の内容は、本ページに記載した発効日から適用します。
+      本ポリシーを改定する場合は本ページを更新し、改定日・発効日とバージョンを更新して告知します。制定日は初版の制定日として維持します。改定後の内容は、本ページに記載した発効日から適用します。
     </p>
   </section>
 </article>

@@ -244,7 +244,7 @@
         登録前に
         <a
           href="/privacy"
-          class="text-action focus:ring-focus rounded-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+          class="text-action-text focus:ring-focus rounded-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
         >
           プライバシーポリシー
         </a>

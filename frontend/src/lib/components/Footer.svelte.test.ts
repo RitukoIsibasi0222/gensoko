@@ -27,5 +27,9 @@ describe('Footer privacy navigation contract', () => {
 
     expect(link).not.toBeNull();
     expect(link?.textContent).toContain('プライバシーポリシー');
+    expect(link?.classList.contains('text-action-text')).toBe(true);
+
+    link?.focus();
+    expect(document.activeElement).toBe(link);
   });
 });

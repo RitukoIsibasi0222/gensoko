@@ -132,6 +132,7 @@ describe('dark mode source contract', () => {
       '--color-border',
       '--color-focus',
       '--color-action',
+      '--color-action-text',
       '--color-success-surface',
       '--color-warning-surface',
       '--color-danger-surface',
@@ -187,6 +188,8 @@ describe('dark mode source contract', () => {
     const contrastPairs = [
       { foreground: '--color-text', background: '--color-canvas', minimum: 4.5 },
       { foreground: '--color-text-muted', background: '--color-surface', minimum: 4.5 },
+      { foreground: '--color-action-text', background: '--color-canvas', minimum: 4.5 },
+      { foreground: '--color-action-text', background: '--color-surface', minimum: 4.5 },
       { foreground: '--color-text-inverse', background: '--color-action', minimum: 4.5 },
       { foreground: '--color-text-inverse', background: '--color-danger-solid', minimum: 4.5 },
       { foreground: '--color-success-text', background: '--color-success-surface', minimum: 4.5 },

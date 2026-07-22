@@ -299,6 +299,9 @@ describe('/settings account deletion A11Y contract', () => {
     expect(link).not.toBeNull();
     expect(link?.textContent).toContain('プライバシーポリシー');
     expect(link?.textContent).toContain('アカウント削除');
+
+    link?.focus();
+    expect(document.activeElement).toBe(link);
   });
 
   it('password空欄はpasswordだけをinvalidにしてpasswordへfocusする', async () => {

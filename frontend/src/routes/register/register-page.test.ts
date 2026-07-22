@@ -108,6 +108,7 @@ describe('/register privacy navigation contract', () => {
 
     expect(link).not.toBeNull();
     expect(link?.textContent).toContain('プライバシーポリシー');
+    expect(link?.classList.contains('text-action-text')).toBe(true);
     expect(submitButton).not.toBeNull();
     expect(
       Boolean(
@@ -116,5 +117,8 @@ describe('/register privacy navigation contract', () => {
         link.compareDocumentPosition(submitButton) & Node.DOCUMENT_POSITION_FOLLOWING
       )
     ).toBe(true);
+
+    link?.focus();
+    expect(document.activeElement).toBe(link);
   });
 });

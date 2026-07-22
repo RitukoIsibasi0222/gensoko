@@ -47,14 +47,26 @@ afterEach(async () => {
 });
 
 describe('/privacy content contract', () => {
-  it('最上位見出しを1つだけ表示し、必須sectionの安定IDを公開する', async () => {
+  it('最上位見出しを1つだけ表示し、目次から名前付きsectionへ移動できる', async () => {
     const target = await renderPage();
     const headings = target.querySelectorAll('h1');
+    const tableOfContents = target.querySelector('nav[aria-label="プライバシーポリシーの目次"]');
 
     expect(headings).toHaveLength(1);
     expect(headings[0]?.textContent).toContain('プライバシーポリシー');
     for (const id of REQUIRED_SECTION_IDS) {
-      expect(target.querySelector(`section#${id}`), id).not.toBeNull();
+      const section = target.querySelector<HTMLElement>(`section#${id}`);
+      const headingId = section?.getAttribute('aria-labelledby');
+      const link = tableOfContents?.querySelector<HTMLAnchorElement>(`a[href="#${id}"]`);
+
+      expect(section, id).not.toBeNull();
+      expect(link, id).not.toBeNull();
+      expect(section?.getAttribute('tabindex'), id).toBe('-1');
+      expect(headingId, id).toBe(`${id}-heading`);
+      expect(section?.querySelector(`#${headingId}`), id).not.toBeNull();
+
+      section?.focus();
+      expect(document.activeElement, id).toBe(section);
     }
   });
 
@@ -84,6 +96,8 @@ describe('/privacy content contract', () => {
 
     expect(retention).toContain('365日');
     expect(retention).toContain('最長7日');
+    expect(retention).toContain('期限切れ後は認証に使用できません');
+    expect(retention).not.toContain('有効期限、利用、無効化、アカウント削除に応じて削除');
     expect(deletion).toContain('稼働DB');
     expect(deletion).toContain('物理削除');
   });
@@ -98,6 +112,9 @@ describe('/privacy content contract', () => {
   it('ownerが確定した運営主体・制定日・発効日・version・問い合わせ先を表示する', async () => {
     const target = await renderPage();
     const scope = target.querySelector('#scope')?.textContent ?? '';
+    const effectiveDate = target.querySelector<HTMLTimeElement>(
+      '#scope time[datetime="2026-08-01"]'
+    );
     const contact = target.querySelector('#contact');
     const contactLink = contact?.querySelector<HTMLAnchorElement>(
       'a[href="mailto:isibasiwork@gmail.com"]'
@@ -106,6 +123,8 @@ describe('/privacy content contract', () => {
     expect(scope).toContain('rituko.llink');
     expect(scope).toContain('2026年8月1日');
     expect(scope).toContain('1.0');
+    expect(effectiveDate).not.toBeNull();
+    expect(effectiveDate?.textContent ?? '').toContain('2026年8月1日');
     expect(contactLink?.textContent).toContain('isibasiwork@gmail.com');
     expect(contact?.textContent).toContain('秘密情報');
   });
@@ -119,16 +138,30 @@ describe('/privacy content contract', () => {
       expect(link, name).not.toBeNull();
       expect(link?.textContent, name).toContain(name);
       expect(link?.textContent, name).toContain('プライバシー');
+      expect(link?.textContent, name).toContain('外部サイト');
+      expect(new URL(link?.href ?? '').protocol, name).toBe('https:');
     }
   });
 
-  it('改定時は本ページと制定日・発効日・versionを更新すると説明する', async () => {
+  it('改定時は制定日を維持し、本ページの改定日・発効日・versionを更新すると説明する', async () => {
     const target = await renderPage();
     const changes = target.querySelector('#changes')?.textContent ?? '';
 
     expect(changes).toContain('本ページ');
-    expect(changes).toContain('制定日・発効日');
+    expect(changes).toContain('改定日・発効日');
     expect(changes).toContain('バージョン');
+    expect(changes).not.toContain('制定日・発効日とバージョンを更新');
+  });
+
+  it('本文中のlinkはdark themeでも通常文字のcontrastを満たすtokenを使う', async () => {
+    const target = await renderPage();
+    const links = target.querySelectorAll<HTMLAnchorElement>('a');
+
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link.classList.contains('text-action-text'), link.textContent ?? link.href).toBe(true);
+      expect(link.classList.contains('text-action'), link.textContent ?? link.href).toBe(false);
+    }
   });
 });
 

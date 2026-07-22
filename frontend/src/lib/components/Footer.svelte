@@ -10,7 +10,7 @@
     <div>&copy; {year} Gensoko</div>
     <a
       href="/privacy"
-      class="text-action focus:ring-focus mt-2 inline-block rounded-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+      class="text-action-text focus:ring-focus mt-2 inline-block rounded-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
     >
       プライバシーポリシー
     </a>
