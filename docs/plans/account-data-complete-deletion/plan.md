@@ -123,18 +123,20 @@
    - 改善案: `USER_ACCOUNT_DELETE / SUCCESS` を追加し、`actorId = targetId`、削除前role、PIIなしで削除transactionへ含める。監査insert失敗時は削除全体をrollbackする。
    - 優先度: **High**
 
-2. **監査内部ID保持の運用説明が未完了**
-   - 指摘内容: 365日と退会後raw内部ID保持の期間・目的・承認者・承認日は2026-07-14に確定したが、利用者向け問い合わせ先とprivacy文言は未確定。
-   - 根拠: **確認できた事実**。`docs/02_security.md`、監査運用計画、`docs/11_deployment.md`に承認記録があり、privacy公開gateが残る。
-   - 影響・リスク: 再識別可能な内部IDの保持を利用者へ十分説明しないまま本番公開すると、承認済みの内部運用と対外説明が不一致になる。
-   - 改善案: 承認済みの期間・目的を変更せず、問い合わせ先を含むprivacy文言を確定・公開するまで本番公開をblockする。
+2. **監査内部ID保持の運用説明（R4で解決済み）**
+   - 計画再レビュー時点の指摘: 365日と退会後raw内部ID保持の期間・目的・承認者・承認日は2026-07-14に確定していたが、利用者向け問い合わせ先とprivacy文言は未確定だった。
+   - R4更新: 2026-07-22に、利用目的、アクセス制限、365日保持、保存する識別子、問い合わせ先を含む公開文面を正式承認した。この指摘はR4で解決済み。
+   - 根拠: **確認できた事実**。`docs/02_security.md`、監査運用計画、`docs/11_deployment.md`に承認記録がある。
+   - 影響・リスク: R4の公開文面に関するblockは解消した。本番cleanup担当者・承認者・実施時間帯・通知方法は別gateとして残る。
+   - 改善案: `/privacy` と運用文書の承認値を維持し、改定時は制定日を維持したまま改定日・発効日・versionを更新する。
    - 優先度: **High**
 
 3. **backupからの復元で削除済み個人情報が復活し得る**
    - 指摘内容: backup後に削除されたUserは、そのbackupを復元すると復活する。現行DBも失った災害では、backup後の削除IDを取得する独立sourceがない。
    - 根拠: backupが7日保持・PITRなしであること、独立削除ledgerがないことは **確認できた事実**。災害発生は **推測**。
    - 影響・リスク: 「復元時に必ず再削除する」という約束を完全には保証できない。
-   - 改善案: 現行DBが読める復元では監査actionから再削除する。現行DB全損時の外部replay sourceを導入するか、残余リスクと最長7日のbackup保持を正式承認・開示する。どちらも未確定のまま完全削除を対外表明しない。
+   - R4更新: 2026-07-22に、現行DB全損時は完全なreplayを保証できない残存リスクを正式承認した。外部replay sourceは未導入のままであり、完全な再削除を保証しない。
+   - 改善案: 現行DBが読める復元では監査actionから再削除する。全損時の外部replay source導入は将来タスクとして扱い、導入されるまでは承認済み残存リスクと最長7日のbackup保持境界を開示する。
    - 優先度: **High**
 
 ### migration・本番運用
@@ -232,18 +234,18 @@
 | production  | migrationは24時間以内の成功backupを確認し、API deploy前に `prisma migrate deploy` する。                                                   |
 | 進捗        | 完全削除は監査保持とは別の本番公開前ブロッカーとして未完了。                                                                               |
 
-### 未確認・承認待ち
+### 未確認・承認待ち（R4更新を含む）
 
-| 項目                                                          | 状態               | releaseへの影響                                 |
-| ------------------------------------------------------------- | ------------------ | ----------------------------------------------- |
-| production/stagingのlegacy soft-deleted user件数と子row数     | 未計測             | execute前dry-run必須                            |
-| 最大ユーザーのGameSession / GameAnswer件数とcascade所要時間   | 未計測             | 同期削除可否のperformance gate                  |
-| 監査保持365日・退会後raw内部ID・承認者・承認日                | 2026-07-14承認済み | privacy問い合わせ先・公開文言は引き続きblock    |
-| `BACKUP_ENCRYPTION_PASSPHRASE` 登録、初回backup/migration実績 | 2026-07-14確認済み | 値は非公開。以後もbackup gateを維持             |
-| 現行DB全損時のbackup後削除ID replay source                    | 未導入             | 完全削除の対外表明blockまたは残余リスク承認必須 |
-| メール配送事業者・アプリログ・ブラウザcacheの保持期間         | 未確認             | privacy policy文言確定block                     |
-| frontend asset/cacheの互換期間                                | 未確認             | v1互換fieldは本タスクでは削除せずdeprecated維持 |
-| username再利用のプロダクト承認                                | 未確認             | 公開前承認必須                                  |
+| 項目                                                          | 状態                                                             | releaseへの影響                                             |
+| ------------------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------- |
+| production/stagingのlegacy soft-deleted user件数と子row数     | 未計測                                                           | execute前dry-run必須                                        |
+| 最大ユーザーのGameSession / GameAnswer件数とcascade所要時間   | 未計測                                                           | 同期削除可否のperformance gate                              |
+| 監査保持365日・退会後raw内部ID・承認者・承認日                | 2026-07-14承認済み。公開文面は2026-07-22再承認済み               | R4の公開文面blockは解消。本番cleanup体制は別gateとして継続  |
+| `BACKUP_ENCRYPTION_PASSPHRASE` 登録、初回backup/migration実績 | 2026-07-14確認済み                                               | 値は非公開。以後もbackup gateを維持                         |
+| 現行DB全損時のbackup後削除ID replay source                    | 未導入。完全なreplayを保証できない残存リスクは2026-07-22承認済み | 完全な再削除を保証しない。外部replay source導入は将来タスク |
+| メール配送事業者・アプリログ・ブラウザcacheの保持期間         | provider境界を2026-07-22承認済み。各providerの実設定確認は未完了 | production設定確認とprivacy改定要否の判定をR14/R16で実施    |
+| frontend asset/cacheの互換期間                                | 未確認                                                           | v1互換fieldは本タスクでは削除せずdeprecated維持             |
+| username再利用のプロダクト承認                                | 未確認                                                           | 公開前承認必須                                              |
 
 ## 削除対象データ
 
@@ -334,10 +336,21 @@
 #### T1B: 本番公開前に確定する運用gate
 
 - [x] 監査内部ID保持期間365日、目的、承認者、承認日（2026-07-14）。
-- [ ] 監査内部ID保持に関する利用者向け問い合わせ先。
-- [ ] backup最長7日と復元時再削除をprivacy policy/UIへ記載する正式文言。
-- [ ] 現行DB全損時の削除replay sourceを導入するか、残余リスクを承認するかの最終判断。
+- [x] 監査内部ID保持に関する利用者向け問い合わせ先（`isibasiwork@gmail.com`、2026-07-22承認）。
+- [x] backup最大7日と復元時再削除をprivacy policy/UIへ記載する正式文言（2026-07-22承認）。
+- [x] 現行DB全損時は完全な削除replayを保証できない残存リスクを正式承認する（2026-07-22）。
 - [ ] production cleanupの実行者・承認者・実行時間帯・通知先。
+
+#### R4 正式承認の判断
+
+- 承認者: プロダクトオーナー `RitukoIsibasi0222`。
+- 承認日: 2026-07-22。
+- 現行production DBが読める復元では、backup取得後の `USER_ACCOUNT_DELETE / SUCCESS` と `ADMIN_USER_FORCE_DELETE / SUCCESS` を再削除の情報源にする。
+- 現行production DBも全損した場合、external replay sourceは未導入であり、backup取得後に削除された対象IDの完全な再構成を保証できない。
+- 復元は隔離環境で行い、削除済みdataが一時的に含まれ得ること、確認できる削除記録を再適用すること、Artifactが最大7日で失効することを公開・運用文書へ記録する。
+- 上記を残存リスクとして承認するが、external ledgerやT42のrestore drillを実装・検証済みとは扱わない。
+
+R4でprivacy・backup・replay判断は完了したが、production cleanup体制が未確定のためT1B全体は進行中のまま維持する。
 
 ## 対象ファイル一覧
 
@@ -786,7 +799,7 @@ Cookie:
     - 根拠: 既存logical backup全体から個別rowだけを安全に除去できない。
 
 22. **全損時replay gap**
-    - 選択: external source導入または残余リスクの正式承認をrelease gateにする。
+    - 選択: 2026-07-22に完全なreplayを保証できない残余リスクを正式承認し、external sourceは未導入の後続課題として残す。
     - 根拠: 現行DBも失うとbackup後の削除actionを取得できない。
 
 23. **同期削除**
@@ -994,7 +1007,7 @@ productionは既存 `.github/workflows/production-database.yml` に `account-del
 
 ### 現行DB全損時の制約
 
-現行DBも読めない場合、backup後に削除されたtarget IDを現行設計だけでは再構成できない。同期的・暗号化済みの外部削除ledgerを別設計するか、最大7日の隔離復元リスクを正式承認・開示する。未決定なら本番公開と「backupを含む完全削除」の対外表明をblockする。通常のAuditLogは外部ledgerの代替ではない。
+現行DBも読めない場合、backup後に削除されたtarget IDを現行設計だけでは再構成できない。通常のAuditLogは外部ledgerの代替ではない。2026-07-22に、最大7日の隔離復元リスクと完全な再削除を保証できない境界をプロダクトオーナー `RitukoIsibasi0222`が正式承認した。この承認によりR4の方針判断は完了するが、external ledgerが実装されたことにはならない。復元時は隔離、確認できる削除記録の再適用、切替前承認を必須とし、「backupを含む完全削除」を保証済みとは対外表明しない。
 
 ## リリース・移行方針
 
@@ -1151,7 +1164,7 @@ application rollbackは削除済み個人データを復元する権限を意味
 | T45 | release gate・plan完了・PR               | docs/GitHub           | T1B,T44          | High   |
 
 - [x] T1A: コード実装に必要な削除契約を確定する
-- [ ] T1B: 本番運用・privacy・replay gateを正式承認する
+- [-] T1B: privacy・backup・replay残存リスクは2026-07-22承認済み。production cleanup体制の確定を継続する
 - [x] T2: `docs/05_progress.md` を実装準備中へ更新する
 - [x] T3: schema cascade/index contract Red testを追加する
 - [x] T4: expand index schema/migrationを実装する

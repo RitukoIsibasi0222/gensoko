@@ -39,15 +39,15 @@ R3 の Green 実装前に、下記「実装入力 gate」の具体値を owner �
 
 ## 現行実装の確認結果
 
-- `/privacy` route と privacy 文言は未実装である。
-- `Footer.svelte` は copyright だけを表示し、`(app)` route group にだけ配置されている。
-- `/register` は `(app)` の外側にあるため Footer がなく、登録 form 近傍へ直接 link が必要である。
-- `/settings` には、稼働 DB から profile・認証情報・学習データを物理削除する既存警告がある。privacy link はこの警告の近くに置く。
+- `/privacy` route と privacy 文言は `(app)` route group 配下へ実装済みで、未認証の直接表示を確認済みである。
+- `Footer.svelte` には `/privacy` linkを実装済みで、component testで固定している。
+- `/register` は `(app)` の外側にあるため、登録 form のsubmit前へ `/privacy` linkを実装済みである。
+- `/settings` の既存削除警告近くには `/privacy#account-deletion` linkを実装済みである。
 - DB は username、email、password hash、role、認証状態・login 状態、token hash、有効期限、苦手元素、game session/answer、問題セット、統計、監査内部 ID 等を保持する。
 - access token と `id`・`username`・`role` は browser の `sessionStorage` に保存する。refresh token は HttpOnly Cookie、DB では SHA-256 hash と有効期限を保存する。
 - 監査 row は email/username ではなく内部 ID を含み、正式保持期間は 365 日である。
-- 現行の account deletion 計画は、稼働 DB の物理削除、監査内部 ID の期限付き例外、暗号化 backup の最長 7 日境界、全損時の削除 replay 未決定リスクを分けている。
-- staging では Vercel、Cloudflare Workers/Durable Objects、Supabase、Resend を使用済みである。production の実利用構成は R4/R14 の確認前に確定扱いしない。
+- 現行の account deletion 計画は、稼働 DB の物理削除、監査内部 ID の期限付き例外、暗号化 backup の最大 7 日境界を分けている。全損時の完全な削除 replayを保証できない境界は2026-07-22に残存リスクとして正式承認し、external replay sourceは未導入のまま明記している。
+- staging では Vercel、Cloudflare Workers/Durable Objects、Supabase、Resend を使用済みである。Vercel、Cloudflare、Supabase、Resend、GitHub Actions・Artifactsをv0.1の外部サービス一覧としてR4で承認したが、production配備済みとは扱わずR14/R15の実環境確認を残す。
 
 ## 前提条件・依存関係
 
@@ -101,31 +101,31 @@ R3 の Green 実装前に、下記「実装入力 gate」の具体値を owner �
 
 R3 の page 実装を開始する前に、次を具体値として決定する。値を決めずに仮実装して完了扱いにしない。
 
-| 決定事項                     | 現状                                                                 | R3 の開始条件                                 | R4 の役割                          |
-| ---------------------------- | -------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------- |
-| 運営主体の表示名             | `rituko.llink` で確定                                                | 公開可能な具体名を受領                        | 表示の妥当性を正式承認             |
-| 問い合わせ窓口               | `isibasiwork@gmail.com` で確定                                       | 実際に受信・対応できる URL またはメールを受領 | 対応責任者・運用を正式承認         |
-| 発効日・version              | 制定日・発効日 `2026年8月1日`、version `1.0` で確定                  | 実日付と version を受領                       | release 日程との整合を正式承認     |
-| 監査内部 ID の利用者向け説明 | security 目的、access 制限、365 日保持を説明する文案で確定           | 目的、access 範囲、保持期間の文案を受領       | 公開文言を正式承認                 |
-| backup/restore 説明          | 暗号化 backup は最長 7 日保持し、復元時の削除反映境界も説明して確定 | 現時点の制約を隠さない具体文案を受領          | 残余リスクと運用を正式承認         |
-| production provider 一覧     | Vercel / Cloudflare / Supabase / Resend / GitHub Actions・Artifacts | v0.1 で利用予定の一覧と役割を受領             | 配備構成と privacy link を正式承認 |
+| 決定事項                     | 現状                                                                         | R3 の開始条件                                 | R4 の役割                          |
+| ---------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------- |
+| 運営主体の表示名             | `rituko.llink` で確定                                                        | 公開可能な具体名を受領                        | 表示の妥当性を正式承認             |
+| 問い合わせ窓口               | `isibasiwork@gmail.com` で確定                                               | 実際に受信・対応できる URL またはメールを受領 | 対応責任者・運用を正式承認         |
+| 発効日・version              | 制定日・発効日 `2026年8月1日`、version `1.0` で確定                          | 実日付と version を受領                       | release 日程との整合を正式承認     |
+| 監査内部 ID の利用者向け説明 | security 目的、access 制限、365 日保持を説明する文案で確定                   | 目的、access 範囲、保持期間の文案を受領       | 公開文言を正式承認                 |
+| backup/restore 説明          | 暗号化 backup は最長 7 日保持し、復元時の削除反映境界も説明して確定          | 現時点の制約を隠さない具体文案を受領          | 残余リスクと運用を正式承認         |
+| production provider 一覧     | Vercel / Cloudflare / Supabase / Resend / GitHub Actions・Artifacts          | v0.1 で利用予定の一覧と役割を受領             | 配備構成と privacy link を正式承認 |
 | policy 改定の告知方法        | 本ページで告知し、制定日は維持、改定日・発効日・version は更新する方針で確定 | 実行可能な方法を受領                          | 運用責任を正式承認                 |
 
-## 対象ファイル一覧
+## 対象ファイル一覧（R3）
 
-| ファイル                                                   | 変更種別         | 内容                                                                       |
-| ---------------------------------------------------------- | ---------------- | -------------------------------------------------------------------------- |
-| `frontend/src/routes/(app)/privacy/+page.svelte`           | 新規             | 共通 Header/Footer を使う公開 privacy page、head metadata、安定 section ID |
-| `frontend/src/routes/(app)/privacy/privacy-page.test.ts`   | 新規             | DOM content contract、head、section ID、link、placeholder 禁止             |
-| `frontend/src/lib/components/Footer.svelte`                | 修正             | `/privacy` link を追加                                                     |
-| `frontend/src/lib/components/Footer.svelte.test.ts`        | 新規             | accessible name と `href` の component contract                            |
-| `frontend/src/routes/register/+page.svelte`                | 修正             | submit 前に確認できる `/privacy` link                                      |
-| `frontend/src/routes/register/register-page.test.ts`       | 修正             | privacy link の accessible name と `href`                                  |
-| `frontend/src/routes/(app)/settings/+page.svelte`          | 修正             | 削除警告近くに `/privacy#account-deletion` link                            |
-| `frontend/src/routes/(app)/settings/settings-page.test.ts` | 修正             | 削除説明 link と既存警告の共存                                             |
-| `frontend/src/dark-mode-contract.test.ts`                  | 修正             | 文字 link token の light/dark contrast contract を追加                     |
-| `docs/05_progress.md`                                      | 修正             | R3 だけを完了へ更新し、R4/R10/R12 は未完了のまま維持                       |
-| `docs/plans/privacy-policy/plan.md`                        | 修正             | TDD記録、実変更、確認結果、R3 完了を同期                                   |
+| ファイル                                                   | 変更種別 | 内容                                                                       |
+| ---------------------------------------------------------- | -------- | -------------------------------------------------------------------------- |
+| `frontend/src/routes/(app)/privacy/+page.svelte`           | 新規     | 共通 Header/Footer を使う公開 privacy page、head metadata、安定 section ID |
+| `frontend/src/routes/(app)/privacy/privacy-page.test.ts`   | 新規     | DOM content contract、head、section ID、link、placeholder 禁止             |
+| `frontend/src/lib/components/Footer.svelte`                | 修正     | `/privacy` link を追加                                                     |
+| `frontend/src/lib/components/Footer.svelte.test.ts`        | 新規     | accessible name と `href` の component contract                            |
+| `frontend/src/routes/register/+page.svelte`                | 修正     | submit 前に確認できる `/privacy` link                                      |
+| `frontend/src/routes/register/register-page.test.ts`       | 修正     | privacy link の accessible name と `href`                                  |
+| `frontend/src/routes/(app)/settings/+page.svelte`          | 修正     | 削除警告近くに `/privacy#account-deletion` link                            |
+| `frontend/src/routes/(app)/settings/settings-page.test.ts` | 修正     | 削除説明 link と既存警告の共存                                             |
+| `frontend/src/dark-mode-contract.test.ts`                  | 修正     | 文字 link token の light/dark contrast contract を追加                     |
+| `docs/05_progress.md`                                      | 修正     | R3 だけを完了へ更新し、R4/R10/R12 は未完了のまま維持                       |
+| `docs/plans/privacy-policy/plan.md`                        | 修正     | TDD記録、実変更、確認結果、R3 完了を同期                                   |
 
 `docs/02_security.md`、`docs/11_deployment.md`、`docs/04_api.md` は R3 の page/link 追加だけでは変更しない。事実差分や承認値を同期する場合は R4 の `docs:` 変更として分離する。API、DB schema、認証 store は変更対象外である。
 
@@ -468,25 +468,41 @@ npm run build
 - シニアレビューで dark theme の文字 link contrast、fragment focus、token 保持説明、日付 semantics の不足を検出し、追加 TDD で改善した。
 - 作業開始前に `origin/develop` の PR #130 までを取り込み、backup 文書のマージ済み変更を保持した。
 
-### 実際の変更ファイル
+### 実際の変更ファイル（R3）
 
-| ファイル                                                   | 変更種別 | 内容                                                        |
-| ---------------------------------------------------------- | -------- | ----------------------------------------------------------- |
-| `frontend/src/routes/(app)/privacy/+page.svelte`           | 新規     | 公開 privacy page、head metadata、安定 section ID           |
-| `frontend/src/routes/(app)/privacy/privacy-page.test.ts`   | 新規     | 内容、A11Y section、head isolation、provider link、placeholder 禁止の 11 test |
-| `frontend/src/lib/components/Footer.svelte`                | 修正     | `/privacy` link を追加                                      |
-| `frontend/src/lib/components/Footer.svelte.test.ts`        | 新規     | Footer の privacy link contract                             |
-| `frontend/src/routes/register/+page.svelte`                | 修正     | submit 前の privacy link を追加                             |
-| `frontend/src/routes/register/register-page.test.ts`       | 修正     | privacy link contract を追加                                |
+| ファイル                                                   | 変更種別 | 内容                                                                              |
+| ---------------------------------------------------------- | -------- | --------------------------------------------------------------------------------- |
+| `frontend/src/routes/(app)/privacy/+page.svelte`           | 新規     | 公開 privacy page、head metadata、安定 section ID                                 |
+| `frontend/src/routes/(app)/privacy/privacy-page.test.ts`   | 新規     | 内容、A11Y section、head isolation、provider link、placeholder 禁止の 11 test     |
+| `frontend/src/lib/components/Footer.svelte`                | 修正     | `/privacy` link を追加                                                            |
+| `frontend/src/lib/components/Footer.svelte.test.ts`        | 新規     | Footer の privacy link contract                                                   |
+| `frontend/src/routes/register/+page.svelte`                | 修正     | submit 前の privacy link を追加                                                   |
+| `frontend/src/routes/register/register-page.test.ts`       | 修正     | privacy link contract を追加                                                      |
 | `frontend/src/routes/(app)/settings/+page.svelte`          | 修正     | 退会警告近くへ文字link用contrast tokenを使うaccount deletionのfragment linkを追加 |
-| `frontend/src/routes/(app)/settings/settings-page.test.ts` | 修正     | 既存警告、fragment link、文字link用contrast tokenの共存を検証 |
-| `frontend/src/dark-mode-contract.test.ts`                  | 修正     | 文字 link token の light/dark contrast contract を追加      |
-| `docs/05_progress.md`                                      | 修正     | R3 と対応する `/privacy` 項目だけを完了へ更新               |
-| `docs/plans/privacy-policy/plan.md`                        | 修正     | 確定入力、TDD、品質 gate、browser、実変更を同期             |
+| `frontend/src/routes/(app)/settings/settings-page.test.ts` | 修正     | 既存警告、fragment link、文字link用contrast tokenの共存を検証                     |
+| `frontend/src/dark-mode-contract.test.ts`                  | 修正     | 文字 link token の light/dark contrast contract を追加                            |
+| `docs/05_progress.md`                                      | 修正     | R3 と対応する `/privacy` 項目だけを完了へ更新                                     |
+| `docs/plans/privacy-policy/plan.md`                        | 修正     | 確定入力、TDD、品質 gate、browser、実変更を同期                                   |
 
 ### 後続 task
 
-- R4: 正式承認記録
+- R4: 2026-07-22に正式承認記録を完了
 - R10: 横断 responsive/A11Y
 - R12: staging 主要導線
 - R16: production smoke
+
+## R4 正式承認記録
+
+- 承認者: プロダクトオーナー `RitukoIsibasi0222`
+- 承認日: 2026-07-22
+- 運営主体: `rituko.llink`
+- 問い合わせ先: `isibasiwork@gmail.com`
+- 制定日・発効日: 2026年8月1日
+- 初版バージョン: `1.0`
+- 外部サービス: Vercel、Cloudflare、Supabase、Resend、GitHub Actions・Artifacts
+- 監査ログ: セキュリティインシデントと管理者操作の相関調査を目的とし、公開API・UIへ提供せずアクセスを運用上必要な担当者に限定して365日保持する。
+- backup: AES-256暗号化backupとchecksumだけをArtifactへ保存し、最大7日保持する。復元時は削除済みdataが一時的に含まれ得るため、隔離環境で確認できる削除記録を再適用する。
+- 全損時replay: 現行production DBも全損した場合のexternal replay sourceは未導入で、完全な再削除を保証できない。この境界を残存リスクとして正式承認する。
+- 改定: 制定日は維持し、改定日・発効日・バージョンを更新して本ページで告知する。
+
+R3で実装した `/privacy` は上記正式値と一致しているため、R4では表示文言・component・testを変更しない。backup日次化、external replay source、restore drill、production deploy・smokeは本承認の完了範囲外であり、後続taskを未完了のまま維持する。
