@@ -198,7 +198,7 @@ async function refreshAccessToken(
     throw new AuthError(401, "無効なリフレッシュトークンです");
   }
 
-  if (record.expiresAt < new Date()) {
+  if (record.expiresAt <= new Date()) {
     // deleteMany で P2025 を回避（並行リクエストで既に削除済みの場合も安全）
     await prisma.refreshToken.deleteMany({ where: { tokenHash } });
     throw new AuthError(401, "リフレッシュトークンの有効期限が切れています");
@@ -208,6 +208,15 @@ async function refreshAccessToken(
     await prisma.refreshToken.deleteMany({ where: { tokenHash } });
     throw new AuthError(403, "アカウントが停止されています");
   }
+
+  // JWT署名失敗後にrefresh token rotationだけがcommitされる状態を避ける。
+  // DB更新前に署名を完了し、失敗時は旧tokenをそのまま再試行可能にする。
+  const now = Math.floor(Date.now() / 1000);
+  const accessToken = await sign(
+    { sub: record.user.id, role: record.user.role, iat: now, exp: now + ACCESS_TOKEN_TTL_SEC },
+    jwtSecret,
+    "HS256",
+  );
 
   // トークンローテーション: トランザクションで旧トークン削除と新トークン作成を原子的に実行
   const newRawToken = randomBytes(32).toString("hex");
@@ -224,13 +233,6 @@ async function refreshAccessToken(
       data: { userId: record.user.id, tokenHash: newTokenHash, expiresAt: newExpiresAt },
     });
   });
-
-  const now = Math.floor(Date.now() / 1000);
-  const accessToken = await sign(
-    { sub: record.user.id, role: record.user.role, iat: now, exp: now + ACCESS_TOKEN_TTL_SEC },
-    jwtSecret,
-    "HS256",
-  );
 
   return {
     accessToken,

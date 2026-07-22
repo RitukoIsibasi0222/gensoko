@@ -28,6 +28,26 @@ function isSameSiteHostname(hostname: string, registrableDomain: string): boolea
   return hostname === registrableDomain || hostname.endsWith(`.${registrableDomain}`);
 }
 
+function isValidDnsHostname(hostname: string): boolean {
+  if (hostname.length > 253) return false;
+  const labels = hostname.split(".");
+  return (
+    labels.length >= 2 &&
+    labels.every(
+      (label) =>
+        label.length >= 1 &&
+        label.length <= 63 &&
+        /^(?:[a-z0-9]|[a-z0-9][a-z0-9-]*[a-z0-9])$/.test(label),
+    )
+  );
+}
+
+function isProviderHostname(hostname: string): boolean {
+  return ["workers.dev", "vercel.app"].some(
+    (provider) => hostname === provider || hostname.endsWith(`.${provider}`),
+  );
+}
+
 function isReservedDomain(domain: string): boolean {
   return (
     domain === "localhost" ||
@@ -53,10 +73,9 @@ export function buildProductionWorkerConfig(
     !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(workerName) ||
     !workerName.includes("production") ||
     workerName.includes("staging") ||
-    !/^[a-z0-9.-]+$/.test(apiHostname) ||
-    !/^[a-z0-9.-]+$/.test(registrableDomain) ||
-    apiHostname.includes("workers.dev") ||
-    apiHostname.includes("vercel.app") ||
+    !isValidDnsHostname(apiHostname) ||
+    !isValidDnsHostname(registrableDomain) ||
+    isProviderHostname(apiHostname) ||
     !/^[0-9a-f]{32}$/.test(hyperdriveId) ||
     !/^[0-9a-f]{32}$/.test(stagingHyperdriveId) ||
     hyperdriveId === stagingHyperdriveId
@@ -80,8 +99,8 @@ export function buildProductionWorkerConfig(
     frontendUrl.search ||
     frontendUrl.hash ||
     frontendUrl.origin !== frontendOrigin ||
-    frontendUrl.hostname.includes("vercel.app") ||
-    frontendUrl.hostname.includes("workers.dev") ||
+    !isValidDnsHostname(frontendUrl.hostname) ||
+    isProviderHostname(frontendUrl.hostname) ||
     frontendUrl.hostname === apiHostname ||
     !isSameSiteHostname(apiHostname, registrableDomain) ||
     !isSameSiteHostname(frontendUrl.hostname, registrableDomain) ||

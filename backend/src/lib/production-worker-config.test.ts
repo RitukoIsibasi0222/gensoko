@@ -67,6 +67,23 @@ describe("production Worker config", () => {
     );
   });
 
+  it.each([
+    { ...INPUT, apiHostname: "api..example.com" },
+    { ...INPUT, apiHostname: "-api.example.com" },
+    { ...INPUT, apiHostname: "api.example.com." },
+    { ...INPUT, registrableDomain: ".example.com" },
+    {
+      ...INPUT,
+      apiHostname: "api.com",
+      frontendOrigin: "https://app.com",
+      registrableDomain: "com",
+    },
+  ])("DNS labelまたはregistrable domainとして不正なhostnameを拒否する", (input) => {
+    expect(() => buildProductionWorkerConfig(input, { allowReservedDomains: true })).toThrow(
+      PRODUCTION_WORKER_CONFIG_ERROR_MESSAGE,
+    );
+  });
+
   it("生成設定へsecret名・DB URL・staging resourceを混入しない", () => {
     const serialized = JSON.stringify(
       buildProductionWorkerConfig(INPUT, { allowReservedDomains: true }),

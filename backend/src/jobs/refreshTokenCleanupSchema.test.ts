@@ -16,6 +16,7 @@ describe("RefreshToken cleanup schema", () => {
       "utf8",
     );
     expect(sql).toContain('ON "refresh_tokens"("expiresAt", "tokenHash")');
+    expect(sql).toContain("CREATE INDEX CONCURRENTLY");
     expect(sql).not.toMatch(/DROP|DELETE|UPDATE|ALTER TABLE/i);
   });
 });

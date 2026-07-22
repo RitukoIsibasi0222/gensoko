@@ -46,6 +46,26 @@ function belongsToSite(hostname: string, registrableDomain: string): boolean {
   return hostname === registrableDomain || hostname.endsWith('.' + registrableDomain);
 }
 
+function isValidDnsHostname(hostname: string): boolean {
+  if (hostname.length > 253) return false;
+  const labels = hostname.split('.');
+  return (
+    labels.length >= 2 &&
+    labels.every(
+      (label) =>
+        label.length >= 1 &&
+        label.length <= 63 &&
+        /^(?:[a-z0-9]|[a-z0-9][a-z0-9-]*[a-z0-9])$/.test(label)
+    )
+  );
+}
+
+function isProviderHostname(hostname: string): boolean {
+  return ['workers.dev', 'vercel.app'].some(
+    (provider) => hostname === provider || hostname.endsWith('.' + provider)
+  );
+}
+
 function isReservedDomain(domain: string): boolean {
   return ['example.com', 'example.net', 'example.org', 'invalid', 'test', 'localhost'].some(
     (reserved) => domain === reserved || domain.endsWith('.' + reserved)
@@ -63,14 +83,14 @@ export function validateProductionE2EConfig(
     if (
       !registrableDomain ||
       registrableDomain !== registrableDomain.trim().toLowerCase() ||
-      !/^[a-z0-9.-]+$/.test(registrableDomain) ||
+      !isValidDnsHostname(registrableDomain) ||
+      !isValidDnsHostname(baseUrl.hostname) ||
+      !isValidDnsHostname(apiBaseUrl.hostname) ||
       baseUrl.hostname === apiBaseUrl.hostname ||
       !belongsToSite(baseUrl.hostname, registrableDomain) ||
       !belongsToSite(apiBaseUrl.hostname, registrableDomain) ||
-      baseUrl.hostname.endsWith('.vercel.app') ||
-      apiBaseUrl.hostname.endsWith('.workers.dev') ||
-      baseUrl.hostname.endsWith('.workers.dev') ||
-      apiBaseUrl.hostname.endsWith('.vercel.app') ||
+      isProviderHostname(baseUrl.hostname) ||
+      isProviderHostname(apiBaseUrl.hostname) ||
       (!options.allowReservedDomains && isReservedDomain(registrableDomain)) ||
       !input.email ||
       input.email !== input.email.trim() ||

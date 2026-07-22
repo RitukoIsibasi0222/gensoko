@@ -35,4 +35,20 @@ describe('production Playwright config guard', () => {
   it('通常実行では予約済みplaceholder domainを拒否する', () => {
     expect(() => validateProductionE2EConfig(INPUT)).toThrow(PRODUCTION_E2E_CONFIG_ERROR_MESSAGE);
   });
+
+  it.each([
+    { ...INPUT, baseUrl: 'https://app..example.com' },
+    { ...INPUT, apiBaseUrl: 'https://-api.example.com/api/v1' },
+    { ...INPUT, registrableDomain: '.example.com' },
+    {
+      ...INPUT,
+      baseUrl: 'https://app.com',
+      apiBaseUrl: 'https://api.com/api/v1',
+      registrableDomain: 'com'
+    }
+  ])('DNS labelまたはregistrable domainとして不正なhostnameを拒否する', (input) => {
+    expect(() => validateProductionE2EConfig(input, { allowReservedDomains: true })).toThrow(
+      PRODUCTION_E2E_CONFIG_ERROR_MESSAGE
+    );
+  });
 });

@@ -227,6 +227,46 @@ describe("POST /auth/refresh", () => {
     expect(setCookieHeader).toContain("Max-Age=0");
   });
 
+  it("境界値: expiresAtが現在時刻と同じtokenを期限切れとして401で拒否する", async () => {
+    vi.useFakeTimers();
+    const now = new Date("2026-07-22T12:00:00.000Z");
+    vi.setSystemTime(now);
+    try {
+      vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue({
+        ...VALID_TOKEN_RECORD,
+        expiresAt: now,
+      } as never);
+      vi.mocked(prisma.refreshToken.deleteMany).mockResolvedValue({ count: 1 } as never);
+
+      const res = await app.request("/auth/refresh", {
+        method: "POST",
+        headers: { Cookie: `refreshToken=${VALID_RAW_TOKEN}` },
+      });
+
+      expect(res.status).toBe(401);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+      expect(sign).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("JWT署名失敗時は旧tokenをrotationせず500で安全側に倒す", async () => {
+    vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(VALID_TOKEN_RECORD as never);
+    vi.mocked(sign).mockRejectedValueOnce(new Error("sign failed"));
+
+    const res = await app.request("/auth/refresh", {
+      method: "POST",
+      headers: { Cookie: `refreshToken=${VALID_RAW_TOKEN}` },
+    });
+
+    expect(res.status).toBe(500);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.refreshToken.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+  });
+
   it("競合loser: deleteMany count=0 は409を返しwinnerの新Cookieを削除しない", async () => {
     vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(VALID_TOKEN_RECORD as never);
     // 並行リクエストで既に削除済みのケース

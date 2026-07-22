@@ -128,7 +128,10 @@ export async function cleanupExpiredRefreshTokens({
       });
       deletedCount += deleteResult.count;
 
-      if (deleteResult.count === 0 || rows.length < batchSize) break;
+      // 別workerが同じbatchを先に削除した場合、現在のsnapshotで選んだrowは次回queryから消える。
+      // ここで終了すると後続の期限切れrowを不必要に残すため、次batchへ進む。
+      if (deleteResult.count === 0) continue;
+      if (rows.length < batchSize) break;
     }
 
     if (deletedCount >= REFRESH_TOKEN_CLEANUP_MAX_ROWS_PER_RUN) {

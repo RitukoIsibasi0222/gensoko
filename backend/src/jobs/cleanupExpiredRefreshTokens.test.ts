@@ -119,6 +119,32 @@ describe("期限切れrefresh token cleanup", () => {
     );
   });
 
+  it("別workerが選択済みbatchを先に削除しても次batchへ進む", async () => {
+    const logger = createLogger();
+    vi.mocked(prisma.refreshToken.findMany)
+      .mockResolvedValueOnce([{ tokenHash: "contended-hash" }] as never)
+      .mockResolvedValueOnce([{ tokenHash: "remaining-hash" }] as never);
+    vi.mocked(prisma.refreshToken.deleteMany)
+      .mockResolvedValueOnce({ count: 0 } as never)
+      .mockResolvedValueOnce({ count: 1 } as never);
+
+    const result = await cleanupExpiredRefreshTokens({
+      cutoff: CUTOFF,
+      executeEnabled: true,
+      logger,
+      getMonotonicTime: () => 1_000,
+    });
+
+    expect(prisma.refreshToken.findMany).toHaveBeenCalledTimes(2);
+    expect(prisma.refreshToken.deleteMany).toHaveBeenNthCalledWith(2, {
+      where: {
+        tokenHash: { in: ["remaining-hash"] },
+        expiresAt: { lt: CUTOFF },
+      },
+    });
+    expect(result.deletedCount).toBe(1);
+  });
+
   it("DB error、token hash、DATABASE_URLをlogせず固定messageで失敗する", async () => {
     const logger = createLogger();
     vi.mocked(prisma.refreshToken.findMany).mockRejectedValue(

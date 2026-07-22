@@ -123,6 +123,9 @@ describe('/login rate-limit error handling', () => {
     await vi.waitFor(() => {
       expect(target.querySelector('[role="alert"]')?.textContent).toContain(message);
     });
+    const alert = target.querySelector('[role="alert"]') as HTMLElement;
+    expect(alert.tabIndex).toBe(-1);
+    expect(document.activeElement).toBe(alert);
     expect((target.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(
       false
     );
@@ -172,6 +175,45 @@ describe('/login rate-limit error handling', () => {
         'ネットワークエラーが発生しました。接続を確認してください'
       );
     });
+  });
+});
+
+describe('/login accessibility', () => {
+  it('空のemailはAPIを呼ばずemail inputをinvalidとしてfocusする', async () => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    mounted = mount(LoginPage, { target });
+
+    (target.querySelector('form') as HTMLFormElement).dispatchEvent(
+      new SubmitEvent('submit', { bubbles: true, cancelable: true })
+    );
+
+    const emailInput = target.querySelector('#email') as HTMLInputElement;
+    const passwordInput = target.querySelector('#password') as HTMLInputElement;
+    await vi.waitFor(() => expect(document.activeElement).toBe(emailInput));
+    expect(emailInput.getAttribute('aria-invalid')).toBe('true');
+    expect(emailInput.getAttribute('aria-describedby')).toBe('login-error');
+    expect(passwordInput.hasAttribute('aria-invalid')).toBe(false);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('email入力済みでpasswordが空ならpassword inputをinvalidとしてfocusする', async () => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    mounted = mount(LoginPage, { target });
+    const emailInput = target.querySelector('#email') as HTMLInputElement;
+    setInputValue(emailInput, 'taro@example.com');
+
+    (target.querySelector('form') as HTMLFormElement).dispatchEvent(
+      new SubmitEvent('submit', { bubbles: true, cancelable: true })
+    );
+
+    const passwordInput = target.querySelector('#password') as HTMLInputElement;
+    await vi.waitFor(() => expect(document.activeElement).toBe(passwordInput));
+    expect(passwordInput.getAttribute('aria-invalid')).toBe('true');
+    expect(passwordInput.getAttribute('aria-describedby')).toBe('login-error');
+    expect(emailInput.hasAttribute('aria-invalid')).toBe(false);
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
 });
 
