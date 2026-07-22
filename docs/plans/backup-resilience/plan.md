@@ -119,17 +119,18 @@ GitHub ActionsのscheduleはUTCで解釈され、default branch `develop`の最�
 
 ### R9対象ファイル一覧
 
-| ファイル                                              | 変更種別 | 内容                                                       |
-| ----------------------------------------------------- | -------- | ---------------------------------------------------------- |
-| `backend/src/jobs/productionDatabaseWorkflow.test.ts` | 修正     | 日次cron、旧週次cron不在、capacity cron維持のcontract test |
-| `.github/workflows/production-database.yml`           | 修正     | backup schedule宣言とoperation解決caseを日次化             |
-| `docs/plans/backup-resilience/plan.md`                | 修正     | R9の計画、実装記録、実環境証拠、実変更ファイル             |
-| `docs/05_progress.md`                                 | 修正     | R9を実装中へ更新し、2世代確認後だけ完了へ更新              |
-| `docs/plans/portfolio-release-v0-1/plan.md`           | 修正     | R9の実装・観測状態とrelease完了条件を同期                  |
-| `docs/09_startup_commands.md`                         | 修正     | 日次backupの運用入口と確認境界を同期                       |
-| `docs/11_deployment.md`                               | 修正     | schedule表、2世代確認、証拠記録、rollback runbookを同期    |
+| ファイル                                                    | 変更種別 | 内容                                                         |
+| ----------------------------------------------------------- | -------- | ------------------------------------------------------------ |
+| `backend/src/jobs/productionDatabaseWorkflow.test.ts`       | 修正     | 日次cron、旧週次cron不在、capacity cron維持のcontract test   |
+| `backend/src/jobs/deleteLegacySoftDeletedUsers.cli.test.ts` | 修正     | CIのNode 22で発生したPrisma import失敗mockのフレークを安定化 |
+| `.github/workflows/production-database.yml`                 | 修正     | backup schedule宣言とoperation解決caseを日次化               |
+| `docs/plans/backup-resilience/plan.md`                      | 修正     | R9の計画、実装記録、実環境証拠、実変更ファイル               |
+| `docs/05_progress.md`                                       | 修正     | R9を実装中へ更新し、2世代確認後だけ完了へ更新                |
+| `docs/plans/portfolio-release-v0-1/plan.md`                 | 修正     | R9の実装・観測状態とrelease完了条件を同期                    |
+| `docs/09_startup_commands.md`                               | 修正     | 日次backupの運用入口と確認境界を同期                         |
+| `docs/11_deployment.md`                                     | 修正     | schedule表、2世代確認、証拠記録、rollback runbookを同期      |
 
-R9実装PRでは上記7ファイルを変更する。実環境のrun ID・Artifact metadata・完了markは、実装PRのreview・`develop`へのmerge後に別の証拠docs PRで同期する。
+R9実装PRでは上記の対象ファイルを変更する。実環境のrun ID・Artifact metadata・完了markは、実装PRのreview・`develop`へのmerge後に別の証拠docs PRで同期する。
 
 ### R9実装記録（schedule観測前）
 
@@ -138,9 +139,10 @@ R9実装PRでは上記7ファイルを変更する。実環境のrun ID・Artifa
 - 状態: code・contract test完了、review・mergeと日次schedule 2回・未失効Artifact 2世代の観測待ち
 - Red: 対象test 6件中、追加した日次cron契約1件だけが現行週次cronを理由に失敗し、既存5件は成功
 - Green: workflowのschedule宣言とoperation解決caseの2行だけを変更し、対象test 6件が成功
+- CI follow-up: Node 22で既存CLI testのPrisma import失敗mockが稀に旧factoryを参照するフレークを再現したため、mock export参照時に失敗条件を評価するgetter方式へ安定化。production codeへの変更はない
 - production Actions: 未実行。manual dispatch、Artifact download・復号、production DB接続、deploy、migration、cleanupは行っていない
 - 公開後task: retry・recovery・36時間鮮度監視・通常7世代・通知失敗検証・restore drillは未完了のまま維持
-- 最終品質gate: 対象test 6件、backend 97 files・1014 tests、Workers 15 tests、Workers build、backend build、lint、format、Prisma validate、変更7ファイルのPrettier check、`git diff --check`が成功。専用DB test 10件は既定どおりskip
+- 最終品質gate: 対象test 6件、backend 97 files・1014 tests、Workers 15 tests、Workers build、backend build、lint、format、Prisma validate、変更ファイルのPrettier check、`git diff --check`が成功。専用DB test 10件は既定どおりskip
 - 横断確認: 日次cron宣言・operation case、capacity cron、manual dispatch、concurrency、AES-256、復号、SHA-256、平文cleanup、暗号化Artifact path、7日保持、migration・account deletion execute前backup gateを確認。旧週次cronはworkflowに存在しない
 
 ### 設計上の決定事項（R9）
