@@ -5,6 +5,7 @@ const runtimeMocks = vi.hoisted(() => ({
   disconnect: vi.fn(),
   cleanupModuleLoaded: vi.fn(),
   prismaModuleLoaded: vi.fn(),
+  prismaImportError: undefined as Error | undefined,
   validateStagingFixtureEnvironment: vi.fn(),
 }));
 
@@ -21,6 +22,18 @@ vi.mock("./stagingAccountDeletionCleanupFixtures.js", () => ({
   },
   validateStagingAccountDeletionCleanupFixtureEnvironment:
     runtimeMocks.validateStagingFixtureEnvironment,
+}));
+
+vi.mock("../lib/prisma.js", () => ({
+  get prisma() {
+    runtimeMocks.prismaModuleLoaded();
+    if (runtimeMocks.prismaImportError) {
+      throw runtimeMocks.prismaImportError;
+    }
+    return {
+      $disconnect: runtimeMocks.disconnect,
+    };
+  },
 }));
 
 const CONFIRMATION = "DELETE_LEGACY_SOFT_DELETED_USERS";
@@ -88,14 +101,7 @@ describe("deleteLegacySoftDeletedUsers CLI", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    vi.doMock("../lib/prisma.js", () => {
-      runtimeMocks.prismaModuleLoaded();
-      return {
-        prisma: {
-          $disconnect: runtimeMocks.disconnect,
-        },
-      };
-    });
+    runtimeMocks.prismaImportError = undefined;
     runtimeMocks.deleteLegacySoftDeletedUsers.mockReset().mockResolvedValue(DRY_RUN_RESULT);
     runtimeMocks.disconnect.mockReset().mockResolvedValue(undefined);
     runtimeMocks.validateStagingFixtureEnvironment.mockReset().mockImplementation(() => undefined);
@@ -342,10 +348,9 @@ describe("deleteLegacySoftDeletedUsers CLI", () => {
   });
 
   it("DB dependency読込失敗は固定stderr・終了code 1とし、生Errorを出力しない", async () => {
-    vi.doMock("../lib/prisma.js", () => {
-      runtimeMocks.prismaModuleLoaded();
-      throw new Error("postgresql://private-user:private-password@production.internal/gensoko");
-    });
+    runtimeMocks.prismaImportError = new Error(
+      "postgresql://private-user:private-password@production.internal/gensoko",
+    );
 
     await importCli();
 
