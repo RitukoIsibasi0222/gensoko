@@ -1,0 +1,51 @@
+name: Production Auth Smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  production-auth-smoke:
+    name: Run approved production auth smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    permissions:
+      contents: read
+    env:
+      PRODUCTION_E2E_BASE_URL: ${{ vars.PRODUCTION_FRONTEND_ORIGIN }}
+      PRODUCTION_E2E_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+      PRODUCTION_REGISTRABLE_DOMAIN: ${{ vars.PRODUCTION_REGISTRABLE_DOMAIN }}
+      PRODUCTION_SMOKE_EMAIL: ${{ secrets.PRODUCTION_SMOKE_EMAIL }}
+      PRODUCTION_SMOKE_PASSWORD: ${{ secrets.PRODUCTION_SMOKE_PASSWORD }}
+
+    steps:
+      - name: Validate approved branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "production auth smokeはmain branchから実行してください"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run production auth smoke
+        working-directory: frontend
+        run: npm run test:e2e:production

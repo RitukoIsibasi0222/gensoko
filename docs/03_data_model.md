@@ -115,14 +115,15 @@ model AuditLog {
 // リフレッシュトークン
 // ─────────────────────────────────────────
 model RefreshToken {
-  id        String   @id @default(cuid())
-  tokenHash String   @unique              // トークンのSHA-256ハッシュ
+  tokenHash String   @id                  // raw tokenのSHA-256ハッシュ
   userId    String
   expiresAt DateTime
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([expiresAt, tokenHash])
   @@map("refresh_tokens")
 }
 
@@ -270,8 +271,9 @@ CREATE INDEX idx_weak_elements_user ON "weak_elements"("userId");
 CREATE INDEX idx_user_stats_weekly ON "user_stats"("weeklyScore" DESC);
 CREATE INDEX idx_user_stats_alltime ON "user_stats"("allTimeScore" DESC);
 
--- リフレッシュトークンの有効期限チェック
-CREATE INDEX idx_refresh_tokens_expires ON "refresh_tokens"("expiresAt");
+-- リフレッシュトークンの期限切れcleanup（安定順batch、online作成）
+CREATE INDEX CONCURRENTLY "refresh_tokens_expiresAt_tokenHash_idx"
+  ON "refresh_tokens"("expiresAt", "tokenHash");
 
 -- メール認証・パスワードリセット・一時問題セットの期限切れ cleanup
 CREATE INDEX idx_email_verifications_expires ON "email_verifications"("expiresAt");
@@ -279,3 +281,5 @@ CREATE INDEX idx_password_reset_tokens_expires ON "password_reset_tokens"("expir
 CREATE INDEX idx_game_question_sets_expires ON "game_question_sets"("expiresAt");
 CREATE INDEX idx_game_question_sets_user_created ON "game_question_sets"("userId", "createdAt" DESC);
 ```
+
+refresh token cleanupは`expiresAt < cutoff`だけを`expiresAt, tokenHash`順で固定batch削除する。cutoff同時刻と有効tokenは保持し、token hash・ID・DB URLをログへ出さない。同時cleanupが先に選択rowを削除して`deleteMany.count === 0`になっても、後続batchの確認を続ける。index追加は既存column/rowを変更しないexpand-only migrationとし、productionでは`CREATE INDEX CONCURRENTLY`で書込みを阻害しにくくする。production適用はR15の別承認まで行わない。

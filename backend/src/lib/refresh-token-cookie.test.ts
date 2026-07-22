@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getRefreshTokenCookieBasePath,
+  getRefreshTokenCookieOptions,
   getRefreshTokenCookiePaths,
 } from "./refresh-token-cookie.js";
 
@@ -20,5 +21,18 @@ describe("refresh-token-cookie helpers", () => {
       "/api/v1/auth",
       "/api/v1/auth/refresh",
     ]);
+  });
+
+  it("production Cookie は host-only・HttpOnly・Secure・Strict・7日契約に固定する", () => {
+    const options = getRefreshTokenCookieOptions(true, "/api/v1/auth");
+
+    expect(options).toEqual({
+      httpOnly: true,
+      secure: true,
+      sameSite: "Strict",
+      path: "/api/v1/auth",
+      maxAge: 604800,
+    });
+    expect(options).not.toHaveProperty("domain");
   });
 });

@@ -41,10 +41,13 @@ vi.mock("hono/jwt", () => ({
 import bcrypt from "bcryptjs";
 import { prisma } from "../../lib/prisma.js";
 const authRouter = createAuthTestRouter(prisma as never);
+const productionAuthRouter = createAuthTestRouter(prisma as never, { isProduction: true });
 import { STRONG_PASSWORD_73_BYTES } from "../../test/password-byte-boundary-fixtures.js";
 
 const app = new Hono();
 app.route("/auth", authRouter);
+const productionApp = new Hono();
+productionApp.route("/api/v1/auth", productionAuthRouter);
 
 const ACTIVE_USER = {
   id: "user-1",
@@ -154,6 +157,31 @@ describe("POST /auth/login", () => {
     expect(issuedCookie).toContain("HttpOnly");
     // Path=/auth ベースであることを確認（/auth/logout でも Cookie が届く設計）
     expect(issuedCookie).toContain("Path=/auth;");
+  });
+
+  it("production loginはrefreshと同じhost-only Cookie契約で発行する", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(ACTIVE_USER as never);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.userStats.upsert).mockResolvedValue({} as never);
+    vi.mocked(prisma.refreshToken.create).mockResolvedValue({} as never);
+
+    const res = await productionApp.request("/api/v1/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "taro@example.com", password: "Pass1234!" }),
+    });
+
+    const issuedCookie = res.headers
+      .getSetCookie()
+      .find((cookie) => cookie.startsWith("refreshToken=") && !cookie.includes("Max-Age=0"));
+    expect(issuedCookie).toContain("HttpOnly");
+    expect(issuedCookie).toContain("Secure");
+    expect(issuedCookie).toContain("SameSite=Strict");
+    expect(issuedCookie).toContain("Path=/api/v1/auth;");
+    expect(issuedCookie).toContain("Max-Age=604800");
+    expect(issuedCookie).not.toContain("Domain=");
   });
 
   it("バリデーション: email が不正な場合は 400 を返す", async () => {

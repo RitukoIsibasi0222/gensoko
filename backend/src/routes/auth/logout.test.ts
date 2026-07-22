@@ -13,9 +13,12 @@ vi.mock("../../lib/prisma.js", () => ({
 
 import { prisma } from "../../lib/prisma.js";
 const authRouter = createAuthTestRouter(prisma as never);
+const productionAuthRouter = createAuthTestRouter(prisma as never, { isProduction: true });
 
 const app = new Hono();
 app.route("/auth", authRouter);
+const productionApp = new Hono();
+productionApp.route("/api/v1/auth", productionAuthRouter);
 
 const VALID_RAW_TOKEN = "a".repeat(64); // randomBytes(32).toString("hex") と同形式
 
@@ -143,5 +146,42 @@ describe("POST /auth/logout", () => {
     const setCookies = res.headers.getSetCookie();
     // /Path=\/auth(?!\/)/ により Path=/auth/refresh の部分一致では通らないことを保証
     expect(setCookies.some((c) => /Path=\/auth(?!\/)/.test(c))).toBe(true);
+  });
+
+  it("production logoutは現行/legacy Cookieを同じ属性で削除する", async () => {
+    vi.mocked(prisma.refreshToken.deleteMany).mockResolvedValue({ count: 1 } as never);
+
+    const res = await productionApp.request("/api/v1/auth/logout", {
+      method: "POST",
+      headers: { Cookie: `refreshToken=${VALID_RAW_TOKEN}` },
+    });
+
+    for (const cookie of res.headers.getSetCookie()) {
+      expect(cookie).toContain("HttpOnly");
+      expect(cookie).toContain("Secure");
+      expect(cookie).toContain("SameSite=Strict");
+      expect(cookie).not.toContain("Domain=");
+    }
+    expect(res.headers.getSetCookie().some((cookie) => cookie.includes("Path=/api/v1/auth;"))).toBe(
+      true,
+    );
+    expect(
+      res.headers.getSetCookie().some((cookie) => cookie.includes("Path=/api/v1/auth/refresh")),
+    ).toBe(true);
+  });
+
+  it("DB revoke失敗はlocal Cookieを削除しつつ500で運用errorを返す", async () => {
+    vi.mocked(prisma.refreshToken.deleteMany).mockRejectedValue(new Error("database failure"));
+
+    const res = await app.request("/auth/logout", {
+      method: "POST",
+      headers: { Cookie: `refreshToken=${VALID_RAW_TOKEN}` },
+    });
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "サーバーエラーが発生しました" });
+    expect(res.headers.getSetCookie().every((cookie) => /Max-Age=0|Expires=/.test(cookie))).toBe(
+      true,
+    );
   });
 });

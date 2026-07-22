@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { authStore } from '$lib/stores/auth.svelte';
+  import { tick } from 'svelte';
+  import { authStore, parseAuthSuccessResponse } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import { goto } from '$app/navigation';
   import { ApiError, parseErrorBody } from '$lib/api/errors';
@@ -15,6 +16,15 @@
 
   // エラーメッセージ（エラーがない時は null）
   let errorMessage = $state<string | null>(null);
+  type LoginErrorTarget = 'email' | 'password' | 'form';
+  type LoginValidationError = Readonly<{
+    message: string;
+    target: Exclude<LoginErrorTarget, 'form'>;
+  }>;
+  let errorTarget = $state<LoginErrorTarget | null>(null);
+  let errorAlert = $state<HTMLElement>();
+  let emailInput = $state<HTMLInputElement>();
+  let passwordInput = $state<HTMLInputElement>();
 
   // 既にログイン済みならトップページにリダイレクト
   // 初期化中（refresh トークン検証中）は判定しない
@@ -28,26 +38,42 @@
    * クライアント側バリデーション
    * @param normalizedEmail - trim 済みメールアドレス
    * @param normalizedPassword - trim 済みパスワード（先頭/末尾スペースを除去した値）
-   * @returns エラーメッセージ（エラーがない場合は null）
+   * @returns エラーメッセージとfocus対象（エラーがない場合は null）
    */
-  function validate(normalizedEmail: string, normalizedPassword: string): string | null {
+  function validate(
+    normalizedEmail: string,
+    normalizedPassword: string
+  ): LoginValidationError | null {
     if (!normalizedEmail) {
-      return 'メールアドレスを入力してください';
+      return { message: 'メールアドレスを入力してください', target: 'email' };
     }
     if (!normalizedPassword) {
-      return 'パスワードを入力してください';
+      return { message: 'パスワードを入力してください', target: 'password' };
     }
     // パスワードは登録時にスペース禁止のため、trim 後に残る内部スペースを含む入力は必ず失敗する。
     // 送信前にクライアント側でバリデーションエラーとして弾き、不要な loginFailCount 増加を防ぐ。
     if (/ /.test(normalizedPassword)) {
-      return 'パスワードにスペースは使用できません';
+      return { message: 'パスワードにスペースは使用できません', target: 'password' };
     }
     // 簡易的なメール形式チェック（@と.があるか）
     // trim 済みの値でチェックすることで、空白混入による形式不正を防ぐ
     if (!isValidEmailFormat(normalizedEmail)) {
-      return 'メールアドレスの形式が正しくありません';
+      return { message: 'メールアドレスの形式が正しくありません', target: 'email' };
     }
     return null;
+  }
+
+  async function showLoginError(message: string, target: LoginErrorTarget): Promise<void> {
+    errorMessage = message;
+    errorTarget = target;
+    await tick();
+    if (target === 'email') {
+      emailInput?.focus();
+    } else if (target === 'password') {
+      passwordInput?.focus();
+    } else {
+      errorAlert?.focus();
+    }
   }
 
   /**
@@ -98,12 +124,13 @@
     // クライアント側バリデーション
     const validationError = validate(normalizedEmail, normalizedPassword);
     if (validationError) {
-      errorMessage = validationError;
+      await showLoginError(validationError.message, validationError.target);
       return;
     }
 
     // エラーメッセージをクリア
     errorMessage = null;
+    errorTarget = null;
     isSubmitting = true;
 
     try {
@@ -131,8 +158,16 @@
         throw new ApiError(response.status, message, errorBody);
       }
 
-      // 成功レスポンスの場合は JSON をパース
-      const data = await response.json();
+      let responseBody: unknown;
+      try {
+        responseBody = await response.json();
+      } catch {
+        throw new ApiError(502, '認証応答を確認できません。しばらく経ってから再試行してください');
+      }
+      const data = parseAuthSuccessResponse(responseBody);
+      if (data === null) {
+        throw new ApiError(502, '認証応答を確認できません。しばらく経ってから再試行してください');
+      }
 
       // ログイン成功: authStore.login() を呼ぶと state が変化し、
       // $effect が自動的にリダイレクトするため、ここでは goto() を呼ばない
@@ -141,10 +176,10 @@
     } catch (error) {
       // ApiError の場合
       if (error instanceof ApiError) {
-        errorMessage = error.message;
+        await showLoginError(error.message, 'form');
       } else {
         // ネットワークエラー等
-        errorMessage = 'ネットワークエラーが発生しました。接続を確認してください';
+        await showLoginError('ネットワークエラーが発生しました。接続を確認してください', 'form');
       }
     } finally {
       isSubmitting = false;
@@ -160,8 +195,10 @@
     <!-- エラーメッセージ表示 -->
     {#if errorMessage}
       <div
+        bind:this={errorAlert}
         id="login-error"
         role="alert"
+        tabindex="-1"
         class="border-danger-border bg-danger-surface text-danger-text rounded-md border px-4 py-3 text-sm"
       >
         {errorMessage}
@@ -172,12 +209,14 @@
     <div>
       <label for="email" class="text-text block text-sm font-medium"> メールアドレス </label>
       <input
+        bind:this={emailInput}
         id="email"
         type="email"
         bind:value={email}
         autocomplete="email"
         required
-        aria-describedby={errorMessage ? 'login-error' : undefined}
+        aria-invalid={errorTarget === 'email' ? 'true' : undefined}
+        aria-describedby={errorMessage && errorTarget !== 'password' ? 'login-error' : undefined}
         class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
       />
     </div>
@@ -186,12 +225,14 @@
     <div>
       <label for="password" class="text-text block text-sm font-medium"> パスワード </label>
       <input
+        bind:this={passwordInput}
         id="password"
         type="password"
         bind:value={password}
         autocomplete="current-password"
         required
-        aria-describedby={errorMessage ? 'login-error' : undefined}
+        aria-invalid={errorTarget === 'password' ? 'true' : undefined}
+        aria-describedby={errorMessage && errorTarget !== 'email' ? 'login-error' : undefined}
         class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
       />
     </div>

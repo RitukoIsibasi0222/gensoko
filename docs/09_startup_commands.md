@@ -163,6 +163,37 @@ env \
 - productionでは、公開後実負荷baseline、アカウント完全削除のproduction gate、削除保留承認者など全release gateの完了を記録し、承認内容を再確認するまで`AUDIT_LOG_CLEANUP_ENABLED=false`を維持する
 - `--execute`を指定してもcleanup有効設定が`false`なら削除せずskipする
 - dry-runと本実行のログに監査ログID・内部ID・メール・username・生DB errorは出ない
+
+### refresh token cleanupの手動確認
+
+`cleanup:refresh-tokens`は引数なしまたは`--dry-run`では件数確認だけを行い、削除しない。`--execute`でも`REFRESH_TOKEN_CLEANUP_ENABLED=true`がなければ安全側でskipする。
+
+```bash
+cd backend
+npm run cleanup:refresh-tokens -- --dry-run
+
+# 実削除は承認済みEnvironmentのmanual Batch Jobsだけで行う
+REFRESH_TOKEN_CLEANUP_ENABLED=true npm run cleanup:refresh-tokens -- --execute
+```
+
+- ローカルshellへstaging/productionの`DATABASE_URL`を渡さない。production DBへの適用・cleanup実行はR15以降の別承認対象。
+- 500件batch、1回1万件、8分上限。`expiresAt < cutoff`だけを削除し、token hash・ID・DB URLをlogしない。
+
+### production Worker dry-run / auth smoke
+
+```bash
+# G1〜G8の非秘密値を承認後にだけ設定する。欠落・不一致時は固定errorで停止する
+cd backend
+npm run workers:production:dry-run
+
+# R15 deploy後、R16の直前承認を得たmanual workflowだけで実行する
+cd ../frontend
+npm run test:e2e:production
+```
+
+- production Worker dry-runは実在hostname/resource IDをcommitせず、一時configを生成して削除する。deployは行わない。
+- production smokeはtrace、screenshot、video、storageState、Cookie一覧を保存しない。
+- このR5実装中はproduction deploy/workflow、production DB接続/migration、Secret参照、DNS/custom domain変更を実行しない。
 - 最大10,000件または8分到達後も期限超過rowが残る場合は終了code 1になる。原因確認後に再実行する
 
 ### 既存soft-deleted User完全削除の手動確認

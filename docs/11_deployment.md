@@ -72,16 +72,15 @@
 
 ### 本番環境
 
-| サービス  | URL例                                                |
-| --------- | ---------------------------------------------------- |
-| SvelteKit | `https://gensoko.vercel.app`（または独自ドメイン）   |
-| Hono API  | `https://gensoko-api.あなたのユーザー名.workers.dev` |
+実在hostnameはG1〜G8のowner判断とR14 preflightで確定するまで記載・推測しない。productionは次のparameter契約だけを正本とする。
 
-> 💡 独自ドメイン（例: `gensoko.com`）を取得した場合：
->
-> - `gensoko.com` → Vercel（フロントエンド）
-> - `api.gensoko.com` → Cloudflare Workers（API）
->   独自ドメインはどちらのサービスも無料で設定できます。
+| parameter          | 契約                                                              |
+| ------------------ | ----------------------------------------------------------------- |
+| frontend origin    | HTTPS origin、provider domain不可、path/query/hash/credentialなし |
+| API base URL       | 別hostのHTTPS custom domain + `/api/v1`、`workers.dev`不可        |
+| registrable domain | frontend/APIの共通site。CookieのDomain属性には設定しない          |
+
+frontendとAPIはcross-originでもsame-siteとなる兄弟hostにする。`SameSite=Strict`を維持できないhostname案は採用せず、R5を停止して別security設計へ戻す。
 
 ---
 
@@ -103,6 +102,27 @@ type CreateAppOptions = {
 実装の正本は `backend/src/app.ts` とし、この文書へmiddleware全体を複製しない。
 
 `NODE_ENV=production` では `FRONTEND_URL` を必須とし、未設定・空文字ならapp構築時にエラーで停止する。HTTP(S)のorigin形式だけを許可し、path、query、hash、認証情報付きURLは拒否する。localhostへのfallbackはdevelopment/testだけで使用する。
+
+## R5 production auth / refresh 配備契約
+
+### コードと外部操作の境界
+
+- `src/worker.ts`はstaging専用、`src/worker-production.ts`は`expectedTarget: "production"`専用。
+- production Wrangler設定は実在値をcommitしない。`PRODUCTION_WORKER_NAME`、`PRODUCTION_API_HOSTNAME`、`PRODUCTION_FRONTEND_ORIGIN`、`PRODUCTION_REGISTRABLE_DOMAIN`、`PRODUCTION_HYPERDRIVE_ID`から一時生成し、dry-run後に削除する。
+- validatorはproduction target、HTTPS/same-site URL、custom domain、`workers_dev: false`、production専用Hyperdrive、staging ID非共有を値非表示でfail-fastする。
+- Durable Objectはproduction worker名でstagingとnamespaceを分離する。Secret値、DB URL、実在resource IDは文書・PR・ログへ記録しない。
+- `workers:production:dry-run`はlocal bundleだけを作り、deploy/promotionを行わない。
+
+### rollout / rollback
+
+1. R14: G1〜G8、review済みSHA、frontend/API URL、resource存在、Environment key名、rollback先をread-only・値非表示で確認する。
+2. R15: 別承認後に`CREATE INDEX CONCURRENTLY`のexpand-only migration → additive API → smoke → frontendの順で配備する。migration直後に対象indexの`indisvalid=true`を値非表示で確認する。失敗またはinvalid indexが残った場合はcleanup/API rolloutを停止し、承認付きでinvalid indexだけを`DROP INDEX CONCURRENTLY`してからmigrationを再試行する。custom domain/CORSを片側だけ切り替えない。
+3. R16: manual `Production Auth Smoke`でlogin → reload 2回 → logout → refresh 401を確認する。trace/screenshot/video/storageState/Cookie一覧は保存しない。
+4. rollbackはAPIを互換versionへ戻し、health/CORS/authを確認後frontendを戻す。Cookie名/Domain/Pathは変更しない。cleanup scheduleを先に停止し、indexは緊急時に無理にdropしない。
+
+### 現在の保留
+
+G1〜G8、R14 preflight、R15 production migration/deploy、R16 smokeは未実施である。このためR5は`[-]`のままとし、本節をproduction適用済み証拠として扱わない。
 
 ## staging frontend/API配備runbook
 

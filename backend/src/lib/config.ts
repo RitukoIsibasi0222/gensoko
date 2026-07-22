@@ -15,6 +15,8 @@ const AUDIT_LOG_RETENTION_DAYS_INVALID_MESSAGE =
   "AUDIT_LOG_RETENTION_DAYSは30から3650までの10進整数で設定してください";
 const AUDIT_LOG_CLEANUP_ENABLED_INVALID_MESSAGE =
   "AUDIT_LOG_CLEANUP_ENABLEDはtrueまたはfalseで設定してください";
+const REFRESH_TOKEN_CLEANUP_ENABLED_INVALID_MESSAGE =
+  "REFRESH_TOKEN_CLEANUP_ENABLEDはtrueまたはfalseで設定してください";
 const ACCOUNT_DATA_DELETION_EXECUTE_ENABLED_INVALID_MESSAGE =
   "ACCOUNT_DATA_DELETION_EXECUTE_ENABLEDはtrueまたはfalseで設定してください";
 const ACCOUNT_DATA_DELETION_BATCH_SIZE_INVALID_MESSAGE =
@@ -73,6 +75,10 @@ export type AuditLogRetentionConfigOptions = Readonly<{
 export type AuditLogRetentionConfig = Readonly<{
   retentionDays: number;
   cleanupEnabled: boolean;
+}>;
+
+export type RefreshTokenCleanupConfig = Readonly<{
+  executeEnabled: boolean;
 }>;
 
 export type AccountDataDeletionConfigOptions = Readonly<{
@@ -296,6 +302,17 @@ function parseDisabledByDefaultBoolean(value: string | undefined, invalidMessage
   }
 
   throw new Error(invalidMessage);
+}
+
+export function getRefreshTokenCleanupConfig(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): RefreshTokenCleanupConfig {
+  return {
+    executeEnabled: parseDisabledByDefaultBoolean(
+      environment.REFRESH_TOKEN_CLEANUP_ENABLED,
+      REFRESH_TOKEN_CLEANUP_ENABLED_INVALID_MESSAGE,
+    ),
+  };
 }
 
 function parseAccountDataDeletionBatchSize(value: string | undefined): number {

@@ -18,7 +18,7 @@ const authMiddleware: MiddlewareHandler<{ Variables: AppVariables }> = async (c,
   await next();
 };
 
-export function createUsersTestRouter() {
+export function createUsersTestRouter({ isProduction = false } = {}) {
   const service = {
     changeCurrentPassword,
     deleteCurrentUser,
@@ -30,5 +30,6 @@ export function createUsersTestRouter() {
   return createUsersRouter({
     authMiddleware,
     service,
+    isProduction,
   });
 }

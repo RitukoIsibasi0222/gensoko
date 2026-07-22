@@ -22,6 +22,10 @@ describe('getTopPageAudience', () => {
   it('初期化完了かつ未ログインなら anonymous', () => {
     expect(getTopPageAudience(false, false)).toBe('anonymous');
   });
+
+  it('認証サーバーが一時利用不能なら unavailable', () => {
+    expect(getTopPageAudience(false, false, true)).toBe('unavailable');
+  });
 });
 
 describe('getPrimaryCta', () => {
@@ -45,6 +49,15 @@ describe('getPrimaryCta', () => {
     expect(cta.href).toBe('/register');
     expect(cta.disabled).toBe(false);
   });
+
+  it('unavailable は誤って登録へ誘導せず非活性CTAを返す', () => {
+    expect(getPrimaryCta('unavailable')).toEqual({
+      href: '#',
+      label: '認証を確認できません',
+      description: '認証サーバーへ接続できるまでお待ちください。',
+      disabled: true
+    });
+  });
 });
 
 describe('getSecondaryCta', () => {
@@ -52,6 +65,7 @@ describe('getSecondaryCta', () => {
     expect(getSecondaryCta('initializing').href).toBe('/elements');
     expect(getSecondaryCta('authenticated').href).toBe('/elements');
     expect(getSecondaryCta('anonymous').href).toBe('/elements');
+    expect(getSecondaryCta('unavailable').href).toBe('/elements');
   });
 });
 

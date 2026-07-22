@@ -12,6 +12,22 @@ const mocks = vi.hoisted(() => ({
 vi.mock('$app/navigation', () => ({ goto: mocks.goto }));
 vi.mock('$lib/api/config', () => ({ API_BASE_URL: 'http://localhost:3000/api/v1' }));
 vi.mock('$lib/stores/auth.svelte', () => ({
+  parseAuthSuccessResponse: (value: unknown) => {
+    if (value === null || typeof value !== 'object') return null;
+    const record = value as Record<string, unknown>;
+    const user = record.user as Record<string, unknown> | undefined;
+    if (
+      typeof record.accessToken !== 'string' ||
+      record.accessToken.length === 0 ||
+      user === undefined ||
+      typeof user.id !== 'string' ||
+      typeof user.username !== 'string' ||
+      (user.role !== 'USER' && user.role !== 'ADMIN')
+    ) {
+      return null;
+    }
+    return { accessToken: record.accessToken, user };
+  },
   authStore: {
     isInitializing: false,
     isLoggedIn: false,
@@ -107,6 +123,9 @@ describe('/login rate-limit error handling', () => {
     await vi.waitFor(() => {
       expect(target.querySelector('[role="alert"]')?.textContent).toContain(message);
     });
+    const alert = target.querySelector('[role="alert"]') as HTMLElement;
+    expect(alert.tabIndex).toBe(-1);
+    expect(document.activeElement).toBe(alert);
     expect((target.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(
       false
     );
@@ -156,5 +175,82 @@ describe('/login rate-limit error handling', () => {
         'ネットワークエラーが発生しました。接続を確認してください'
       );
     });
+  });
+});
+
+describe('/login accessibility', () => {
+  it('空のemailはAPIを呼ばずemail inputをinvalidとしてfocusする', async () => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    mounted = mount(LoginPage, { target });
+
+    (target.querySelector('form') as HTMLFormElement).dispatchEvent(
+      new SubmitEvent('submit', { bubbles: true, cancelable: true })
+    );
+
+    const emailInput = target.querySelector('#email') as HTMLInputElement;
+    const passwordInput = target.querySelector('#password') as HTMLInputElement;
+    await vi.waitFor(() => expect(document.activeElement).toBe(emailInput));
+    expect(emailInput.getAttribute('aria-invalid')).toBe('true');
+    expect(emailInput.getAttribute('aria-describedby')).toBe('login-error');
+    expect(passwordInput.hasAttribute('aria-invalid')).toBe(false);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('email入力済みでpasswordが空ならpassword inputをinvalidとしてfocusする', async () => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    mounted = mount(LoginPage, { target });
+    const emailInput = target.querySelector('#email') as HTMLInputElement;
+    setInputValue(emailInput, 'taro@example.com');
+
+    (target.querySelector('form') as HTMLFormElement).dispatchEvent(
+      new SubmitEvent('submit', { bubbles: true, cancelable: true })
+    );
+
+    const passwordInput = target.querySelector('#password') as HTMLInputElement;
+    await vi.waitFor(() => expect(document.activeElement).toBe(passwordInput));
+    expect(passwordInput.getAttribute('aria-invalid')).toBe('true');
+    expect(passwordInput.getAttribute('aria-describedby')).toBe('login-error');
+    expect(emailInput.hasAttribute('aria-invalid')).toBe(false);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('/login success response validation', () => {
+  it('200でもuserが不正ならloginせず安全なrole=alertを表示する', async () => {
+    mocks.fetch.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        user: { id: 'user-1' },
+        accessToken: 'new-access-token'
+      })
+    });
+
+    const target = mountAndSubmitLogin();
+
+    await vi.waitFor(() => {
+      expect(target.querySelector('[role="alert"]')?.textContent).toContain(
+        '認証応答を確認できません'
+      );
+    });
+    expect(mocks.login).not.toHaveBeenCalled();
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it('200でも非JSONならnetwork errorと混同せず安全なrole=alertを表示する', async () => {
+    mocks.fetch.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockRejectedValue(new SyntaxError('Unexpected token'))
+    });
+
+    const target = mountAndSubmitLogin();
+
+    await vi.waitFor(() => {
+      expect(target.querySelector('[role="alert"]')?.textContent).toContain(
+        '認証応答を確認できません'
+      );
+    });
+    expect(mocks.login).not.toHaveBeenCalled();
   });
 });

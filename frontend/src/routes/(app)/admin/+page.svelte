@@ -30,7 +30,7 @@
   import AdminUserDetailComponent from '$lib/components/admin/AdminUserDetail.svelte';
   import AdminUserFilters from '$lib/components/admin/AdminUserFilters.svelte';
   import AdminUserList from '$lib/components/admin/AdminUserList.svelte';
-  import { authStore } from '$lib/stores/auth.svelte';
+  import { authStore, type AuthenticatedRequest } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
 
   type AccessState =
@@ -48,10 +48,6 @@
     index: number;
     view: AdminListView;
   };
-  /* eslint-disable no-unused-vars -- Svelte parserがcallback型の引数名を実変数として判定するため */
-  type AuthenticatedRequest<T> = (latestAccessToken: string) => Promise<T>;
-  /* eslint-enable no-unused-vars */
-
   const ADMIN_PAGE_LIMIT = 20;
   const CONNECTION_ERROR_MESSAGE =
     'ネットワークエラーが発生しました。接続を確認して再試行してください';
@@ -95,7 +91,7 @@
   let listGeneration = 0;
   let statsGeneration = 0;
   let detailGeneration = 0;
-  let reauthPromise: Promise<string | null> | null = null;
+  let reauthenticationRequestCount = $state(0);
   let lastInitialRequestKey: string | null = null;
 
   function isAbortError(error: unknown): boolean {
@@ -153,38 +149,13 @@
     return false;
   }
 
-  async function getRefreshedAccessToken(): Promise<string | null> {
-    if (reauthPromise === null) {
-      reauthPromise = (async () => {
-        const refreshed = await authStore.refresh();
-        if (!refreshed) {
-          return null;
-        }
-        return authStore.accessToken;
-      })().finally(() => {
-        reauthPromise = null;
-      });
-    }
-    return reauthPromise;
-  }
-
-  async function requestWithReauth<T>(
-    accessToken: string,
-    request: AuthenticatedRequest<T>
-  ): Promise<T> {
+  async function executeAuthenticatedRequest<T>(request: AuthenticatedRequest<T>): Promise<T> {
+    reauthenticationRequestCount += 1;
     try {
-      return await request(accessToken);
-    } catch (error) {
-      if (!(error instanceof ApiError) || error.status !== 401) {
-        throw error;
-      }
+      return await authStore.requestWithReauthentication(request);
+    } finally {
+      reauthenticationRequestCount -= 1;
     }
-
-    const refreshedAccessToken = await getRefreshedAccessToken();
-    if (refreshedAccessToken === null) {
-      throw new ApiError(401, '認証が必要です');
-    }
-    return request(refreshedAccessToken);
   }
 
   function syncSuccessfulAdminRole(): void {
@@ -194,7 +165,7 @@
     }
   }
 
-  async function loadStats(accessToken: string): Promise<void> {
+  async function loadStats(): Promise<void> {
     statsController?.abort();
     const controller = new AbortController();
     const generation = ++statsGeneration;
@@ -203,7 +174,7 @@
     statsError = null;
 
     try {
-      const response = await requestWithReauth(accessToken, (latestAccessToken) =>
+      const response = await executeAuthenticatedRequest((latestAccessToken) =>
         getAdminStats({ accessToken: latestAccessToken, signal: controller.signal })
       );
       if (controller.signal.aborted || generation !== statsGeneration) {
@@ -258,7 +229,7 @@
     activeQuery = query;
 
     try {
-      const response = await requestWithReauth(accessToken, (latestAccessToken) =>
+      const response = await executeAuthenticatedRequest((latestAccessToken) =>
         getAdminUsers({
           accessToken: latestAccessToken,
           query: { limit: ADMIN_PAGE_LIMIT, ...query },
@@ -274,8 +245,7 @@
       accessState = 'authorized';
       syncSuccessfulAdminRole();
       if (mode === 'initial' || mode === 'sync') {
-        const latestAccessToken = authStore.accessToken ?? accessToken;
-        void loadStats(latestAccessToken);
+        void loadStats();
       }
       return true;
     } catch (error) {
@@ -310,7 +280,7 @@
     }
   }
 
-  async function loadDetail(user: AdminUserSummary, accessToken: string): Promise<void> {
+  async function loadDetail(user: AdminUserSummary): Promise<void> {
     detailController?.abort();
     const controller = new AbortController();
     const generation = ++detailGeneration;
@@ -321,7 +291,7 @@
     detailError = null;
 
     try {
-      const response = await requestWithReauth(accessToken, (latestAccessToken) =>
+      const response = await executeAuthenticatedRequest((latestAccessToken) =>
         getAdminUserDetail({
           accessToken: latestAccessToken,
           userId: user.id,
@@ -355,7 +325,7 @@
     }
     returnFocus = trigger;
     dialogMode = 'detail';
-    void loadDetail(user, accessToken);
+    void loadDetail(user);
   }
 
   function closeDetail(): void {
@@ -392,14 +362,14 @@
   function retryDetail(): void {
     const accessToken = authStore.accessToken;
     if (selectedListUser !== null && accessToken !== null) {
-      void loadDetail(selectedListUser, accessToken);
+      void loadDetail(selectedListUser);
     }
   }
 
   function retryStats(): void {
     const accessToken = authStore.accessToken;
     if (accessToken !== null) {
-      void loadStats(accessToken);
+      void loadStats();
     }
   }
 
@@ -608,8 +578,7 @@
     restoreDetailAfterMutation = false;
     postMutationSyncKind = null;
     dialogMode = 'detail';
-    const latestAccessToken = authStore.accessToken ?? accessToken;
-    await loadDetail(targetUser, latestAccessToken);
+    await loadDetail(targetUser);
   }
 
   async function submitMutation(): Promise<void> {
@@ -632,7 +601,7 @@
     pendingDeleteFocus = null;
 
     try {
-      const response = await requestWithReauth(accessToken, (latestAccessToken) => {
+      const response = await executeAuthenticatedRequest((latestAccessToken) => {
         if (action.type === 'status') {
           return updateAdminUserStatus({
             accessToken: latestAccessToken,
@@ -690,18 +659,16 @@
       enterAnonymousState();
       return;
     }
-    if (reauthPromise !== null) {
+    if (reauthenticationRequestCount > 0) {
       return;
     }
 
     const location = parseAdminListLocation(new URLSearchParams(search), adminPageState);
     searchDraft = location.searchDraft;
+    // token rotationは進行中request自身が最新tokenでretryするため、location keyへtokenを含めない。
+    // 含めるとrefresh成功時のreactive rerunが同じreadを重複送信する。
     const requestKey =
-      accessToken +
-      '|' +
-      location.canonicalSearchParams.toString() +
-      '|' +
-      JSON.stringify(location.canonicalPageState);
+      location.canonicalSearchParams.toString() + '|' + JSON.stringify(location.canonicalPageState);
     if (requestKey === lastInitialRequestKey) {
       return;
     }

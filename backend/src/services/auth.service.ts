@@ -185,20 +185,20 @@ async function refreshAccessToken(
 ): Promise<{
   accessToken: string;
   newRefreshToken: string;
-  user: { id: string; role: Role };
+  user: { id: string; username: string; role: Role };
 }> {
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
 
   const record = await prisma.refreshToken.findUnique({
     where: { tokenHash },
-    include: { user: { select: { id: true, role: true, isActive: true } } },
+    include: { user: { select: { id: true, username: true, role: true, isActive: true } } },
   });
 
   if (!record) {
     throw new AuthError(401, "無効なリフレッシュトークンです");
   }
 
-  if (record.expiresAt < new Date()) {
+  if (record.expiresAt <= new Date()) {
     // deleteMany で P2025 を回避（並行リクエストで既に削除済みの場合も安全）
     await prisma.refreshToken.deleteMany({ where: { tokenHash } });
     throw new AuthError(401, "リフレッシュトークンの有効期限が切れています");
@@ -209,6 +209,15 @@ async function refreshAccessToken(
     throw new AuthError(403, "アカウントが停止されています");
   }
 
+  // JWT署名失敗後にrefresh token rotationだけがcommitされる状態を避ける。
+  // DB更新前に署名を完了し、失敗時は旧tokenをそのまま再試行可能にする。
+  const now = Math.floor(Date.now() / 1000);
+  const accessToken = await sign(
+    { sub: record.user.id, role: record.user.role, iat: now, exp: now + ACCESS_TOKEN_TTL_SEC },
+    jwtSecret,
+    "HS256",
+  );
+
   // トークンローテーション: トランザクションで旧トークン削除と新トークン作成を原子的に実行
   const newRawToken = randomBytes(32).toString("hex");
   const newTokenHash = createHash("sha256").update(newRawToken).digest("hex");
@@ -218,24 +227,17 @@ async function refreshAccessToken(
     // count=0 の場合は並行リクエストで既に使用済み → 旧トークンの単回使用を担保
     const { count } = await tx.refreshToken.deleteMany({ where: { tokenHash } });
     if (count === 0) {
-      throw new AuthError(401, "無効なリフレッシュトークンです");
+      throw new AuthError(409, "リフレッシュトークンは既に更新されています");
     }
     await tx.refreshToken.create({
       data: { userId: record.user.id, tokenHash: newTokenHash, expiresAt: newExpiresAt },
     });
   });
 
-  const now = Math.floor(Date.now() / 1000);
-  const accessToken = await sign(
-    { sub: record.user.id, role: record.user.role, iat: now, exp: now + ACCESS_TOKEN_TTL_SEC },
-    jwtSecret,
-    "HS256",
-  );
-
   return {
     accessToken,
     newRefreshToken: newRawToken,
-    user: { id: record.user.id, role: record.user.role },
+    user: { id: record.user.id, username: record.user.username, role: record.user.role },
   };
 }
 

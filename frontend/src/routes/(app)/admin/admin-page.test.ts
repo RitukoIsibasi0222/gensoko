@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
     accessToken: 'old-token' as string | null
   },
   refresh: vi.fn<() => Promise<boolean>>(),
+  requestWithReauthentication: vi.fn(),
+  reauthPromise: null as Promise<boolean> | null,
   updateUser: vi.fn(),
   getAdminUsers: vi.fn(),
   getAdminStats: vi.fn(),
@@ -41,6 +43,7 @@ vi.mock('$lib/stores/auth.svelte', () => ({
       return mocks.auth.accessToken;
     },
     refresh: mocks.refresh,
+    requestWithReauthentication: mocks.requestWithReauthentication,
     updateUser: mocks.updateUser
   }
 }));
@@ -156,6 +159,33 @@ beforeEach(() => {
     mocks.auth.accessToken = 'new-token';
     return true;
   });
+  mocks.reauthPromise = null;
+  mocks.requestWithReauthentication.mockImplementation(
+    async <T>(request: (accessToken: string) => Promise<T>): Promise<T> => {
+      const accessToken = mocks.auth.accessToken;
+      if (accessToken === null) {
+        throw new ApiError(401, '認証が必要です');
+      }
+      try {
+        return await request(accessToken);
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 401) {
+          throw error;
+        }
+      }
+
+      if (mocks.reauthPromise === null) {
+        mocks.reauthPromise = mocks.refresh().finally(() => {
+          mocks.reauthPromise = null;
+        });
+      }
+      const refreshed = await mocks.reauthPromise;
+      if (!refreshed || mocks.auth.accessToken === null) {
+        throw new ApiError(401, '認証が必要です');
+      }
+      return request(mocks.auth.accessToken);
+    }
+  );
   mocks.updateUser.mockImplementation((user) => {
     mocks.auth.user = user;
   });
