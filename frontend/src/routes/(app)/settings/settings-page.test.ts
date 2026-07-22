@@ -299,6 +299,8 @@ describe('/settings account deletion A11Y contract', () => {
     expect(link).not.toBeNull();
     expect(link?.textContent).toContain('プライバシーポリシー');
     expect(link?.textContent).toContain('アカウント削除');
+    expect(link?.classList.contains('text-action-text')).toBe(true);
+    expect(link?.classList.contains('text-action')).toBe(false);
 
     link?.focus();
     expect(document.activeElement).toBe(link);

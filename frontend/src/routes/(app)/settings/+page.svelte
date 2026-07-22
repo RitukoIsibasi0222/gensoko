@@ -548,7 +548,7 @@
         削除時のデータの取扱いは
         <a
           href="/privacy#account-deletion"
-          class="focus:ring-focus rounded-sm underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+          class="text-action-text focus:ring-focus rounded-sm underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
         >
           プライバシーポリシーのアカウント削除
         </a>
