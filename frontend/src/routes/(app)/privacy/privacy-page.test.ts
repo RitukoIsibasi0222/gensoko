@@ -27,6 +27,8 @@ const PROVIDER_PRIVACY_LINKS = [
   ]
 ] as const;
 
+const HEAD_FIXTURE_ATTRIBUTE = 'data-privacy-head-fixture';
+
 let mounted: ReturnType<typeof mount> | null = null;
 let mountedHeadNodes: Node[] = [];
 let existingTitleContents = new Map<HTMLTitleElement, string | null>();
@@ -67,36 +69,54 @@ async function cleanupPage(): Promise<void> {
 
 afterEach(cleanupPage);
 
+afterEach(() => {
+  const leakedFixtures = Array.from(document.head.querySelectorAll(`[${HEAD_FIXTURE_ATTRIBUTE}]`));
+  try {
+    expect(leakedFixtures).toHaveLength(0);
+  } finally {
+    for (const fixture of leakedFixtures) {
+      fixture.remove();
+    }
+  }
+});
+
 describe('/privacy test isolation', () => {
   it('page metadataだけを片付け、既存のhead要素を保持する', async () => {
     const existingMeta = document.createElement('meta');
     existingMeta.setAttribute('charset', 'utf-8');
+    existingMeta.setAttribute(HEAD_FIXTURE_ATTRIBUTE, '');
     const existingTitle = document.createElement('title');
     existingTitle.textContent = '既存タイトル';
+    existingTitle.setAttribute(HEAD_FIXTURE_ATTRIBUTE, '');
     document.head.append(existingMeta, existingTitle);
 
-    await renderPage();
-    const privacyDescription = Array.from(
-      document.head.querySelectorAll<HTMLMetaElement>('meta[name="description"]')
-    ).find((meta) => meta.content.includes('Gensoko'));
-    const privacyTitle = Array.from(document.head.querySelectorAll('title')).find((title) =>
-      title.textContent?.includes('Gensoko')
-    );
-
-    expect(privacyDescription).toBeDefined();
-    expect(privacyTitle).toBeDefined();
-
-    await cleanupPage();
-
-    expect(document.head.contains(existingMeta)).toBe(true);
-    expect(document.head.contains(existingTitle)).toBe(true);
-    expect(existingTitle.textContent).toBe('既存タイトル');
-    expect(document.head.contains(privacyDescription ?? null)).toBe(false);
-    expect(
-      Array.from(document.head.querySelectorAll('title')).some((title) =>
+    try {
+      await renderPage();
+      const privacyDescription = Array.from(
+        document.head.querySelectorAll<HTMLMetaElement>('meta[name="description"]')
+      ).find((meta) => meta.content.includes('Gensoko'));
+      const privacyTitle = Array.from(document.head.querySelectorAll('title')).find((title) =>
         title.textContent?.includes('Gensoko')
-      )
-    ).toBe(false);
+      );
+
+      expect(privacyDescription).toBeDefined();
+      expect(privacyTitle).toBeDefined();
+
+      await cleanupPage();
+
+      expect(document.head.contains(existingMeta)).toBe(true);
+      expect(document.head.contains(existingTitle)).toBe(true);
+      expect(existingTitle.textContent).toBe('既存タイトル');
+      expect(document.head.contains(privacyDescription ?? null)).toBe(false);
+      expect(
+        Array.from(document.head.querySelectorAll('title')).some((title) =>
+          title.textContent?.includes('Gensoko')
+        )
+      ).toBe(false);
+    } finally {
+      existingMeta.remove();
+      existingTitle.remove();
+    }
   });
 });
 
