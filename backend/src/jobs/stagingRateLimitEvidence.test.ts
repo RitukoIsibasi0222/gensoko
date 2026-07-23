@@ -333,6 +333,85 @@ describe("staging rate limit evidence", () => {
     expect(JSON.stringify(failure)).not.toContain("cancel-internal-secret");
   });
 
+  it.each([
+    ["status", () => jsonResponse(500, { error: "safe-test-error" }), "EXPECTED_STATUS", 500],
+    [
+      "Content-Type",
+      () => new Response("safe-test-body", { status: 200 }),
+      "EXPECTED_CONTENT_TYPE",
+      200,
+    ],
+  ] as const)(
+    "auth許可requestの%s契約はbody cancel拒否でも分類を維持する",
+    async (_name, createResponse, failedContract, observedStatus) => {
+      const response = createResponse();
+      const cancelSpy = vi
+        .spyOn(response.body!, "cancel")
+        .mockRejectedValue(new Error("cancel-internal-secret"));
+      const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(response);
+
+      await expect(
+        runStagingRateLimitEvidence({
+          apiBaseUrl: API_BASE_URL,
+          frontendOrigin: FRONTEND_ORIGIN,
+          evidenceCase: "auth",
+          userPassword: USER_PASSWORD,
+          fetchImpl: fetchMock,
+        }),
+      ).rejects.toMatchObject({
+        failureStage: "AUTH_ALLOWED_REQUEST",
+        requestNumber: 1,
+        observedStatus,
+        failedContract,
+      });
+      expect(cancelSpy).toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [
+      "status",
+      () => jsonResponse(500, { error: "safe-test-error" }, RATE_LIMIT_HEADERS),
+      "RATE_LIMIT_STATUS",
+      500,
+    ],
+    [
+      "Content-Type",
+      () => new Response("safe-test-body", { status: 429, headers: RATE_LIMIT_HEADERS }),
+      "RATE_LIMIT_CONTENT_TYPE",
+      429,
+    ],
+  ] as const)(
+    "auth制限requestの%s契約はbody cancel拒否でも分類を維持する",
+    async (_name, createResponse, failedContract, observedStatus) => {
+      let requestNumber = 0;
+      const response = createResponse();
+      const cancelSpy = vi
+        .spyOn(response.body!, "cancel")
+        .mockRejectedValue(new Error("cancel-internal-secret"));
+      const fetchMock = vi.fn<typeof fetch>(async () => {
+        requestNumber += 1;
+        return requestNumber <= 10 ? loginResponse() : response;
+      });
+
+      await expect(
+        runStagingRateLimitEvidence({
+          apiBaseUrl: API_BASE_URL,
+          frontendOrigin: FRONTEND_ORIGIN,
+          evidenceCase: "auth",
+          userPassword: USER_PASSWORD,
+          fetchImpl: fetchMock,
+        }),
+      ).rejects.toMatchObject({
+        failureStage: "AUTH_LIMITED_REQUEST",
+        requestNumber: 11,
+        observedStatus,
+        failedContract,
+      });
+      expect(cancelSpy).toHaveBeenCalled();
+    },
+  );
+
   it("auth request失敗はraw例外を保持せずrequest番号とstatusなしだけを残す", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

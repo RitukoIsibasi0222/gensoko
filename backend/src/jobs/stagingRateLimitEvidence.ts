@@ -170,14 +170,14 @@ function hasJsonContentType(response: Response): boolean {
 
 async function readExpectedJson(response: Response, expectedStatus: number): Promise<unknown> {
   if (response.status !== expectedStatus) {
-    await response.body?.cancel();
+    await cancelResponseBodyBestEffort(response);
     throw new StagingRateLimitEvidenceContractError(
       INVALID_PREREQUISITE_RESPONSE_MESSAGE,
       "EXPECTED_STATUS",
     );
   }
   if (!hasJsonContentType(response)) {
-    await response.body?.cancel();
+    await cancelResponseBodyBestEffort(response);
     throw new StagingRateLimitEvidenceContractError(
       INVALID_PREREQUISITE_RESPONSE_MESSAGE,
       "EXPECTED_CONTENT_TYPE",
@@ -478,14 +478,14 @@ async function createRateLimitSummary({
   frontendOrigin: string;
 }): Promise<StagingRateLimitEvidenceSummary> {
   if (response.status !== 429) {
-    await response.body?.cancel();
+    await cancelResponseBodyBestEffort(response);
     throw new StagingRateLimitEvidenceContractError(
       INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
       "RATE_LIMIT_STATUS",
     );
   }
   if (!hasJsonContentType(response)) {
-    await response.body?.cancel();
+    await cancelResponseBodyBestEffort(response);
     throw new StagingRateLimitEvidenceContractError(
       INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
       "RATE_LIMIT_CONTENT_TYPE",
