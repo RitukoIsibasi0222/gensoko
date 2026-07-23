@@ -303,21 +303,29 @@ async function classifyUnexpectedResponse(
 
     const retryAfter = response.headers.get("Retry-After");
     const retryAfterSec = retryAfter === null ? Number.NaN : Number(retryAfter);
-    const failedHeaderContract = findFailedResponseHeaderContract(response, frontendOrigin);
-    const body = await parseJson(response);
     const hasExpectedRetryAfter =
       retryAfter !== null &&
       /^[1-9]\d*$/.test(retryAfter) &&
       Number.isSafeInteger(retryAfterSec) &&
       retryAfterSec === SERVICE_UNAVAILABLE_RETRY_AFTER_SEC;
+    if (!hasExpectedRetryAfter) {
+      await cancelResponseBodyBestEffort(response);
+      return "EDGE_OR_UNCLASSIFIED_503";
+    }
+
+    const failedHeaderContract = findFailedResponseHeaderContract(response, frontendOrigin);
+    if (failedHeaderContract !== null) {
+      await cancelResponseBodyBestEffort(response);
+      return "EDGE_OR_UNCLASSIFIED_503";
+    }
+
+    const body = await parseJson(response);
     const hasExpectedBody =
       isRecord(body) &&
       Object.keys(body).length === 1 &&
       body.error === SERVICE_UNAVAILABLE_MESSAGE;
 
-    return hasExpectedRetryAfter && hasExpectedBody && failedHeaderContract === null
-      ? "SAFE_JSON_503_CONTRACT"
-      : "EDGE_OR_UNCLASSIFIED_503";
+    return hasExpectedBody ? "SAFE_JSON_503_CONTRACT" : "EDGE_OR_UNCLASSIFIED_503";
   } catch {
     await cancelResponseBodyBestEffort(response);
     return "EDGE_OR_UNCLASSIFIED_503";

@@ -292,6 +292,29 @@ describe("staging rate limit evidence", () => {
     expect(serializedFailure).not.toContain(SERVICE_UNAVAILABLE_MESSAGE);
   });
 
+  it.each([
+    ["Retry-After不一致", () => serviceUnavailableResponse(undefined, { "Retry-After": "61" })],
+    [
+      "header契約不一致",
+      () => serviceUnavailableResponse(undefined, { "Strict-Transport-Security": "" }),
+    ],
+  ] as const)("auth 5回目503の%sではbodyをparseせずcancelする", async (_name, createResponse) => {
+    const response = createResponse();
+    const jsonSpy = vi.spyOn(response, "json");
+    const cancelSpy = vi.spyOn(response.body!, "cancel");
+
+    const { failure } = await captureAuthFailure(response);
+
+    expect(jsonSpy).not.toHaveBeenCalled();
+    expect(cancelSpy).toHaveBeenCalledOnce();
+    expect(failure).toMatchObject({
+      requestNumber: 5,
+      observedStatus: 503,
+      failedContract: "EXPECTED_STATUS",
+      observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+    });
+  });
+
   it.each([500, 502, 504] as const)(
     "auth 5回目のstatus %iを503と混同しない固定classへ分類する",
     async (status) => {
