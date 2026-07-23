@@ -13,11 +13,13 @@
     "preview": "vite preview",
     "prepare": "svelte-kit sync || echo ''",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:e2e": "tsc --noEmit -p tsconfig.e2e.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "test": "vitest",
     "test:run": "vitest run",
     "test:e2e:staging": "playwright test --config playwright.config.ts",
     "test:e2e:production": "playwright test --config playwright.production.config.ts",
+    "test:e2e:production-account-deletion": "playwright test --config playwright.production-account-deletion.config.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

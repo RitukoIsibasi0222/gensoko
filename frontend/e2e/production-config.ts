@@ -42,7 +42,7 @@ function parseExactHttpsUrl(value: string, expectedPath: string): URL {
   return url;
 }
 
-function belongsToSite(hostname: string, registrableDomain: string): boolean {
+export function belongsToSite(hostname: string, registrableDomain: string): boolean {
   return hostname === registrableDomain || hostname.endsWith('.' + registrableDomain);
 }
 

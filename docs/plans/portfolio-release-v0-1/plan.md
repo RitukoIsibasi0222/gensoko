@@ -276,6 +276,7 @@ backendでは少なくともHono、Nodemailer、Prisma toolchain経由の`@hono/
 - PR #125とrun 29802327100を確認し、Admin E2Eを重複実装せず完了へ更新した。
 - stagingで登録・メール・login・本人導線は確認済みだが、production smokeの代替にはしない境界を明記した。
 - 完全削除のコード完了と、T33/T35/production/restore等の未完了を分離した。
+- R6厳格レビューで旧refresh token未再送とrecovery 401の曖昧性を修正し、Cookie個別属性、production domain、keyboard、E2E型検査をrelease contractへ追加した。実環境gateは完了扱いにしていない。
 - 共通API client、game test補強、backup耐障害性計画の未完了checkboxを保持し、日次化だけをv0.1境界へ分離した。
 
 ### v4 確定
@@ -315,6 +316,7 @@ backendでは少なくともHono、Nodemailer、Prisma toolchain経由の`@hono/
 - [-] R5: 認証・refreshのproduction構成を確定する
   - code・contract test・migration file・runbookを実装。G1〜G8とR14〜R16のproduction証拠待ちのため完了にしない。
 - [-] R6: 完全削除の残るv0.1 gateを完了する — 計画書: [`r6-account-deletion-gates`](../r6-account-deletion-gates/plan.md)
+  - production本人削除専用config guard、main/recovery Playwright、manual-only workflow、runbookをTDD実装済み。T1B、T35、R13〜R16の承認付き実環境証拠待ちのため完了にしない。
 - [ ] R7: app rate limitの実環境gateを完了する
 - [ ] R8: headers・CORS・safe error・logを最終確認する
 - [-] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する（code実装済み、schedule観測待ち）
