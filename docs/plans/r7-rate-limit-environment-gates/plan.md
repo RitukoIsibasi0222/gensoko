@@ -773,7 +773,7 @@ R7実行ごとに次を同期する。
 - PR #141追加review対応 Red/Green: 許可/制限requestのstatus・Content-Type不一致時にcancel拒否で固定契約分類を失う問題を4 tests失敗・29 tests成功で再現し、4箇所の直接cancelをbest-effort helperへ統一して対象33 tests成功
 - PR #141追加review対応後の最終品質gate: backend 104 files / 1088 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
 - security: raw例外message/cause、response body、header値、credential、識別子、URLをerror metadataへ保持しない
-- 診断merge後の実環境再実行: run 30010266297を別runとして1回実施し、auth許可request 5回目の503で安全に停止した。詳細はR7 Evidence E-04へ記録する
+- 診断merge後の実環境再実行: run [30010266297](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30010266297)を別runとして1回実施し、auth許可request 5回目の503で安全に停止した。詳細はR7 Evidence E-04へ記録する
 
 #### 初回失敗後の診断変更ファイル
 
