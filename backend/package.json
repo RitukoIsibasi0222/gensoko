@@ -34,6 +34,7 @@
     "staging:synthetic-admin-e2e-fixtures": "tsx src/jobs/stagingSyntheticAdminE2eFixtures.cli.ts",
     "staging:validate-database-target": "tsx src/jobs/validateStagingDatabaseTarget.cli.ts",
     "staging:account-deletion-performance": "tsx src/jobs/stagingAccountDeletionPerformance.cli.ts",
+    "staging:rate-limit-evidence": "tsx src/jobs/stagingRateLimitEvidence.cli.ts",
     "cleanup:game-question-sets": "tsx src/jobs/cleanupGameQuestionSets.cli.ts",
     "reset:weekly-scores": "tsx src/jobs/resetWeeklyScores.cli.ts",
     "batch:scheduled": "tsx src/jobs/scheduled.cli.ts"

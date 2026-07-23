@@ -229,6 +229,20 @@ Hono + SQLite-backed Durable Objectによるアプリレベルrate limitは実�
 | `frontend/src/routes/login/login-page.test.ts`                     | login alert/retry                        |
 | `frontend/src/routes/(app)/game/play/game-play-rate-limit.test.ts` | game alert/retry                         |
 
+### R7 staging実HTTP証拠の実行準備で変更するファイル
+
+| ファイル                                                    | 変更種別 | 内容                                                        |
+| ----------------------------------------------------------- | -------- | ----------------------------------------------------------- |
+| `.github/workflows/staging-rate-limit-evidence.yml`         | 新規     | 1実行1caseのmanual staging証拠workflowとfixture回収         |
+| `backend/package.json`                                      | 修正     | staging証拠runnerのCLI script追加                           |
+| `backend/src/jobs/stagingRateLimitEvidence.ts`              | 新規     | auth・questions・game submit境界と429 header/body契約の確認 |
+| `backend/src/jobs/stagingRateLimitEvidence.cli.ts`          | 新規     | 機密を含めず安全な証拠要約だけを出力するCLI                 |
+| `backend/src/jobs/stagingRateLimitEvidence.cli.test.ts`     | 新規     | CLI終了code・固定失敗文言・機密非出力のunit test            |
+| `backend/src/jobs/stagingRateLimitEvidence.test.ts`         | 新規     | 環境guard・境界回数・429契約・機密非出力のunit test         |
+| `backend/src/jobs/stagingRateLimitEvidenceWorkflow.test.ts` | 新規     | manual限定・fixture cleanup・credential取扱いの契約test     |
+| `docs/plans/r7-rate-limit-environment-gates/plan.md`        | 修正     | 実装準備・TDD結果・実環境未実施状態の同期                   |
+| `docs/05_progress.md`                                       | 修正     | staging証拠workflow実装済み、実環境証拠待ちを同期           |
+
 ## 外部resource
 
 実在ID、Secret値、token、account ID、zone IDは文書へ記載しない。
@@ -357,25 +371,37 @@ npm run test -- --run src/lib/api/errors.test.ts src/routes/login/login-page.tes
 - scriptはstatus、必要なresponse header、redact済みbody要約だけを出力する。
 - 実行中に一般利用者の429/503、login成功率低下が見えたら停止する。
 
+### manual証拠workflow
+
+- `.github/workflows/staging-rate-limit-evidence.yml`は`workflow_dispatch`のみとし、`develop`とstaging Environmentに限定する。
+- fixture作成前にreview済み40桁SHAと実行SHAの一致、固定確認文字列、承認者、change recordを検証する。承認者とchange recordは改行やMarkdown記号を許可しない形式に限定する。
+- `auth`、`questions`、`game-submit`はpolicy windowと共通bucketを混ぜないよう、必ず1caseずつ別workflow runで実行する。
+- workflowは既存の完全一致synthetic Admin/User fixtureをephemeral passwordで再作成し、成功・失敗を問わずcleanupする。main jobが非成功なら独立recovery jobも実行する。
+- runnerはstatus、観測policy ID、許可件数、制限request番号、`Retry-After`、429本文・credentialed CORS（origin/credentials）・security headerの契約判定だけを出力する。token、Cookie、Authorization、password、email/user ID、question/session ID、response bodyは出力しない。
+- 全HTTP requestはredirectを追跡せず、固定10秒timeoutで停止する。許可応答もstatus・JSON Content-Type・公開response shapeをruntime検証し、429ではpolicy window内の`Retry-After`とproduction security header一式を確認する。
+- `game-submit`は公開questions responseの各問題について先頭choiceを回答として使い、正解情報やDB直読み取りへ依存しない。各submit用に新しいquestion setを取得する。route順序上、同じlimit値ではIP middlewareがuser middlewareより先に429を返すため、本workflowの観測policyは`GAME_SUBMIT_IP`とする。`GAME_SUBMIT_USER`のbucket分離はR7-08で別証拠化する。
+- 既存fixture flag、固定staging API URL、固定frontend originのguardを通過しない限りHTTP requestを開始しない。
+- workflowのrepository実装完了はR7-04〜R7-07の完了を意味しない。G5/G6、実行時間帯、停止時通知先の承認後に実行し、結果を別Evidenceとして記録する。
+
 ### 実HTTPテストケース
 
-| ID  | 対象                     | 手順                                             | 期待結果                                         | 安全策                                         |
-| --- | ------------------------ | ------------------------------------------------ | ------------------------------------------------ | ---------------------------------------------- |
-| S01 | root/health/OPTIONS      | 少数request                                      | rate limit対象外、CORS/security headers正常      | 境界回数を送らない                             |
-| S02 | general API              | limit未満だけ確認                                | 2xx/認証上の通常status、429なし                  | 60回境界は共有stagingで原則省略                |
-| S03 | auth IP                  | synthetic userで正しいloginを10回、その直後に1回 | 1〜10許可、11回目Hono 429                        | 失敗login lockを使わず、refresh tokenをcleanup |
-| S04 | auth reset               | `Retry-After`後に1回                             | 再許可                                           | 10分待機を別実行記録に分ける                   |
-| S05 | questions IP             | 30回後に1回                                      | 1〜30許可、31回目429                             | 問題bodyを保存しない                           |
-| S06 | game submit IP/user      | isolated question setで20回後に1回               | 1〜20許可、21回目429                             | synthetic sessionをcleanup、事前にDB負荷承認   |
-| S07 | same IP / different user | user Aでuser bucketを消費し、user Bを確認        | user bucketは独立、IP bucketは共有               | 2 synthetic user限定                           |
-| S08 | same user / different IP | 承認済みの2送信元から確認                        | user bucket共有、IP bucket独立                   | 送信元制御できない場合は実行しない             |
-| S09 | operation別email         | register/login/forgot等の対象操作を分離して確認  | 操作別bucket                                     | mail/DB副作用を承認できるcaseだけ              |
-| S10 | IPv6 `/64`               | 同一`/64`の2 addressで確認                       | 同一IP actor bucket                              | IPv6環境がなければcontract testへ代替          |
-| S11 | spoof header             | XFF/X-Real-IPだけを変更                          | bucket回避不可                                   | `CF-Connecting-IP`はclientから偽装しない       |
-| S12 | Hono 429 contract        | S03/S05/S06の429を確認                           | 日本語JSON、`Retry-After`、CORS/security headers | responseからPIIを除外                          |
-| S13 | reset                    | window経過後に再度1回                            | 許可される                                       | 長時間sleepせず別時刻に再実行                  |
-| S14 | general store failure    | 代替証拠またはisolated canary                    | fail-open                                        | 共有bindingを変更しない                        |
-| S15 | sensitive store failure  | 代替証拠またはisolated canary                    | 日本語JSON 503                                   | 共有bindingを変更しない                        |
+| ID  | 対象                     | 手順                                             | 期待結果                                                      | 安全策                                         |
+| --- | ------------------------ | ------------------------------------------------ | ------------------------------------------------------------- | ---------------------------------------------- |
+| S01 | root/health/OPTIONS      | 少数request                                      | rate limit対象外、CORS/security headers正常                   | 境界回数を送らない                             |
+| S02 | general API              | limit未満だけ確認                                | 2xx/認証上の通常status、429なし                               | 60回境界は共有stagingで原則省略                |
+| S03 | auth IP                  | synthetic userで正しいloginを10回、その直後に1回 | 1〜10許可、11回目Hono 429                                     | 失敗login lockを使わず、refresh tokenをcleanup |
+| S04 | auth reset               | `Retry-After`後に1回                             | 再許可                                                        | 10分待機を別実行記録に分ける                   |
+| S05 | questions IP             | 30回後に1回                                      | 1〜30許可、31回目429                                          | 問題bodyを保存しない                           |
+| S06 | game submit IP/user      | isolated question setで20回後に1回               | 1〜20許可、21回目429                                          | synthetic sessionをcleanup、事前にDB負荷承認   |
+| S07 | same IP / different user | user Aでuser bucketを消費し、user Bを確認        | user bucketは独立、IP bucketは共有                            | 2 synthetic user限定                           |
+| S08 | same user / different IP | 承認済みの2送信元から確認                        | user bucket共有、IP bucket独立                                | 送信元制御できない場合は実行しない             |
+| S09 | operation別email         | register/login/forgot等の対象操作を分離して確認  | 操作別bucket                                                  | mail/DB副作用を承認できるcaseだけ              |
+| S10 | IPv6 `/64`               | 同一`/64`の2 addressで確認                       | 同一IP actor bucket                                           | IPv6環境がなければcontract testへ代替          |
+| S11 | spoof header             | XFF/X-Real-IPだけを変更                          | bucket回避不可                                                | `CF-Connecting-IP`はclientから偽装しない       |
+| S12 | Hono 429 contract        | S03/S05/S06の429を確認                           | 日本語JSON、`Retry-After`、credentialed CORS/security headers | responseからPIIを除外                          |
+| S13 | reset                    | window経過後に再度1回                            | 許可される                                                    | 長時間sleepせず別時刻に再実行                  |
+| S14 | general store failure    | 代替証拠またはisolated canary                    | fail-open                                                     | 共有bindingを変更しない                        |
+| S15 | sensitive store failure  | 代替証拠またはisolated canary                    | 日本語JSON 503                                                | 共有bindingを変更しない                        |
 
 ### 共有stagingで省略できる境界
 
@@ -691,6 +717,57 @@ R7実行ごとに次を同期する。
 - R7の完了を「コード実装」ではなく「実環境証拠と承認」に限定した。
 - 実行不能caseは代替証拠・残余リスク・承認を必須にした。
 
+## staging証拠workflow実装記録
+
+- 実装日: 2026-07-23
+- 実装ブランチ: `feature/r7-rate-limit-environment-gates`
+- 実装commit: `d007d3f`
+- PR: [#140](https://github.com/RitukoIsibasi0222/gensoko/pull/140)
+- TDD Red: runner moduleとworkflowが未作成であることを理由に対象2 filesが失敗
+- TDD Green: runner・CLI・manual workflow実装後、2 files / 13 tests成功
+- Refactor: 未使用response bodyの破棄と検証済みchoiceの型明示後、再利用fixtureを含む4 files / 30 tests成功
+- 最終品質gate: backend 103 files / 1057 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
+- 実環境実行: 未実施。レビュー・merge・G5/G6承認後にcaseごとに別実行する
+
+### 設計判断
+
+- 長時間sleepをworkflowへ入れず、reset確認は別時刻・別実行のR7-08証拠に分離した。
+- `auth`、`questions`、`game-submit`を1runにまとめず、共通`GENERAL_API_IP`やpolicy windowの相互干渉を避けた。
+- 新しいfixtureを増やさず、完全一致識別・collision停止・冪等cleanupが既にtest済みのstaging synthetic Admin/User fixtureを再利用した。
+- APIの公開契約とpolicy値は変更せず、`docs/04_api.md`と`docs/02_security.md`は変更対象外とした。
+
+### 厳格レビュー後の改善記録
+
+- 改善日: 2026-07-23
+- TDD Red: redirect拒否、request timeout、全security header、policy ID、runtime validation、CLI失敗契約、workflow承認gateを追加し、対象3 filesで22 tests失敗・13 tests成功を確認
+- TDD Green: 共通HTTP helper、許可応答validator、429 validator、CLI終了code、manual workflow gateを実装し、対象3 files / 35 tests成功
+- Copilot review対応 Red/Green: `Access-Control-Allow-Credentials`欠落を1 test失敗・25 tests成功で再現し、credentialed CORSのorigin/credentials両方を必須化して対象26 tests成功
+- Copilot review対応commit: `51bed34`（2件のCORS指摘を1つの契約修正として対応）
+- Copilot再レビュー対応 Red/Green: gate通過後の後続失敗でも監査summaryを残す契約を1 test失敗・6 tests成功で再現し、検証済みgate outputで`always()`を制限して対象7 tests成功。無条件`always()`は未検証入力のMarkdown出力を防ぐため採用しない
+- Copilot再レビュー対応commit: `57eb0ce`（監査summaryとPR参照の2指摘を一括対応）
+- 追加TDD Red/Green: 承認gate失敗時にもcleanup recoveryがstaging DBへ触れる問題を1 test失敗・6 tests成功で再現し、fixture lifecycle開始後だけmain cleanup/recoveryを許可して7 tests成功
+- security: `fetch`の既定redirect追跡によるephemeral password POST bodyの転送を防ぐため、全requestへ`redirect: "error"`を固定した
+- operations: 個々のrequestへ10秒timeoutを付け、5分のworkflow step timeoutまで無応答のまま待たない構造にした
+- contract: 429のJSON Content-Type、policy window内かつsafe integerの`Retry-After`、credentialed CORS（`Access-Control-Allow-Origin`と`Access-Control-Allow-Credentials: true`）、production security header一式、`X-Powered-By`非露出を必須化した
+- audit: workflow実行前のreview済みSHA・確認文字列・承認者・change recordを必須化する。全gate通過後はsetup・prepare・runnerの成功/失敗を問わず、秘密値なしのJob Summaryへ記録する。gate不成立時は未検証入力を記録しない
+- cleanup: prepare直前にfixture lifecycle markerを設定し、markerがないgate失敗ではmain cleanupと独立recoveryの両方を実行しない。prepare開始後の失敗では従来どおり二重の回収経路を維持する
+- 改善後最終品質gate: backend 104 files / 1080 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
+- 実環境実行: 未実施のまま。R7-04〜R7-08の完了状態は変更しない
+
+### 実際の変更ファイル
+
+| ファイル                                                    | 変更種別 | 内容                                 |
+| ----------------------------------------------------------- | -------- | ------------------------------------ |
+| `.github/workflows/staging-rate-limit-evidence.yml`         | 新規     | manual-only staging証拠workflow      |
+| `backend/package.json`                                      | 修正     | `staging:rate-limit-evidence` script |
+| `backend/src/jobs/stagingRateLimitEvidence.ts`              | 新規     | 3境界caseと安全な429契約要約         |
+| `backend/src/jobs/stagingRateLimitEvidence.cli.ts`          | 新規     | 環境guardと固定文言のCLI             |
+| `backend/src/jobs/stagingRateLimitEvidence.cli.test.ts`     | 新規     | CLI終了codeと機密非出力のunit test   |
+| `backend/src/jobs/stagingRateLimitEvidence.test.ts`         | 新規     | runnerのunit test                    |
+| `backend/src/jobs/stagingRateLimitEvidenceWorkflow.test.ts` | 新規     | workflowのrepository contract test   |
+| `docs/plans/r7-rate-limit-environment-gates/plan.md`        | 修正     | 実装準備と実環境未実施状態を同期     |
+| `docs/05_progress.md`                                       | 修正     | R7進捗要約を同期                     |
+
 ## 最終タスクリスト
 
 | タスクID | 内容                                     | 主な対象                  | 優先度 | 完了条件                     |
@@ -718,9 +795,9 @@ R7実行ごとに次を同期する。
 
 ### チェックリスト
 
-- [ ] R7-01: 基準SHAとrepository contract testを固定する
+- [x] R7-01: 基準SHAとrepository contract testを固定する
 - [ ] R7-02: Cloudflare plan/zone/hostname/権限を確認する
-- [ ] R7-03: staging resource分離とconfigを確認する
+- [x] R7-03: staging resource分離とconfigを確認する
 - [ ] R7-04: synthetic fixtureとcleanupを承認する
 - [ ] R7-05: auth 11回目を確認する
 - [ ] R7-06: questions 31回目を確認する
@@ -769,14 +846,102 @@ R7-20	証拠・進捗・release文書を同期	docs	中
 
 次を満たしてからR7実行へ着手する。
 
-- [ ] R7計画PRがreviewされ`develop`へmerge済み
+- [x] R7計画PRがreviewされ`develop`へmerge済み（PR #139、merge commit `fe431d1`）
 - [ ] G1〜G6の判断者と承認者が確定
-- [ ] release候補SHAまたはstaging検証SHAが固定
+- [x] release候補SHAまたはstaging検証SHAが固定（`fe431d1adcc077382e73484a3c9704ed18b69f7e`）
 - [ ] synthetic fixtureとcleanupが承認済み
-- [ ] Cloudflare read-only確認権限がある
+- [x] Cloudflare read-only確認権限がある（OAuthのaccount/zone readとDashboard閲覧を確認）
 - [ ] WAF/Worker rollback権限を持つ担当者が同席
 - [ ] 実行時間帯と停止時の通知先が確定
-- [ ] 証拠のPII/Secret redaction方法が確認済み
+- [x] 証拠のPII/Secret redaction方法が確認済み（CLI/Dashboard出力を保存前にredact）
+
+## 実行証拠
+
+### R7 Evidence E-01
+
+- 実行日時: 2026-07-23 15:13〜15:18 JST
+- environment: repository local / Workers local runtime
+- 基準commit: `fe431d1adcc077382e73484a3c9704ed18b69f7e`
+- 対象Worker version: repository source（Cloudflare実resourceは未使用）
+- 対象policy/rule: 全Hono rate limit policy / Durable Object / frontend 429・503契約
+- 実行者: Codex
+- 承認者: repository owner（R7作業開始指示）
+- 事前gate: PR #139が`develop`へmerge済みであることをGitHubとlocal fast-forwardで確認
+- 手順:
+  - Hono 429・503・route matrixの対象testを実行
+  - Durable Objectとproduction相当Worker graphのWorkers runtime testを実行
+  - policy・actor key・production configの対象testを実行
+  - frontend API error・login・game rate limitの対象testを実行
+  - Workers type生成差分・typecheck・staging dry-run bundleを確認
+- 期待結果: 既存contract testとdeployを伴わないWorkers buildがすべて成功する
+- 実結果:
+  - backend Hono contract: 2 files / 24 tests成功
+  - Workers runtime: 2 files / 15 tests成功
+  - backend policy・key・production config: 3 files / 33 tests成功
+  - frontend rate limit contract: 3 files / 28 tests成功
+  - Workers build: types check・typecheck・staging dry-run成功
+- status/header/body要約: repository testでHono 429・503、日本語JSON、`Retry-After`、CORS/security headersを確認
+- Cloudflare metrics/Security Events確認時間帯: 未実施（R7-02、R7-11、R7-14以降）
+- cleanup: local test runtime終了。追跡対象の生成差分なし
+- rollback: repository code・Cloudflare resourceの変更なし
+- 判定: pass
+- 代替証拠: なし
+- 残余リスク: staging実HTTP、Cloudflare実resource、production dry-runは未確認。production dry-runは実hostname・resource分離値を確認するR7-16で実施する
+- 添付先: 本節
+
+PII・Secret確認:
+
+- [x] raw IPなし
+- [x] email/user IDなし
+- [x] digestなし
+- [x] token/Cookie/Authorizationなし
+- [x] password/bodyなし
+- [x] account/zone/resource IDなし
+
+### R7 Evidence E-02
+
+- 実行日時: 2026-07-23 15:20〜15:28 JST
+- environment: Cloudflare account / staging（read-only）
+- 基準commit: `fe431d1adcc077382e73484a3c9704ed18b69f7e`
+- 対象Worker version: `gensoko-api-staging` / `ab420f62`表示を確認
+- 対象policy/rule: Worker・Durable Object・Hyperdrive・Secret presence・zone/WAF前提
+- 実行者: Codex
+- 承認者: repository owner（R7作業開始指示）
+- 事前gate: Cloudflare OAuth認証済み。account/zone read権限を確認し、Dashboard操作をread-onlyへ限定
+- 手順:
+  - Workers planを確認
+  - domain/zone一覧を確認
+  - Workers一覧、staging Worker概要、binding、変数とSecret presenceを確認
+  - WAF利用前提とObservability状態を確認
+- 期待結果: staging resourceの接続先が一致し、plan・zone・hostname・WAF権限の判断材料が揃う
+- 実結果:
+  - Workers planはFree
+  - domain/zoneは0件
+  - Workerは`gensoko-api-staging`の1件だけで、production Workerは未作成
+  - staging公開hostnameは`gensoko-api-staging.rituko-labs.workers.dev`。custom domainとrouteは未設定
+  - Hyperdrive binding `HYPERDRIVE`はstaging resourceへ接続
+  - Durable Object binding `RATE_LIMIT_COUNTER`はstaging `RateLimitCounter`へ接続
+  - `DEPLOYMENT_ENVIRONMENT=staging`、`DATABASE_TARGET=staging`、`NODE_ENV=production`、`RATE_LIMIT_STORE=durable-object`を確認
+  - `RATE_LIMIT_KEY_SECRET`、`JWT_SECRET`、mail/frontend系Secretは値を開かずpresenceだけ確認
+  - Workers Logs、Traces、Export、samplingは無効
+  - account-level WAFはEnterprise add-on案内のみ。zoneがないためzone WAF rate limiting ruleとSecurity Eventsを検証不能
+- status/header/body要約: 対象外（Dashboard/APIのread-only inventory）
+- Cloudflare metrics/Security Events確認時間帯: Worker概要の直近24時間表示を確認。zone Security Eventsは対象zone不在のため未確認
+- cleanup: Dashboard/CLIの設定変更なし。browser controlを解放
+- rollback: resource変更なし
+- 判定: R7-03 pass / R7-02 blocked
+- 代替証拠: repository production config contractはE-01で成功
+- 残余リスク: G2の公開hostname/zoneが未確定。zone WAF、Security Events、WAF迂回経路閉鎖、production resource分離は確認できない
+- 添付先: 本節
+
+PII・Secret確認:
+
+- [x] raw IPなし
+- [x] email/user IDなし
+- [x] digestなし
+- [x] token/Cookie/Authorizationなし
+- [x] password/bodyなし
+- [x] account/zone/resource IDなし
 
 ## R7完了記録
 
