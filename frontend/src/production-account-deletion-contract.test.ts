@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 const FRONTEND_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const CONFIG_PATH = FRONTEND_ROOT + 'playwright.production-account-deletion.config.ts';
+const E2E_TSCONFIG_PATH = FRONTEND_ROOT + 'tsconfig.e2e.json';
 const SPEC_PATH = FRONTEND_ROOT + 'e2e/production-account-deletion.spec.ts';
 const WORKFLOW_PATH = FRONTEND_ROOT + '../.github/workflows/production-account-deletion-smoke.yml';
 
@@ -14,6 +15,7 @@ function readFileOrEmpty(path: string): string {
 }
 
 const CONFIG = readFileOrEmpty(CONFIG_PATH);
+const E2E_TSCONFIG = readFileOrEmpty(E2E_TSCONFIG_PATH);
 const SPEC = readFileOrEmpty(SPEC_PATH);
 const WORKFLOW = readFileOrEmpty(WORKFLOW_PATH);
 const PACKAGE_JSON = JSON.parse(readFileSync(FRONTEND_ROOT + 'package.json', 'utf8')) as {
@@ -28,6 +30,9 @@ describe('production account deletion smoke source contract', () => {
     expect(PACKAGE_JSON.scripts?.['test:e2e:production-account-deletion']).toBe(
       'playwright test --config playwright.production-account-deletion.config.ts'
     );
+    expect(PACKAGE_JSON.scripts?.['check:e2e']).toBe('tsc --noEmit -p tsconfig.e2e.json');
+    expect(E2E_TSCONFIG).toContain('"e2e/**/*.ts"');
+    expect(E2E_TSCONFIG).toContain('"playwright*.config.ts"');
     expect(CONFIG).toContain("testMatch: 'production-account-deletion.spec.ts'");
   });
 
@@ -47,7 +52,7 @@ describe('production account deletion smoke source contract', () => {
     expect(SPEC).not.toContain('async function waitForHydratedLoginForm');
   });
 
-  it('mainはexact USERを確認してUI削除後に旧access・refresh・loginの401を確認する', () => {
+  it('mainはexact USERと発行済みrefresh tokenを確認してUI削除後に旧認証の401を確認する', () => {
     expect(SPEC).toContain('loadProductionAccountDeletionE2EConfig');
     expect(SPEC).toContain('PRODUCTION_ACCOUNT_DELETION_OPERATION');
     expect(SPEC).toContain("'main'");
@@ -57,16 +62,22 @@ describe('production account deletion smoke source contract', () => {
     expect(SPEC).toContain("name: '設定'");
     expect(SPEC).toContain("'#delete-current-password'");
     expect(SPEC).toContain("name: 'アカウントを削除する'");
-    expect(SPEC).toContain('cookieDeletionContractMatches');
+    expect(SPEC).toContain('findIssuedRefreshToken');
+    expect(SPEC).toContain('refreshTokenBeforeDeletion');
+    expect(SPEC).toContain("Cookie: 'refreshToken=' + refreshTokenBeforeDeletion");
+    expect(SPEC).toContain('matchesRefreshCookieDeletionContract');
+    expect(SPEC).toContain("await page.keyboard.press('Space')");
+    expect(SPEC).toContain("await page.keyboard.press('Enter')");
     expect(SPEC.match(/\.toBe\(401\)/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
     expect(SPEC).toContain("role !== 'USER'");
   });
 
-  it('recoveryは削除済み401を許容し、存在時はexact profile確認後だけ再削除する', () => {
+  it('recoveryは401を削除済みと推測せず、200かつexact profile確認後だけ再削除する', () => {
     expect(SPEC).toContain("'recovery'");
     expect(SPEC).toContain("'completed'");
-    expect(SPEC).toContain("'not-required'");
     expect(SPEC).toContain("'failed'");
+    expect(SPEC).not.toContain("return 'not-required'");
+    expect(SPEC).toContain('if (loginResponse.status() !== 200)');
     expect(SPEC).toContain('profile.email !== productionConfig.email');
     expect(SPEC).toContain('profile.username !== productionConfig.username');
     expect(SPEC).toContain("profile.role !== 'USER'");
@@ -100,6 +111,8 @@ describe('production account deletion smoke source contract', () => {
     expect(WORKFLOW).toContain('PRODUCTION_ACCOUNT_DELETION_OPERATION: recovery');
     expect(WORKFLOW).toContain('npm run test:e2e:production-account-deletion');
     expect(WORKFLOW).toContain('GITHUB_STEP_SUMMARY');
+    expect(WORKFLOW).toContain('completed|failed');
+    expect(WORKFLOW).not.toContain('completed|not-required|failed');
   });
 
   it('credentialをjob全体・CLI・output・artifactへ渡さずmain/recovery stepだけへ限定する', () => {

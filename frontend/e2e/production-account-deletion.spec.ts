@@ -5,13 +5,20 @@ import {
   test,
   type APIRequestContext,
   type APIResponse,
-  type Page
+  type Page,
+  type Response
 } from '@playwright/test';
 
 import {
   loadProductionAccountDeletionE2EConfig,
   type ProductionAccountDeletionRecoveryStatus
 } from './production-account-deletion-config';
+import {
+  findIssuedRefreshToken,
+  hasIssuedRefreshToken,
+  matchesRefreshCookieDeletionContract,
+  type ResponseHeader
+} from './production-account-deletion-safety';
 import { waitForHydratedLoginForm } from './login-form';
 
 export const PRODUCTION_ACCOUNT_DELETION_SMOKE_ERROR_MESSAGE =
@@ -22,6 +29,11 @@ type ProductionAccountDeletionOperation = 'main' | 'recovery';
 const productionConfig = loadProductionAccountDeletionE2EConfig(process.env);
 const operation = loadOperation(process.env);
 const statusPath = loadStatusPath(process.env, operation);
+const refreshCookieBasePath = new URL(productionConfig.apiBaseUrl).pathname + '/auth';
+const refreshCookiePaths = [refreshCookieBasePath, refreshCookieBasePath + '/refresh'] as const;
+
+type JsonResponse = Pick<APIResponse, 'json'> | Pick<Response, 'json'>;
+type HeaderResponse = Pick<APIResponse, 'headersArray'> | Pick<Response, 'headersArray'>;
 
 function failSmoke(): never {
   throw new Error(PRODUCTION_ACCOUNT_DELETION_SMOKE_ERROR_MESSAGE);
@@ -64,12 +76,16 @@ function writeFailedStatus(): void {
   }
 }
 
-async function readJson(response: APIResponse): Promise<unknown> {
+async function readJson(response: JsonResponse): Promise<unknown> {
   try {
     return await response.json();
   } catch {
     failSmoke();
   }
+}
+
+async function readHeaders(response: HeaderResponse): Promise<readonly ResponseHeader[]> {
+  return await response.headersArray();
 }
 
 function requireExactLoginResponse(value: unknown): string {
@@ -125,25 +141,7 @@ async function requireExactProfileFromApi(
   requireExactProfile(await readJson(response));
 }
 
-function cookieDeletionContractMatches(response: APIResponse): boolean {
-  const setCookie = response.headers()['set-cookie'] ?? '';
-  const refreshCookieCount = setCookie.match(/(?:^|,)\s*refreshToken=/g)?.length ?? 0;
-  const deletionMarkerCount = setCookie.match(/Max-Age=0|Expires=/g)?.length ?? 0;
-  return (
-    refreshCookieCount >= 2 &&
-    deletionMarkerCount >= 2 &&
-    /Path=\/api\/v1\/auth(?!\/)/.test(setCookie) &&
-    setCookie.includes('Path=/api/v1/auth/refresh') &&
-    !setCookie.includes('Max-Age=604800')
-  );
-}
-
-function hasLiveRefreshCookie(response: APIResponse): boolean {
-  const setCookie = response.headers()['set-cookie'] ?? '';
-  return setCookie.includes('refreshToken=') && setCookie.includes('Max-Age=604800');
-}
-
-async function runMain(page: Page): Promise<void> {
+async function runMain(page: Page, isolatedRequest: APIRequestContext): Promise<void> {
   await page.goto('/login');
   await waitForHydratedLoginForm(page);
   await page.getByLabel('メールアドレス').fill(productionConfig.email);
@@ -160,6 +158,13 @@ async function runMain(page: Page): Promise<void> {
     failSmoke();
   }
   const accessTokenBeforeDeletion = requireExactLoginResponse(await readJson(loginResponse));
+  const refreshTokenBeforeDeletion = findIssuedRefreshToken(
+    await readHeaders(loginResponse),
+    refreshCookieBasePath
+  );
+  if (refreshTokenBeforeDeletion === null) {
+    failSmoke();
+  }
   await requireExactProfileFromApi(page.request, accessTokenBeforeDeletion);
   await expect(page).toHaveURL(productionConfig.baseUrl + '/');
 
@@ -172,37 +177,55 @@ async function runMain(page: Page): Promise<void> {
     has: page.getByRole('heading', { name: 'アカウント削除', exact: true })
   });
   await deleteSection.locator('#delete-current-password').fill(productionConfig.password);
-  await deleteSection.getByRole('checkbox').check();
+  const acknowledgement = deleteSection.getByRole('checkbox', {
+    name: '上記の内容を確認し、アカウントを削除することに同意します。',
+    exact: true
+  });
+  await acknowledgement.focus();
+  await page.keyboard.press('Space');
+  await expect(acknowledgement).toBeChecked();
 
   const deleteResponsePromise = page.waitForResponse(
     (response) =>
       response.url() === productionConfig.apiBaseUrl + '/users/me' &&
       response.request().method() === 'DELETE'
   );
-  await deleteSection.getByRole('button', { name: 'アカウントを削除する', exact: true }).click();
+  const deleteButton = deleteSection.getByRole('button', {
+    name: 'アカウントを削除する',
+    exact: true
+  });
+  await deleteButton.focus();
+  await page.keyboard.press('Enter');
   const deleteResponse = await deleteResponsePromise;
   expect(deleteResponse.status()).toBe(200);
-  expect(cookieDeletionContractMatches(deleteResponse)).toBe(true);
+  expect(
+    matchesRefreshCookieDeletionContract(await readHeaders(deleteResponse), refreshCookiePaths)
+  ).toBe(true);
   await expect(page).toHaveURL(productionConfig.baseUrl + '/');
   await expect(page.getByRole('link', { name: 'ログイン', exact: true })).toBeVisible();
 
-  const rejectedAccess = await page.request.get(productionConfig.apiBaseUrl + '/users/me', {
+  const rejectedAccess = await isolatedRequest.get(productionConfig.apiBaseUrl + '/users/me', {
     headers: { Authorization: 'Bearer ' + accessTokenBeforeDeletion },
     failOnStatusCode: false
   });
   expect(rejectedAccess.status()).toBe(401);
 
-  const rejectedRefresh = await page.request.post(productionConfig.apiBaseUrl + '/auth/refresh', {
-    failOnStatusCode: false
-  });
+  const rejectedRefresh = await isolatedRequest.post(
+    productionConfig.apiBaseUrl + '/auth/refresh',
+    {
+      headers: { Cookie: 'refreshToken=' + refreshTokenBeforeDeletion },
+      failOnStatusCode: false
+    }
+  );
   expect(rejectedRefresh.status()).toBe(401);
-  expect(hasLiveRefreshCookie(rejectedRefresh)).toBe(false);
+  expect(hasIssuedRefreshToken(await readHeaders(rejectedRefresh))).toBe(false);
 
-  const rejectedLogin = await page.request.post(productionConfig.apiBaseUrl + '/auth/login', {
+  const rejectedLogin = await isolatedRequest.post(productionConfig.apiBaseUrl + '/auth/login', {
     data: { email: productionConfig.email, password: productionConfig.password },
     failOnStatusCode: false
   });
   expect(rejectedLogin.status()).toBe(401);
+  expect(hasIssuedRefreshToken(await readHeaders(rejectedLogin))).toBe(false);
 }
 
 async function runRecovery(
@@ -212,9 +235,6 @@ async function runRecovery(
     data: { email: productionConfig.email, password: productionConfig.password },
     failOnStatusCode: false
   });
-  if (loginResponse.status() === 401) {
-    return 'not-required';
-  }
   if (loginResponse.status() !== 200) {
     failSmoke();
   }
@@ -226,16 +246,19 @@ async function runRecovery(
     data: { currentPassword: productionConfig.password },
     failOnStatusCode: false
   });
-  if (deleteResponse.status() !== 200 || !cookieDeletionContractMatches(deleteResponse)) {
+  if (
+    deleteResponse.status() !== 200 ||
+    !matchesRefreshCookieDeletionContract(await readHeaders(deleteResponse), refreshCookiePaths)
+  ) {
     failSmoke();
   }
   return 'completed';
 }
 
-test('production synthetic USERを本人削除し、旧認証を拒否する', async ({ page }) => {
+test('production synthetic USERを本人削除し、旧認証を拒否する', async ({ page, request }) => {
   test.skip(operation !== 'main', 'main operationだけで実行します');
   try {
-    await runMain(page);
+    await runMain(page, request);
     writeStatus('completed');
   } catch {
     writeFailedStatus();

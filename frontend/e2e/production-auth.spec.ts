@@ -1,10 +1,12 @@
-import { expect, test, type APIResponse, type Page } from '@playwright/test';
+import { expect, test, type APIResponse, type Page, type Response } from '@playwright/test';
 
 import { loadProductionE2EConfig } from './production-config';
 
 const productionConfig = loadProductionE2EConfig(process.env);
 
-function summarizeRefreshCookieContract(response: APIResponse) {
+type HeaderResponse = Pick<APIResponse, 'headers'> | Pick<Response, 'headers'>;
+
+function summarizeRefreshCookieContract(response: HeaderResponse) {
   const setCookie = response.headers()['set-cookie'] ?? '';
   return {
     present: setCookie.length > 0,
@@ -17,11 +19,11 @@ function summarizeRefreshCookieContract(response: APIResponse) {
   };
 }
 
-function cookieContractMatches(response: APIResponse): boolean {
+function cookieContractMatches(response: HeaderResponse): boolean {
   return Object.values(summarizeRefreshCookieContract(response)).every(Boolean);
 }
 
-async function reloadWithRefresh(page: Page): Promise<APIResponse> {
+async function reloadWithRefresh(page: Page): Promise<Response> {
   const refreshResponsePromise = page.waitForResponse(
     (response) =>
       response.url() === productionConfig.apiBaseUrl + '/auth/refresh' &&

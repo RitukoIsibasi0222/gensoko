@@ -142,7 +142,7 @@ jobs:
           if [ -f "$STATUS_PATH" ]; then
             candidate="$(tr -d '\r\n' < "$STATUS_PATH")"
             case "$candidate" in
-              completed|not-required|failed) status="$candidate" ;;
+              completed|failed) status="$candidate" ;;
             esac
           fi
           {
@@ -215,7 +215,7 @@ jobs:
           if [ -f "$STATUS_PATH" ]; then
             candidate="$(tr -d '\r\n' < "$STATUS_PATH")"
             case "$candidate" in
-              completed|not-required|failed) status="$candidate" ;;
+              completed|failed) status="$candidate" ;;
             esac
           fi
           {

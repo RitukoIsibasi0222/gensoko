@@ -1,4 +1,4 @@
-import { validateProductionE2EConfig } from './production-config';
+import { belongsToSite, validateProductionE2EConfig } from './production-config';
 
 export const PRODUCTION_ACCOUNT_DELETION_E2E_CONFIG_ERROR_MESSAGE =
   'production account deletion Playwright設定が不正です';
@@ -17,7 +17,7 @@ export type ProductionAccountDeletionE2EConfig = Readonly<{
   confirmation: typeof PRODUCTION_ACCOUNT_DELETION_CONFIRMATION;
 }>;
 
-export type ProductionAccountDeletionRecoveryStatus = 'completed' | 'not-required' | 'failed';
+export type ProductionAccountDeletionRecoveryStatus = 'completed' | 'failed';
 
 function failInvalidConfig(): never {
   throw new Error(PRODUCTION_ACCOUNT_DELETION_E2E_CONFIG_ERROR_MESSAGE);
@@ -36,10 +36,12 @@ export function loadProductionAccountDeletionE2EConfig(
     });
     const username = environment.PRODUCTION_ACCOUNT_DELETION_USERNAME ?? '';
     const confirmation = environment.PRODUCTION_ACCOUNT_DELETION_CONFIRMATION ?? '';
+    const emailDomain = productionConfig.email.slice(productionConfig.email.lastIndexOf('@') + 1);
 
     if (
       username !== PRODUCTION_ACCOUNT_DELETION_USERNAME ||
       !PRODUCTION_ACCOUNT_DELETION_EMAIL_PATTERN.test(productionConfig.email) ||
+      !belongsToSite(emailDomain, productionConfig.registrableDomain) ||
       confirmation !== PRODUCTION_ACCOUNT_DELETION_CONFIRMATION
     ) {
       failInvalidConfig();

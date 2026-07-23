@@ -51,6 +51,7 @@ describe('production account deletion Playwright config guard', () => {
     { ...ENVIRONMENT, PRODUCTION_ACCOUNT_DELETION_USERNAME: 'normal_user' },
     { ...ENVIRONMENT, PRODUCTION_ACCOUNT_DELETION_USERNAME: ' prod_delete_smoke' },
     { ...ENVIRONMENT, PRODUCTION_ACCOUNT_DELETION_EMAIL: 'normal-user@ops.gensoko.jp' },
+    { ...ENVIRONMENT, PRODUCTION_ACCOUNT_DELETION_EMAIL: 'prod-delete-smoke@outside.example' },
     { ...ENVIRONMENT, PRODUCTION_ACCOUNT_DELETION_EMAIL: 'prod-delete-smoke+@ops.gensoko.jp' },
     { ...ENVIRONMENT, PRODUCTION_ACCOUNT_DELETION_EMAIL: 'PROD-delete-smoke@ops.gensoko.jp' }
   ])('通常account・予約規則不一致・前後空白をlogin前に拒否する', (environment) => {
