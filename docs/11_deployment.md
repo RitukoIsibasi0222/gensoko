@@ -335,7 +335,7 @@ Cloudflare Workersは`DATABASE_URL`を直接受けず、staging専用Hyperdrive 
 - 本番DBの変更は `prisma migrate deploy` でのみ適用する
 - `prisma migrate deploy` は GitHub Actions の本番デプロイ中、Cloudflare Workers への API デプロイ前に実行する
 - 実行前に24時間以内の暗号化backup workflowが成功し、Artifactが期限内であることを確認する
-- `DATABASE_URL`はGitHub Actions Secretとして管理し、リポジトリや`wrangler.toml`には書かない
+- `DATABASE_URL`はmigration/batch用のGitHub Environment Secretとして管理する。Workers runtimeへ`DATABASE_URL`を渡さず、DB接続はCloudflare resource側でcredentialを管理する`HYPERDRIVE` bindingを使う。いずれの値もリポジトリへ書かない
 
 ### Free planのbackup・容量監視
 
@@ -644,19 +644,19 @@ jobs:
 
 > `secrets.VERCEL_TOKEN` などは GitHub の「Settings > Secrets and variables > Actions」に登録します。
 
-> `secrets.DATABASE_URL` は `prisma migrate deploy` 用です。Workers 実行時の接続URLは `wrangler secret put DATABASE_URL` で別途設定します。
+> `secrets.DATABASE_URL`はGitHub Actionsの`prisma migrate deploy`とNode batch用です。Workers runtimeへ`DATABASE_URL`を設定せず、Cloudflare側で接続先credentialを管理する`HYPERDRIVE` bindingを使います。
 
 ---
 
 ## 定期バッチ運用（GitHub Actions schedule）
 
-フェーズ9時点では Cloudflare Workers の wrangler.toml、Workers 用 Prisma 接続、デプロイ workflow が未整備のため、週間スコアリセット、GameQuestionSet cleanup、監査ログcleanupはGitHub Actions scheduleから既存Node CLIを実行する。
+フェーズ9時点ではCloudflare Workers基盤が未整備だったため、週間スコアリセット、GameQuestionSet cleanup、監査ログcleanupはGitHub Actions scheduleから既存Node CLIを実行する方針を採用した。2026-07-23時点ではAPI Worker、`backend/wrangler.jsonc`、Hyperdrive接続は実装済みだが、定期batchの実行主体は変更しておらず、GitHub Actions scheduleを正本として維持する。
 
 ### 採用理由
 
 - 既存のresetWeeklyScores、cleanupExpiredGameQuestionSets、cleanupExpiredAuditLogsはNode + Prisma adapter-pg前提で動作確認済み
-- Workers runtime 用の Prisma adapter / Hyperdrive 方針が未確定
-- Cron だけを Workers に置くと DB 接続や entrypoint 分離まで同時に必要になり、フェーズ12のデプロイ作業とスコープが衝突する
+- API WorkerのPrisma/Hyperdrive方針が確定しても、scheduled handler、失敗通知、concurrency、手動recoveryの移行証拠は別途必要
+- CronだけをWorkersへ移すと、既存Actionsの通知・artifact・承認gateと二重実行防止を同時に設計する必要がある
 - GitHub Actions schedule なら DATABASE_URL を Actions Secret として渡し、既存の npm run batch:scheduled から同じ wrapper を実行できる
 
 ### 実行スケジュール
@@ -812,12 +812,12 @@ T19では次の順序を変更しない。
 
 ### Cloudflare Workers Cron へ移行する条件
 
-フェーズ12で Workers 本番基盤を整備するときに、以下を満たせたら Cloudflare Workers Cron Trigger へ移行する。
+2026-07-23時点でAPI Workers基盤は整備済みだが、batchはGitHub Actions scheduleで運用する。将来Cloudflare Workers Cron Triggerへ移行する場合は別計画を作成し、以下を満たす。
 
-- backend/wrangler.toml を作成し、triggers.crons を設定する
-- Hono app 構築と Node server 起動を分離し、Workers 用 entrypoint を追加する
-- Workers runtime で Prisma / Supabase に接続する方式を確定する
-- wrangler dev または Cloudflare dashboard で scheduled handler を確認する
+- `backend/wrangler.jsonc`またはproduction生成configへ`triggers.crons`を追加する
+- 既存Workers entrypointとrequest-scoped Hyperdrive接続をscheduled handlerから安全に再利用する
+- GitHub Actionsとの二重実行を防ぎ、失敗通知、manual recovery、rollbackを設計する
+- Workers runtime test、staging scheduled handler、Cloudflare Dashboardの実行証拠を確認する
 
 ## オブザーバビリティ設定
 
@@ -831,20 +831,24 @@ T19では次の順序を変更しない。
 
 ## 本番レート制限設定
 
-> 2026-07-21時点: Honoのpolicy・HMAC key・middleware・route配線、SQLite-backed Durable Object、Workers runtime test、staging namespace/bindingは実装・配備済み。rate limit専用のstaging実HTTP 429/503、WAF、production namespace/binding・実機確認は未完了であり、本番適用済みとは扱わない。
+> 2026-07-23時点: Honoのpolicy・HMAC key・middleware・route配線、SQLite-backed Durable Object、Workers runtime test、staging namespace/bindingは実装・配備済みである。production entrypoint/config/dry-run契約もrepositoryに存在する。一方、rate limit専用のstaging実HTTP 429/503、WAF、DO cleanup/利用量、production実resource、監視、rollbackは未完了であり、本番適用済みとは扱わない。
+
+R7の実行順序、decision gate、テストケース、証拠、停止条件、監視期間、rollback、production依存は
+[`docs/plans/r7-rate-limit-environment-gates/plan.md`](plans/r7-rate-limit-environment-gates/plan.md)を正本とする。本節はdeployment全体からR7 runbookへ入るための要約だけを保持する。
 
 ### リリースゲート
 
-次の値はリポジトリだけでは確定できない。staging設定前に担当者と確認し、確認結果をこの節へ記録する。
+次を確認できるまでWAF作成、production deploy、実HTTP境界試験へ進まない。
 
-- Cloudflare zone plan（Free / Pro / Business / Enterprise）とWorkers plan（Free / Paid）
-- 本番API hostname、対象zone、custom domainまたはWorkers route
-- `workers.dev`を含むWAF迂回経路がなく、公開trafficが必ず対象zoneを通ること
-- 使用可能なWAF Rate Limiting Rule数、field、period、custom response、Security Events閲覧権限
-- stagingとproductionのDurable Object namespace、migration、binding、secretを分離できること
-- 1リクエスト当たりのDurable Object RPC数、alarm数、想定日次利用量、Paid移行条件
+- Cloudflare zone plan、Workers plan、rule枠、field、period、action、custom responseの実account上の利用可否
+- staging/production API hostname、対象zone、Custom Domain/Route、`workers.dev`を含む迂回経路
+- staging/productionのDurable Object namespace、migration、`RATE_LIMIT_COUNTER` binding、Secretの分離
+- Security Events、Workers metrics、Durable Objects metrics、必要な場合のWorkers Logs閲覧権限
+- DO request/RPC、alarm、SQLite read/write/delete、storage、Workers Logsの想定利用量
+- staging synthetic fixture、cleanup、実行時間帯、停止時の通知先
+- WAF/Worker rollback権限を持つ担当者
 
-これらが未確認の場合、Honoの先行実装を完了しても `docs/05_progress.md` を完了 `[x]` にしない。
+未確認の項目がある場合、コード実装が完了していてもR7と`docs/05_progress.md`を完了`[x]`にしない。
 
 ### 二層の責務
 
@@ -853,37 +857,29 @@ T19では次の順序を変更しない。
 | Cloudflare WAF                      | Hono到達前に大量のIP/burstアクセスを遮断       | Honoより高い閾値の粗いedge防御       |
 | Hono + SQLite-backed Durable Object | route、検証済みemail、認証済みuserを使って判定 | `docs/02_security.md` の正確なpolicy |
 
-- productionでは `RATE_LIMIT_STORE=durable-object` を必須とし、memory storeへ暗黙fallbackしない。
-- `RATE_LIMIT_KEY_SECRET` はJWTとは別の256-bit以上のランダム値をWrangler Secretとして設定する。値はログ、文書、PRへ記載しない。
-- Durable Object binding名はWorkers基盤の命名規則を確認後に確定する。候補は `RATE_LIMIT_COUNTER` とする。
-- productionのIP actorには検証済み `CF-Connecting-IP` だけを使い、`X-Forwarded-For` と `X-Real-IP` は無視する。
-- `POST /auth/register` はIPと操作別email、`POST /game/sessions` はIPとuserの独立バケットで制限する。正式値は `docs/02_security.md` をsingle sourceとして参照する。
+- productionでは`RATE_LIMIT_STORE=durable-object`を必須とし、memory storeへ暗黙fallbackしない。
+- `RATE_LIMIT_KEY_SECRET`はJWTとは別の256-bit以上のランダム値をSecretとして設定し、値をログ、文書、PRへ記載しない。
+- Durable Object binding名は`RATE_LIMIT_COUNTER`とし、staging/productionで異なるnamespaceへ接続する。
+- productionのIP actorには検証済み`CF-Connecting-IP`だけを使い、`X-Forwarded-For`と`X-Real-IP`は無視する。
+- 正式なapp policyは`docs/02_security.md`と`policies.ts`をsingle sourceとする。
+- WAF edge responseはHonoの日本語JSON契約外とし、frontendの非JSON/network fallbackを維持する。
 
-### WAFルール候補
+### Cloudflare現行制約
 
-契約プラン確認後、app上限よりedgeを厳しくしない値を選ぶ。次は確定前の候補であり、実値は設定日・設定者とともに記録する。
+2026-07-23確認時点で、WAF Freeは1 rule、Path/Verified Bot、10秒のcounting/mitigationであり、methodを条件にできない。Proは2 rulesでcounting最大1分、Businessは5 rulesでMethod等とcounting最大10分を利用できる。実planを確認せず、古い固定候補や複数ruleを適用しない。
 
-| zone plan    | rule候補    | match                           |      閾値候補 |
-| ------------ | ----------- | ------------------------------- | ------------: |
-| Free         | general     | `/api/v1/*`、health除外         |  40回/10秒/IP |
-| Pro          | general     | `/api/v1/*`、health除外         | 240回/60秒/IP |
-| Pro          | auth        | register/login/forgot/resetのOR |  20回/60秒/IP |
-| Business以上 | general     | `/api/v1/*`、health/OPTIONS除外 | 120回/60秒/IP |
-| Business以上 | auth        | 4 auth path + POST              | 20回/600秒/IP |
-| Business以上 | game submit | POST `/api/v1/game/sessions`    |  40回/60秒/IP |
+Free planの場合はexactな高リスクpath 1本を候補にし、OPTIONS消費と通常trafficを観測してからthresholdを決める。WAFでHonoの10分policyを再現せず、draft/disabled、利用可能ならlog、または十分高いthresholdから段階適用する。高度なWAF tuningは公開後の別taskとする。
 
-- Free/Proではmethodをmatch条件に使えない場合があり、OPTIONSもedge countへ含まれ得る。HonoではOPTIONSを除外したまま、edge閾値に余裕を持たせる。
-- custom JSON responseを利用できないplanでは、edge responseは非JSONまたはCORS network errorになり得る。Honoの日本語JSON契約には含めない。
-- Dashboard上の設定だけで終わらせず、rule名、zone、expression、characteristics、period、requests、mitigation timeout、action、rule order、設定者、確認日をこの文書へ転記する。account ID、zone ID、tokenは記載しない。
+### 適用・確認の要約
 
-### 適用・確認手順
-
-1. Workers基盤を取り込み、staging用SQLite-backed Durable Object namespace、migration、binding、secretを設定する。
-2. stagingでHono limiterを有効化し、正常応答、429、store障害時503、alarm cleanupを確認する。
-3. WAF ruleを安全な高閾値でstaging hostnameへ適用し、Security Eventsとorigin到達を確認する。
-4. false positiveがないことを確認後、契約プランに合う計画値へ下げる。
-5. productionへDO migration/binding、Worker、WAFの順で適用する。
-6. Hono 429率、WAF block、DO error、503率、login成功率、game submit成功率を確認する。
+1. repository contract testと基準SHAを固定する。
+2. read-onlyでplan、zone、hostname、resource分離、権限、rollbackを確認する。
+3. stagingでauth 11回目、questions 31回目、game submit 21回目、`Retry-After`、resetを安全に確認する。
+4. 503はrepository runtime testとconfig validationを必須にし、明示承認されたisolated canary以外でfault injectionしない。
+5. DO cleanupとrequest/alarm/storage利用量、R7対象A11Yを確認する。
+6. WAFを段階適用し、Security Events、client response、Worker/DO metricsを同じ時間帯で確認する。
+7. R5/R14のproduction preflight、R15の共通deploy、R16の非破壊smokeへ統合する。
+8. stagingを各段階24時間以上、productionを48時間以上観測し、文書を同期する。
 
 ### 障害時・ロールバック
 
@@ -911,10 +907,10 @@ T19では次の順序を変更しない。
 [x] Supabase staging・production project作成、Session pooler接続設定
 [ ] Vercelアカウント作成・プロジェクトインポート
 [ ] Vercelに VITE_API_BASE_URL 環境変数を設定
-[ ] Cloudflareアカウント作成・Wranglerインストール
-[ ] wrangler.toml 作成
+[x] Cloudflareアカウント作成・Wrangler導入、staging Worker配備を確認
+[x] `backend/wrangler.jsonc`とproduction config生成・dry-run契約を実装
 [ ] Cloudflare Workers に production の FRONTEND_URL を設定（未設定では起動不可）
-[ ] DATABASE_URL、JWT_SECRET、RATE_LIMIT_KEY_SECRET をWrangler Secretsに設定
+[ ] productionの`HYPERDRIVE` bindingを設定し、JWT_SECRET、RATE_LIMIT_KEY_SECRETをWrangler Secretsに設定
 [ ] staging/productionのSQLite-backed Durable Object namespace・migration・bindingを分離
 [ ] productionでRATE_LIMIT_STORE=durable-object以外を拒否することを確認
 [ ] 本番API hostnameが対象zoneのWAFを通り、直接到達・迂回経路がないことを確認
