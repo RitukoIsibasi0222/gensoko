@@ -742,6 +742,7 @@ R7実行ごとに次を同期する。
 - TDD Red: redirect拒否、request timeout、全security header、policy ID、runtime validation、CLI失敗契約、workflow承認gateを追加し、対象3 filesで22 tests失敗・13 tests成功を確認
 - TDD Green: 共通HTTP helper、許可応答validator、429 validator、CLI終了code、manual workflow gateを実装し、対象3 files / 35 tests成功
 - Copilot review対応 Red/Green: `Access-Control-Allow-Credentials`欠落を1 test失敗・25 tests成功で再現し、credentialed CORSのorigin/credentials両方を必須化して対象26 tests成功
+- Copilot review対応commit: `51bed34`（2件のCORS指摘を1つの契約修正として対応）
 - 追加TDD Red/Green: 承認gate失敗時にもcleanup recoveryがstaging DBへ触れる問題を1 test失敗・6 tests成功で再現し、fixture lifecycle開始後だけmain cleanup/recoveryを許可して7 tests成功
 - security: `fetch`の既定redirect追跡によるephemeral password POST bodyの転送を防ぐため、全requestへ`redirect: "error"`を固定した
 - operations: 個々のrequestへ10秒timeoutを付け、5分のworkflow step timeoutまで無応答のまま待たない構造にした
