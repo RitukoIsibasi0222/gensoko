@@ -427,8 +427,17 @@ npm run format:check
 - Green 1: safe JSON 503、非JSON/契約不一致503、500/502/504、auth 5回目/11回目、header getter・cancel拒否、request失敗nullを実装し、runner 49 testsが成功した
 - Red 2: CLI 4 tests中、既存3 testsは成功し、`observedResponseClass`未出力だけを理由に1 testが失敗した
 - Green 2: known errorへ固定enumだけを追加し、runner/CLI 2 files / 53 testsが成功した
-- Refactor: 429/503のCORS/security判定を共通化し、contract errorが処理済みのbodyをouter layerで再cancelしない構造へ整理した。runner/CLI/workflow 3 files / 60 testsが成功した
-- 最終品質gate: backend 104 files / 1104 tests成功、外部DB用10 testsは既定どおりskip。Workers runtime 2 files / 15 tests、Node/Workers TypeScript build、ESLint、Prettier checkが成功した
+- Refactor: 429/503のCORS/security判定を共通化し、contract errorが処理済みのbodyをouter layerで再cancelしない構造へ整理した。初回時点でrunner/CLI/workflow 3 files / 60 testsが成功した
+- 最終品質gate: PR #144 review対応後、backend 104 files / 1106 tests成功、外部DB用10 testsは既定どおりskip。Workers runtime 2 files / 15 tests、Node/Workers TypeScript build、ESLint、Prettier checkが成功した
+
+### PR #144 review対応
+
+- 対象review: [pullrequestreview-4765099785](https://github.com/RitukoIsibasi0222/gensoko/pull/144#pullrequestreview-4765099785)
+- 文書2件: 「PR未作成」「ユーザー確認待ち」の不整合は、PR作成直後のcommit `37671b5`でPR #144 review待ちへ更新済み
+- code 1件 Red: `Retry-After`またはheader契約不一致503でbodyをparseしない契約を2 tests追加し、runner 51 tests中49 tests成功・2 tests失敗を確認した
+- code 1件 Green: `Retry-After`、header、bodyの順に短絡評価し、先行契約不一致ではbodyをbest-effort cancelして`EDGE_OR_UNCLASSIFIED_503`を維持する。runner 51 tests、関連3 files / 62 testsが成功した
+- review対応commit: `f3b156d`（`fix: 503契約不一致時のbody解析を短絡`）
+- security: 完全なsafe 503候補だけがbody JSON parseへ進むため、response bodyを扱う範囲と不要な解析コストを縮小した。raw値の保持・出力は追加していない
 
 ### 設計判断と安全性
 
