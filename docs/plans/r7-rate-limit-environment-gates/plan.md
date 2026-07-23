@@ -775,6 +775,20 @@ R7実行ごとに次を同期する。
 - security: raw例外message/cause、response body、header値、credential、識別子、URLをerror metadataへ保持しない
 - 診断merge後の実環境再実行: run [30010266297](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30010266297)を別runとして1回実施し、auth許可request 5回目の503で安全に停止した。詳細はR7 Evidence E-04へ記録する
 
+### 第二run後の503安全分類実装
+
+- 実装日: 2026-07-23
+- 実装branch: `feature/r7-auth-503-safe-classification`
+- base `develop` SHA: `647ea6b17c6994e2e953b6c26224173d658eac5c`
+- commit: `0247510`（Red contract test）、`a9cb3db`（Green/Refactor実装）
+- TDD Red: runner 49 tests中18 testsが固定class欠如とbody二重cancelを理由に失敗し、CLI 4 tests中1 testが固定class未出力を理由に失敗した
+- TDD Green/Refactor: 完全なHono 503公開契約だけを`SAFE_JSON_503_CONTRACT`、非JSONまたは契約不一致503を`EDGE_OR_UNCLASSIFIED_503`、その他の想定外statusを`OTHER_UNEXPECTED_STATUS`へ分類する。request失敗はclass `null`を維持する
+- 回帰確認: runner/CLI/workflow 3 files / 60 tests成功。backend 104 files / 1104 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests、Node/Workers TypeScript build、ESLint、Prettier check成功
+- security: bodyは分類中だけmemory上で検証し、error/CLIへ保持しない。header値、URL、credential、識別子、raw例外も保持・出力しない。固定classはresponse契約一致を示すだけで、DO/adapter/edge等の原因を断定しない
+- 非変更範囲: workflow、API、Worker、rate-limit middleware、Durable Object、DB、Cloudflare設定、frontend、production resourceを変更していない
+- 実環境操作: staging HTTP request、fixture、Environment Variable、DB、workflow dispatchを行っておらず、第三runは未実施
+- 判定: 過去のrun 30010266297はbody/headerを記録していないため新classを遡及適用できない。R7-04/R7-05、R7-02、R7-06以降、R7全体は未完了を維持する
+
 #### 初回失敗後の診断変更ファイル
 
 | ファイル | 変更種別 | 内容 |
@@ -1062,7 +1076,7 @@ PII・Secret確認:
 - 再実行判断: 想定外503の停止条件に該当するため、同一条件で第三runを行わない
 - 代替証拠: repository contract testは成功しているが、staging実HTTP成功証拠の代替にはしない
 - 残余リスク: 許可request 5回目の503原因は未特定。R7-04/R7-05は未完了を維持し、読み取り調査または別TDD修正タスクのreview後に新しい承認で別runを検討する
-- 次工程計画: [`r7-auth-503-safe-classification`](../r7-auth-503-safe-classification/plan.md) — safe JSON 503とedge/non-JSONまたは契約不一致503を固定enumで区別するTDD計画。実装・review・merge・第三runは未実施
+- 次工程: [`r7-auth-503-safe-classification`](../r7-auth-503-safe-classification/plan.md) — safe JSON 503とedge/non-JSONまたは契約不一致503を固定enumで区別するTDD実装はbranch上で完了し、review用PR作成待ち。過去runへの遡及判定はせず、mergeと新しい実環境承認まで第三runは行わない
 - 添付先: [GitHub Actions run 30010266297](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30010266297)
 - production操作: URL、DB、Cloudflare binding/Secret、WAF、deploymentを変更していない
 
