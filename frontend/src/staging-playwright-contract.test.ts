@@ -9,6 +9,7 @@ const FRONTEND_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const VITE_CONFIG = readFileSync(FRONTEND_ROOT + 'vite.config.ts', 'utf8');
 const PLAYWRIGHT_CONFIG = readFileSync(FRONTEND_ROOT + 'playwright.config.ts', 'utf8');
 const PLAYWRIGHT_SPEC = readFileSync(FRONTEND_ROOT + 'e2e/admin-force-delete.spec.ts', 'utf8');
+const LOGIN_FORM_HELPER = readFileSync(FRONTEND_ROOT + 'e2e/login-form.ts', 'utf8');
 const PACKAGE_JSON = JSON.parse(readFileSync(FRONTEND_ROOT + 'package.json', 'utf8')) as {
   scripts?: Record<string, string>;
   devDependencies?: Record<string, string>;
@@ -50,15 +51,16 @@ describe('staging Playwright source contract', () => {
       firstHydrationCallIndex + hydrationCall.length
     );
 
-    expect(PLAYWRIGHT_SPEC).toContain(
+    expect(PLAYWRIGHT_SPEC).toContain("import { waitForHydratedLoginForm } from './login-form';");
+    expect(LOGIN_FORM_HELPER).toContain(
       'async function waitForHydratedLoginForm(page: Page): Promise<void>'
     );
-    expect(PLAYWRIGHT_SPEC).toContain(
+    expect(LOGIN_FORM_HELPER).toContain(
       "const event = new SubmitEvent('submit', { bubbles: true, cancelable: true })"
     );
-    expect(PLAYWRIGHT_SPEC).toContain('form.dispatchEvent(event)');
-    expect(PLAYWRIGHT_SPEC).toContain('return event.defaultPrevented');
-    expect(PLAYWRIGHT_SPEC).toContain(
+    expect(LOGIN_FORM_HELPER).toContain('form.dispatchEvent(event)');
+    expect(LOGIN_FORM_HELPER).toContain('return event.defaultPrevented');
+    expect(LOGIN_FORM_HELPER).toContain(
       "await expect(page.getByRole('alert')).toHaveText('メールアドレスを入力してください')"
     );
     expect(PLAYWRIGHT_SPEC).not.toContain('LOGIN_HYDRATION_PROBE_EMAIL');

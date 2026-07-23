@@ -17,6 +17,8 @@ export type ProductionAccountDeletionE2EConfig = Readonly<{
   confirmation: typeof PRODUCTION_ACCOUNT_DELETION_CONFIRMATION;
 }>;
 
+export type ProductionAccountDeletionRecoveryStatus = 'completed' | 'not-required' | 'failed';
+
 function failInvalidConfig(): never {
   throw new Error(PRODUCTION_ACCOUNT_DELETION_E2E_CONFIG_ERROR_MESSAGE);
 }

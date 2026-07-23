@@ -1,0 +1,228 @@
+name: Production Account Deletion Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 実行する操作
+        required: true
+        type: choice
+        options:
+          - main
+          - recovery-only
+      reviewed_sha:
+        description: review済みmain commit SHA
+        required: true
+        type: string
+      confirmation:
+        description: DELETE_PRODUCTION_SYNTHETIC_ACCOUNT と入力
+        required: true
+        type: string
+      approved_by:
+        description: 承認者の非秘密識別子
+        required: true
+        type: string
+      change_record:
+        description: change recordの非秘密識別子
+        required: true
+        type: string
+
+concurrency:
+  group: gensoko-production-account-deletion
+  cancel-in-progress: false
+
+jobs:
+  validate-production-account-deletion-request:
+    name: Validate approved production deletion request
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production
+    permissions:
+      contents: read
+    env:
+      PRODUCTION_ACCOUNT_DELETION_SMOKE_ENABLED: ${{ vars.PRODUCTION_ACCOUNT_DELETION_SMOKE_ENABLED }}
+
+    steps:
+      - name: Validate branch, SHA, approval and destructive gates
+        shell: bash
+        env:
+          REQUESTED_OPERATION: ${{ inputs.operation }}
+          REQUESTED_REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          REQUESTED_CONFIRMATION: ${{ inputs.confirmation }}
+          REQUESTED_APPROVED_BY: ${{ inputs.approved_by }}
+          REQUESTED_CHANGE_RECORD: ${{ inputs.change_record }}
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "production account deletion smokeはmain branchから実行してください"
+            exit 1
+          fi
+          if [[ ! "$REQUESTED_REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]] || [ "$REQUESTED_REVIEWED_SHA" != "$GITHUB_SHA" ]; then
+            echo "review済みSHAが実行対象と一致しません"
+            exit 1
+          fi
+          if [ "$PRODUCTION_ACCOUNT_DELETION_SMOKE_ENABLED" != "true" ]; then
+            echo "production account deletion smokeは無効です"
+            exit 1
+          fi
+          if [ "$REQUESTED_CONFIRMATION" != "DELETE_PRODUCTION_SYNTHETIC_ACCOUNT" ]; then
+            echo "production account deletion smokeの確認文字列が不正です"
+            exit 1
+          fi
+          if [ "$REQUESTED_OPERATION" != "main" ] && [ "$REQUESTED_OPERATION" != "recovery-only" ]; then
+            echo "production account deletion smokeの操作が不正です"
+            exit 1
+          fi
+          if [[ ! "$REQUESTED_APPROVED_BY" =~ ^[A-Za-z0-9._-]{1,100}$ ]]; then
+            echo "production account deletion smokeの承認者識別子が不正です"
+            exit 1
+          fi
+          if [[ ! "$REQUESTED_CHANGE_RECORD" =~ ^[A-Za-z0-9._:/-]{1,100}$ ]]; then
+            echo "production account deletion smokeのchange record識別子が不正です"
+            exit 1
+          fi
+
+  production-account-deletion-main:
+    name: Delete exact production synthetic account and reject old auth
+    needs: validate-production-account-deletion-request
+    if: ${{ inputs.operation == 'main' && needs['validate-production-account-deletion-request'].result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout reviewed SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.reviewed_sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run approved production account deletion main smoke
+        timeout-minutes: 5
+        working-directory: frontend
+        env:
+          PRODUCTION_E2E_BASE_URL: ${{ vars.PRODUCTION_FRONTEND_ORIGIN }}
+          PRODUCTION_E2E_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+          PRODUCTION_REGISTRABLE_DOMAIN: ${{ vars.PRODUCTION_REGISTRABLE_DOMAIN }}
+          PRODUCTION_ACCOUNT_DELETION_USERNAME: ${{ vars.PRODUCTION_ACCOUNT_DELETION_USERNAME }}
+          PRODUCTION_ACCOUNT_DELETION_EMAIL: ${{ secrets.PRODUCTION_ACCOUNT_DELETION_EMAIL }}
+          PRODUCTION_ACCOUNT_DELETION_PASSWORD: ${{ secrets.PRODUCTION_ACCOUNT_DELETION_PASSWORD }}
+          PRODUCTION_ACCOUNT_DELETION_CONFIRMATION: ${{ inputs.confirmation }}
+          PRODUCTION_ACCOUNT_DELETION_OPERATION: main
+          PRODUCTION_ACCOUNT_DELETION_STATUS_PATH: ${{ runner.temp }}/production-account-deletion-main-status.txt
+        run: npm run test:e2e:production-account-deletion
+
+      - name: Record non-secret main result
+        if: ${{ always() }}
+        shell: bash
+        env:
+          STATUS_PATH: ${{ runner.temp }}/production-account-deletion-main-status.txt
+          APPROVED_BY: ${{ inputs.approved_by }}
+          CHANGE_RECORD: ${{ inputs.change_record }}
+        run: |
+          set -euo pipefail
+          status="failed"
+          if [ -f "$STATUS_PATH" ]; then
+            candidate="$(tr -d '\r\n' < "$STATUS_PATH")"
+            case "$candidate" in
+              completed|not-required|failed) status="$candidate" ;;
+            esac
+          fi
+          {
+            echo "### Production account deletion main"
+            echo "- status: $status"
+            echo "- run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "- reviewed SHA: $GITHUB_SHA"
+            echo "- approved by: $APPROVED_BY"
+            echo "- change record: $CHANGE_RECORD"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  recover-production-account-deletion:
+    name: Recover exact production synthetic account deletion
+    needs:
+      - validate-production-account-deletion-request
+      - production-account-deletion-main
+    if: ${{ always() && needs['validate-production-account-deletion-request'].result == 'success' && (inputs.operation == 'recovery-only' || needs['production-account-deletion-main'].result != 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout reviewed SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.reviewed_sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run exact production account deletion recovery
+        timeout-minutes: 5
+        working-directory: frontend
+        env:
+          PRODUCTION_E2E_BASE_URL: ${{ vars.PRODUCTION_FRONTEND_ORIGIN }}
+          PRODUCTION_E2E_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+          PRODUCTION_REGISTRABLE_DOMAIN: ${{ vars.PRODUCTION_REGISTRABLE_DOMAIN }}
+          PRODUCTION_ACCOUNT_DELETION_USERNAME: ${{ vars.PRODUCTION_ACCOUNT_DELETION_USERNAME }}
+          PRODUCTION_ACCOUNT_DELETION_EMAIL: ${{ secrets.PRODUCTION_ACCOUNT_DELETION_EMAIL }}
+          PRODUCTION_ACCOUNT_DELETION_PASSWORD: ${{ secrets.PRODUCTION_ACCOUNT_DELETION_PASSWORD }}
+          PRODUCTION_ACCOUNT_DELETION_CONFIRMATION: ${{ inputs.confirmation }}
+          PRODUCTION_ACCOUNT_DELETION_OPERATION: recovery
+          PRODUCTION_ACCOUNT_DELETION_STATUS_PATH: ${{ runner.temp }}/production-account-deletion-recovery-status.txt
+        run: npm run test:e2e:production-account-deletion
+
+      - name: Record non-secret recovery result
+        if: ${{ always() }}
+        shell: bash
+        env:
+          STATUS_PATH: ${{ runner.temp }}/production-account-deletion-recovery-status.txt
+          APPROVED_BY: ${{ inputs.approved_by }}
+          CHANGE_RECORD: ${{ inputs.change_record }}
+        run: |
+          set -euo pipefail
+          status="failed"
+          if [ -f "$STATUS_PATH" ]; then
+            candidate="$(tr -d '\r\n' < "$STATUS_PATH")"
+            case "$candidate" in
+              completed|not-required|failed) status="$candidate" ;;
+            esac
+          fi
+          {
+            echo "### Production account deletion recovery"
+            echo "- status: $status"
+            echo "- run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "- reviewed SHA: $GITHUB_SHA"
+            echo "- approved by: $APPROVED_BY"
+            echo "- change record: $CHANGE_RECORD"
+          } >> "$GITHUB_STEP_SUMMARY"

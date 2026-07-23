@@ -1,22 +1,9 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
+import { waitForHydratedLoginForm } from './login-form';
 import { loadStagingE2EConfig } from './staging-config';
 
 const stagingConfig = loadStagingE2EConfig(process.env);
-
-async function waitForHydratedLoginForm(page: Page): Promise<void> {
-  await page.waitForFunction(() => {
-    const form = document.querySelector<HTMLFormElement>('form');
-    if (!form) {
-      return false;
-    }
-
-    const event = new SubmitEvent('submit', { bubbles: true, cancelable: true });
-    form.dispatchEvent(event);
-    return event.defaultPrevented;
-  });
-  await expect(page.getByRole('alert')).toHaveText('メールアドレスを入力してください');
-}
 
 test('synthetic Adminが対象Userを強制退会し、旧資格情報の再認証を拒否する', async ({ page }) => {
   await page.route(stagingConfig.baseUrl + '/**', async (route) => {
