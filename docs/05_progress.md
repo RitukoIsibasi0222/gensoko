@@ -171,7 +171,7 @@
 
 - [x] bcrypt 72バイト上限の入力検証統一（UTF-8バイト数、登録・変更・リセット・管理者CLI、既存ユーザー互換性、フロント表示、72/73バイト境界テスト） — 計画書: [`docs/plans/bcrypt-password-byte-limit/plan.md`](plans/bcrypt-password-byte-limit/plan.md) / PR: #82
 - [x] セキュリティヘッダーミドルウェア（CSP/HSTS/X-Frame-Options/nosniff等） — 計画書: [`docs/plans/security-headers/plan.md`](plans/security-headers/plan.md) / PR: #84
-- [-] APIレート制限の本番設計・適用（認証系 / 一般API / `POST /game/sessions`） — 実装履歴: [`api-rate-limit-production`](plans/api-rate-limit-production/plan.md) / R7実環境gate正本: [`r7-rate-limit-environment-gates`](plans/r7-rate-limit-environment-gates/plan.md) — Hono・フロントエンド、SQLite-backed Durable Object/store adapter、local Workers runtime test、staging namespace/binding稼働、manual staging境界証拠workflowまで実装済み。staging実HTTP 429/503、WAF、監視、production namespace/binding・実機確認は未実施
+- [-] APIレート制限の本番設計・適用（認証系 / 一般API / `POST /game/sessions`） — 実装履歴: [`api-rate-limit-production`](plans/api-rate-limit-production/plan.md) / R7実環境gate正本: [`r7-rate-limit-environment-gates`](plans/r7-rate-limit-environment-gates/plan.md) — Hono・フロントエンド、SQLite-backed Durable Object/store adapter、local Workers runtime test、staging namespace/binding稼働、manual staging境界証拠workflowまで実装済み。初回auth run 30004874751は境界stepで失敗したがmain/recovery cleanupとfixture flagの`false`復旧は成功し、安全な失敗分類をTDD補強した。staging実HTTP 429成功証拠、503、WAF、監視、production namespace/binding・実機確認は未完了
 - [-] 監査ログ本番運用設計（保持期間365日・退会後内部IDの同期間保持は2026-07-14承認済み。T20・公開前T21・T22完了。公開後回帰と残るrelease gateを継続） — 計画書: [docs/plans/audit-log-production-operations/plan.md](plans/audit-log-production-operations/plan.md)
   - [x] T20: production容量監視・通知先・暗号化backup・migration gateを実環境で確認
   - [x] T21: 2026-07-14 22:54 JST〜2026-07-21 22:55 JSTの公開前baselineを確認。観測開始時と2026-07-22 03:58 JSTの終了後確認run時はいずれも監査row 0件、7日増加量0件
@@ -252,7 +252,7 @@
 - [-] staging frontend/API配備基盤（Workers専用entrypoint・Prisma/mail runtime境界・Wrangler・Vercel Preview・T34実機確認） — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md) / PR: #117 — SD1〜SD13・SD15完了。Vercel `develop` Preview、Cloudflare staging Worker/DO/Hyperdrive/secret、Supabase migration、health/CORS/OPTIONS、元素118件、synthetic登録・認証・ゲーム・password reset・本人退会を確認済み。production resource・deploy・DB操作は未実施
   - [x] SD16実環境検証: PR #125で管理者linkのSPA遷移をTDD固定し、run 29802327100でAdmin login、`/admin` dashboard、強制退会、旧credential 401、main cleanupが成功した。flagは`false`へ復旧済み。production・migration・実メール・再配備・追加の直接DB queryは未実行
 - [-] Cloudflare Workers Wrangler + Prisma `@prisma/adapter-pg`/接続binding設定・デプロイ — stagingはHyperdrive方式で設定・配備・実機確認済み。production resource・binding・deployは未実施
-- [-] APIレート制限の本番適用継続（Workers専用entrypoint・SQLite-backed Durable Object・WAF・staging/production実機確認） — 実装履歴: [`api-rate-limit-production`](plans/api-rate-limit-production/plan.md) / R7実環境gate正本: [`r7-rate-limit-environment-gates`](plans/r7-rate-limit-environment-gates/plan.md) — T13/T14のDO test・store adapterとstaging namespace/binding稼働は確認済み。R7-05〜R7-07用manual workflowは実装済みだが未実行。安全な503証拠、WAF、監視、production resource/preflight/smokeも未実施
+- [-] APIレート制限の本番適用継続（Workers専用entrypoint・SQLite-backed Durable Object・WAF・staging/production実機確認） — 実装履歴: [`api-rate-limit-production`](plans/api-rate-limit-production/plan.md) / R7実環境gate正本: [`r7-rate-limit-environment-gates`](plans/r7-rate-limit-environment-gates/plan.md) — T13/T14のDO test・store adapterとstaging namespace/binding稼働は確認済み。R7-05の初回auth runは境界stepで失敗し、cleanupとflag復旧は成功。request段階・番号・status・固定契約名だけを出す安全な診断をTDD実装し、review・merge後の別run待ち。安全な503証拠、WAF、監視、production resource/preflight/smokeも未実施
 - [x] Vercel SvelteKit `develop` Previewデプロイ・branch scoped環境変数設定 — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md)
 - [ ] GitHub Actions CI/CD 設定（本番マイグレーション → APIデプロイ → フロントデプロイ）
 - [ ] npm audit・本番環境動作確認（ログイン/ゲーム/メール）
@@ -275,7 +275,7 @@
   - code・contract test・migration file・runbookを実装中。G1〜G8、R14 preflight、R15 deploy、R16 production smokeの証拠が未完了のため`[-]`を維持する。
 - [-] R6: 完全削除の残るv0.1 gateを完了する — 計画書: [`r6-account-deletion-gates`](plans/r6-account-deletion-gates/plan.md)
   - production本人削除専用config guard、main/recovery Playwright、manual-only workflow、runbookをTDD実装済み。厳格レビューで、削除前refresh tokenの明示再送、個別Cookie契約、recovery 401のfail-closed化、production domain外email拒否、keyboard操作、E2E型検査まで補強した。関連63件、frontend全体675件、ESLint、Prettier、Svelte/TypeScript check、E2E TypeScript check、実行なしのPlaywright 2件収集は成功。T1B、T35、R13〜R16の承認付き実環境証拠が未完了のため`[-]`を維持する。
-- [-] R7: app rate limitの実環境gateを完了する — 計画書: [`r7-rate-limit-environment-gates`](plans/r7-rate-limit-environment-gates/plan.md) — R7-01の基準SHA・repository contract test 100件・Workers buildと、R7-03のstaging Worker/DO/Secret presence確認は完了。auth 11回目・questions 31回目・game submit 21回目を1caseずつ確認するmanual workflowをTDDで実装済み（実環境未実行）。厳格レビュー後、redirect拒否、request 10秒timeout、公開response runtime validation、credentialed CORS（origin/credentials）と全security header、観測policy ID、CLI機密非出力、review済みSHA・承認記録gate、gate通過後の失敗時監査summary、fixture lifecycle開始後だけのcleanup/recoveryを追加した。改善後はbackend 1080件、Workers 15件、build・lint・formatが成功。game submitはroute順序どおり`GAME_SUBMIT_IP`を観測し、user bucket分離はR7-08へ残す。Cloudflare domain/zoneが0件でzone WAF・Security Events・production公開hostnameを確認できないためR7-02はblocked。G5/G6承認後のstaging境界実行・監視・production分離・rollbackの証拠待ち
+- [-] R7: app rate limitの実環境gateを完了する — 計画書: [`r7-rate-limit-environment-gates`](plans/r7-rate-limit-environment-gates/plan.md) — R7-01の基準SHA・repository contract test 100件・Workers buildと、R7-03のstaging Worker/DO/Secret presence確認は完了。auth 11回目・questions 31回目・game submit 21回目を1caseずつ確認するmanual workflowをTDDで実装済み。初回auth run 30004874751は境界stepで失敗し、main cleanup 2件・recovery cleanup 0件・fixture flagの`false`復旧は成功したため再実行せず停止した。raw値を保持せずrequest段階・番号・status・固定契約名だけを出す安全な診断を対象2 files / 32 testsでTDD補強し、review・merge後の別run待ち。Cloudflare domain/zoneが0件でzone WAF・Security Events・production公開hostnameを確認できないためR7-02はblocked。R7-04/R7-05、監視、production分離、rollbackは未完了
 - [ ] R8: headers・CORS・safe error・logを最終確認する
 - [-] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する（code・contract test完了。review・merge後の日次schedule 2回と未失効2世代は観測待ち）
 - [ ] R10: 基本responsive・keyboard/A11Yを確認する
@@ -302,7 +302,7 @@
 - [x] ダークモード（OS設定追従 + 明示toggle） — D1〜D12完了、計画: [`dark-mode`](plans/dark-mode/plan.md)
 - [x] プライバシーポリシーページ`/privacy` — R3 / 計画: [`privacy-policy`](plans/privacy-policy/plan.md)
 - [-] 基本レスポンシブ・keyboard・focus・live region — 実装済み範囲あり、主要画面のrelease確認待ち
-- [-] 認証系・ゲーム送信APIのアプリレベルrate limit — Hono/DO、staging binding、manual境界証拠workflowまで実装済み。実HTTP 429/503・production binding待ち
+- [-] 認証系・ゲーム送信APIのアプリレベルrate limit — Hono/DO、staging binding、manual境界証拠workflowまで実装済み。auth初回runは安全にcleanupして失敗停止し、診断補強後の実HTTP 429成功証拠・503・production binding待ち
 - [ ] production CORS、HttpOnly/Secure/SameSite Cookie、security headersの実HTTP確認
 - [ ] staging/production logでPII・token・Cookie・Authorization・DB URL・raw error非出力を最終確認
 - [-] 暗号化backupの日次化 — 日次cronのcontract testとworkflowの2行変更はRed→Greenで実装済み。初回Artifact・checksum・復号はrun 29322979476で確認済み。review・`develop`へのmerge後の日次schedule 2回と未失効Artifact 2世代の確認待ち

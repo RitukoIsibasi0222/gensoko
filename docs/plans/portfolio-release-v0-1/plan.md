@@ -318,7 +318,7 @@ backendでは少なくともHono、Nodemailer、Prisma toolchain経由の`@hono/
   - code・contract test・migration file・runbookを実装。G1〜G8とR14〜R16のproduction証拠待ちのため完了にしない。
 - [-] R6: 完全削除の残るv0.1 gateを完了する — 計画書: [`r6-account-deletion-gates`](../r6-account-deletion-gates/plan.md)
   - production本人削除専用config guard、main/recovery Playwright、manual-only workflow、runbookをTDD実装済み。T1B、T35、R13〜R16の承認付き実環境証拠待ちのため完了にしない。
-- [ ] R7: app rate limitの実環境gateを完了する — 計画書: [`r7-rate-limit-environment-gates`](../r7-rate-limit-environment-gates/plan.md) — repository実装とstaging bindingは確認済み。R7-01〜R7-20の実環境証拠は未実施
+- [ ] R7: app rate limitの実環境gateを完了する — 計画書: [`r7-rate-limit-environment-gates`](../r7-rate-limit-environment-gates/plan.md) — R7-01 repository契約とR7-03 staging bindingを確認済み。初回auth runは境界stepで失敗したがfixture cleanupとflag復旧は成功し、安全な失敗分類をTDD補強した。R7-02はzone不在でblocked、R7-04/R7-05以降の成功証拠は未完了
 - [ ] R8: headers・CORS・safe error・logを最終確認する
 - [-] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する（code実装済み、schedule観測待ち）
 - [ ] R10: 基本responsive・keyboard/A11Yを確認する
