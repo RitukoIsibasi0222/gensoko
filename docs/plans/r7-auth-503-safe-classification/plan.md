@@ -312,7 +312,7 @@ table-driven testで最低限次を追加する。
 - [x] R7D-06: 対象・関連testを通す
 - [x] R7D-07: 最終品質gateを通す
 - [x] R7D-08: 文書を実態へ同期する
-- [-] R7D-09: review用PR本文のユーザー確認を待つ
+- [x] R7D-09: review用PR #144を作成する
 
 ### タブ区切り
 
@@ -412,14 +412,14 @@ npm run format:check
 - API契約を変更していない場合、`docs/04_api.md`は変更しない。
 - portfolio release計画はR7状態が実際に変わる場合だけ更新する。
 
-## 実装記録（PR作成待ち）
+## 実装完了
 
 - 実装日: 2026-07-23
 - 実装branch: `feature/r7-auth-503-safe-classification`
 - base `develop` SHA: `647ea6b17c6994e2e953b6c26224173d658eac5c`
 - Red test commit: `0247510`（`test: R7 auth 503安全分類のRed契約を追加`）
 - Green/Refactor commit: `a9cb3db`（`fix: R7 auth 503応答を固定契約で安全に分類`）
-- PR: 未作成。詳細な日本語PR本文をユーザーが確認するまでGitHubへ作成しない
+- PR: [#144](https://github.com/RitukoIsibasi0222/gensoko/pull/144)（review待ち）
 
 ### TDD実測
 

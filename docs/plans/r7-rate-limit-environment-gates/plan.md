@@ -781,6 +781,7 @@ R7実行ごとに次を同期する。
 - 実装branch: `feature/r7-auth-503-safe-classification`
 - base `develop` SHA: `647ea6b17c6994e2e953b6c26224173d658eac5c`
 - commit: `0247510`（Red contract test）、`a9cb3db`（Green/Refactor実装）
+- PR: [#144](https://github.com/RitukoIsibasi0222/gensoko/pull/144)（review待ち）
 - TDD Red: runner 49 tests中18 testsが固定class欠如とbody二重cancelを理由に失敗し、CLI 4 tests中1 testが固定class未出力を理由に失敗した
 - TDD Green/Refactor: 完全なHono 503公開契約だけを`SAFE_JSON_503_CONTRACT`、非JSONまたは契約不一致503を`EDGE_OR_UNCLASSIFIED_503`、その他の想定外statusを`OTHER_UNEXPECTED_STATUS`へ分類する。request失敗はclass `null`を維持する
 - 回帰確認: runner/CLI/workflow 3 files / 60 tests成功。backend 104 files / 1104 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests、Node/Workers TypeScript build、ESLint、Prettier check成功
@@ -1076,7 +1077,7 @@ PII・Secret確認:
 - 再実行判断: 想定外503の停止条件に該当するため、同一条件で第三runを行わない
 - 代替証拠: repository contract testは成功しているが、staging実HTTP成功証拠の代替にはしない
 - 残余リスク: 許可request 5回目の503原因は未特定。R7-04/R7-05は未完了を維持し、読み取り調査または別TDD修正タスクのreview後に新しい承認で別runを検討する
-- 次工程: [`r7-auth-503-safe-classification`](../r7-auth-503-safe-classification/plan.md) — safe JSON 503とedge/non-JSONまたは契約不一致503を固定enumで区別するTDD実装はbranch上で完了し、review用PR作成待ち。過去runへの遡及判定はせず、mergeと新しい実環境承認まで第三runは行わない
+- 次工程: [`r7-auth-503-safe-classification`](../r7-auth-503-safe-classification/plan.md) — safe JSON 503とedge/non-JSONまたは契約不一致503を固定enumで区別するTDD実装は完了し、PR #144でreview待ち。過去runへの遡及判定はせず、mergeと新しい実環境承認まで第三runは行わない
 - 添付先: [GitHub Actions run 30010266297](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30010266297)
 - production操作: URL、DB、Cloudflare binding/Secret、WAF、deploymentを変更していない
 
