@@ -32,6 +32,7 @@ export async function main(): Promise<void> {
             requestNumber: error.requestNumber,
             observedStatus: error.observedStatus,
             failedContract: error.failedContract,
+            observedResponseClass: error.observedResponseClass,
           }
         : {};
     console.error({
