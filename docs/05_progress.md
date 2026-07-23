@@ -276,6 +276,7 @@
 - [-] R6: 完全削除の残るv0.1 gateを完了する — 計画書: [`r6-account-deletion-gates`](plans/r6-account-deletion-gates/plan.md)
   - production本人削除専用config guard、main/recovery Playwright、manual-only workflow、runbookをTDD実装済み。厳格レビューで、削除前refresh tokenの明示再送、個別Cookie契約、recovery 401のfail-closed化、production domain外email拒否、keyboard操作、E2E型検査まで補強した。関連63件、frontend全体675件、ESLint、Prettier、Svelte/TypeScript check、E2E TypeScript check、実行なしのPlaywright 2件収集は成功。T1B、T35、R13〜R16の承認付き実環境証拠が未完了のため`[-]`を維持する。
 - [-] R7: app rate limitの実環境gateを完了する — 計画書: [`r7-rate-limit-environment-gates`](plans/r7-rate-limit-environment-gates/plan.md) — R7-01の基準SHA・repository contract test 100件・Workers buildと、R7-03のstaging Worker/DO/Secret presence確認は完了。auth 11回目・questions 31回目・game submit 21回目を1caseずつ確認するmanual workflowをTDDで実装済み。初回auth run 30004874751の失敗後、raw値を保持せず段階・番号・status・固定契約名だけを出す診断を対象2 files / 37 testsでTDD補強した。PR #141 merge後の第二run 30010266297は1〜4回目を通過後、許可request 5回目のstatus 503 / `EXPECTED_STATUS`で停止した。fixture prepare 2件、main cleanup 2件、recovery 0件、flag `false`復旧は成功し、第三runは行っていない。Cloudflare domain/zoneが0件でR7-02はblocked。503原因、R7-04/R7-05、監視、production分離、rollbackは未完了
+  - 503安全分類の別TDD計画: [`r7-auth-503-safe-classification`](plans/r7-auth-503-safe-classification/plan.md) — safe JSON 503とedge/non-JSONまたは契約不一致503を、raw body/header値なしの固定enumで区別する計画を作成。実装・review・merge・第三runは未実施
 - [ ] R8: headers・CORS・safe error・logを最終確認する
 - [-] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する（code・contract test完了。review・merge後の日次schedule 2回と未失効2世代は観測待ち）
 - [ ] R10: 基本responsive・keyboard/A11Yを確認する

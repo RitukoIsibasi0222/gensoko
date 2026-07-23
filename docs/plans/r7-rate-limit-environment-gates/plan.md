@@ -1062,6 +1062,7 @@ PII・Secret確認:
 - 再実行判断: 想定外503の停止条件に該当するため、同一条件で第三runを行わない
 - 代替証拠: repository contract testは成功しているが、staging実HTTP成功証拠の代替にはしない
 - 残余リスク: 許可request 5回目の503原因は未特定。R7-04/R7-05は未完了を維持し、読み取り調査または別TDD修正タスクのreview後に新しい承認で別runを検討する
+- 次工程計画: [`r7-auth-503-safe-classification`](../r7-auth-503-safe-classification/plan.md) — safe JSON 503とedge/non-JSONまたは契約不一致503を固定enumで区別するTDD計画。実装・review・merge・第三runは未実施
 - 添付先: [GitHub Actions run 30010266297](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30010266297)
 - production操作: URL、DB、Cloudflare binding/Secret、WAF、deploymentを変更していない
 
