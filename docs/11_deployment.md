@@ -335,7 +335,7 @@ Cloudflare Workersは`DATABASE_URL`を直接受けず、staging専用Hyperdrive 
 - 本番DBの変更は `prisma migrate deploy` でのみ適用する
 - `prisma migrate deploy` は GitHub Actions の本番デプロイ中、Cloudflare Workers への API デプロイ前に実行する
 - 実行前に24時間以内の暗号化backup workflowが成功し、Artifactが期限内であることを確認する
-- `DATABASE_URL`はGitHub Actions SecretまたはWrangler Secret/bindingとして管理し、リポジトリのWrangler設定へ値を書かない
+- `DATABASE_URL`はmigration/batch用のGitHub Environment Secretとして管理する。Workers runtimeへ`DATABASE_URL`を渡さず、DB接続はCloudflare resource側でcredentialを管理する`HYPERDRIVE` bindingを使う。いずれの値もリポジトリへ書かない
 
 ### Free planのbackup・容量監視
 
@@ -644,7 +644,7 @@ jobs:
 
 > `secrets.VERCEL_TOKEN` などは GitHub の「Settings > Secrets and variables > Actions」に登録します。
 
-> `secrets.DATABASE_URL` は `prisma migrate deploy` 用です。Workers 実行時の接続URLは `wrangler secret put DATABASE_URL` で別途設定します。
+> `secrets.DATABASE_URL`はGitHub Actionsの`prisma migrate deploy`とNode batch用です。Workers runtimeへ`DATABASE_URL`を設定せず、Cloudflare側で接続先credentialを管理する`HYPERDRIVE` bindingを使います。
 
 ---
 
@@ -910,7 +910,7 @@ Free planの場合はexactな高リスクpath 1本を候補にし、OPTIONS消�
 [x] Cloudflareアカウント作成・Wrangler導入、staging Worker配備を確認
 [x] `backend/wrangler.jsonc`とproduction config生成・dry-run契約を実装
 [ ] Cloudflare Workers に production の FRONTEND_URL を設定（未設定では起動不可）
-[ ] DATABASE_URL、JWT_SECRET、RATE_LIMIT_KEY_SECRET をWrangler Secretsに設定
+[ ] productionの`HYPERDRIVE` bindingを設定し、JWT_SECRET、RATE_LIMIT_KEY_SECRETをWrangler Secretsに設定
 [ ] staging/productionのSQLite-backed Durable Object namespace・migration・bindingを分離
 [ ] productionでRATE_LIMIT_STORE=durable-object以外を拒否することを確認
 [ ] 本番API hostnameが対象zoneのWAFを通り、直接到達・迂回経路がないことを確認
