@@ -34,6 +34,24 @@ describe("staging rate limit evidence workflow", () => {
     expect(workflow).toContain("npm run staging:rate-limit-evidence");
   });
 
+  it("review済みSHA・確認文字列・承認者・change recordをfixture作成前に検証する", () => {
+    const workflow = readFileSync(WORKFLOW_PATH, "utf8");
+    const gateIndex = workflow.indexOf("Validate branch, SHA and approval gates");
+    const prepareIndex = workflow.indexOf("--operation prepare");
+
+    expect(workflow).toContain("reviewed_sha:");
+    expect(workflow).toContain("confirmation:");
+    expect(workflow).toContain("approved_by:");
+    expect(workflow).toContain("change_record:");
+    expect(workflow).toContain("RUN_STAGING_RATE_LIMIT_EVIDENCE");
+    expect(workflow).toContain('[[ ! "$REQUESTED_REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]');
+    expect(workflow).toContain('[ "$REQUESTED_REVIEWED_SHA" != "$GITHUB_SHA" ]');
+    expect(workflow).toContain('[[ ! "$REQUESTED_APPROVED_BY" =~ ^[A-Za-z0-9._-]{1,100}$ ]]');
+    expect(workflow).toContain('[[ ! "$REQUESTED_CHANGE_RECORD" =~ ^[A-Za-z0-9._:/-]{1,100}$ ]]');
+    expect(gateIndex).toBeGreaterThan(-1);
+    expect(prepareIndex).toBeGreaterThan(gateIndex);
+  });
+
   it("固定staging URLと既存fixture guardを使いproduction targetを持たない", () => {
     const workflow = readFileSync(WORKFLOW_PATH, "utf8");
 
@@ -43,6 +61,7 @@ describe("staging rate limit evidence workflow", () => {
     expect(workflow).toContain("https://gensoko-frontend-staging-develop.vercel.app");
     expect(workflow).toContain("https://gensoko-api-staging.rituko-labs.workers.dev/api/v1");
     expect(workflow).toContain("STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED");
+    expect(workflow).toContain('STAGING_RATE_LIMIT_REQUEST_TIMEOUT_MS: "10000"');
     expect(workflow).not.toContain("environment: production");
     expect(workflow).not.toContain("secrets.PRODUCTION");
   });
@@ -67,18 +86,35 @@ describe("staging rate limit evidence workflow", () => {
 
   it("fixture prepare後に時間制限付きrunnerを実行し、常時cleanupと独立recoveryを行う", () => {
     const workflow = readFileSync(WORKFLOW_PATH, "utf8");
+    const lifecycleIndex = workflow.indexOf("Mark fixture lifecycle started");
     const prepareIndex = workflow.indexOf("--operation prepare");
     const evidenceIndex = workflow.indexOf("npm run staging:rate-limit-evidence");
     const cleanupIndex = workflow.indexOf("--operation remove");
 
-    expect(prepareIndex).toBeGreaterThan(-1);
+    expect(lifecycleIndex).toBeGreaterThan(-1);
+    expect(prepareIndex).toBeGreaterThan(lifecycleIndex);
     expect(evidenceIndex).toBeGreaterThan(prepareIndex);
     expect(cleanupIndex).toBeGreaterThan(evidenceIndex);
     expect(workflow.match(/--operation remove/g)).toHaveLength(2);
-    expect(workflow).toContain("if: ${{ always() }}");
+    expect(workflow).toContain(
+      "if: ${{ always() && steps.fixture_lifecycle.outputs.started == 'true' }}",
+    );
     expect(workflow).toContain("cleanup-staging-rate-limit-fixtures:");
     expect(workflow).toContain("needs: staging-rate-limit-evidence");
     expect(workflow).toContain("needs['staging-rate-limit-evidence'].result != 'success'");
+    expect(workflow).toContain(
+      "needs['staging-rate-limit-evidence'].outputs.fixture_lifecycle_started == 'true'",
+    );
     expect(workflow).toContain("timeout-minutes: 5");
+  });
+
+  it("承認記録と実行SHAを秘密値なしでjob summaryへ残す", () => {
+    const workflow = readFileSync(WORKFLOW_PATH, "utf8");
+
+    expect(workflow).toContain("GITHUB_STEP_SUMMARY");
+    expect(workflow).toContain("REQUESTED_APPROVED_BY");
+    expect(workflow).toContain("REQUESTED_CHANGE_RECORD");
+    expect(workflow).toContain("GITHUB_SHA");
+    expect(workflow).not.toContain('echo "$STAGING_SYNTHETIC_USER_PASSWORD"');
   });
 });

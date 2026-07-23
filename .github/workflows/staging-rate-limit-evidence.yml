@@ -11,6 +11,22 @@ on:
           - auth
           - questions
           - game-submit
+      reviewed_sha:
+        description: レビュー済みdevelop commit SHA（40桁）
+        required: true
+        type: string
+      confirmation:
+        description: RUN_STAGING_RATE_LIMIT_EVIDENCE と入力
+        required: true
+        type: string
+      approved_by:
+        description: 実行承認者（英数字・._-、100文字以内）
+        required: true
+        type: string
+      change_record:
+        description: 関連する変更・承認記録ID（英数字・._:/-、100文字以内）
+        required: true
+        type: string
 
 concurrency:
   group: gensoko-batch-jobs
@@ -24,25 +40,48 @@ jobs:
     environment: staging
     permissions:
       contents: read
+    outputs:
+      fixture_lifecycle_started: ${{ steps.fixture_lifecycle.outputs.started }}
     env:
       BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
       STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED: ${{ vars.STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED }}
       STAGING_RATE_LIMIT_EVIDENCE_CASE: ${{ inputs.case }}
       STAGING_RATE_LIMIT_API_BASE_URL: https://gensoko-api-staging.rituko-labs.workers.dev/api/v1
       STAGING_RATE_LIMIT_FRONTEND_ORIGIN: https://gensoko-frontend-staging-develop.vercel.app
+      STAGING_RATE_LIMIT_REQUEST_TIMEOUT_MS: "10000"
 
     steps:
-      - name: Validate manual staging target
+      - name: Validate branch, SHA and approval gates
         shell: bash
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
           REQUESTED_CASE: ${{ inputs.case }}
+          REQUESTED_REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          REQUESTED_CONFIRMATION: ${{ inputs.confirmation }}
+          REQUESTED_APPROVED_BY: ${{ inputs.approved_by }}
+          REQUESTED_CHANGE_RECORD: ${{ inputs.change_record }}
         run: |
           set -euo pipefail
 
           if [ "$GITHUB_REF_NAME" != "develop" ]; then
             echo "staging rate limit evidenceはdevelop branchから実行してください"
+            exit 1
+          fi
+          if [[ ! "$REQUESTED_REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]] || [ "$REQUESTED_REVIEWED_SHA" != "$GITHUB_SHA" ]; then
+            echo "review済みSHAが実行commitと一致しません"
+            exit 1
+          fi
+          if [ "$REQUESTED_CONFIRMATION" != "RUN_STAGING_RATE_LIMIT_EVIDENCE" ]; then
+            echo "staging rate limit evidenceの確認文字列が不正です"
+            exit 1
+          fi
+          if [[ ! "$REQUESTED_APPROVED_BY" =~ ^[A-Za-z0-9._-]{1,100}$ ]]; then
+            echo "staging rate limit evidenceの承認者形式が不正です"
+            exit 1
+          fi
+          if [[ ! "$REQUESTED_CHANGE_RECORD" =~ ^[A-Za-z0-9._:/-]{1,100}$ ]]; then
+            echo "staging rate limit evidenceの変更記録形式が不正です"
             exit 1
           fi
           if [ "$BATCH_ENVIRONMENT" != "staging" ]; then
@@ -121,6 +160,11 @@ jobs:
           );
           NODE
 
+      - name: Mark fixture lifecycle started
+        id: fixture_lifecycle
+        shell: bash
+        run: echo "started=true" >> "$GITHUB_OUTPUT"
+
       - name: Prepare exact synthetic Admin and User fixtures
         working-directory: backend
         env:
@@ -137,8 +181,23 @@ jobs:
           STAGING_SYNTHETIC_USER_PASSWORD: ${{ steps.credentials.outputs.user_password }}
         run: npm run staging:rate-limit-evidence
 
+      - name: Record reviewed execution metadata
+        shell: bash
+        env:
+          REQUESTED_APPROVED_BY: ${{ inputs.approved_by }}
+          REQUESTED_CHANGE_RECORD: ${{ inputs.change_record }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Staging rate limit evidence"
+            echo "- SHA: \`$GITHUB_SHA\`"
+            echo "- Case: \`$STAGING_RATE_LIMIT_EVIDENCE_CASE\`"
+            echo "- Approved by: \`$REQUESTED_APPROVED_BY\`"
+            echo "- Change record: \`$REQUESTED_CHANGE_RECORD\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Remove exact synthetic fixtures
-        if: ${{ always() }}
+        if: ${{ always() && steps.fixture_lifecycle.outputs.started == 'true' }}
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -148,7 +207,7 @@ jobs:
   cleanup-staging-rate-limit-fixtures:
     name: Recover exact staging fixtures after a non-success result
     needs: staging-rate-limit-evidence
-    if: ${{ always() && github.ref_name == 'develop' && needs['staging-rate-limit-evidence'].result != 'success' }}
+    if: ${{ always() && github.ref_name == 'develop' && needs['staging-rate-limit-evidence'].result != 'success' && needs['staging-rate-limit-evidence'].outputs.fixture_lifecycle_started == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: staging
