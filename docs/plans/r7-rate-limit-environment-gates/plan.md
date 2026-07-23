@@ -781,11 +781,12 @@ R7実行ごとに次を同期する。
 - 実装branch: `feature/r7-auth-503-safe-classification`
 - base `develop` SHA: `647ea6b17c6994e2e953b6c26224173d658eac5c`
 - commit: `0247510`（Red contract test）、`a9cb3db`（Green/Refactor実装）
-- PR: [#144](https://github.com/RitukoIsibasi0222/gensoko/pull/144)（review待ち）
+- PR: [#144](https://github.com/RitukoIsibasi0222/gensoko/pull/144)（追加review対応済み・review待ち）
 - TDD Red: runner 49 tests中18 testsが固定class欠如とbody二重cancelを理由に失敗し、CLI 4 tests中1 testが固定class未出力を理由に失敗した
 - TDD Green/Refactor: 完全なHono 503公開契約だけを`SAFE_JSON_503_CONTRACT`、非JSONまたは契約不一致503を`EDGE_OR_UNCLASSIFIED_503`、その他の想定外statusを`OTHER_UNEXPECTED_STATUS`へ分類する。request失敗はclass `null`を維持する
-- 回帰確認: PR #144 review対応後、runner/CLI/workflow 3 files / 62 tests成功。backend 104 files / 1106 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests、Node/Workers TypeScript build、ESLint、Prettier check成功
+- 回帰確認: PR #144追加review対応後、runner/CLI/workflow 3 files / 65 tests成功。backend 104 files / 1109 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests、Node/Workers TypeScript build、ESLint、Prettier check成功
 - PR #144 review対応: 文書のPR状態不整合2件はcommit `37671b5`で解消済み。code指摘は2 testsをRed追加し、`Retry-After`またはheader契約不一致503ではbodyをparseせずbest-effort cancelする短絡評価へ修正した（commit `f3b156d`）
+- PR #144追加review対応: JSON parse失敗時のbody解放をauth許可200・5回目503・11回目429の3 testsでRed再現し、各parse ownerでbest-effort cancelするGreen実装により固定分類とraw値非露出を維持した（commit `74cc588`）
 - security: bodyは分類中だけmemory上で検証し、error/CLIへ保持しない。header値、URL、credential、識別子、raw例外も保持・出力しない。固定classはresponse契約一致を示すだけで、DO/adapter/edge等の原因を断定しない
 - 非変更範囲: workflow、API、Worker、rate-limit middleware、Durable Object、DB、Cloudflare設定、frontend、production resourceを変更していない
 - 実環境操作: staging HTTP request、fixture、Environment Variable、DB、workflow dispatchを行っておらず、第三runは未実施

@@ -428,7 +428,7 @@ npm run format:check
 - Red 2: CLI 4 tests中、既存3 testsは成功し、`observedResponseClass`未出力だけを理由に1 testが失敗した
 - Green 2: known errorへ固定enumだけを追加し、runner/CLI 2 files / 53 testsが成功した
 - Refactor: 429/503のCORS/security判定を共通化し、contract errorが処理済みのbodyをouter layerで再cancelしない構造へ整理した。初回時点でrunner/CLI/workflow 3 files / 60 testsが成功した
-- 最終品質gate: PR #144 review対応後、backend 104 files / 1106 tests成功、外部DB用10 testsは既定どおりskip。Workers runtime 2 files / 15 tests、Node/Workers TypeScript build、ESLint、Prettier checkが成功した
+- 最終品質gate: PR #144追加review対応後、backend 104 files / 1109 tests成功、外部DB用10 testsは既定どおりskip。Workers runtime 2 files / 15 tests、Node/Workers TypeScript build、ESLint、Prettier checkが成功した
 
 ### PR #144 review対応
 
@@ -438,6 +438,14 @@ npm run format:check
 - code 1件 Green: `Retry-After`、header、bodyの順に短絡評価し、先行契約不一致ではbodyをbest-effort cancelして`EDGE_OR_UNCLASSIFIED_503`を維持する。runner 51 tests、関連3 files / 62 testsが成功した
 - review対応commit: `f3b156d`（`fix: 503契約不一致時のbody解析を短絡`）
 - security: 完全なsafe 503候補だけがbody JSON parseへ進むため、response bodyを扱う範囲と不要な解析コストを縮小した。raw値の保持・出力は追加していない
+
+### PR #144追加review対応
+
+- 対象review: [pullrequestreview-4768836627](https://github.com/RitukoIsibasi0222/gensoko/pull/144#pullrequestreview-4768836627)
+- Red: auth許可200、auth 5回目503、auth 11回目429のJSON parse失敗時にも未消費bodyを解放する3 testsを追加し、runner 54 tests中51 tests成功・3 tests失敗を確認した
+- Green: parse失敗を所有する`readExpectedJson`、`classifyUnexpectedResponse`、`createRateLimitSummary`でbodyをbest-effort cancelし、既存の固定契約違反・503分類とraw例外非露出を維持した。runner 54 tests、関連3 files / 65 testsが成功した
+- 追加review対応commit: `74cc588`（`fix: JSON parse失敗時にresponse bodyを解放`）
+- security: cancel自体が失敗しても元の固定分類を上書きせず、parse例外、response body、credential、PIIをerror metadataやCLIへ保持・出力しない
 
 ### 設計判断と安全性
 
