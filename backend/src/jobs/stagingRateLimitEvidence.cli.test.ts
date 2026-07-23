@@ -117,17 +117,19 @@ describe("stagingRateLimitEvidence CLI", () => {
     expect(output).not.toContain("attacker.invalid");
   });
 
-  it("既知のauth失敗はrequest段階・番号・statusだけを安全に出力する", async () => {
+  it("既知のauth失敗は固定response classだけを追加しraw値を出力しない", async () => {
     const { StagingRateLimitEvidenceExecutionError } =
       await import("./stagingRateLimitEvidence.js");
     runtimeMocks.runEvidence.mockRejectedValue(
       new StagingRateLimitEvidenceExecutionError({
-        message: "staging rate limit evidenceの429契約が不正です",
-        failureStage: "AUTH_LIMITED_REQUEST",
+        message:
+          "body=secret-body header=secret-header password=secret-password token=secret-token Cookie=secret-cookie Authorization=secret-authorization email=secret@example.test userId=secret-user-id ip=192.0.2.1 url=https://private.invalid",
+        failureStage: "AUTH_ALLOWED_REQUEST",
         failureKind: "RESPONSE_CONTRACT_FAILED",
-        requestNumber: 11,
-        observedStatus: 429,
-        failedContract: "STRICT_TRANSPORT_SECURITY",
+        requestNumber: 5,
+        observedStatus: 503,
+        failedContract: "EXPECTED_STATUS",
+        observedResponseClass: "SAFE_JSON_503_CONTRACT",
       }),
     );
 
@@ -137,15 +139,27 @@ describe("stagingRateLimitEvidence CLI", () => {
     expect(consoleErrorSpy).toHaveBeenCalledWith({
       event: "staging_rate_limit_evidence.failed",
       message: "staging rate limit evidenceの実行に失敗しました",
-      failureStage: "AUTH_LIMITED_REQUEST",
+      failureStage: "AUTH_ALLOWED_REQUEST",
       failureKind: "RESPONSE_CONTRACT_FAILED",
-      requestNumber: 11,
-      observedStatus: 429,
-      failedContract: "STRICT_TRANSPORT_SECURITY",
+      requestNumber: 5,
+      observedStatus: 503,
+      failedContract: "EXPECTED_STATUS",
+      observedResponseClass: "SAFE_JSON_503_CONTRACT",
     });
     const output = getConsoleOutput(consoleErrorSpy);
-    expect(output).not.toContain("token");
-    expect(output).not.toContain("body");
-    expect(output).not.toContain("password");
+    for (const forbiddenValue of [
+      "secret-body",
+      "secret-header",
+      "secret-password",
+      "secret-token",
+      "secret-cookie",
+      "secret-authorization",
+      "secret@example.test",
+      "secret-user-id",
+      "192.0.2.1",
+      "private.invalid",
+    ]) {
+      expect(output).not.toContain(forbiddenValue);
+    }
   });
 });
