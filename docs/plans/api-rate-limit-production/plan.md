@@ -2,6 +2,44 @@
 
 > 設計者ロール: シニアフルスタックエンジニア / シニアバックエンドエンジニア / Webセキュリティエンジニア / Cloudflareプラットフォームエンジニア
 
+## 2026-07-23 現状再監査と文書責務
+
+> この文書はレート制限の設計、Hono・フロントエンド実装、TDD、SQLite-backed Durable Object実装、過去の判断を保持する歴史的記録である。
+>
+> R7のstaging実HTTP、WAF段階適用、Cloudflare実resource、A11Y手動確認、監視、rollback、production preflight/smoke、完了証拠は
+> [`../r7-rate-limit-environment-gates/plan.md`](../r7-rate-limit-environment-gates/plan.md)を正本とする。
+
+- 再監査日: 2026-07-23
+- 基準branch: `develop`
+- 基準commit: `fbec33b`（PR #138 merge）
+- コード実装の主なmerge実績: PR #87（Hono/frontend）、PR #113（SQLite-backed Durable Object）、PR #116（staging Worker構成）、PR #136（production Worker構成）
+- staging: Worker、Durable Object namespace/binding、専用Secretの稼働記録あり
+- production: entrypoint/config/dry-run契約はrepositoryに存在するが、実resource、deploy、WAF、監視、rollbackは証拠不足
+- R7: 未完了。一般synthetic導線の成功をrate limit境界の証拠に置き換えない
+
+### 再監査で古いと確認した記述
+
+以下の本文は作成・実装当時の判断経緯を残すため削除や現在値への上書きを行わない。現在状態の判断には本節とR7専用計画を使う。
+
+| 過去の記述                                         | 現在の扱い                                                                  |
+| -------------------------------------------------- | --------------------------------------------------------------------------- |
+| 現行storeがmodule-local `Map`だけ                  | store抽象化とDurable Objectを実装済み                                       |
+| 一般API、HMAC actor、複数bucketが未実装            | PR #87で実装済み                                                            |
+| Workers entrypoint/Wrangler基盤が未実装            | staging/production entrypointとconfig契約を実装済み                         |
+| frontendのrate limit表示が不足                     | login JSON 429/503・非JSON 429・network error、game 429 retryを自動test済み |
+| T15を「staging WAF/DO」と一括管理                  | DO配備済みと実HTTP/WAF未完了を分け、未完了分をR7計画へ移管                  |
+| T17を未完了扱い                                    | 自動A11Y testは完了。R7影響導線の手動確認だけを移管                         |
+| T18でproduction実装と実環境確認を一括管理          | repository構成準備済みと、実resource/deploy/監視未完了を分離                |
+| Free planのcustom responseや複数条件を固定的に扱う | 実accountで利用可否を再確認し、edgeはHono JSON契約外とする                  |
+
+### コード実装完了とR7完了の境界
+
+- Hono policy、HMAC key、route/middleware、429/503契約、frontend表示、Durable Object、Workers runtime testは実装記録として完了済みである。
+- staging rate limit専用実HTTP、safeな503証拠、DO cleanup/利用量、WAF、手動A11Y、production resource/preflight/smoke、監視、rollbackは未完了である。
+- 旧T15・T17〜T19の未完了部分はR7専用計画のR7-01〜R7-20へ移管する。
+- 本文中の過去の日付、branch、PR、test件数は「記録日時点」の事実として保持し、現在値として読まない。
+- 本文末尾の`実装完了`追記テンプレートはコード実装時の旧形式であり、R7完了記録には使用しない。
+
 ## 背景・目的
 
 `docs/05_progress.md` フェーズ11の「APIレート制限の本番設計・適用（認証系 / 一般API / `POST /game/sessions`）」を実装する。
@@ -419,7 +457,10 @@ export type RateLimitResult = Readonly<{
 }>;
 
 export interface RateLimitStore {
-  consume(input: { policyId: RateLimitPolicyId; keyDigest: string }): Promise<RateLimitResult>;
+  consume(input: {
+    policyId: RateLimitPolicyId;
+    keyDigest: string;
+  }): Promise<RateLimitResult>;
 }
 
 export type RateLimitStoreFactory = (context: Context) => RateLimitStore;
@@ -428,7 +469,9 @@ export type RateLimitBucket = Readonly<{
   keyContext: RateLimitKeyContext;
 }>;
 
-export type RateLimitBucketResolver = (context: Context) => Promise<readonly RateLimitBucket[]>;
+export type RateLimitBucketResolver = (
+  context: Context,
+) => Promise<readonly RateLimitBucket[]>;
 
 export function rateLimit(options: {
   getStore: RateLimitStoreFactory;
@@ -442,9 +485,15 @@ export function resolveClientIp(input: {
 }): string | null;
 export function normalizeIpActor(ip: string): string | null;
 export function normalizeRateLimitEmail(email: string): string;
-export function createIpRateLimitKey(context: RateLimitKeyContext): Promise<string | null>;
-export function createUserRateLimitKey(context: RateLimitKeyContext): Promise<string | null>;
-export function createEmailRateLimitKey(context: RateLimitKeyContext): Promise<string | null>;
+export function createIpRateLimitKey(
+  context: RateLimitKeyContext,
+): Promise<string | null>;
+export function createUserRateLimitKey(
+  context: RateLimitKeyContext,
+): Promise<string | null>;
+export function createEmailRateLimitKey(
+  context: RateLimitKeyContext,
+): Promise<string | null>;
 export function createRateLimitKeyDigest(input: {
   secret: string;
   policyId: RateLimitPolicyId;
@@ -462,9 +511,13 @@ export function createRateLimitExceededResponse(
   context: Context,
   result: RateLimitResult,
 ): Response;
-export function createRateLimitStoreUnavailableResponse(context: Context): Response;
+export function createRateLimitStoreUnavailableResponse(
+  context: Context,
+): Response;
 
-export const RATE_LIMIT_POLICIES: Readonly<Record<RateLimitPolicyId, RateLimitPolicy>>;
+export const RATE_LIMIT_POLICIES: Readonly<
+  Record<RateLimitPolicyId, RateLimitPolicy>
+>;
 ```
 
 - `remaining`と`retryAfterSec`は0以上、`resetAtMs`はUnix epoch milliseconds。
