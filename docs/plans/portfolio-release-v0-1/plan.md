@@ -276,6 +276,7 @@ backendでは少なくともHono、Nodemailer、Prisma toolchain経由の`@hono/
 - PR #125とrun 29802327100を確認し、Admin E2Eを重複実装せず完了へ更新した。
 - stagingで登録・メール・login・本人導線は確認済みだが、production smokeの代替にはしない境界を明記した。
 - 完全削除のコード完了と、T33/T35/production/restore等の未完了を分離した。
+- R6厳格レビューで旧refresh token未再送とrecovery 401の曖昧性を修正し、Cookie個別属性、production domain、keyboard、E2E型検査をrelease contractへ追加した。実環境gateは完了扱いにしていない。
 - 共通API client、game test補強、backup耐障害性計画の未完了checkboxを保持し、日次化だけをv0.1境界へ分離した。
 
 ### v4 確定

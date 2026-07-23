@@ -123,9 +123,14 @@ R6 は次のすべてを満たした時点で完了とする。
 | `docs/11_deployment.md`                                     | 修正     | R16 main/recovery-only、停止、flag復旧、証拠記録runbook                  |
 | `frontend/e2e/production-account-deletion-config.ts`        | 新規     | 一回限り削除account、URL、reserved identity、確認文字列をfail-closed検証 |
 | `frontend/e2e/production-account-deletion-config.test.ts`   | 新規     | production/staging混同、通常account、弱いpassword、不正URLを拒否         |
+| `frontend/e2e/production-account-deletion-safety.ts`        | 新規     | refresh Cookie発行・削除契約を個別Set-Cookie単位で厳格検証               |
+| `frontend/e2e/production-account-deletion-safety.test.ts`   | 新規     | Cookie属性、重複、別path、flatten誤検知の境界test                        |
 | `frontend/e2e/production-account-deletion.spec.ts`          | 新規     | 本人削除、旧access/refresh/login拒否、exact recovery                     |
+| `frontend/e2e/production-auth.spec.ts`                      | 修正     | browser/API response双方を扱う既存helperの型境界を明示                   |
+| `frontend/e2e/production-config.ts`                         | 修正     | registrable domain所属判定を削除configと共有                             |
 | `frontend/playwright.production-account-deletion.config.ts` | 新規     | destructive smokeを分離し、秘密を残す出力を無効化                        |
 | `frontend/src/production-account-deletion-contract.test.ts` | 新規     | 専用config/spec/workflow、manual-only、Environment、recovery契約         |
+| `frontend/tsconfig.e2e.json`                                | 新規     | Playwright E2E sourceを独立して型検査                                    |
 | `frontend/e2e/login-form.ts`                                | 新規     | credential入力前のlogin hydration待機を共有                              |
 | `frontend/e2e/admin-force-delete.spec.ts`                   | 修正     | 既存staging E2Eを共有login helperへ置換                                  |
 | `frontend/src/staging-playwright-contract.test.ts`          | 修正     | 共有login helperの利用契約を追加                                         |
@@ -191,7 +196,7 @@ User/legacy/関連 row が 1 件以上、証拠不明、接続先不一致、旧
 
 - R5 の反復用 auth smoke account と別の、削除を目的にした一回限り `USER` を使う。
 - 公開 register と実メール verify を通して事前作成し、DB へ fixture を直接 insert しない。
-- reserved username/email 規則、期待 username、実行 confirmation がすべて一致しなければ login 前に停止する。
+- reserved username/email 規則、email domainのproduction registrable domain所属、期待 username、実行 confirmation がすべて一致しなければ login 前に停止する。
 - credential は production Environment Secret から main/recovery job の process env だけへ渡し、`GITHUB_OUTPUT`、Artifact、summary、command line へ渡さない。
 
 ### main job
@@ -199,16 +204,17 @@ User/legacy/関連 row が 1 件以上、証拠不明、接続先不一致、旧
 1. manual dispatch、review 済み SHA、production Environment approval、enable flag、confirmation、change record を検証する。
 2. production frontend/API の HTTPS、approved host、same-site、`workers.dev` 非使用を値非表示で確認する。
 3. synthetic `USER` で login し、profile の username/email/role が期待値と一致しなければ削除前に停止する。
-4. access token を runner memory 内だけに保持し、設定画面から password と確認 checkbox を使って本人削除する。
-5. 200、refresh Cookie 削除、anonymous UI を確認する。
-6. 削除前 access token で `GET /users/me` が 401、refresh が 401、同じ資格情報の login が 401 であることを確認する。
+4. access tokenとloginで実際に発行されたrefresh tokenをrunner memory内だけに保持し、設定画面の確認checkboxと削除buttonをkeyboardだけで操作して本人削除する。
+5. 200、個別`Set-Cookie`の完全なrefresh Cookie削除契約、anonymous UIを確認する。
+6. 削除前access tokenで`GET /users/me`が401、削除前refresh tokenを隔離requestで明示再送したrefreshが401かつtoken再発行なし、同じ資格情報のloginが401かつtoken発行なしであることを確認する。
 7. status、run URL、review 済み SHA、実行日時、recovery 状態だけを summary に残す。
 
 ### recovery job
 
 - main が非成功・cancel・timeout の場合、別 runner の `always()` job で同じ exact account だけを再確認する。
-- login 401 は既に削除済みとして `not-required`、login 200 かつ profile が期待 identity と一致する場合だけ本人削除を再試行する。
-- profile 不一致、5xx、network、非 JSON、identity 不明では削除せず `failed` とし、公開を停止する。
+- login 401は「削除済み」と「Secret不一致・変更済み」を区別できないため成功扱いにせず`failed`とする。login 200かつprofileが期待identityと一致する場合だけ本人削除を再試行し、削除成功時だけ`completed`とする。
+- profile不一致、401、その他の非200、5xx、network、非JSON、identity不明では削除せず`failed`とし、公開を停止する。
+- mainとrecoveryはjobごとにproduction Environment保護を通る。required reviewer待ちでrecoveryが`Waiting`になった場合は、同じ証拠を確認して別途承認し、未承認のまま成功扱いにしない。
 - hard kill で recovery 自体が動かなかった場合は、同じ review 済み SHA と Secret で recovery-only 再実行できる runbook を用意する。
 - 成否にかかわらず operator が enable flag を `false` へ戻し、別画面で復旧を確認する。
 
@@ -269,10 +275,7 @@ export function loadProductionAccountDeletionE2EConfig(
   environment: NodeJS.ProcessEnv,
 ): ProductionAccountDeletionE2EConfig;
 
-export type ProductionAccountDeletionRecoveryStatus =
-  | "completed"
-  | "not-required"
-  | "failed";
+export type ProductionAccountDeletionRecoveryStatus = "completed" | "failed";
 ```
 
 config loader は値を error message に含めず、URL、reserved identity、password byte 境界、confirmation のどれかが不正なら browser/API request 前に例外を投げる。
@@ -283,7 +286,8 @@ config loader は値を error message に含めず、URL、reserved identity、p
 
 ### Red
 
-- production/staging URL 混同、通常 account、reserved identity 不一致、弱い/73 byte 以上 password、confirmation 不一致を拒否する config test を先行する。
+- production/staging URL 混同、通常 account、reserved identity 不一致、production registrable domain外のemail、弱い/73 byte 以上 password、confirmation 不一致を拒否する config test を先行する。
+- flatten済みheaderの誤検知を避け、個別`Set-Cookie`の発行・削除属性、path、重複を固定するbehavior testを先行する。
 - destructive spec が専用 config、本人削除、旧 access/refresh/login 401 を要求する source contract を先行する。
 - workflow が manual-only、production Environment、enable flag、confirmation、main/recovery、secret 非出力、trace/video/screenshot 無効を要求する contract test を先行する。
 
@@ -294,7 +298,8 @@ config loader は値を error message に含めず、URL、reserved identity、p
 
 ### Refactor
 
-- URL/identity/password validation を config loader に一元化し、spec/workflow へ正規表現や判定を複製しない。
+- URL/identity/password validationをconfig loaderに一元化し、registrable domain所属判定を既存production configと共有して、spec/workflowへ正規表現や判定を複製しない。
+- E2E source専用TypeScript設定を追加し、source contractだけでは検出できないbrowser/API response型のずれも品質gateで検出する。
 - production auth smoke と安全に共有できる URL validation だけを helper 化し、account credential と destructive gate は共有しない。
 
 ## テストケース一覧
@@ -304,18 +309,20 @@ config loader は値を error message に含めず、URL、reserved identity、p
 | config: approved HTTPS frontend/API、reserved identity、強い password、confirmation 一致 | config を返す                                                    |
 | config: localhost、HTTP、staging/provider URL、cross-site、不正 API path                 | request 前に拒否                                                 |
 | config: reserved username/email 規則不一致                                               | login 前に拒否し、値を error へ出さない                          |
+| config: reserved local-partだがproduction registrable domain外                           | login前に拒否                                                    |
 | config: password 空、弱い、73 UTF-8 bytes 以上                                           | request 前に拒否                                                 |
 | workflow: push/pull_request/schedule から destructive job 起動                           | contract test が失敗                                             |
 | workflow: production Environment/enable flag/confirmation/reviewer 欠落                  | job を開始しない                                                 |
 | workflow: credential を output/summary/CLI 引数へ渡す                                    | contract test が失敗                                             |
 | smoke: profile identity/role 不一致                                                      | DELETE を送らず失敗                                              |
-| smoke: 本人削除成功                                                                      | 200、Cookie clear、anonymous UI                                  |
+| smoke: 本人削除成功                                                                      | keyboardだけで完結し、200、Cookie clear、anonymous UI            |
 | smoke: 削除前 access token                                                               | 削除後 `GET /users/me` 401                                       |
-| smoke: refresh                                                                           | 削除後 401、Cookie 再発行なし                                    |
+| smoke: refresh                                                                           | 削除前tokenを明示再送後401、Cookie再発行なし                     |
+| smoke: Cookie headerがflatten、重複、別path、属性不足                                    | 契約不一致として失敗                                             |
 | smoke: 同じ資格情報 login                                                                | 汎用 401、内部状態非出力                                         |
 | recovery: main 前半失敗、exact account が存在                                            | profile 再検証後に削除し `completed`                             |
-| recovery: account 削除済み                                                               | login 401 を `not-required` とする                               |
-| recovery: identity 不明、5xx、network、非 JSON                                           | 削除せず `failed`、公開停止                                      |
+| recovery: account削除済みまたはSecret不一致でlogin 401                                   | 判別不能のため`failed`、公開停止                                 |
+| recovery: identity不明、その他の非200、5xx、network、非JSON                              | 削除せず`failed`、公開停止                                       |
 | T35: exact fixture の dry-run                                                            | legacy target 1、所有 row 2、未知 row 0                          |
 | T35: execute と再実行                                                                    | 初回削除成功、再実行 0 件、sentinel/Element 保持                 |
 | Path A                                                                                   | 0 件・旧配備なし証拠を記録し、対象外項目と再着手条件を残す       |
@@ -389,13 +396,22 @@ config loader は値を error message に含めず、URL、reserved identity、p
 - 実装ブランチ: `feature/r6-account-deletion-gates`
 - config guard commit: `a87da89 feat: 本番アカウント削除smokeの設定guardをTDD実装`
 - smoke/recovery commit: `027352b feat: 本番アカウント完全削除smokeとrecoveryをTDD実装`
+- strict review follow-up commit: `14752bf fix: 本番削除smokeの旧refresh検証とrecovery判定を厳格化`
 
 ### Red → Green → Refactor
 
 - Red: config module不在により専用config testが失敗することを確認した。専用spec/config/workflow追加前はsource contract 7件が意図した理由で失敗した。共有login hydration helper追加前はstaging contractがhelper不在で失敗した。
 - Green: reserved identity、同一site HTTPS、password、固定確認句のconfig guardと、本人削除・旧access/refresh/login 401・exact recoveryを実装した。workflowはmanual-only、production Environment、review済みSHA、enable flag、confirmation、承認者、change recordをfail-closed検証する。
 - Refactor: login hydration待機を`frontend/e2e/login-form.ts`へ一元化し、staging Admin E2Eとproduction本人削除smokeで共有した。credentialやdestructive gateは共有していない。
-- 確認済み: 関連5 files・49 tests、frontend全体61 files・661 tests、ESLint、Prettier、`npm run check` 0 errors / 0 warnings、実行なしのPlaywright `--list` 2件。
+- 初回確認済み: 関連5 files・49 tests、frontend全体61 files・661 tests、ESLint、Prettier、`npm run check` 0 errors / 0 warnings、実行なしのPlaywright `--list` 2件。
+
+### 厳格レビューfollow-up
+
+- Red: Cookie helper不在、production domain外emailの許可、旧refresh token未再送、recovery 401成功扱い、E2E型検査script不在を、それぞれ対象testの意図した失敗で確認した。型検査追加時には既存production auth helperのbrowser/API response型のずれも検出した。
+- Green: loginで実際に発行されたrefresh tokenをmemoryだけに保持し、削除後の隔離requestへ明示再送するよう修正した。Cookieは個別`Set-Cookie`単位で値・path・`HttpOnly`・`Secure`・`SameSite=Strict`・`Max-Age`・重複を検証する。recoveryは401を含む非200をすべて`failed`とし、exact profileの200後に削除成功した場合だけ`completed`とした。
+- Refactor: registrable domain所属判定とCookie契約をhelperへ一元化し、main/recovery/source contractで重複判定を作らない形にした。E2E専用`tsconfig`と`check:e2e`を追加し、確認checkboxはSpace、削除buttonはEnterで操作するproduction smoke契約へ強化した。
+- DB再レビュー: schema/migration変更はなく、cascade対象外部キーの先頭index・unique・主キーを確認した。本人削除は単一transactionでN+1を発生させず、expand/contract順序も変更しない。既存data量・同時write・rollbackの実環境証拠にはならないため、T33、T35、R13〜R16は未完了のまま維持する。
+- 最終品質gate: 関連6 files・63 tests、frontend全体62 files・675 tests、ESLint、Prettier、`npm run check` 0 errors / 0 warnings、`npm run check:e2e`、実credentialを使わないPlaywright `--list` 2件が成功した。
 
 ### 計画からの変更点
 
@@ -440,7 +456,7 @@ backup/dry-run/migration/deploy runs: <URLs or not-applicable + reason>
 production account deletion smoke: <URL>
 delete response: 200
 old access / refresh / login: 401 / 401 / 401
-recovery: completed / not-required / failed
+recovery: completed / failed
 execute/fixture/smoke flags restored: yes/no
 残余リスク・公開後タスク: <非秘密の要約>
 ```

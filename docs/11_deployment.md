@@ -526,7 +526,7 @@ Actionsの`Production Account Deletion Smoke`を、R15でreview済みrelease候�
 
 1. T35、R13〜R15のうち選択pathで必要なgateが完了し、T1Bの実行者、承認者、実行時間帯、通知先が実値で承認済みであることを確認する。
 2. production Environmentのfrontend origin、API base URL、registrable domainがR14の証拠と一致し、review済み40桁SHAが配備対象かつworkflowを起動する`main`の`GITHUB_SHA`と完全一致することを確認する。
-3. 一回限りaccountのusernameが`prod_delete_smoke`、email local-partが`prod-delete-smoke`または`prod-delete-smoke+<英小文字・数字・hyphen>`、roleが`USER`であることを作成責任者が確認する。email、password、内部IDを運用記録へ転記しない。
+3. 一回限りaccountのusernameが`prod_delete_smoke`、email local-partが`prod-delete-smoke`または`prod-delete-smoke+<英小文字・数字・hyphen>`、email domainがproduction registrable domain配下、roleが`USER`であることを作成責任者が確認する。email、password、内部IDを運用記録へ転記しない。
 4. `PRODUCTION_ACCOUNT_DELETION_SMOKE_ENABLED=false`を別画面で確認する。実行直前の承認後だけ`true`へ変更する。
 5. runbookの記録欄へreview済みSHA、承認者の非秘密識別子、change record、実行時間帯、通知先を記入する。
 
@@ -535,19 +535,19 @@ Actionsの`Production Account Deletion Smoke`を、R15でreview済みrelease候�
 1. Actions > Production Account Deletion Smoke > Run workflowで`main` branchとoperation `main`を選ぶ。
 2. `reviewed_sha`へ現在の40桁`GITHUB_SHA`、`confirmation`へ`DELETE_PRODUCTION_SYNTHETIC_ACCOUNT`、`approved_by`と`change_record`へ承認済みの非秘密識別子を入力する。credentialはworkflow入力やcommand lineへ入力しない。
 3. validation jobがbranch、SHA、enable flag、確認文字列、承認者、change recordを拒否しなかったことを確認する。
-4. main summaryのstatusが`completed`であることを確認する。specは削除前profileのemail・username・`USER`完全一致、設定画面からの本人削除、refresh Cookie削除、旧access token 401、refresh 401、同一資格情報login 401を一続きで検証する。
-5. main成功時はrecovery jobがskipされる。mainが失敗・cancel・timeoutになった場合は、別runnerのrecoveryが起動し、summaryが`completed`または`not-required`であることを確認する。`failed`、summary欠落、job未起動は公開停止条件とする。
+4. main summaryのstatusが`completed`であることを確認する。specは削除前profileのemail・username・`USER`完全一致、loginで発行されたrefresh tokenの安全属性、keyboardだけによる確認checkbox・本人削除、refresh Cookie削除、旧access token 401、削除前refresh tokenの明示再送401、同一資格情報login 401を一続きで検証する。
+5. main成功時はrecovery jobがskipされる。mainが失敗・cancel・timeoutになった場合は、別runnerのrecoveryが起動する。production Environmentのrequired reviewerはjobごとに保護ルールを通過させるため、recoveryが`Waiting`なら元の承認者が内容を再確認して承認し、bypassしない。summaryは`completed`だけを成功とし、`failed`、summary欠落、job未起動・未承認は公開停止条件とする。
 6. 成否にかかわらず`PRODUCTION_ACCOUNT_DELETION_SMOKE_ENABLED=false`へ戻し、別画面で復旧を確認する。
 
 #### recovery-only
 
-runnerのhard killなどで自動recovery自体が起動しなかった場合だけ、同じreview済みSHA、同じEnvironment Secret、同じ承認記録でoperation `recovery-only`を実行する。login 401は削除済みの`not-required`、login 200かつprofileの予約identity完全一致時だけ削除を再試行して`completed`とする。profile不一致、5xx、network、非JSON、状態不明ではDELETEを送らず`failed`にする。
+runnerのhard killなどで自動recovery自体が起動しなかった場合だけ、同じreview済みSHA、同じEnvironment Secret、同じ承認記録でoperation `recovery-only`を実行する。login 401は削除済みとSecret不一致を区別できないため`failed`とする。login 200かつprofileの予約identity完全一致時だけ削除を再試行して`completed`とする。profile不一致、401、5xx、network、非JSON、状態不明ではDELETEを送らず公開を停止する。
 
 `recovery-only`でSecretやidentityを差し替えない。別accountの削除、identity不一致時の手動DELETE、DBからの直接削除は新しい事故対応計画と承認がない限り行わない。
 
 #### 証拠・停止条件
 
-安全な運用記録へ残すのは、run URL、review済みSHA、実行日時、承認者、change record、main/recoveryの`completed` / `not-required` / `failed`、flag復旧結果だけとする。email、username、password、token、Cookie、内部ID、raw error、trace、video、screenshot、storageStateは保存しない。
+安全な運用記録へ残すのは、run URL、review済みSHA、実行日時、承認者、change record、main/recoveryの`completed` / `failed`、flag復旧結果だけとする。email、username、password、token、Cookie、内部ID、raw error、trace、video、screenshot、storageStateは保存しない。
 
 - validation失敗、profile不一致、main/recoveryの`failed`、status欠落、flag復旧未確認ではR6/R16を完了にせず公開を停止する
 - 削除後の旧access、refresh、loginのいずれかが401以外なら、新しいsynthetic accountで再試行せず、認証・削除実装を調査する
