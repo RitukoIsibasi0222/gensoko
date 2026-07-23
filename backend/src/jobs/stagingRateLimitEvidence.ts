@@ -207,6 +207,14 @@ async function requestEvidence(
   });
 }
 
+async function cancelResponseBodyBestEffort(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // body解放の失敗で、安全な分類errorを上書きしない
+  }
+}
+
 async function runClassifiedEvidenceRequest<T>({
   request,
   validate,
@@ -237,6 +245,7 @@ async function runClassifiedEvidenceRequest<T>({
   try {
     return await validate(response);
   } catch (error) {
+    await cancelResponseBodyBestEffort(response);
     throw new StagingRateLimitEvidenceExecutionError({
       message: validationFailureMessage,
       failureStage,

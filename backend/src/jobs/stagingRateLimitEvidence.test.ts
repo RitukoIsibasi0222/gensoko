@@ -293,6 +293,46 @@ describe("staging rate limit evidence", () => {
     expect(JSON.stringify(failure)).not.toContain("secret-response-body");
   });
 
+  it("auth validatorの予期しない失敗でも未消費response bodyをcancelする", async () => {
+    const response = new Response("secret-response-body", { status: 200 });
+    const cancelSpy = vi
+      .spyOn(response.body!, "cancel")
+      .mockRejectedValue(new Error("cancel-internal-secret"));
+    Object.defineProperty(response, "headers", {
+      value: {
+        get: vi.fn(() => {
+          throw new Error("validator-internal-secret");
+        }),
+      },
+    });
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(response);
+
+    let failure: unknown;
+    try {
+      await runStagingRateLimitEvidence({
+        apiBaseUrl: API_BASE_URL,
+        frontendOrigin: FRONTEND_ORIGIN,
+        evidenceCase: "auth",
+        userPassword: USER_PASSWORD,
+        fetchImpl: fetchMock,
+      });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(cancelSpy).toHaveBeenCalledOnce();
+    expect(failure).toMatchObject({
+      message: "staging rate limit evidenceの前提応答が不正です",
+      failureStage: "AUTH_ALLOWED_REQUEST",
+      failureKind: "RESPONSE_CONTRACT_FAILED",
+      requestNumber: 1,
+      observedStatus: 200,
+      failedContract: null,
+    });
+    expect(JSON.stringify(failure)).not.toContain("validator-internal-secret");
+    expect(JSON.stringify(failure)).not.toContain("cancel-internal-secret");
+  });
+
   it("auth request失敗はraw例外を保持せずrequest番号とstatusなしだけを残す", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
