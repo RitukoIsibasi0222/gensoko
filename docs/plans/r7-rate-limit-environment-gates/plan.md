@@ -722,7 +722,7 @@ R7実行ごとに次を同期する。
 - 実装日: 2026-07-23
 - 実装ブランチ: `feature/r7-rate-limit-environment-gates`
 - 実装commit: `d007d3f`
-- PR: チャットレビュー前のため未作成
+- PR: [#140](https://github.com/RitukoIsibasi0222/gensoko/pull/140)
 - TDD Red: runner moduleとworkflowが未作成であることを理由に対象2 filesが失敗
 - TDD Green: runner・CLI・manual workflow実装後、2 files / 13 tests成功
 - Refactor: 未使用response bodyの破棄と検証済みchoiceの型明示後、再利用fixtureを含む4 files / 30 tests成功
@@ -743,11 +743,12 @@ R7実行ごとに次を同期する。
 - TDD Green: 共通HTTP helper、許可応答validator、429 validator、CLI終了code、manual workflow gateを実装し、対象3 files / 35 tests成功
 - Copilot review対応 Red/Green: `Access-Control-Allow-Credentials`欠落を1 test失敗・25 tests成功で再現し、credentialed CORSのorigin/credentials両方を必須化して対象26 tests成功
 - Copilot review対応commit: `51bed34`（2件のCORS指摘を1つの契約修正として対応）
+- Copilot再レビュー対応 Red/Green: gate通過後の後続失敗でも監査summaryを残す契約を1 test失敗・6 tests成功で再現し、検証済みgate outputで`always()`を制限して対象7 tests成功。無条件`always()`は未検証入力のMarkdown出力を防ぐため採用しない
 - 追加TDD Red/Green: 承認gate失敗時にもcleanup recoveryがstaging DBへ触れる問題を1 test失敗・6 tests成功で再現し、fixture lifecycle開始後だけmain cleanup/recoveryを許可して7 tests成功
 - security: `fetch`の既定redirect追跡によるephemeral password POST bodyの転送を防ぐため、全requestへ`redirect: "error"`を固定した
 - operations: 個々のrequestへ10秒timeoutを付け、5分のworkflow step timeoutまで無応答のまま待たない構造にした
 - contract: 429のJSON Content-Type、policy window内かつsafe integerの`Retry-After`、credentialed CORS（`Access-Control-Allow-Origin`と`Access-Control-Allow-Credentials: true`）、production security header一式、`X-Powered-By`非露出を必須化した
-- audit: workflow実行前のreview済みSHA・確認文字列・承認者・change recordを必須化し、秘密値なしのJob Summaryへ記録する
+- audit: workflow実行前のreview済みSHA・確認文字列・承認者・change recordを必須化する。全gate通過後はsetup・prepare・runnerの成功/失敗を問わず、秘密値なしのJob Summaryへ記録する。gate不成立時は未検証入力を記録しない
 - cleanup: prepare直前にfixture lifecycle markerを設定し、markerがないgate失敗ではmain cleanupと独立recoveryの両方を実行しない。prepare開始後の失敗では従来どおり二重の回収経路を維持する
 - 改善後最終品質gate: backend 104 files / 1080 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
 - 実環境実行: 未実施のまま。R7-04〜R7-08の完了状態は変更しない

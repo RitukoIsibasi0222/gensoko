@@ -52,6 +52,7 @@ jobs:
 
     steps:
       - name: Validate branch, SHA and approval gates
+        id: gates
         shell: bash
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -111,6 +112,7 @@ jobs:
             echo "staging frontend originが不正です"
             exit 1
           fi
+          echo "validated=true" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -182,6 +184,7 @@ jobs:
         run: npm run staging:rate-limit-evidence
 
       - name: Record reviewed execution metadata
+        if: ${{ always() && steps.gates.outputs.validated == 'true' }}
         shell: bash
         env:
           REQUESTED_APPROVED_BY: ${{ inputs.approved_by }}

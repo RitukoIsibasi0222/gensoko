@@ -108,13 +108,19 @@ describe("staging rate limit evidence workflow", () => {
     expect(workflow).toContain("timeout-minutes: 5");
   });
 
-  it("承認記録と実行SHAを秘密値なしでjob summaryへ残す", () => {
+  it("承認gate通過後は後続失敗時も秘密値なしのjob summaryを残す", () => {
     const workflow = readFileSync(WORKFLOW_PATH, "utf8");
+    const gateIndex = workflow.indexOf("Validate branch, SHA and approval gates");
+    const summaryIndex = workflow.indexOf("Record reviewed execution metadata");
 
+    expect(workflow).toContain("id: gates");
+    expect(workflow).toContain('echo "validated=true" >> "$GITHUB_OUTPUT"');
+    expect(workflow).toContain("if: ${{ always() && steps.gates.outputs.validated == 'true' }}");
     expect(workflow).toContain("GITHUB_STEP_SUMMARY");
     expect(workflow).toContain("REQUESTED_APPROVED_BY");
     expect(workflow).toContain("REQUESTED_CHANGE_RECORD");
     expect(workflow).toContain("GITHUB_SHA");
     expect(workflow).not.toContain('echo "$STAGING_SYNTHETIC_USER_PASSWORD"');
+    expect(summaryIndex).toBeGreaterThan(gateIndex);
   });
 });
