@@ -726,7 +726,7 @@ R7実行ごとに次を同期する。
 - TDD Red: runner moduleとworkflowが未作成であることを理由に対象2 filesが失敗
 - TDD Green: runner・CLI・manual workflow実装後、2 files / 13 tests成功
 - Refactor: 未使用response bodyの破棄と検証済みchoiceの型明示後、再利用fixtureを含む4 files / 30 tests成功
-- 最終品質gate: backend 103 files / 1057 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
+- PR #140初回実装commit時点の最終品質gate: backend 103 files / 1057 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
 - 実環境実行: 未実施。レビュー・merge・G5/G6承認後にcaseごとに別実行する
 
 ### 設計判断
@@ -751,7 +751,7 @@ R7実行ごとに次を同期する。
 - contract: 429のJSON Content-Type、policy window内かつsafe integerの`Retry-After`、credentialed CORS（`Access-Control-Allow-Origin`と`Access-Control-Allow-Credentials: true`）、production security header一式、`X-Powered-By`非露出を必須化した
 - audit: workflow実行前のreview済みSHA・確認文字列・承認者・change recordを必須化する。全gate通過後はsetup・prepare・runnerの成功/失敗を問わず、秘密値なしのJob Summaryへ記録する。gate不成立時は未検証入力を記録しない
 - cleanup: prepare直前にfixture lifecycle markerを設定し、markerがないgate失敗ではmain cleanupと独立recoveryの両方を実行しない。prepare開始後の失敗では従来どおり二重の回収経路を維持する
-- 改善後最終品質gate: backend 104 files / 1080 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
+- PR #140 merge時点の最終品質gate: backend 104 files / 1080 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
 - 実環境実行: 未実施のまま。R7-04〜R7-08の完了状態は変更しない
 
 ### 初回auth実環境runと安全な失敗分類
@@ -771,7 +771,7 @@ R7実行ごとに次を同期する。
 - TDD Green 2 / Refactor: header値やbodyを出さず、固定enumの`failedContract`だけを追加し、Prettier後も対象2 files / 32 tests成功
 - PR #141 review対応 Red/Green: validatorの予期しない失敗時に未消費response bodyを解放する契約を1 test失敗・28 tests成功で再現し、best-effort cancelとcancel失敗時の安全な分類error維持を実装して対象29 tests成功
 - PR #141追加review対応 Red/Green: 許可/制限requestのstatus・Content-Type不一致時にcancel拒否で固定契約分類を失う問題を4 tests失敗・29 tests成功で再現し、4箇所の直接cancelをbest-effort helperへ統一して対象33 tests成功
-- 最終品質gate: backend 104 files / 1088 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
+- PR #141追加review対応後の最終品質gate: backend 104 files / 1088 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
 - security: raw例外message/cause、response body、header値、credential、識別子、URLをerror metadataへ保持しない
 - 実環境再実行: 未実施。診断変更のreview・mergeと新しい実行時間帯の承認後に、別runとして扱う
 
