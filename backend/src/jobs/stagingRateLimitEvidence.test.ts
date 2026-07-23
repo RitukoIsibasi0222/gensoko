@@ -315,6 +315,68 @@ describe("staging rate limit evidence", () => {
     });
   });
 
+  it("auth 5回目503のJSON parse例外ではbodyをcancelして固定分類を維持する", async () => {
+    const response = serviceUnavailableResponse();
+    const jsonSpy = vi
+      .spyOn(response, "json")
+      .mockRejectedValue(new Error("parse-internal-secret"));
+    const cancelSpy = vi.spyOn(response.body!, "cancel");
+
+    const { failure } = await captureAuthFailure(response);
+
+    expect(jsonSpy).toHaveBeenCalledOnce();
+    expect(cancelSpy).toHaveBeenCalledOnce();
+    expect(failure).toMatchObject({
+      requestNumber: 5,
+      observedStatus: 503,
+      failedContract: "EXPECTED_STATUS",
+      observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+    });
+    expect(JSON.stringify(failure)).not.toContain("parse-internal-secret");
+  });
+
+  it("auth許可200のJSON parse例外ではbodyをcancelして固定契約違反にする", async () => {
+    const response = loginResponse();
+    const jsonSpy = vi
+      .spyOn(response, "json")
+      .mockRejectedValue(new Error("parse-internal-secret"));
+    const cancelSpy = vi.spyOn(response.body!, "cancel");
+
+    const { failure } = await captureAuthFailure(response, 0);
+
+    expect(jsonSpy).toHaveBeenCalledOnce();
+    expect(cancelSpy).toHaveBeenCalledOnce();
+    expect(failure).toMatchObject({
+      failureStage: "AUTH_ALLOWED_REQUEST",
+      requestNumber: 1,
+      observedStatus: 200,
+      failedContract: "EXPECTED_JSON_BODY",
+      observedResponseClass: null,
+    });
+    expect(JSON.stringify(failure)).not.toContain("parse-internal-secret");
+  });
+
+  it("auth 11回目429のJSON parse例外ではbodyをcancelして固定契約違反にする", async () => {
+    const response = rateLimitedResponse();
+    const jsonSpy = vi
+      .spyOn(response, "json")
+      .mockRejectedValue(new Error("parse-internal-secret"));
+    const cancelSpy = vi.spyOn(response.body!, "cancel");
+
+    const { failure } = await captureAuthFailure(response, 10);
+
+    expect(jsonSpy).toHaveBeenCalledOnce();
+    expect(cancelSpy).toHaveBeenCalledOnce();
+    expect(failure).toMatchObject({
+      failureStage: "AUTH_LIMITED_REQUEST",
+      requestNumber: 11,
+      observedStatus: 429,
+      failedContract: "RATE_LIMIT_BODY",
+      observedResponseClass: null,
+    });
+    expect(JSON.stringify(failure)).not.toContain("parse-internal-secret");
+  });
+
   it.each([500, 502, 504] as const)(
     "auth 5回目のstatus %iを503と混同しない固定classへ分類する",
     async (status) => {

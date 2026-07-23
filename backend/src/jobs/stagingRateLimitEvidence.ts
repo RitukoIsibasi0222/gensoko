@@ -209,6 +209,7 @@ async function readExpectedJson(
 
   const body = await parseJson(response);
   if (body === null) {
+    await cancelResponseBodyBestEffort(response);
     throw new StagingRateLimitEvidenceContractError(
       INVALID_PREREQUISITE_RESPONSE_MESSAGE,
       "EXPECTED_JSON_BODY",
@@ -320,6 +321,10 @@ async function classifyUnexpectedResponse(
     }
 
     const body = await parseJson(response);
+    if (body === null) {
+      await cancelResponseBodyBestEffort(response);
+      return "EDGE_OR_UNCLASSIFIED_503";
+    }
     const hasExpectedBody =
       isRecord(body) &&
       Object.keys(body).length === 1 &&
@@ -625,6 +630,9 @@ async function createRateLimitSummary({
 
   const retryAfter = response.headers.get("Retry-After");
   const body = await parseJson(response);
+  if (body === null) {
+    await cancelResponseBodyBestEffort(response);
+  }
   const bodyContract =
     isRecord(body) && Object.keys(body).length === 1 && body.error === RATE_LIMIT_EXCEEDED_MESSAGE;
   const retryAfterSec = retryAfter === null ? Number.NaN : Number(retryAfter);
