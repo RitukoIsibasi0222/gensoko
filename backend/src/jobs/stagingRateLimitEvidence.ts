@@ -12,8 +12,10 @@ const INVALID_ENVIRONMENT_MESSAGE = "staging rate limit evidence設定が不正�
 const INVALID_PREREQUISITE_RESPONSE_MESSAGE = "staging rate limit evidenceの前提応答が不正です";
 const INVALID_RATE_LIMIT_RESPONSE_MESSAGE = "staging rate limit evidenceの429契約が不正です";
 const GAME_MODE = "SYMBOL_TO_NAME_LV1";
+const STAGING_RATE_LIMIT_REQUEST_TIMEOUT_MS = 10_000;
 
 export type StagingRateLimitEvidenceCase = "auth" | "questions" | "game-submit";
+type ObservedRateLimitPolicyId = "AUTH_IP" | "GAME_QUESTIONS_IP" | "GAME_SUBMIT_IP";
 
 export type StagingRateLimitEvidenceEnvironment = Readonly<{
   BATCH_ENVIRONMENT?: string;
@@ -21,6 +23,7 @@ export type StagingRateLimitEvidenceEnvironment = Readonly<{
   STAGING_RATE_LIMIT_EVIDENCE_CASE?: string;
   STAGING_RATE_LIMIT_API_BASE_URL?: string;
   STAGING_RATE_LIMIT_FRONTEND_ORIGIN?: string;
+  STAGING_RATE_LIMIT_REQUEST_TIMEOUT_MS?: string;
   STAGING_SYNTHETIC_USER_PASSWORD?: string;
 }>;
 
@@ -28,6 +31,7 @@ export type ValidatedStagingRateLimitEvidenceEnvironment = Readonly<{
   apiBaseUrl: typeof STAGING_API_BASE_URL;
   frontendOrigin: typeof STAGING_FRONTEND_ORIGIN;
   evidenceCase: StagingRateLimitEvidenceCase;
+  requestTimeoutMs: typeof STAGING_RATE_LIMIT_REQUEST_TIMEOUT_MS;
   userPassword: string;
 }>;
 
@@ -36,14 +40,21 @@ export type StagingRateLimitEvidenceSummary = Readonly<{
   allowedRequests: number;
   limitedRequestNumber: number;
   limitedStatus: 429;
+  policyId: ObservedRateLimitPolicyId;
   retryAfterSec: number;
   bodyContract: true;
   corsContract: true;
   securityHeadersContract: true;
 }>;
 
-type RunStagingRateLimitEvidenceOptions = ValidatedStagingRateLimitEvidenceEnvironment &
-  Readonly<{ fetchImpl?: typeof fetch }>;
+type RunStagingRateLimitEvidenceOptions = Omit<
+  ValidatedStagingRateLimitEvidenceEnvironment,
+  "requestTimeoutMs"
+> &
+  Readonly<{
+    fetchImpl?: typeof fetch;
+    requestTimeoutMs?: number;
+  }>;
 
 type GameQuestion = Readonly<{
   questionId: string;
@@ -53,6 +64,15 @@ type GameQuestion = Readonly<{
 type GameQuestionsResponse = Readonly<{
   questionSetId: string;
   questions: ReadonlyArray<GameQuestion>;
+}>;
+
+type LoginResponse = Readonly<{
+  accessToken: string;
+  user: Readonly<{
+    id: string;
+    username: string;
+    role: "USER";
+  }>;
 }>;
 
 function isEvidenceCase(value: unknown): value is StagingRateLimitEvidenceCase {
@@ -71,6 +91,41 @@ async function parseJson(response: Response): Promise<unknown | null> {
   }
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasJsonContentType(response: Response): boolean {
+  const contentType = response.headers.get("Content-Type");
+  return contentType !== null && /^application\/json(?:\s*;|$)/i.test(contentType);
+}
+
+async function readExpectedJson(response: Response, expectedStatus: number): Promise<unknown> {
+  if (response.status !== expectedStatus || !hasJsonContentType(response)) {
+    await response.body?.cancel();
+    throw new Error(INVALID_PREREQUISITE_RESPONSE_MESSAGE);
+  }
+
+  const body = await parseJson(response);
+  if (body === null) {
+    throw new Error(INVALID_PREREQUISITE_RESPONSE_MESSAGE);
+  }
+  return body;
+}
+
+async function requestEvidence(
+  fetchImpl: typeof fetch,
+  input: string,
+  init: RequestInit,
+  requestTimeoutMs: number,
+): Promise<Response> {
+  return await fetchImpl(input, {
+    ...init,
+    redirect: "error",
+    signal: AbortSignal.timeout(requestTimeoutMs),
+  });
+}
+
 function createCommonHeaders(frontendOrigin: string): Record<string, string> {
   return { Origin: frontendOrigin };
 }
@@ -82,39 +137,63 @@ function createAuthenticatedHeaders(frontendOrigin: string, accessToken: string)
   };
 }
 
-async function login({
+async function requestLogin({
   apiBaseUrl,
   frontendOrigin,
   userPassword,
+  requestTimeoutMs,
   fetchImpl,
-}: Pick<RunStagingRateLimitEvidenceOptions, "apiBaseUrl" | "frontendOrigin" | "userPassword"> &
-  Readonly<{ fetchImpl: typeof fetch }>): Promise<{ response: Response; body: unknown | null }> {
-  const response = await fetchImpl(`${apiBaseUrl}/auth/login`, {
-    method: "POST",
-    headers: {
-      ...createCommonHeaders(frontendOrigin),
-      "Content-Type": "application/json",
+}: Pick<
+  Required<RunStagingRateLimitEvidenceOptions>,
+  "apiBaseUrl" | "frontendOrigin" | "userPassword" | "requestTimeoutMs" | "fetchImpl"
+>): Promise<Response> {
+  return await requestEvidence(
+    fetchImpl,
+    `${apiBaseUrl}/auth/login`,
+    {
+      method: "POST",
+      headers: {
+        ...createCommonHeaders(frontendOrigin),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: STAGING_SYNTHETIC_E2E_USER.email,
+        password: userPassword,
+      }),
     },
-    body: JSON.stringify({
-      email: STAGING_SYNTHETIC_E2E_USER.email,
-      password: userPassword,
-    }),
-  });
-  return { response, body: await parseJson(response) };
+    requestTimeoutMs,
+  );
 }
 
-function requireAccessToken(response: Response, body: unknown): string {
-  if (response.status !== 200 || !isRecord(body) || typeof body.accessToken !== "string") {
+async function parseLoginResponse(response: Response): Promise<LoginResponse> {
+  const body = await readExpectedJson(response, 200);
+  if (
+    !isRecord(body) ||
+    !isNonEmptyString(body.accessToken) ||
+    !isRecord(body.user) ||
+    !isNonEmptyString(body.user.id) ||
+    !isNonEmptyString(body.user.username) ||
+    body.user.role !== "USER"
+  ) {
     throw new Error(INVALID_PREREQUISITE_RESPONSE_MESSAGE);
   }
-  return body.accessToken;
+
+  return {
+    accessToken: body.accessToken,
+    user: {
+      id: body.user.id,
+      username: body.user.username,
+      role: body.user.role,
+    },
+  };
 }
 
-function parseQuestionsResponse(response: Response, body: unknown): GameQuestionsResponse {
+async function parseQuestionsResponse(response: Response): Promise<GameQuestionsResponse> {
+  const body = await readExpectedJson(response, 200);
   if (
-    response.status !== 200 ||
     !isRecord(body) ||
-    typeof body.questionSetId !== "string" ||
+    !isNonEmptyString(body.questionSetId) ||
+    !isNonEmptyString(body.expiresAt) ||
     !Array.isArray(body.questions) ||
     body.questions.length === 0
   ) {
@@ -124,14 +203,23 @@ function parseQuestionsResponse(response: Response, body: unknown): GameQuestion
   const questions: GameQuestion[] = body.questions.map((question) => {
     if (
       !isRecord(question) ||
-      typeof question.questionId !== "string" ||
+      !isNonEmptyString(question.questionId) ||
+      typeof question.prompt !== "string" ||
       !Array.isArray(question.choices) ||
-      question.choices.length === 0
+      question.choices.length === 0 ||
+      "correctChoiceId" in question ||
+      "elementId" in question
     ) {
       throw new Error(INVALID_PREREQUISITE_RESPONSE_MESSAGE);
     }
     const choices = question.choices.map((choice) => {
-      if (!isRecord(choice) || typeof choice.choiceId !== "string") {
+      if (
+        !isRecord(choice) ||
+        !isNonEmptyString(choice.choiceId) ||
+        typeof choice.text !== "string" ||
+        "correctChoiceId" in choice ||
+        "elementId" in choice
+      ) {
         throw new Error(INVALID_PREREQUISITE_RESPONSE_MESSAGE);
       }
       return { choiceId: choice.choiceId };
@@ -146,14 +234,23 @@ async function getQuestions({
   apiBaseUrl,
   frontendOrigin,
   accessToken,
+  requestTimeoutMs,
   fetchImpl,
-}: Pick<RunStagingRateLimitEvidenceOptions, "apiBaseUrl" | "frontendOrigin"> &
-  Readonly<{ accessToken: string; fetchImpl: typeof fetch }>): Promise<Response> {
+}: Pick<
+  Required<RunStagingRateLimitEvidenceOptions>,
+  "apiBaseUrl" | "frontendOrigin" | "requestTimeoutMs" | "fetchImpl"
+> &
+  Readonly<{ accessToken: string }>): Promise<Response> {
   const searchParams = new URLSearchParams({ mode: GAME_MODE });
-  return await fetchImpl(`${apiBaseUrl}/game/questions?${searchParams.toString()}`, {
-    method: "GET",
-    headers: createAuthenticatedHeaders(frontendOrigin, accessToken),
-  });
+  return await requestEvidence(
+    fetchImpl,
+    `${apiBaseUrl}/game/questions?${searchParams.toString()}`,
+    {
+      method: "GET",
+      headers: createAuthenticatedHeaders(frontendOrigin, accessToken),
+    },
+    requestTimeoutMs,
+  );
 }
 
 async function submitGame({
@@ -161,67 +258,119 @@ async function submitGame({
   frontendOrigin,
   accessToken,
   questions,
+  requestTimeoutMs,
   fetchImpl,
-}: Pick<RunStagingRateLimitEvidenceOptions, "apiBaseUrl" | "frontendOrigin"> &
+}: Pick<
+  Required<RunStagingRateLimitEvidenceOptions>,
+  "apiBaseUrl" | "frontendOrigin" | "requestTimeoutMs" | "fetchImpl"
+> &
   Readonly<{
     accessToken: string;
     questions: GameQuestionsResponse;
-    fetchImpl: typeof fetch;
   }>): Promise<Response> {
-  return await fetchImpl(`${apiBaseUrl}/game/sessions`, {
-    method: "POST",
-    headers: {
-      ...createAuthenticatedHeaders(frontendOrigin, accessToken),
-      "Content-Type": "application/json",
+  return await requestEvidence(
+    fetchImpl,
+    `${apiBaseUrl}/game/sessions`,
+    {
+      method: "POST",
+      headers: {
+        ...createAuthenticatedHeaders(frontendOrigin, accessToken),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        questionSetId: questions.questionSetId,
+        mode: GAME_MODE,
+        answers: questions.questions.map((question) => ({
+          questionId: question.questionId,
+          chosenChoiceId: question.choices[0]!.choiceId,
+          answerTimeSec: 0,
+        })),
+        durationSec: 1,
+      }),
     },
-    body: JSON.stringify({
-      questionSetId: questions.questionSetId,
-      mode: GAME_MODE,
-      answers: questions.questions.map((question) => ({
-        questionId: question.questionId,
-        chosenChoiceId: question.choices[0]!.choiceId,
-        answerTimeSec: 0,
-      })),
-      durationSec: 1,
-    }),
-  });
+    requestTimeoutMs,
+  );
 }
 
-async function assertAllowedResponse(response: Response, expectedStatus: number): Promise<void> {
-  if (response.status !== expectedStatus) {
-    await response.body?.cancel();
+function isGameSessionResult(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    isNonEmptyString(value.questionId) &&
+    typeof value.elementId === "number" &&
+    typeof value.prompt === "string" &&
+    (value.chosenChoiceId === null || typeof value.chosenChoiceId === "string") &&
+    typeof value.isCorrect === "boolean" &&
+    typeof value.correctAnswer === "string" &&
+    (value.yourAnswer === null || typeof value.yourAnswer === "string") &&
+    typeof value.answerTimeSec === "number" &&
+    typeof value.score === "number"
+  );
+}
+
+async function assertGameSessionResponse(response: Response): Promise<void> {
+  const body = await readExpectedJson(response, 201);
+  if (
+    !isRecord(body) ||
+    !isNonEmptyString(body.sessionId) ||
+    body.mode !== GAME_MODE ||
+    typeof body.totalCount !== "number" ||
+    typeof body.correctCount !== "number" ||
+    typeof body.totalScore !== "number" ||
+    typeof body.maxStreak !== "number" ||
+    typeof body.durationSec !== "number" ||
+    !isNonEmptyString(body.playedAt) ||
+    !Array.isArray(body.results) ||
+    !body.results.every(isGameSessionResult)
+  ) {
     throw new Error(INVALID_PREREQUISITE_RESPONSE_MESSAGE);
   }
-  await response.body?.cancel();
 }
 
 async function createRateLimitSummary({
   evidenceCase,
   allowedRequests,
+  policyId,
   response,
   frontendOrigin,
-  parsedBody,
 }: {
   evidenceCase: StagingRateLimitEvidenceCase;
   allowedRequests: number;
+  policyId: ObservedRateLimitPolicyId;
   response: Response;
   frontendOrigin: string;
-  parsedBody?: unknown | null;
 }): Promise<StagingRateLimitEvidenceSummary> {
+  if (response.status !== 429 || !hasJsonContentType(response)) {
+    await response.body?.cancel();
+    throw new Error(INVALID_RATE_LIMIT_RESPONSE_MESSAGE);
+  }
+
   const retryAfter = response.headers.get("Retry-After");
-  const body = parsedBody === undefined ? await parseJson(response) : parsedBody;
+  const body = await parseJson(response);
   const bodyContract =
     isRecord(body) && Object.keys(body).length === 1 && body.error === RATE_LIMIT_EXCEEDED_MESSAGE;
   const corsContract = response.headers.get("Access-Control-Allow-Origin") === frontendOrigin;
   const securityHeadersContract =
     response.headers.get("Content-Security-Policy") === EXPECTED_CONTENT_SECURITY_POLICY &&
+    response.headers.get("Cross-Origin-Resource-Policy") === "same-origin" &&
+    response.headers.get("Permissions-Policy") === "camera=(), microphone=(), geolocation=()" &&
+    response.headers.get("Referrer-Policy") === "strict-origin-when-cross-origin" &&
+    response.headers.get("Strict-Transport-Security") === "max-age=31536000; includeSubDomains" &&
     response.headers.get("X-Content-Type-Options") === "nosniff" &&
-    response.headers.get("X-Frame-Options") === "DENY";
+    response.headers.get("X-Frame-Options") === "DENY" &&
+    response.headers.get("X-Permitted-Cross-Domain-Policies") === "none" &&
+    response.headers.get("X-XSS-Protection") === "0" &&
+    response.headers.get("X-Powered-By") === null;
+  const retryAfterSec = retryAfter === null ? Number.NaN : Number(retryAfter);
+  const maximumRetryAfterSec = Math.ceil(RATE_LIMIT_POLICIES[policyId].windowMs / 1_000);
 
   if (
-    response.status !== 429 ||
     retryAfter === null ||
     !/^[1-9]\d*$/.test(retryAfter) ||
+    !Number.isSafeInteger(retryAfterSec) ||
+    retryAfterSec > maximumRetryAfterSec ||
     !bodyContract ||
     !corsContract ||
     !securityHeadersContract
@@ -234,7 +383,8 @@ async function createRateLimitSummary({
     allowedRequests,
     limitedRequestNumber: allowedRequests + 1,
     limitedStatus: 429,
-    retryAfterSec: Number(retryAfter),
+    policyId,
+    retryAfterSec,
     bodyContract: true,
     corsContract: true,
     securityHeadersContract: true,
@@ -253,6 +403,8 @@ export function validateStagingRateLimitEvidenceEnvironment(
     !isEvidenceCase(environment.STAGING_RATE_LIMIT_EVIDENCE_CASE) ||
     environment.STAGING_RATE_LIMIT_API_BASE_URL !== STAGING_API_BASE_URL ||
     environment.STAGING_RATE_LIMIT_FRONTEND_ORIGIN !== STAGING_FRONTEND_ORIGIN ||
+    environment.STAGING_RATE_LIMIT_REQUEST_TIMEOUT_MS !==
+      String(STAGING_RATE_LIMIT_REQUEST_TIMEOUT_MS) ||
     !passwordResult.success
   ) {
     throw new Error(INVALID_ENVIRONMENT_MESSAGE);
@@ -262,6 +414,7 @@ export function validateStagingRateLimitEvidenceEnvironment(
     apiBaseUrl: STAGING_API_BASE_URL,
     frontendOrigin: STAGING_FRONTEND_ORIGIN,
     evidenceCase: environment.STAGING_RATE_LIMIT_EVIDENCE_CASE,
+    requestTimeoutMs: STAGING_RATE_LIMIT_REQUEST_TIMEOUT_MS,
     userPassword: passwordResult.data,
   };
 }
@@ -271,6 +424,7 @@ export async function runStagingRateLimitEvidence({
   frontendOrigin,
   evidenceCase,
   userPassword,
+  requestTimeoutMs = STAGING_RATE_LIMIT_REQUEST_TIMEOUT_MS,
   fetchImpl = fetch,
 }: RunStagingRateLimitEvidenceOptions): Promise<StagingRateLimitEvidenceSummary> {
   if (evidenceCase === "auth") {
@@ -279,31 +433,39 @@ export async function runStagingRateLimitEvidence({
       requestNumber <= RATE_LIMIT_POLICIES.AUTH_IP.limit;
       requestNumber += 1
     ) {
-      const { response, body } = await login({
+      const response = await requestLogin({
         apiBaseUrl,
         frontendOrigin,
         userPassword,
+        requestTimeoutMs,
         fetchImpl,
       });
-      requireAccessToken(response, body);
+      await parseLoginResponse(response);
     }
-    const { response, body } = await login({
+    const response = await requestLogin({
       apiBaseUrl,
       frontendOrigin,
       userPassword,
+      requestTimeoutMs,
       fetchImpl,
     });
     return await createRateLimitSummary({
       evidenceCase,
       allowedRequests: RATE_LIMIT_POLICIES.AUTH_IP.limit,
+      policyId: "AUTH_IP",
       response,
       frontendOrigin,
-      parsedBody: body,
     });
   }
 
-  const loginResult = await login({ apiBaseUrl, frontendOrigin, userPassword, fetchImpl });
-  const accessToken = requireAccessToken(loginResult.response, loginResult.body);
+  const loginResponse = await requestLogin({
+    apiBaseUrl,
+    frontendOrigin,
+    userPassword,
+    requestTimeoutMs,
+    fetchImpl,
+  });
+  const { accessToken } = await parseLoginResponse(loginResponse);
 
   if (evidenceCase === "questions") {
     for (
@@ -315,14 +477,22 @@ export async function runStagingRateLimitEvidence({
         apiBaseUrl,
         frontendOrigin,
         accessToken,
+        requestTimeoutMs,
         fetchImpl,
       });
-      await assertAllowedResponse(response, 200);
+      await parseQuestionsResponse(response);
     }
-    const response = await getQuestions({ apiBaseUrl, frontendOrigin, accessToken, fetchImpl });
+    const response = await getQuestions({
+      apiBaseUrl,
+      frontendOrigin,
+      accessToken,
+      requestTimeoutMs,
+      fetchImpl,
+    });
     return await createRateLimitSummary({
       evidenceCase,
       allowedRequests: RATE_LIMIT_POLICIES.GAME_QUESTIONS_IP.limit,
+      policyId: "GAME_QUESTIONS_IP",
       response,
       frontendOrigin,
     });
@@ -330,43 +500,48 @@ export async function runStagingRateLimitEvidence({
 
   for (
     let requestNumber = 1;
-    requestNumber <= RATE_LIMIT_POLICIES.GAME_SUBMIT_USER.limit;
+    requestNumber <= RATE_LIMIT_POLICIES.GAME_SUBMIT_IP.limit;
     requestNumber += 1
   ) {
     const questionsResponse = await getQuestions({
       apiBaseUrl,
       frontendOrigin,
       accessToken,
+      requestTimeoutMs,
       fetchImpl,
     });
-    const questions = parseQuestionsResponse(questionsResponse, await parseJson(questionsResponse));
+    const questions = await parseQuestionsResponse(questionsResponse);
     const submitResponse = await submitGame({
       apiBaseUrl,
       frontendOrigin,
       accessToken,
       questions,
+      requestTimeoutMs,
       fetchImpl,
     });
-    await assertAllowedResponse(submitResponse, 201);
+    await assertGameSessionResponse(submitResponse);
   }
 
   const questionsResponse = await getQuestions({
     apiBaseUrl,
     frontendOrigin,
     accessToken,
+    requestTimeoutMs,
     fetchImpl,
   });
-  const questions = parseQuestionsResponse(questionsResponse, await parseJson(questionsResponse));
+  const questions = await parseQuestionsResponse(questionsResponse);
   const response = await submitGame({
     apiBaseUrl,
     frontendOrigin,
     accessToken,
     questions,
+    requestTimeoutMs,
     fetchImpl,
   });
   return await createRateLimitSummary({
     evidenceCase,
-    allowedRequests: RATE_LIMIT_POLICIES.GAME_SUBMIT_USER.limit,
+    allowedRequests: RATE_LIMIT_POLICIES.GAME_SUBMIT_IP.limit,
+    policyId: "GAME_SUBMIT_IP",
     response,
     frontendOrigin,
   });
