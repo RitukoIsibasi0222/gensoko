@@ -773,7 +773,7 @@ R7実行ごとに次を同期する。
 - PR #141追加review対応 Red/Green: 許可/制限requestのstatus・Content-Type不一致時にcancel拒否で固定契約分類を失う問題を4 tests失敗・29 tests成功で再現し、4箇所の直接cancelをbest-effort helperへ統一して対象33 tests成功
 - PR #141追加review対応後の最終品質gate: backend 104 files / 1088 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
 - security: raw例外message/cause、response body、header値、credential、識別子、URLをerror metadataへ保持しない
-- 実環境再実行: 未実施。診断変更のreview・mergeと新しい実行時間帯の承認後に、別runとして扱う
+- 診断merge後の実環境再実行: run 30010266297を別runとして1回実施し、auth許可request 5回目の503で安全に停止した。詳細はR7 Evidence E-04へ記録する
 
 #### 初回失敗後の診断変更ファイル
 
@@ -1009,6 +1009,60 @@ PII・Secret確認:
 - 代替証拠: repository contract testはE-01で成功しているが、staging実HTTP成功証拠の代替にはしない
 - 残余リスク: 初回失敗の具体的な段階・契約分類が不明。安全な分類metadataのreview・merge後、再承認された別runが必要
 - 添付先: [GitHub Actions run 30004874751](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30004874751)
+- production操作: URL、DB、Cloudflare binding/Secret、WAF、deploymentを変更していない
+
+PII・Secret確認:
+
+- [x] raw IPなし
+- [x] email/user IDなし
+- [x] digestなし
+- [x] token/Cookie/Authorizationなし
+- [x] password/bodyなし
+- [x] account/zone/resource IDなし
+
+### R7 Evidence E-04
+
+- 実行日時: 2026-07-23 22:13:24〜22:14:47 JST
+- 承認実行時間帯: 2026-07-23 22:12:15〜22:27:15 JST
+- environment: staging
+- 基準commit: `2a90be3248e08da00361719f4b5d36472fda5508`
+- 対象Worker version: staging Worker（versionは本runで再取得していない）
+- 対象policy/rule: auth / 期待policy `AUTH_IP`。429へ到達していないため観測policyは未成立
+- 実行者: Codex
+- 承認者: `RitukoIsibasi0222`（チャットで実行内容を明示承認し、残る入力設定を委任）
+- 変更記録: `PR-141-R7-AUTH-20260723-2212`
+- 事前gate:
+  - PR #141 merge commitと最新`develop` SHAが一致
+  - PR #141のbackend/Vercel check成功、workflow active、前回run以外の履歴なし
+  - default branchとstaging Environment許可branchはいずれも`develop`
+  - `BATCH_ENVIRONMENT=staging`、fixture flag `false`、必要なEnvironment Secret名のpresenceを確認。Secret値は取得していない
+  - repository全体でqueued/in-progress Actions runなし、`gensoko-batch-jobs`競合なし
+  - fixture flagを一時`true`化し、読み取り確認後に1回だけdispatch
+- 手順:
+  - `case=auth`、最新40桁SHA、固定confirmation、承認者、変更記録を入力し、`develop` refから1回だけdispatch
+  - exact synthetic Admin/User fixtureをprepare
+  - auth境界runnerを実行
+  - main cleanupと非成功時recovery cleanupを確認
+  - fixture flagを`false`へ復旧してGitHub APIで読み取り確認
+- 期待結果: 正しいlogin 1〜10回目を許可し、11回目で`AUTH_IP`のHono 429契約を確認する
+- 実結果:
+  - branch/SHA/approval/Environment/DB target gate成功
+  - fixture prepare成功、2件作成・置換0件
+  - auth許可request 1〜4回目はvalidatorを通過
+  - 5回目で`AUTH_ALLOWED_REQUEST` / `RESPONSE_CONTRACT_FAILED` / status 503 / `EXPECTED_STATUS`として安全に停止
+  - 11回目へ到達せず、429と`AUTH_IP`観測証拠は未成立
+  - main cleanup成功、固定fixture 2件削除
+  - recovery cleanup成功、追加削除0件
+- status/header/body要約: 許可request 5回目のstatus 503だけを記録。response body、header値、credential、識別子は取得・記録していない。429契約は未評価
+- Cloudflare metrics/Security Events確認時間帯: 未実施。R7-02 blockedを維持
+- cleanup: main/recoveryとも成功。workflow上のexact fixture残存なし
+- rollback: fixture flagを`false`へ復旧し、GitHub APIで読み取り確認
+- 停止通知: 本チャットへ即時報告。外部メール送信は行っていない
+- 判定: fail
+- 再実行判断: 想定外503の停止条件に該当するため、同一条件で第三runを行わない
+- 代替証拠: repository contract testは成功しているが、staging実HTTP成功証拠の代替にはしない
+- 残余リスク: 許可request 5回目の503原因は未特定。R7-04/R7-05は未完了を維持し、読み取り調査または別TDD修正タスクのreview後に新しい承認で別runを検討する
+- 添付先: [GitHub Actions run 30010266297](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30010266297)
 - production操作: URL、DB、Cloudflare binding/Secret、WAF、deploymentを変更していない
 
 PII・Secret確認:
