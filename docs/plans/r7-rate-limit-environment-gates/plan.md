@@ -229,6 +229,19 @@ Hono + SQLite-backed Durable Objectによるアプリレベルrate limitは実�
 | `frontend/src/routes/login/login-page.test.ts`                     | login alert/retry                        |
 | `frontend/src/routes/(app)/game/play/game-play-rate-limit.test.ts` | game alert/retry                         |
 
+### R7 staging実HTTP証拠の実行準備で変更するファイル
+
+| ファイル                                                    | 変更種別 | 内容                                                        |
+| ----------------------------------------------------------- | -------- | ----------------------------------------------------------- |
+| `.github/workflows/staging-rate-limit-evidence.yml`         | 新規     | 1実行1caseのmanual staging証拠workflowとfixture回収         |
+| `backend/package.json`                                      | 修正     | staging証拠runnerのCLI script追加                           |
+| `backend/src/jobs/stagingRateLimitEvidence.ts`              | 新規     | auth・questions・game submit境界と429 header/body契約の確認 |
+| `backend/src/jobs/stagingRateLimitEvidence.cli.ts`          | 新規     | 機密を含めず安全な証拠要約だけを出力するCLI                 |
+| `backend/src/jobs/stagingRateLimitEvidence.test.ts`         | 新規     | 環境guard・境界回数・429契約・機密非出力のunit test         |
+| `backend/src/jobs/stagingRateLimitEvidenceWorkflow.test.ts` | 新規     | manual限定・fixture cleanup・credential取扱いの契約test     |
+| `docs/plans/r7-rate-limit-environment-gates/plan.md`        | 修正     | 実装準備・TDD結果・実環境未実施状態の同期                   |
+| `docs/05_progress.md`                                       | 修正     | staging証拠workflow実装済み、実環境証拠待ちを同期           |
+
 ## 外部resource
 
 実在ID、Secret値、token、account ID、zone IDは文書へ記載しない。
@@ -356,6 +369,16 @@ npm run test -- --run src/lib/api/errors.test.ts src/routes/login/login-page.tes
 - HTTP body、Cookie、Authorization、raw actorをcaptureへ残さない。
 - scriptはstatus、必要なresponse header、redact済みbody要約だけを出力する。
 - 実行中に一般利用者の429/503、login成功率低下が見えたら停止する。
+
+### manual証拠workflow
+
+- `.github/workflows/staging-rate-limit-evidence.yml`は`workflow_dispatch`のみとし、`develop`とstaging Environmentに限定する。
+- `auth`、`questions`、`game-submit`はpolicy windowと共通bucketを混ぜないよう、必ず1caseずつ別workflow runで実行する。
+- workflowは既存の完全一致synthetic Admin/User fixtureをephemeral passwordで再作成し、成功・失敗を問わずcleanupする。main jobが非成功なら独立recovery jobも実行する。
+- runnerはstatus、許可件数、制限request番号、`Retry-After`、429本文・CORS・security headerの契約判定だけを出力する。token、Cookie、Authorization、password、email/user ID、question/session ID、response bodyは出力しない。
+- `game-submit`は公開questions responseの各問題について先頭choiceを回答として使い、正解情報やDB直読み取りへ依存しない。各submit用に新しいquestion setを取得する。
+- 既存fixture flag、固定staging API URL、固定frontend originのguardを通過しない限りHTTP requestを開始しない。
+- workflowのrepository実装完了はR7-04〜R7-07の完了を意味しない。G5/G6、実行時間帯、停止時通知先の承認後に実行し、結果を別Evidenceとして記録する。
 
 ### 実HTTPテストケース
 
@@ -690,6 +713,38 @@ R7実行ごとに次を同期する。
 - 高度なWAF tuning、全体A11Y/security監査、DB変更、dependency updateを除外した。
 - R7の完了を「コード実装」ではなく「実環境証拠と承認」に限定した。
 - 実行不能caseは代替証拠・残余リスク・承認を必須にした。
+
+## staging証拠workflow実装記録
+
+- 実装日: 2026-07-23
+- 実装ブランチ: `feature/r7-rate-limit-environment-gates`
+- 実装commit: `d007d3f`
+- PR: チャットレビュー前のため未作成
+- TDD Red: runner moduleとworkflowが未作成であることを理由に対象2 filesが失敗
+- TDD Green: runner・CLI・manual workflow実装後、2 files / 13 tests成功
+- Refactor: 未使用response bodyの破棄と検証済みchoiceの型明示後、再利用fixtureを含む4 files / 30 tests成功
+- 最終品質gate: backend 103 files / 1057 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
+- 実環境実行: 未実施。レビュー・merge・G5/G6承認後にcaseごとに別実行する
+
+### 設計判断
+
+- 長時間sleepをworkflowへ入れず、reset確認は別時刻・別実行のR7-08証拠に分離した。
+- `auth`、`questions`、`game-submit`を1runにまとめず、共通`GENERAL_API_IP`やpolicy windowの相互干渉を避けた。
+- 新しいfixtureを増やさず、完全一致識別・collision停止・冪等cleanupが既にtest済みのstaging synthetic Admin/User fixtureを再利用した。
+- APIの公開契約とpolicy値は変更せず、`docs/04_api.md`と`docs/02_security.md`は変更対象外とした。
+
+### 実際の変更ファイル
+
+| ファイル                                                    | 変更種別 | 内容                                 |
+| ----------------------------------------------------------- | -------- | ------------------------------------ |
+| `.github/workflows/staging-rate-limit-evidence.yml`         | 新規     | manual-only staging証拠workflow      |
+| `backend/package.json`                                      | 修正     | `staging:rate-limit-evidence` script |
+| `backend/src/jobs/stagingRateLimitEvidence.ts`              | 新規     | 3境界caseと安全な429契約要約         |
+| `backend/src/jobs/stagingRateLimitEvidence.cli.ts`          | 新規     | 環境guardと固定文言のCLI             |
+| `backend/src/jobs/stagingRateLimitEvidence.test.ts`         | 新規     | runnerのunit test                    |
+| `backend/src/jobs/stagingRateLimitEvidenceWorkflow.test.ts` | 新規     | workflowのrepository contract test   |
+| `docs/plans/r7-rate-limit-environment-gates/plan.md`        | 修正     | 実装準備と実環境未実施状態を同期     |
+| `docs/05_progress.md`                                       | 修正     | R7進捗要約を同期                     |
 
 ## 最終タスクリスト
 
