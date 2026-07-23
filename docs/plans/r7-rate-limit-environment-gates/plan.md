@@ -720,7 +720,7 @@ R7実行ごとに次を同期する。
 
 - [x] R7-01: 基準SHAとrepository contract testを固定する
 - [ ] R7-02: Cloudflare plan/zone/hostname/権限を確認する
-- [ ] R7-03: staging resource分離とconfigを確認する
+- [x] R7-03: staging resource分離とconfigを確認する
 - [ ] R7-04: synthetic fixtureとcleanupを承認する
 - [ ] R7-05: auth 11回目を確認する
 - [ ] R7-06: questions 31回目を確認する
@@ -773,10 +773,10 @@ R7-20	証拠・進捗・release文書を同期	docs	中
 - [ ] G1〜G6の判断者と承認者が確定
 - [x] release候補SHAまたはstaging検証SHAが固定（`fe431d1adcc077382e73484a3c9704ed18b69f7e`）
 - [ ] synthetic fixtureとcleanupが承認済み
-- [ ] Cloudflare read-only確認権限がある
+- [x] Cloudflare read-only確認権限がある（OAuthのaccount/zone readとDashboard閲覧を確認）
 - [ ] WAF/Worker rollback権限を持つ担当者が同席
 - [ ] 実行時間帯と停止時の通知先が確定
-- [ ] 証拠のPII/Secret redaction方法が確認済み
+- [x] 証拠のPII/Secret redaction方法が確認済み（CLI/Dashboard出力を保存前にredact）
 
 ## 実行証拠
 
@@ -810,6 +810,51 @@ R7-20	証拠・進捗・release文書を同期	docs	中
 - 判定: pass
 - 代替証拠: なし
 - 残余リスク: staging実HTTP、Cloudflare実resource、production dry-runは未確認。production dry-runは実hostname・resource分離値を確認するR7-16で実施する
+- 添付先: 本節
+
+PII・Secret確認:
+
+- [x] raw IPなし
+- [x] email/user IDなし
+- [x] digestなし
+- [x] token/Cookie/Authorizationなし
+- [x] password/bodyなし
+- [x] account/zone/resource IDなし
+
+### R7 Evidence E-02
+
+- 実行日時: 2026-07-23 15:20〜15:28 JST
+- environment: Cloudflare account / staging（read-only）
+- 基準commit: `fe431d1adcc077382e73484a3c9704ed18b69f7e`
+- 対象Worker version: `gensoko-api-staging` / `ab420f62`表示を確認
+- 対象policy/rule: Worker・Durable Object・Hyperdrive・Secret presence・zone/WAF前提
+- 実行者: Codex
+- 承認者: repository owner（R7作業開始指示）
+- 事前gate: Cloudflare OAuth認証済み。account/zone read権限を確認し、Dashboard操作をread-onlyへ限定
+- 手順:
+  - Workers planを確認
+  - domain/zone一覧を確認
+  - Workers一覧、staging Worker概要、binding、変数とSecret presenceを確認
+  - WAF利用前提とObservability状態を確認
+- 期待結果: staging resourceの接続先が一致し、plan・zone・hostname・WAF権限の判断材料が揃う
+- 実結果:
+  - Workers planはFree
+  - domain/zoneは0件
+  - Workerは`gensoko-api-staging`の1件だけで、production Workerは未作成
+  - staging公開hostnameは`gensoko-api-staging.rituko-labs.workers.dev`。custom domainとrouteは未設定
+  - Hyperdrive binding `HYPERDRIVE`はstaging resourceへ接続
+  - Durable Object binding `RATE_LIMIT_COUNTER`はstaging `RateLimitCounter`へ接続
+  - `DEPLOYMENT_ENVIRONMENT=staging`、`DATABASE_TARGET=staging`、`NODE_ENV=production`、`RATE_LIMIT_STORE=durable-object`を確認
+  - `RATE_LIMIT_KEY_SECRET`、`JWT_SECRET`、mail/frontend系Secretは値を開かずpresenceだけ確認
+  - Workers Logs、Traces、Export、samplingは無効
+  - account-level WAFはEnterprise add-on案内のみ。zoneがないためzone WAF rate limiting ruleとSecurity Eventsを検証不能
+- status/header/body要約: 対象外（Dashboard/APIのread-only inventory）
+- Cloudflare metrics/Security Events確認時間帯: Worker概要の直近24時間表示を確認。zone Security Eventsは対象zone不在のため未確認
+- cleanup: Dashboard/CLIの設定変更なし。browser controlを解放
+- rollback: resource変更なし
+- 判定: R7-03 pass / R7-02 blocked
+- 代替証拠: repository production config contractはE-01で成功
+- 残余リスク: G2の公開hostname/zoneが未確定。zone WAF、Security Events、WAF迂回経路閉鎖、production resource分離は確認できない
 - 添付先: 本節
 
 PII・Secret確認:
