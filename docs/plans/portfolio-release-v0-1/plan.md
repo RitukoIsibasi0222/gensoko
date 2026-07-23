@@ -54,7 +54,8 @@ Gensokoを、商用サービスではなく技術力を示すポートフォリ�
 
 - [`staging-app-deployment`](../staging-app-deployment/plan.md) — staging配備とsynthetic E2E。
 - [`account-data-complete-deletion`](../account-data-complete-deletion/plan.md) — 本人・管理者の物理削除とlegacy移行。
-- [`api-rate-limit-production`](../api-rate-limit-production/plan.md) — Hono/DO/WAFの責務と実環境gate。
+- [`api-rate-limit-production`](../api-rate-limit-production/plan.md) — Hono/DOの設計・コード実装・TDD・過去の判断記録。
+- [`r7-rate-limit-environment-gates`](../r7-rate-limit-environment-gates/plan.md) — R7のstaging実HTTP、WAF、production依存、監視、rollback、完了証拠の正本。
 - [`audit-log-production-operations`](../audit-log-production-operations/plan.md) — 監査保持、cleanup、通知。
 - [`backup-resilience`](../backup-resilience/plan.md) — v0.1公開前の日次化と、公開後のretry・鮮度監視・restore drill強化。
 - [`dark-mode`](../dark-mode/plan.md) — v0.1必須のダークモード。
@@ -287,27 +288,27 @@ backendでは少なくともHono、Nodemailer、Prisma toolchain経由の`@hono/
 
 ## 最終タスクリスト
 
-| タスクID | 内容                                      | ファイル・環境       | 優先度 | 完了条件                                            |
-| -------- | ----------------------------------------- | -------------------- | ------ | --------------------------------------------------- |
-| R1       | Admin E2E修正後runを記録                  | staging/docs         | 高     | run 29802327100成功、cleanup、flag false            |
-| R2       | ダークモードをTDD実装                     | frontend             | 高     | OS追従、toggle、保存、主要画面確認                  |
-| R3       | `/privacy`をTDD実装                       | frontend/docs        | 高     | 公開route、必須文言、footer/register/settings導線   |
-| R4       | privacy・監査・backup・問い合わせ先を承認 | docs/運用            | 高     | 正式値、承認者、日付を記録                          |
-| R5       | 認証・refreshのproduction構成を確定       | frontend/API/環境    | 高     | same-site/Strict Cookieでreload後refresh成功        |
-| R6       | 完全削除の残るv0.1 gateを完了             | account deletion計画 | 高     | 本人削除、旧auth拒否、必要な移行判断                |
-| R7       | app rate limitの実環境gateを完了          | Cloudflare/API       | 高     | staging/prod DO、429/503、memory fallbackなし       |
-| R8       | headers・CORS・safe error・logを最終確認  | API/環境             | 高     | production smokeとnegative log review成功           |
-| R9       | 暗号化backupを日次化して複数世代を確認    | workflow/Actions     | 高     | 日次cron、7日保持、未失効2世代、平文なし            |
-| R10      | 基本responsive・keyboard/A11Yを確認       | frontend             | 高     | 主要画面の基準を満たす                              |
-| R11A     | backend High/Moderate依存を安全に更新     | backend/package      | 高     | TDD回帰後、production依存High/Moderate 0件          |
-| R11      | release候補SHAの品質gateとnpm audit       | backend/frontend     | 高     | test/build/lint/format/audit結果を記録              |
-| R12      | staging主要導線を最終確認                 | staging              | 高     | 登録〜削除、game、privacy、theme成功                |
-| R13      | 本番DB簡略化の適用可否を判断              | production read-only | 高     | 証拠ありで対象外記録、なければ通常gate維持          |
-| R14      | rollout/rollback preflight                | deployment docs      | 高     | URL、SHA、Secrets名、flags、rollback先確認          |
-| R15      | production deployを別承認で実施           | production           | 高     | review済みSHAを配備しrun URL記録                    |
-| R16      | production smokeを実施                    | production           | 高     | auth/refresh/game/delete/privacy/theme/security成功 |
-| R17      | release recordと進捗を同期                | docs                 | 中     | 未実施を完了扱いせず残余リスク記録                  |
-| R18      | 公開後タスクをissue/計画へ引き継ぐ        | docs/issues          | 中     | ownerと再着手条件を記録                             |
+| タスクID | 内容                                      | ファイル・環境         | 優先度 | 完了条件                                            |
+| -------- | ----------------------------------------- | ---------------------- | ------ | --------------------------------------------------- |
+| R1       | Admin E2E修正後runを記録                  | staging/docs           | 高     | run 29802327100成功、cleanup、flag false            |
+| R2       | ダークモードをTDD実装                     | frontend               | 高     | OS追従、toggle、保存、主要画面確認                  |
+| R3       | `/privacy`をTDD実装                       | frontend/docs          | 高     | 公開route、必須文言、footer/register/settings導線   |
+| R4       | privacy・監査・backup・問い合わせ先を承認 | docs/運用              | 高     | 正式値、承認者、日付を記録                          |
+| R5       | 認証・refreshのproduction構成を確定       | frontend/API/環境      | 高     | same-site/Strict Cookieでreload後refresh成功        |
+| R6       | 完全削除の残るv0.1 gateを完了             | account deletion計画   | 高     | 本人削除、旧auth拒否、必要な移行判断                |
+| R7       | app rate limitの実環境gateを完了          | R7 gate計画/Cloudflare | 高     | staging境界、production分離、WAF、監視、rollback    |
+| R8       | headers・CORS・safe error・logを最終確認  | API/環境               | 高     | production smokeとnegative log review成功           |
+| R9       | 暗号化backupを日次化して複数世代を確認    | workflow/Actions       | 高     | 日次cron、7日保持、未失効2世代、平文なし            |
+| R10      | 基本responsive・keyboard/A11Yを確認       | frontend               | 高     | 主要画面の基準を満たす                              |
+| R11A     | backend High/Moderate依存を安全に更新     | backend/package        | 高     | TDD回帰後、production依存High/Moderate 0件          |
+| R11      | release候補SHAの品質gateとnpm audit       | backend/frontend       | 高     | test/build/lint/format/audit結果を記録              |
+| R12      | staging主要導線を最終確認                 | staging                | 高     | 登録〜削除、game、privacy、theme成功                |
+| R13      | 本番DB簡略化の適用可否を判断              | production read-only   | 高     | 証拠ありで対象外記録、なければ通常gate維持          |
+| R14      | rollout/rollback preflight                | deployment docs        | 高     | URL、SHA、Secrets名、flags、rollback先確認          |
+| R15      | production deployを別承認で実施           | production             | 高     | review済みSHAを配備しrun URL記録                    |
+| R16      | production smokeを実施                    | production             | 高     | auth/refresh/game/delete/privacy/theme/security成功 |
+| R17      | release recordと進捗を同期                | docs                   | 中     | 未実施を完了扱いせず残余リスク記録                  |
+| R18      | 公開後タスクをissue/計画へ引き継ぐ        | docs/issues            | 中     | ownerと再着手条件を記録                             |
 
 - [x] R1: Admin E2E修正後runを記録する
 - [x] R2: ダークモードをTDD実装する
@@ -317,7 +318,7 @@ backendでは少なくともHono、Nodemailer、Prisma toolchain経由の`@hono/
   - code・contract test・migration file・runbookを実装。G1〜G8とR14〜R16のproduction証拠待ちのため完了にしない。
 - [-] R6: 完全削除の残るv0.1 gateを完了する — 計画書: [`r6-account-deletion-gates`](../r6-account-deletion-gates/plan.md)
   - production本人削除専用config guard、main/recovery Playwright、manual-only workflow、runbookをTDD実装済み。T1B、T35、R13〜R16の承認付き実環境証拠待ちのため完了にしない。
-- [ ] R7: app rate limitの実環境gateを完了する
+- [ ] R7: app rate limitの実環境gateを完了する — 計画書: [`r7-rate-limit-environment-gates`](../r7-rate-limit-environment-gates/plan.md) — repository実装とstaging bindingは確認済み。R7-01〜R7-20の実環境証拠は未実施
 - [ ] R8: headers・CORS・safe error・logを最終確認する
 - [-] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する（code実装済み、schedule観測待ち）
 - [ ] R10: 基本responsive・keyboard/A11Yを確認する
