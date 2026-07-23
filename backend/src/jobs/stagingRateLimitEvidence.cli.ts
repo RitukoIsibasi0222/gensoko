@@ -1,12 +1,13 @@
 import {
   runStagingRateLimitEvidence,
+  STAGING_RATE_LIMIT_EVIDENCE_EXECUTION_FAILED_MESSAGE,
+  StagingRateLimitEvidenceExecutionError,
   validateStagingRateLimitEvidenceEnvironment,
 } from "./stagingRateLimitEvidence.js";
 
 const COMPLETED_EVENT = "staging_rate_limit_evidence.completed";
 const FAILED_EVENT = "staging_rate_limit_evidence.failed";
 const INVALID_ENVIRONMENT_MESSAGE = "staging rate limit evidence設定が不正です";
-const EXECUTION_FAILED_MESSAGE = "staging rate limit evidenceの実行に失敗しました";
 
 export async function main(): Promise<void> {
   let environment: ReturnType<typeof validateStagingRateLimitEvidenceEnvironment>;
@@ -22,8 +23,22 @@ export async function main(): Promise<void> {
     const summary = await runStagingRateLimitEvidence(environment);
     console.info({ event: COMPLETED_EVENT, ...summary });
     process.exitCode = 0;
-  } catch {
-    console.error({ event: FAILED_EVENT, message: EXECUTION_FAILED_MESSAGE });
+  } catch (error) {
+    const failureMetadata =
+      error instanceof StagingRateLimitEvidenceExecutionError
+        ? {
+            failureStage: error.failureStage,
+            failureKind: error.failureKind,
+            requestNumber: error.requestNumber,
+            observedStatus: error.observedStatus,
+            failedContract: error.failedContract,
+          }
+        : {};
+    console.error({
+      event: FAILED_EVENT,
+      message: STAGING_RATE_LIMIT_EVIDENCE_EXECUTION_FAILED_MESSAGE,
+      ...failureMetadata,
+    });
     process.exitCode = 1;
   }
 }

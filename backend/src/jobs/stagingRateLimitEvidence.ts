@@ -11,6 +11,8 @@ const EXPECTED_CONTENT_SECURITY_POLICY =
 const INVALID_ENVIRONMENT_MESSAGE = "staging rate limit evidence設定が不正です";
 const INVALID_PREREQUISITE_RESPONSE_MESSAGE = "staging rate limit evidenceの前提応答が不正です";
 const INVALID_RATE_LIMIT_RESPONSE_MESSAGE = "staging rate limit evidenceの429契約が不正です";
+export const STAGING_RATE_LIMIT_EVIDENCE_EXECUTION_FAILED_MESSAGE =
+  "staging rate limit evidenceの実行に失敗しました";
 const GAME_MODE = "SYMBOL_TO_NAME_LV1";
 const STAGING_RATE_LIMIT_REQUEST_TIMEOUT_MS = 10_000;
 
@@ -46,6 +48,72 @@ export type StagingRateLimitEvidenceSummary = Readonly<{
   corsContract: true;
   securityHeadersContract: true;
 }>;
+
+export type StagingRateLimitEvidenceFailureStage = "AUTH_ALLOWED_REQUEST" | "AUTH_LIMITED_REQUEST";
+export type StagingRateLimitEvidenceFailureKind = "REQUEST_FAILED" | "RESPONSE_CONTRACT_FAILED";
+export type StagingRateLimitEvidenceFailedContract =
+  | "EXPECTED_STATUS"
+  | "EXPECTED_CONTENT_TYPE"
+  | "EXPECTED_JSON_BODY"
+  | "EXPECTED_RESPONSE_SHAPE"
+  | "RATE_LIMIT_STATUS"
+  | "RATE_LIMIT_CONTENT_TYPE"
+  | "RETRY_AFTER"
+  | "RATE_LIMIT_BODY"
+  | "ACCESS_CONTROL_ALLOW_ORIGIN"
+  | "ACCESS_CONTROL_ALLOW_CREDENTIALS"
+  | "CONTENT_SECURITY_POLICY"
+  | "CROSS_ORIGIN_RESOURCE_POLICY"
+  | "PERMISSIONS_POLICY"
+  | "REFERRER_POLICY"
+  | "STRICT_TRANSPORT_SECURITY"
+  | "X_CONTENT_TYPE_OPTIONS"
+  | "X_FRAME_OPTIONS"
+  | "X_PERMITTED_CROSS_DOMAIN_POLICIES"
+  | "X_XSS_PROTECTION"
+  | "X_POWERED_BY";
+
+class StagingRateLimitEvidenceContractError extends Error {
+  readonly failedContract: StagingRateLimitEvidenceFailedContract;
+
+  constructor(message: string, failedContract: StagingRateLimitEvidenceFailedContract) {
+    super(message);
+    this.name = "StagingRateLimitEvidenceContractError";
+    this.failedContract = failedContract;
+  }
+}
+
+export class StagingRateLimitEvidenceExecutionError extends Error {
+  readonly failureStage: StagingRateLimitEvidenceFailureStage;
+  readonly failureKind: StagingRateLimitEvidenceFailureKind;
+  readonly requestNumber: number;
+  readonly observedStatus: number | null;
+  readonly failedContract: StagingRateLimitEvidenceFailedContract | null;
+
+  constructor({
+    message,
+    failureStage,
+    failureKind,
+    requestNumber,
+    observedStatus,
+    failedContract,
+  }: {
+    message: string;
+    failureStage: StagingRateLimitEvidenceFailureStage;
+    failureKind: StagingRateLimitEvidenceFailureKind;
+    requestNumber: number;
+    observedStatus: number | null;
+    failedContract: StagingRateLimitEvidenceFailedContract | null;
+  }) {
+    super(message);
+    this.name = "StagingRateLimitEvidenceExecutionError";
+    this.failureStage = failureStage;
+    this.failureKind = failureKind;
+    this.requestNumber = requestNumber;
+    this.observedStatus = observedStatus;
+    this.failedContract = failedContract;
+  }
+}
 
 type RunStagingRateLimitEvidenceOptions = Omit<
   ValidatedStagingRateLimitEvidenceEnvironment,
@@ -101,14 +169,27 @@ function hasJsonContentType(response: Response): boolean {
 }
 
 async function readExpectedJson(response: Response, expectedStatus: number): Promise<unknown> {
-  if (response.status !== expectedStatus || !hasJsonContentType(response)) {
-    await response.body?.cancel();
-    throw new Error(INVALID_PREREQUISITE_RESPONSE_MESSAGE);
+  if (response.status !== expectedStatus) {
+    await cancelResponseBodyBestEffort(response);
+    throw new StagingRateLimitEvidenceContractError(
+      INVALID_PREREQUISITE_RESPONSE_MESSAGE,
+      "EXPECTED_STATUS",
+    );
+  }
+  if (!hasJsonContentType(response)) {
+    await cancelResponseBodyBestEffort(response);
+    throw new StagingRateLimitEvidenceContractError(
+      INVALID_PREREQUISITE_RESPONSE_MESSAGE,
+      "EXPECTED_CONTENT_TYPE",
+    );
   }
 
   const body = await parseJson(response);
   if (body === null) {
-    throw new Error(INVALID_PREREQUISITE_RESPONSE_MESSAGE);
+    throw new StagingRateLimitEvidenceContractError(
+      INVALID_PREREQUISITE_RESPONSE_MESSAGE,
+      "EXPECTED_JSON_BODY",
+    );
   }
   return body;
 }
@@ -124,6 +205,57 @@ async function requestEvidence(
     redirect: "error",
     signal: AbortSignal.timeout(requestTimeoutMs),
   });
+}
+
+async function cancelResponseBodyBestEffort(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // body解放の失敗で、安全な分類errorを上書きしない
+  }
+}
+
+async function runClassifiedEvidenceRequest<T>({
+  request,
+  validate,
+  failureStage,
+  requestNumber,
+  validationFailureMessage,
+}: {
+  request: () => Promise<Response>;
+  validate: (response: Response) => Promise<T>;
+  failureStage: StagingRateLimitEvidenceFailureStage;
+  requestNumber: number;
+  validationFailureMessage: string;
+}): Promise<T> {
+  let response: Response;
+  try {
+    response = await request();
+  } catch {
+    throw new StagingRateLimitEvidenceExecutionError({
+      message: STAGING_RATE_LIMIT_EVIDENCE_EXECUTION_FAILED_MESSAGE,
+      failureStage,
+      failureKind: "REQUEST_FAILED",
+      requestNumber,
+      observedStatus: null,
+      failedContract: null,
+    });
+  }
+
+  try {
+    return await validate(response);
+  } catch (error) {
+    await cancelResponseBodyBestEffort(response);
+    throw new StagingRateLimitEvidenceExecutionError({
+      message: validationFailureMessage,
+      failureStage,
+      failureKind: "RESPONSE_CONTRACT_FAILED",
+      requestNumber,
+      observedStatus: response.status,
+      failedContract:
+        error instanceof StagingRateLimitEvidenceContractError ? error.failedContract : null,
+    });
+  }
 }
 
 function createCommonHeaders(frontendOrigin: string): Record<string, string> {
@@ -175,7 +307,10 @@ async function parseLoginResponse(response: Response): Promise<LoginResponse> {
     !isNonEmptyString(body.user.username) ||
     body.user.role !== "USER"
   ) {
-    throw new Error(INVALID_PREREQUISITE_RESPONSE_MESSAGE);
+    throw new StagingRateLimitEvidenceContractError(
+      INVALID_PREREQUISITE_RESPONSE_MESSAGE,
+      "EXPECTED_RESPONSE_SHAPE",
+    );
   }
 
   return {
@@ -342,29 +477,25 @@ async function createRateLimitSummary({
   response: Response;
   frontendOrigin: string;
 }): Promise<StagingRateLimitEvidenceSummary> {
-  if (response.status !== 429 || !hasJsonContentType(response)) {
-    await response.body?.cancel();
-    throw new Error(INVALID_RATE_LIMIT_RESPONSE_MESSAGE);
+  if (response.status !== 429) {
+    await cancelResponseBodyBestEffort(response);
+    throw new StagingRateLimitEvidenceContractError(
+      INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
+      "RATE_LIMIT_STATUS",
+    );
+  }
+  if (!hasJsonContentType(response)) {
+    await cancelResponseBodyBestEffort(response);
+    throw new StagingRateLimitEvidenceContractError(
+      INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
+      "RATE_LIMIT_CONTENT_TYPE",
+    );
   }
 
   const retryAfter = response.headers.get("Retry-After");
   const body = await parseJson(response);
   const bodyContract =
     isRecord(body) && Object.keys(body).length === 1 && body.error === RATE_LIMIT_EXCEEDED_MESSAGE;
-  const corsContract =
-    response.headers.get("Access-Control-Allow-Origin") === frontendOrigin &&
-    response.headers.get("Access-Control-Allow-Credentials") === "true";
-  const securityHeadersContract =
-    response.headers.get("Content-Security-Policy") === EXPECTED_CONTENT_SECURITY_POLICY &&
-    response.headers.get("Cross-Origin-Resource-Policy") === "same-origin" &&
-    response.headers.get("Permissions-Policy") === "camera=(), microphone=(), geolocation=()" &&
-    response.headers.get("Referrer-Policy") === "strict-origin-when-cross-origin" &&
-    response.headers.get("Strict-Transport-Security") === "max-age=31536000; includeSubDomains" &&
-    response.headers.get("X-Content-Type-Options") === "nosniff" &&
-    response.headers.get("X-Frame-Options") === "DENY" &&
-    response.headers.get("X-Permitted-Cross-Domain-Policies") === "none" &&
-    response.headers.get("X-XSS-Protection") === "0" &&
-    response.headers.get("X-Powered-By") === null;
   const retryAfterSec = retryAfter === null ? Number.NaN : Number(retryAfter);
   const maximumRetryAfterSec = Math.ceil(RATE_LIMIT_POLICIES[policyId].windowMs / 1_000);
 
@@ -372,12 +503,70 @@ async function createRateLimitSummary({
     retryAfter === null ||
     !/^[1-9]\d*$/.test(retryAfter) ||
     !Number.isSafeInteger(retryAfterSec) ||
-    retryAfterSec > maximumRetryAfterSec ||
-    !bodyContract ||
-    !corsContract ||
-    !securityHeadersContract
+    retryAfterSec > maximumRetryAfterSec
   ) {
-    throw new Error(INVALID_RATE_LIMIT_RESPONSE_MESSAGE);
+    throw new StagingRateLimitEvidenceContractError(
+      INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
+      "RETRY_AFTER",
+    );
+  }
+  if (!bodyContract) {
+    throw new StagingRateLimitEvidenceContractError(
+      INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
+      "RATE_LIMIT_BODY",
+    );
+  }
+  if (response.headers.get("Access-Control-Allow-Origin") !== frontendOrigin) {
+    throw new StagingRateLimitEvidenceContractError(
+      INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
+      "ACCESS_CONTROL_ALLOW_ORIGIN",
+    );
+  }
+  if (response.headers.get("Access-Control-Allow-Credentials") !== "true") {
+    throw new StagingRateLimitEvidenceContractError(
+      INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
+      "ACCESS_CONTROL_ALLOW_CREDENTIALS",
+    );
+  }
+
+  const securityContractChecks: ReadonlyArray<
+    readonly [StagingRateLimitEvidenceFailedContract, boolean]
+  > = [
+    [
+      "CONTENT_SECURITY_POLICY",
+      response.headers.get("Content-Security-Policy") === EXPECTED_CONTENT_SECURITY_POLICY,
+    ],
+    [
+      "CROSS_ORIGIN_RESOURCE_POLICY",
+      response.headers.get("Cross-Origin-Resource-Policy") === "same-origin",
+    ],
+    [
+      "PERMISSIONS_POLICY",
+      response.headers.get("Permissions-Policy") === "camera=(), microphone=(), geolocation=()",
+    ],
+    [
+      "REFERRER_POLICY",
+      response.headers.get("Referrer-Policy") === "strict-origin-when-cross-origin",
+    ],
+    [
+      "STRICT_TRANSPORT_SECURITY",
+      response.headers.get("Strict-Transport-Security") === "max-age=31536000; includeSubDomains",
+    ],
+    ["X_CONTENT_TYPE_OPTIONS", response.headers.get("X-Content-Type-Options") === "nosniff"],
+    ["X_FRAME_OPTIONS", response.headers.get("X-Frame-Options") === "DENY"],
+    [
+      "X_PERMITTED_CROSS_DOMAIN_POLICIES",
+      response.headers.get("X-Permitted-Cross-Domain-Policies") === "none",
+    ],
+    ["X_XSS_PROTECTION", response.headers.get("X-XSS-Protection") === "0"],
+    ["X_POWERED_BY", response.headers.get("X-Powered-By") === null],
+  ];
+  const failedSecurityContract = securityContractChecks.find(([, passed]) => !passed)?.[0];
+  if (failedSecurityContract !== undefined) {
+    throw new StagingRateLimitEvidenceContractError(
+      INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
+      failedSecurityContract,
+    );
   }
 
   return {
@@ -435,28 +624,42 @@ export async function runStagingRateLimitEvidence({
       requestNumber <= RATE_LIMIT_POLICIES.AUTH_IP.limit;
       requestNumber += 1
     ) {
-      const response = await requestLogin({
-        apiBaseUrl,
-        frontendOrigin,
-        userPassword,
-        requestTimeoutMs,
-        fetchImpl,
+      await runClassifiedEvidenceRequest({
+        failureStage: "AUTH_ALLOWED_REQUEST",
+        requestNumber,
+        validationFailureMessage: INVALID_PREREQUISITE_RESPONSE_MESSAGE,
+        request: async () =>
+          await requestLogin({
+            apiBaseUrl,
+            frontendOrigin,
+            userPassword,
+            requestTimeoutMs,
+            fetchImpl,
+          }),
+        validate: parseLoginResponse,
       });
-      await parseLoginResponse(response);
     }
-    const response = await requestLogin({
-      apiBaseUrl,
-      frontendOrigin,
-      userPassword,
-      requestTimeoutMs,
-      fetchImpl,
-    });
-    return await createRateLimitSummary({
-      evidenceCase,
-      allowedRequests: RATE_LIMIT_POLICIES.AUTH_IP.limit,
-      policyId: "AUTH_IP",
-      response,
-      frontendOrigin,
+    const limitedRequestNumber = RATE_LIMIT_POLICIES.AUTH_IP.limit + 1;
+    return await runClassifiedEvidenceRequest({
+      failureStage: "AUTH_LIMITED_REQUEST",
+      requestNumber: limitedRequestNumber,
+      validationFailureMessage: INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
+      request: async () =>
+        await requestLogin({
+          apiBaseUrl,
+          frontendOrigin,
+          userPassword,
+          requestTimeoutMs,
+          fetchImpl,
+        }),
+      validate: async (response) =>
+        await createRateLimitSummary({
+          evidenceCase,
+          allowedRequests: RATE_LIMIT_POLICIES.AUTH_IP.limit,
+          policyId: "AUTH_IP",
+          response,
+          frontendOrigin,
+        }),
     });
   }
 

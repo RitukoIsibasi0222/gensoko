@@ -726,7 +726,7 @@ R7実行ごとに次を同期する。
 - TDD Red: runner moduleとworkflowが未作成であることを理由に対象2 filesが失敗
 - TDD Green: runner・CLI・manual workflow実装後、2 files / 13 tests成功
 - Refactor: 未使用response bodyの破棄と検証済みchoiceの型明示後、再利用fixtureを含む4 files / 30 tests成功
-- 最終品質gate: backend 103 files / 1057 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
+- PR #140初回実装commit時点の最終品質gate: backend 103 files / 1057 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
 - 実環境実行: 未実施。レビュー・merge・G5/G6承認後にcaseごとに別実行する
 
 ### 設計判断
@@ -751,8 +751,41 @@ R7実行ごとに次を同期する。
 - contract: 429のJSON Content-Type、policy window内かつsafe integerの`Retry-After`、credentialed CORS（`Access-Control-Allow-Origin`と`Access-Control-Allow-Credentials: true`）、production security header一式、`X-Powered-By`非露出を必須化した
 - audit: workflow実行前のreview済みSHA・確認文字列・承認者・change recordを必須化する。全gate通過後はsetup・prepare・runnerの成功/失敗を問わず、秘密値なしのJob Summaryへ記録する。gate不成立時は未検証入力を記録しない
 - cleanup: prepare直前にfixture lifecycle markerを設定し、markerがないgate失敗ではmain cleanupと独立recoveryの両方を実行しない。prepare開始後の失敗では従来どおり二重の回収経路を維持する
-- 改善後最終品質gate: backend 104 files / 1080 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
+- PR #140 merge時点の最終品質gate: backend 104 files / 1080 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
 - 実環境実行: 未実施のまま。R7-04〜R7-08の完了状態は変更しない
+
+### 初回auth実環境runと安全な失敗分類
+
+- 実行日: 2026-07-23
+- 実行SHA: `823798385b8ca10a45f64bb94709e31b2b9664f4`
+- workflow run: [30004874751](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30004874751)
+- G5/G6: `auth` 1回、synthetic fixture作成・cleanup、flagの一時`true`化と`false`復旧、staging DB操作、正しいlogin 10回と11回目429、cascade cleanup、R7-02 blockedのままHono境界だけを取得することを承認
+- 実結果: branch/SHA/Environment/DB target gateとfixture作成は成功したが、auth境界runner stepは固定失敗eventで終了した。request段階・request番号・status・契約分類は当時のCLI出力だけでは特定できず、429契約の証拠は成立していない
+- cleanup: main cleanupは固定fixture 2件を削除して成功し、独立recovery cleanupも追加削除0件で成功した
+- 復旧: `STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED=false`をGitHub APIで読み取り確認した
+- 停止判断: 同一条件で再実行せず、追加の直接DB操作、production操作、deploymentを行わなかった。R7-04/R7-05は未完了を維持する
+- 診断実装branch: `feature/r7-auth-evidence-diagnostics`
+- TDD Red 1: request段階・番号・statusの安全な分類を要求し、対象2 filesで4 tests失敗・28 tests成功
+- TDD Green 1: raw例外を保持しない分類errorとCLI metadataを実装し、対象2 files / 32 tests成功
+- TDD Red 2: Retry-After・CORS・security header等の固定契約名を要求し、対象2 filesで4 tests失敗・28 tests成功
+- TDD Green 2 / Refactor: header値やbodyを出さず、固定enumの`failedContract`だけを追加し、Prettier後も対象2 files / 32 tests成功
+- PR #141 review対応 Red/Green: validatorの予期しない失敗時に未消費response bodyを解放する契約を1 test失敗・28 tests成功で再現し、best-effort cancelとcancel失敗時の安全な分類error維持を実装して対象29 tests成功
+- PR #141追加review対応 Red/Green: 許可/制限requestのstatus・Content-Type不一致時にcancel拒否で固定契約分類を失う問題を4 tests失敗・29 tests成功で再現し、4箇所の直接cancelをbest-effort helperへ統一して対象33 tests成功
+- PR #141追加review対応後の最終品質gate: backend 104 files / 1088 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
+- security: raw例外message/cause、response body、header値、credential、識別子、URLをerror metadataへ保持しない
+- 実環境再実行: 未実施。診断変更のreview・mergeと新しい実行時間帯の承認後に、別runとして扱う
+
+#### 初回失敗後の診断変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+| --- | --- | --- |
+| `backend/src/jobs/stagingRateLimitEvidence.ts` | 修正 | auth requestの安全な失敗段階・番号・status・固定契約名を分類 |
+| `backend/src/jobs/stagingRateLimitEvidence.cli.ts` | 修正 | 既知の分類metadataだけを固定失敗eventへ追加 |
+| `backend/src/jobs/stagingRateLimitEvidence.test.ts` | 修正 | raw例外・body非保持とauth段階・契約分類のcontract test |
+| `backend/src/jobs/stagingRateLimitEvidence.cli.test.ts` | 修正 | CLIの安全なmetadata出力と機密非出力test |
+| `docs/plans/r7-rate-limit-environment-gates/plan.md` | 修正 | 初回run、cleanup、flag復旧、TDD、残余リスクを記録 |
+| `docs/05_progress.md` | 修正 | R7-04/R7-05未完了と診断実装待ちへ同期 |
+| `docs/plans/portfolio-release-v0-1/plan.md` | 修正 | 実際に変わったR7の状態だけを同期 |
 
 ### 実際の変更ファイル
 
@@ -933,6 +966,50 @@ PII・Secret確認:
 - 代替証拠: repository production config contractはE-01で成功
 - 残余リスク: G2の公開hostname/zoneが未確定。zone WAF、Security Events、WAF迂回経路閉鎖、production resource分離は確認できない
 - 添付先: 本節
+
+PII・Secret確認:
+
+- [x] raw IPなし
+- [x] email/user IDなし
+- [x] digestなし
+- [x] token/Cookie/Authorizationなし
+- [x] password/bodyなし
+- [x] account/zone/resource IDなし
+
+### R7 Evidence E-03
+
+- 実行日時: 2026-07-23 20:54:11〜20:55:20 JST
+- environment: staging
+- 基準commit: `823798385b8ca10a45f64bb94709e31b2b9664f4`
+- 対象Worker version: staging Worker（versionは本runで再取得していない）
+- 対象policy/rule: auth / 期待policy `AUTH_IP`
+- 実行者: Codex
+- 承認者: `ritukodayo40`（チャットでG5/G6を明示承認）
+- 変更記録: `R7-G5-G6-20260723-2052`
+- 事前gate: `develop` SHA一致、workflow active、実行履歴0件、branch policy `develop`、staging Environment/DB target/Secret presence、concurrency競合なし、fixture flag `false`を確認後に一時`true`化
+- 手順:
+  - `case=auth`を`develop` refから1回だけdispatch
+  - exact synthetic Admin/User fixtureをprepare
+  - auth境界runnerを実行
+  - main cleanupと非成功時recovery cleanupを確認
+  - fixture flagを`false`へ復旧して読み取り確認
+- 期待結果: 正しいlogin 1〜10回目を許可し、11回目で`AUTH_IP`のHono 429契約を確認する
+- 実結果:
+  - branch/SHA/Environment/DB target gate成功
+  - fixture prepare成功
+  - auth境界runner step失敗
+  - 当時の安全なCLI出力は固定失敗eventだけで、request段階・request番号・status・契約分類は特定不能
+  - main cleanup成功、固定fixture 2件削除
+  - recovery cleanup成功、追加削除0件
+- status/header/body要約: 429、`Retry-After`、CORS/security header、日本語単一error契約は未確認。response bodyは記録していない
+- Cloudflare metrics/Security Events確認時間帯: 未実施。R7-02 blockedを維持
+- cleanup: main/recoveryとも成功。workflow上のexact fixture残存なし
+- rollback: fixture flagを`false`へ復旧し、GitHub APIで読み取り確認
+- 判定: fail
+- 代替証拠: repository contract testはE-01で成功しているが、staging実HTTP成功証拠の代替にはしない
+- 残余リスク: 初回失敗の具体的な段階・契約分類が不明。安全な分類metadataのreview・merge後、再承認された別runが必要
+- 添付先: [GitHub Actions run 30004874751](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30004874751)
+- production操作: URL、DB、Cloudflare binding/Secret、WAF、deploymentを変更していない
 
 PII・Secret確認:
 

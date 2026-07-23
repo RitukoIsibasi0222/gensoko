@@ -5,10 +5,14 @@ const runtimeMocks = vi.hoisted(() => ({
   runEvidence: vi.fn(),
 }));
 
-vi.mock("./stagingRateLimitEvidence.js", () => ({
-  validateStagingRateLimitEvidenceEnvironment: runtimeMocks.validateEnvironment,
-  runStagingRateLimitEvidence: runtimeMocks.runEvidence,
-}));
+vi.mock("./stagingRateLimitEvidence.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./stagingRateLimitEvidence.js")>();
+  return {
+    ...actual,
+    validateStagingRateLimitEvidenceEnvironment: runtimeMocks.validateEnvironment,
+    runStagingRateLimitEvidence: runtimeMocks.runEvidence,
+  };
+});
 
 const ORIGINAL_ENV = { ...process.env };
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -111,5 +115,37 @@ describe("stagingRateLimitEvidence CLI", () => {
     expect(output).not.toContain("secret");
     expect(output).not.toContain("private");
     expect(output).not.toContain("attacker.invalid");
+  });
+
+  it("既知のauth失敗はrequest段階・番号・statusだけを安全に出力する", async () => {
+    const { StagingRateLimitEvidenceExecutionError } =
+      await import("./stagingRateLimitEvidence.js");
+    runtimeMocks.runEvidence.mockRejectedValue(
+      new StagingRateLimitEvidenceExecutionError({
+        message: "staging rate limit evidenceの429契約が不正です",
+        failureStage: "AUTH_LIMITED_REQUEST",
+        failureKind: "RESPONSE_CONTRACT_FAILED",
+        requestNumber: 11,
+        observedStatus: 429,
+        failedContract: "STRICT_TRANSPORT_SECURITY",
+      }),
+    );
+
+    await runCli();
+
+    expect(process.exitCode).toBe(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith({
+      event: "staging_rate_limit_evidence.failed",
+      message: "staging rate limit evidenceの実行に失敗しました",
+      failureStage: "AUTH_LIMITED_REQUEST",
+      failureKind: "RESPONSE_CONTRACT_FAILED",
+      requestNumber: 11,
+      observedStatus: 429,
+      failedContract: "STRICT_TRANSPORT_SECURITY",
+    });
+    const output = getConsoleOutput(consoleErrorSpy);
+    expect(output).not.toContain("token");
+    expect(output).not.toContain("body");
+    expect(output).not.toContain("password");
   });
 });
