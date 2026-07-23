@@ -112,22 +112,25 @@ R6 は次のすべてを満たした時点で完了とする。
 
 ## 対象ファイル一覧
 
-実装時に不要と判明した候補は削除し、実際の変更ファイルを本計画の `## 実装完了` に同期する。
+2026-07-23のrepository実装で実際に変更したファイルへ同期した。実環境gateが残るため、R6全体の`## 実装完了`はまだ追加しない。
 
-| ファイル                                                    | 変更種別 | 内容                                                                          |
-| ----------------------------------------------------------- | -------- | ----------------------------------------------------------------------------- |
-| `docs/plans/r6-account-deletion-gates/plan.md`              | 新規     | R6 の v0.1 完了境界、判断分岐、証拠、タスクリスト                             |
-| `docs/05_progress.md`                                       | 修正     | R6 を進行中にし、本計画へのリンクを追加                                       |
-| `docs/plans/portfolio-release-v0-1/plan.md`                 | 修正     | R6 の正本リンクと進行状態を同期                                               |
-| `frontend/e2e/production-account-deletion-config.ts`        | 新規候補 | 一回限り削除 account、URL、reserved identity、確認文字列を fail-closed 検証   |
-| `frontend/e2e/production-account-deletion-config.test.ts`   | 新規候補 | production/staging 混同、通常 account、弱い password、不正 URL を拒否         |
-| `frontend/e2e/production-account-deletion.spec.ts`          | 新規候補 | 本人削除、旧 access/refresh/login 拒否、値非出力の production smoke           |
-| `frontend/playwright.production-account-deletion.config.ts` | 新規候補 | destructive smoke を通常 E2E と分離し、trace/video/screenshot を無効化        |
-| `frontend/src/production-account-deletion-contract.test.ts` | 新規候補 | 専用 config/spec/workflow、manual-only、production Environment、recovery 契約 |
-| `frontend/package.json`                                     | 修正候補 | production account deletion smoke 専用 script                                 |
-| `.github/workflows/production-account-deletion-smoke.yml`   | 新規候補 | 明示 confirmation、Environment approval、main/recovery、秘密非出力            |
-| `docs/11_deployment.md`                                     | 修正候補 | R6 staging/production smoke、停止、recovery、証拠記録 runbook                 |
-| `docs/plans/account-data-complete-deletion/plan.md`         | 修正候補 | T1B、T33/T35、選択 path、R16 証拠、公開後引継ぎを同期                         |
+| ファイル                                                    | 変更種別 | 内容                                                                     |
+| ----------------------------------------------------------- | -------- | ------------------------------------------------------------------------ |
+| `docs/plans/r6-account-deletion-gates/plan.md`              | 修正     | 実装結果、task状態、対象ファイル、未実施gateを同期                       |
+| `docs/05_progress.md`                                       | 修正     | repository実装済み・実環境gate未完了を同期                               |
+| `docs/plans/portfolio-release-v0-1/plan.md`                 | 修正     | R6の正本リンクと進行状態を同期                                           |
+| `docs/plans/account-data-complete-deletion/plan.md`         | 修正     | T1B記録欄、R6 TDD証拠、未完了gateを同期                                  |
+| `docs/11_deployment.md`                                     | 修正     | R16 main/recovery-only、停止、flag復旧、証拠記録runbook                  |
+| `frontend/e2e/production-account-deletion-config.ts`        | 新規     | 一回限り削除account、URL、reserved identity、確認文字列をfail-closed検証 |
+| `frontend/e2e/production-account-deletion-config.test.ts`   | 新規     | production/staging混同、通常account、弱いpassword、不正URLを拒否         |
+| `frontend/e2e/production-account-deletion.spec.ts`          | 新規     | 本人削除、旧access/refresh/login拒否、exact recovery                     |
+| `frontend/playwright.production-account-deletion.config.ts` | 新規     | destructive smokeを分離し、秘密を残す出力を無効化                        |
+| `frontend/src/production-account-deletion-contract.test.ts` | 新規     | 専用config/spec/workflow、manual-only、Environment、recovery契約         |
+| `frontend/e2e/login-form.ts`                                | 新規     | credential入力前のlogin hydration待機を共有                              |
+| `frontend/e2e/admin-force-delete.spec.ts`                   | 修正     | 既存staging E2Eを共有login helperへ置換                                  |
+| `frontend/src/staging-playwright-contract.test.ts`          | 修正     | 共有login helperの利用契約を追加                                         |
+| `frontend/package.json`                                     | 修正     | production account deletion smoke専用script                              |
+| `.github/workflows/production-account-deletion-smoke.yml`   | 新規     | confirmation、Environment、review済みSHA、main/recovery、秘密非出力      |
 
 ## API 仕様（関連エンドポイント）
 
@@ -365,21 +368,41 @@ config loader は値を error message に含めず、URL、reserved identity、p
 | T14      | R6・元計画・進捗・release record を同期        | docs                      | 高     | R6 完了/進行中と元計画未完了が実態一致                    |
 | T15      | contract/restore/soak 残作業を引継ぐ           | docs/issues               | 中     | owner、残余リスク、再着手条件を記録                       |
 
-- [ ] T1: 現状・R6 境界・既存証拠を同期する
-- [ ] T2: production 削除 config の Red test を作成する
-- [ ] T3: production 削除 config を実装する
-- [ ] T4: destructive spec/workflow contract の Red test を作成する
-- [ ] T5: 本人削除 smoke と recovery を実装する
-- [ ] T6: R6 runbook と T1B 記録欄を同期する
-- [ ] T7: 対象・関連 test と最終品質 gate を通す
+- [x] T1: 現状・R6 境界・既存証拠を同期する
+- [x] T2: production 削除 config の Red test を作成する
+- [x] T3: production 削除 config を実装する
+- [x] T4: destructive spec/workflow contract の Red test を作成する
+- [x] T5: 本人削除 smoke と recovery を実装する
+- [x] T6: R6 runbook と T1B 記録欄を同期する
+- [x] T7: 対象・関連 test と最終品質 gate を通す
 - [ ] T8: T35 staging cleanup を別承認で実行する
 - [ ] T9: production cleanup 体制を承認する
 - [ ] T10: R13 の証拠で Path A/B を選択する
 - [ ] T11: R14 preflight へ R6 gate を統合する
 - [ ] T12: R15 で選択 path の migration/deploy を実行する
 - [ ] T13: R16 で production 本人削除 smoke を実行する
-- [ ] T14: R6・元計画・進捗・release record を同期する
+- [x] T14: R6・元計画・進捗・release record を同期する
 - [ ] T15: contract/restore/soak 残作業を公開後へ引き継ぐ
+
+## リポジトリ実装記録（2026-07-23）
+
+- 実装ブランチ: `feature/r6-account-deletion-gates`
+- config guard commit: `a87da89 feat: 本番アカウント削除smokeの設定guardをTDD実装`
+- smoke/recovery commit: `027352b feat: 本番アカウント完全削除smokeとrecoveryをTDD実装`
+
+### Red → Green → Refactor
+
+- Red: config module不在により専用config testが失敗することを確認した。専用spec/config/workflow追加前はsource contract 7件が意図した理由で失敗した。共有login hydration helper追加前はstaging contractがhelper不在で失敗した。
+- Green: reserved identity、同一site HTTPS、password、固定確認句のconfig guardと、本人削除・旧access/refresh/login 401・exact recoveryを実装した。workflowはmanual-only、production Environment、review済みSHA、enable flag、confirmation、承認者、change recordをfail-closed検証する。
+- Refactor: login hydration待機を`frontend/e2e/login-form.ts`へ一元化し、staging Admin E2Eとproduction本人削除smokeで共有した。credentialやdestructive gateは共有していない。
+- 確認済み: 関連5 files・49 tests、frontend全体61 files・661 tests、ESLint、Prettier、`npm run check` 0 errors / 0 warnings、実行なしのPlaywright `--list` 2件。
+
+### 計画からの変更点
+
+- login hydration待機の重複を避けるため、計画外だった`frontend/e2e/login-form.ts`を追加し、既存staging spec/contractを共有helperへ更新した。
+- API、app route、DB schema、migrationは変更していない。現行API contractとsmokeの期待値が一致したため、`docs/04_api.md`の仕様変更は不要と判断した。
+- T8〜T13の実環境操作とT15の公開後引継ぎは未完了である。production/staging接続、GitHub Actions、DB操作、deploy、account作成・削除は本実装では行っていない。
+- R6全体の完了条件は満たしていないため、`## 実装完了`は追加せず進行中を維持する。
 
 ## 最終タスクリスト（タブ区切り）
 

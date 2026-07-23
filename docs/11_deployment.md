@@ -418,7 +418,7 @@ DBを即時に巻き戻す前提にはしない。まず直前のアプリケー
 
 ## アカウント完全削除のrollout・legacy cleanup
 
-> 2026-07-18時点: 物理削除backend、legacy cleanup CLI、synthetic fixture preflight、staging/production manual workflow、DB列非参照code、隔離contract SQLは実装済み。staging/productionのcleanup・contract workflowは未実行であり、本番適用済みとは扱わない。
+> 2026-07-23時点: 物理削除backend、legacy cleanup CLI、synthetic fixture preflight、staging/production manual workflow、DB列非参照code、隔離contract SQL、production本人削除smoke/recoveryは実装済み。staging/productionのcleanup、production本人削除smoke、contract workflowは未実行であり、本番適用済みとは扱わない。
 
 ### release gate
 
@@ -442,6 +442,10 @@ DBを即時に巻き戻す前提にはしない。まず直前のアプリケー
 | staging     | Variable | `STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED`   | 通常`false`。T33の承認済みmigration probe・cascade execute中だけ`true` |
 | production  | Variable | `ACCOUNT_DATA_DELETION_EXECUTE_ENABLED`          | 通常`false`。T38の承認済みexecute中だけ`true`                          |
 | production  | Variable | `ACCOUNT_DATA_DELETION_BATCH_SIZE`               | 1〜100。既定25                                                         |
+| production  | Variable | `PRODUCTION_ACCOUNT_DELETION_SMOKE_ENABLED`      | 通常`false`。R16の承認済み本人削除smoke中だけ`true`                    |
+| production  | Variable | `PRODUCTION_ACCOUNT_DELETION_USERNAME`           | 専用予約値`prod_delete_smoke`。通常accountと共用しない                 |
+| production  | Secret   | `PRODUCTION_ACCOUNT_DELETION_EMAIL`              | `prod-delete-smoke`または`prod-delete-smoke+<suffix>`の専用email       |
+| production  | Secret   | `PRODUCTION_ACCOUNT_DELETION_PASSWORD`           | 専用accountの資格情報。stepのprocess env以外へ出力しない               |
 
 `DATABASE_URL`、`STAGING_SUPABASE_PROJECT_REF`、`BATCH_ENVIRONMENT`は既存のEnvironment単位設定を使い、repository共通値やローカルshellへ複製しない。project refは接続先照合用の値だが、Actionsのenv一覧への表示を防ぐためEnvironment Secretで管理する。staging/productionで同じ接続文字列を共用しない。
 
@@ -513,6 +517,42 @@ Actionsの`Production Database Operations`を`develop` branchから実行する�
 5. workflow内の実行後dry-runが残件0件で成功し、step summaryへ承認記録が残ったことを確認する。
 6. flagを直ちに`false`へ戻し、再度`account-deletion-dry-run`を実行して0件を確認する。
 7. run URL、件数、所要時間、backup run ID、dry-run run ID、承認者、change recordを安全な運用記録へ残す。
+
+### production本人削除smoke runbook（R16）
+
+Actionsの`Production Account Deletion Smoke`を、R15でreview済みrelease候補を配備した後に`main` branchから手動実行する。R5の反復利用するauth smoke accountとは別に、公開registerとmail verifyを通した一回限りのsynthetic `USER`だけを使う。DBへの直接insert、ローカルshellからのDELETE、通常accountへの流用は禁止する。
+
+#### 事前準備
+
+1. T35、R13〜R15のうち選択pathで必要なgateが完了し、T1Bの実行者、承認者、実行時間帯、通知先が実値で承認済みであることを確認する。
+2. production Environmentのfrontend origin、API base URL、registrable domainがR14の証拠と一致し、review済み40桁SHAが配備対象かつworkflowを起動する`main`の`GITHUB_SHA`と完全一致することを確認する。
+3. 一回限りaccountのusernameが`prod_delete_smoke`、email local-partが`prod-delete-smoke`または`prod-delete-smoke+<英小文字・数字・hyphen>`、roleが`USER`であることを作成責任者が確認する。email、password、内部IDを運用記録へ転記しない。
+4. `PRODUCTION_ACCOUNT_DELETION_SMOKE_ENABLED=false`を別画面で確認する。実行直前の承認後だけ`true`へ変更する。
+5. runbookの記録欄へreview済みSHA、承認者の非秘密識別子、change record、実行時間帯、通知先を記入する。
+
+#### main実行
+
+1. Actions > Production Account Deletion Smoke > Run workflowで`main` branchとoperation `main`を選ぶ。
+2. `reviewed_sha`へ現在の40桁`GITHUB_SHA`、`confirmation`へ`DELETE_PRODUCTION_SYNTHETIC_ACCOUNT`、`approved_by`と`change_record`へ承認済みの非秘密識別子を入力する。credentialはworkflow入力やcommand lineへ入力しない。
+3. validation jobがbranch、SHA、enable flag、確認文字列、承認者、change recordを拒否しなかったことを確認する。
+4. main summaryのstatusが`completed`であることを確認する。specは削除前profileのemail・username・`USER`完全一致、設定画面からの本人削除、refresh Cookie削除、旧access token 401、refresh 401、同一資格情報login 401を一続きで検証する。
+5. main成功時はrecovery jobがskipされる。mainが失敗・cancel・timeoutになった場合は、別runnerのrecoveryが起動し、summaryが`completed`または`not-required`であることを確認する。`failed`、summary欠落、job未起動は公開停止条件とする。
+6. 成否にかかわらず`PRODUCTION_ACCOUNT_DELETION_SMOKE_ENABLED=false`へ戻し、別画面で復旧を確認する。
+
+#### recovery-only
+
+runnerのhard killなどで自動recovery自体が起動しなかった場合だけ、同じreview済みSHA、同じEnvironment Secret、同じ承認記録でoperation `recovery-only`を実行する。login 401は削除済みの`not-required`、login 200かつprofileの予約identity完全一致時だけ削除を再試行して`completed`とする。profile不一致、5xx、network、非JSON、状態不明ではDELETEを送らず`failed`にする。
+
+`recovery-only`でSecretやidentityを差し替えない。別accountの削除、identity不一致時の手動DELETE、DBからの直接削除は新しい事故対応計画と承認がない限り行わない。
+
+#### 証拠・停止条件
+
+安全な運用記録へ残すのは、run URL、review済みSHA、実行日時、承認者、change record、main/recoveryの`completed` / `not-required` / `failed`、flag復旧結果だけとする。email、username、password、token、Cookie、内部ID、raw error、trace、video、screenshot、storageStateは保存しない。
+
+- validation失敗、profile不一致、main/recoveryの`failed`、status欠落、flag復旧未確認ではR6/R16を完了にせず公開を停止する
+- 削除後の旧access、refresh、loginのいずれかが401以外なら、新しいsynthetic accountで再試行せず、認証・削除実装を調査する
+- 本人削除済みUserと所有rowはrollbackで復元しない。配備障害時は新規削除を停止し、互換な直前app版へのrollbackを検討する
+- Playwright設定はworkers 1、retries 0、trace/screenshot/video off、output非保持を維持する
 
 ### contract migration runbook（T43/T44）
 

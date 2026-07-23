@@ -341,6 +341,25 @@
 - [x] 現行DB全損時は完全な削除replayを保証できない残存リスクを正式承認する（2026-07-22）。
 - [ ] production cleanupの実行者・承認者・実行時間帯・通知先。
 
+##### production cleanup・本人削除smoke体制の承認記録欄
+
+次の値は実行直前のT1B承認で記入する。架空値、credential、PII、内部IDは記録しない。全項目が実値で承認されるまで上のcheckboxとR6/R16を未完了に保つ。
+
+| 項目              | 承認値 |
+| ----------------- | ------ |
+| 実行者            | 未確定 |
+| 承認者            | 未確定 |
+| 実行時間帯        | 未確定 |
+| 通知先            | 未確定 |
+| 補完策            | 未確定 |
+| review済みSHA     | 未確定 |
+| change record     | 未確定 |
+| 承認日            | 未確定 |
+| T35 run URL群     | 未実行 |
+| R13 read-only run | 未実行 |
+| R16 smoke run     | 未実行 |
+| enable flag復旧   | 未確認 |
+
 #### R4 正式承認の判断
 
 - 承認者: プロダクトオーナー `RitukoIsibasi0222`。
@@ -1307,6 +1326,8 @@ application rollbackは削除済み個人データを復元する権限を意味
 > T35 safety preflight TDD記録（2026-07-18）: staging cleanup前に完全一致するsynthetic legacy target 1件とactive/suspended sentinelを検証し、未知のlegacy row、fixture識別子衝突、所有row不整合、Element欠落があれば削除前に停止するfixture module・CLI・manual workflowを追加した。cleanup workflowはproject ref照合、Prisma Client生成、dry-run/execute前の`verify-isolated`、execute後の`verify-cleaned`を必須化した。cleanup済み0件かつ所有row 0件は冪等再実行として許可する。Redではmodule/workflow未実装と再実行不許可を確認し、Greenはmodule/workflow 13件とTypeScript buildが成功した。変更はPR #107で`develop`へmerge済みだが、staging workflowのdry-run/execute/再実行はBタスクとして未実施であり、T35全体は未完了とする。
 
 > T34 staging synthetic Admin E2E完了記録（2026-07-21）: PR #125 merge後の`develop` SHA `6bb898d52915df1139b863383e8be88e35a3d63b`から[run 29802327100](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/29802327100)を明示承認付きで1回実行した。Admin login、管理者linkのSPA遷移、`/admin` dashboard、synthetic User強制退会、旧credential 401拒否を含むPlaywright 1件が成功した。prepareはAdmin/User 2件作成・置換0件、E2E内で対象Userを削除し、main cleanupは残るAdmin 1件を削除して成功した。recovery cleanupはmain成功のためskipされ、enable flagは終了後に`false`へ復旧した。production URL・DB・deploy、migration、実メール、追加の直接DB queryは実行していない。これによりT34を完了とするが、T33、T35、production、restore、contract適用のgateは未完了のまま維持する。
+
+> R6 production本人削除smoke TDD記録（2026-07-23）: 一回限りのsynthetic `USER`専用config guard、Playwright main/recovery spec、manual-only production Environment workflow、source contractを追加した。Redではconfig module不在、専用spec/config/workflow不在、共有login hydration helper不在による意図した失敗を確認した。Green/Refactorでは予約username/email、同一site HTTPS、強いpassword、固定確認句をrequest前にfail-closed検証し、本人削除後のCookie消去、旧access/refresh/login 401とexact identity recoveryを実装した。workflowはreview済みSHA、enable flag、承認者、change record、main/recovery-onlyを検証し、credentialを実行stepのprocess envだけへ渡す。trace、screenshot、video、storageState、output保持を無効化した。関連5 files・49 tests、frontend全体61 files・661 tests、ESLint、Prettier、Svelte/TypeScript check 0 errors / 0 warnings、実credentialを使わないPlaywright `--list` 2件が成功した。production/staging接続、GitHub Actions、DB操作、deploy、account作成・削除は実行していないため、T1B、T35、R13〜R16と元計画のproduction/restore/contract gateは未完了のまま維持する。
 
 > T39 Red/Green記録（2026-07-18）: `usable-admin`、auth、admin、ranking、admin-create、user serviceに旧DB列名が残れば失敗し、admin v1 route境界のdeprecated `deletedAt: null`合成は維持するsource contract testを先行追加した。Redは6 service fileの参照を検出し、route互換だけGreenだった。Greenではserviceの型・select・where・状態判定から旧列依存を除去し、現存Userだけを扱うcontract後の集計へ切り替えた。`status=deleted`の200空一覧と公開responseの`deletedAt: null`は維持した。関連151件、追加contract 7件、TypeScript buildが成功した。staging/production deployとsoakはT38完了後のBタスクとして残す。
 
