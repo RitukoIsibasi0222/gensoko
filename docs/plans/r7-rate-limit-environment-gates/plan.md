@@ -718,7 +718,7 @@ R7実行ごとに次を同期する。
 
 ### チェックリスト
 
-- [ ] R7-01: 基準SHAとrepository contract testを固定する
+- [x] R7-01: 基準SHAとrepository contract testを固定する
 - [ ] R7-02: Cloudflare plan/zone/hostname/権限を確認する
 - [ ] R7-03: staging resource分離とconfigを確認する
 - [ ] R7-04: synthetic fixtureとcleanupを承認する
@@ -769,14 +769,57 @@ R7-20	証拠・進捗・release文書を同期	docs	中
 
 次を満たしてからR7実行へ着手する。
 
-- [ ] R7計画PRがreviewされ`develop`へmerge済み
+- [x] R7計画PRがreviewされ`develop`へmerge済み（PR #139、merge commit `fe431d1`）
 - [ ] G1〜G6の判断者と承認者が確定
-- [ ] release候補SHAまたはstaging検証SHAが固定
+- [x] release候補SHAまたはstaging検証SHAが固定（`fe431d1adcc077382e73484a3c9704ed18b69f7e`）
 - [ ] synthetic fixtureとcleanupが承認済み
 - [ ] Cloudflare read-only確認権限がある
 - [ ] WAF/Worker rollback権限を持つ担当者が同席
 - [ ] 実行時間帯と停止時の通知先が確定
 - [ ] 証拠のPII/Secret redaction方法が確認済み
+
+## 実行証拠
+
+### R7 Evidence E-01
+
+- 実行日時: 2026-07-23 15:13〜15:18 JST
+- environment: repository local / Workers local runtime
+- 基準commit: `fe431d1adcc077382e73484a3c9704ed18b69f7e`
+- 対象Worker version: repository source（Cloudflare実resourceは未使用）
+- 対象policy/rule: 全Hono rate limit policy / Durable Object / frontend 429・503契約
+- 実行者: Codex
+- 承認者: repository owner（R7作業開始指示）
+- 事前gate: PR #139が`develop`へmerge済みであることをGitHubとlocal fast-forwardで確認
+- 手順:
+  - Hono 429・503・route matrixの対象testを実行
+  - Durable Objectとproduction相当Worker graphのWorkers runtime testを実行
+  - policy・actor key・production configの対象testを実行
+  - frontend API error・login・game rate limitの対象testを実行
+  - Workers type生成差分・typecheck・staging dry-run bundleを確認
+- 期待結果: 既存contract testとdeployを伴わないWorkers buildがすべて成功する
+- 実結果:
+  - backend Hono contract: 2 files / 24 tests成功
+  - Workers runtime: 2 files / 15 tests成功
+  - backend policy・key・production config: 3 files / 33 tests成功
+  - frontend rate limit contract: 3 files / 28 tests成功
+  - Workers build: types check・typecheck・staging dry-run成功
+- status/header/body要約: repository testでHono 429・503、日本語JSON、`Retry-After`、CORS/security headersを確認
+- Cloudflare metrics/Security Events確認時間帯: 未実施（R7-02、R7-11、R7-14以降）
+- cleanup: local test runtime終了。追跡対象の生成差分なし
+- rollback: repository code・Cloudflare resourceの変更なし
+- 判定: pass
+- 代替証拠: なし
+- 残余リスク: staging実HTTP、Cloudflare実resource、production dry-runは未確認。production dry-runは実hostname・resource分離値を確認するR7-16で実施する
+- 添付先: 本節
+
+PII・Secret確認:
+
+- [x] raw IPなし
+- [x] email/user IDなし
+- [x] digestなし
+- [x] token/Cookie/Authorizationなし
+- [x] password/bodyなし
+- [x] account/zone/resource IDなし
 
 ## R7完了記録
 
