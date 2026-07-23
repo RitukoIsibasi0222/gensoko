@@ -770,7 +770,8 @@ R7実行ごとに次を同期する。
 - TDD Red 2: Retry-After・CORS・security header等の固定契約名を要求し、対象2 filesで4 tests失敗・28 tests成功
 - TDD Green 2 / Refactor: header値やbodyを出さず、固定enumの`failedContract`だけを追加し、Prettier後も対象2 files / 32 tests成功
 - PR #141 review対応 Red/Green: validatorの予期しない失敗時に未消費response bodyを解放する契約を1 test失敗・28 tests成功で再現し、best-effort cancelとcancel失敗時の安全な分類error維持を実装して対象29 tests成功
-- 最終品質gate: backend 104 files / 1084 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
+- PR #141追加review対応 Red/Green: 許可/制限requestのstatus・Content-Type不一致時にcancel拒否で固定契約分類を失う問題を4 tests失敗・29 tests成功で再現し、4箇所の直接cancelをbest-effort helperへ統一して対象33 tests成功
+- 最終品質gate: backend 104 files / 1088 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
 - security: raw例外message/cause、response body、header値、credential、識別子、URLをerror metadataへ保持しない
 - 実環境再実行: 未実施。診断変更のreview・mergeと新しい実行時間帯の承認後に、別runとして扱う
 
