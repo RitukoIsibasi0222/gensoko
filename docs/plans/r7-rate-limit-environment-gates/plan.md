@@ -377,7 +377,7 @@ npm run test -- --run src/lib/api/errors.test.ts src/routes/login/login-page.tes
 - fixture作成前にreview済み40桁SHAと実行SHAの一致、固定確認文字列、承認者、change recordを検証する。承認者とchange recordは改行やMarkdown記号を許可しない形式に限定する。
 - `auth`、`questions`、`game-submit`はpolicy windowと共通bucketを混ぜないよう、必ず1caseずつ別workflow runで実行する。
 - workflowは既存の完全一致synthetic Admin/User fixtureをephemeral passwordで再作成し、成功・失敗を問わずcleanupする。main jobが非成功なら独立recovery jobも実行する。
-- runnerはstatus、観測policy ID、許可件数、制限request番号、`Retry-After`、429本文・CORS・security headerの契約判定だけを出力する。token、Cookie、Authorization、password、email/user ID、question/session ID、response bodyは出力しない。
+- runnerはstatus、観測policy ID、許可件数、制限request番号、`Retry-After`、429本文・credentialed CORS（origin/credentials）・security headerの契約判定だけを出力する。token、Cookie、Authorization、password、email/user ID、question/session ID、response bodyは出力しない。
 - 全HTTP requestはredirectを追跡せず、固定10秒timeoutで停止する。許可応答もstatus・JSON Content-Type・公開response shapeをruntime検証し、429ではpolicy window内の`Retry-After`とproduction security header一式を確認する。
 - `game-submit`は公開questions responseの各問題について先頭choiceを回答として使い、正解情報やDB直読み取りへ依存しない。各submit用に新しいquestion setを取得する。route順序上、同じlimit値ではIP middlewareがuser middlewareより先に429を返すため、本workflowの観測policyは`GAME_SUBMIT_IP`とする。`GAME_SUBMIT_USER`のbucket分離はR7-08で別証拠化する。
 - 既存fixture flag、固定staging API URL、固定frontend originのguardを通過しない限りHTTP requestを開始しない。
@@ -385,23 +385,23 @@ npm run test -- --run src/lib/api/errors.test.ts src/routes/login/login-page.tes
 
 ### 実HTTPテストケース
 
-| ID  | 対象                     | 手順                                             | 期待結果                                         | 安全策                                         |
-| --- | ------------------------ | ------------------------------------------------ | ------------------------------------------------ | ---------------------------------------------- |
-| S01 | root/health/OPTIONS      | 少数request                                      | rate limit対象外、CORS/security headers正常      | 境界回数を送らない                             |
-| S02 | general API              | limit未満だけ確認                                | 2xx/認証上の通常status、429なし                  | 60回境界は共有stagingで原則省略                |
-| S03 | auth IP                  | synthetic userで正しいloginを10回、その直後に1回 | 1〜10許可、11回目Hono 429                        | 失敗login lockを使わず、refresh tokenをcleanup |
-| S04 | auth reset               | `Retry-After`後に1回                             | 再許可                                           | 10分待機を別実行記録に分ける                   |
-| S05 | questions IP             | 30回後に1回                                      | 1〜30許可、31回目429                             | 問題bodyを保存しない                           |
-| S06 | game submit IP/user      | isolated question setで20回後に1回               | 1〜20許可、21回目429                             | synthetic sessionをcleanup、事前にDB負荷承認   |
-| S07 | same IP / different user | user Aでuser bucketを消費し、user Bを確認        | user bucketは独立、IP bucketは共有               | 2 synthetic user限定                           |
-| S08 | same user / different IP | 承認済みの2送信元から確認                        | user bucket共有、IP bucket独立                   | 送信元制御できない場合は実行しない             |
-| S09 | operation別email         | register/login/forgot等の対象操作を分離して確認  | 操作別bucket                                     | mail/DB副作用を承認できるcaseだけ              |
-| S10 | IPv6 `/64`               | 同一`/64`の2 addressで確認                       | 同一IP actor bucket                              | IPv6環境がなければcontract testへ代替          |
-| S11 | spoof header             | XFF/X-Real-IPだけを変更                          | bucket回避不可                                   | `CF-Connecting-IP`はclientから偽装しない       |
-| S12 | Hono 429 contract        | S03/S05/S06の429を確認                           | 日本語JSON、`Retry-After`、CORS/security headers | responseからPIIを除外                          |
-| S13 | reset                    | window経過後に再度1回                            | 許可される                                       | 長時間sleepせず別時刻に再実行                  |
-| S14 | general store failure    | 代替証拠またはisolated canary                    | fail-open                                        | 共有bindingを変更しない                        |
-| S15 | sensitive store failure  | 代替証拠またはisolated canary                    | 日本語JSON 503                                   | 共有bindingを変更しない                        |
+| ID  | 対象                     | 手順                                             | 期待結果                                                      | 安全策                                         |
+| --- | ------------------------ | ------------------------------------------------ | ------------------------------------------------------------- | ---------------------------------------------- |
+| S01 | root/health/OPTIONS      | 少数request                                      | rate limit対象外、CORS/security headers正常                   | 境界回数を送らない                             |
+| S02 | general API              | limit未満だけ確認                                | 2xx/認証上の通常status、429なし                               | 60回境界は共有stagingで原則省略                |
+| S03 | auth IP                  | synthetic userで正しいloginを10回、その直後に1回 | 1〜10許可、11回目Hono 429                                     | 失敗login lockを使わず、refresh tokenをcleanup |
+| S04 | auth reset               | `Retry-After`後に1回                             | 再許可                                                        | 10分待機を別実行記録に分ける                   |
+| S05 | questions IP             | 30回後に1回                                      | 1〜30許可、31回目429                                          | 問題bodyを保存しない                           |
+| S06 | game submit IP/user      | isolated question setで20回後に1回               | 1〜20許可、21回目429                                          | synthetic sessionをcleanup、事前にDB負荷承認   |
+| S07 | same IP / different user | user Aでuser bucketを消費し、user Bを確認        | user bucketは独立、IP bucketは共有                            | 2 synthetic user限定                           |
+| S08 | same user / different IP | 承認済みの2送信元から確認                        | user bucket共有、IP bucket独立                                | 送信元制御できない場合は実行しない             |
+| S09 | operation別email         | register/login/forgot等の対象操作を分離して確認  | 操作別bucket                                                  | mail/DB副作用を承認できるcaseだけ              |
+| S10 | IPv6 `/64`               | 同一`/64`の2 addressで確認                       | 同一IP actor bucket                                           | IPv6環境がなければcontract testへ代替          |
+| S11 | spoof header             | XFF/X-Real-IPだけを変更                          | bucket回避不可                                                | `CF-Connecting-IP`はclientから偽装しない       |
+| S12 | Hono 429 contract        | S03/S05/S06の429を確認                           | 日本語JSON、`Retry-After`、credentialed CORS/security headers | responseからPIIを除外                          |
+| S13 | reset                    | window経過後に再度1回                            | 許可される                                                    | 長時間sleepせず別時刻に再実行                  |
+| S14 | general store failure    | 代替証拠またはisolated canary                    | fail-open                                                     | 共有bindingを変更しない                        |
+| S15 | sensitive store failure  | 代替証拠またはisolated canary                    | 日本語JSON 503                                                | 共有bindingを変更しない                        |
 
 ### 共有stagingで省略できる境界
 
@@ -741,13 +741,14 @@ R7実行ごとに次を同期する。
 - 改善日: 2026-07-23
 - TDD Red: redirect拒否、request timeout、全security header、policy ID、runtime validation、CLI失敗契約、workflow承認gateを追加し、対象3 filesで22 tests失敗・13 tests成功を確認
 - TDD Green: 共通HTTP helper、許可応答validator、429 validator、CLI終了code、manual workflow gateを実装し、対象3 files / 35 tests成功
+- Copilot review対応 Red/Green: `Access-Control-Allow-Credentials`欠落を1 test失敗・25 tests成功で再現し、credentialed CORSのorigin/credentials両方を必須化して対象26 tests成功
 - 追加TDD Red/Green: 承認gate失敗時にもcleanup recoveryがstaging DBへ触れる問題を1 test失敗・6 tests成功で再現し、fixture lifecycle開始後だけmain cleanup/recoveryを許可して7 tests成功
 - security: `fetch`の既定redirect追跡によるephemeral password POST bodyの転送を防ぐため、全requestへ`redirect: "error"`を固定した
 - operations: 個々のrequestへ10秒timeoutを付け、5分のworkflow step timeoutまで無応答のまま待たない構造にした
-- contract: 429のJSON Content-Type、policy window内かつsafe integerの`Retry-After`、CORS、production security header一式、`X-Powered-By`非露出を必須化した
+- contract: 429のJSON Content-Type、policy window内かつsafe integerの`Retry-After`、credentialed CORS（`Access-Control-Allow-Origin`と`Access-Control-Allow-Credentials: true`）、production security header一式、`X-Powered-By`非露出を必須化した
 - audit: workflow実行前のreview済みSHA・確認文字列・承認者・change recordを必須化し、秘密値なしのJob Summaryへ記録する
 - cleanup: prepare直前にfixture lifecycle markerを設定し、markerがないgate失敗ではmain cleanupと独立recoveryの両方を実行しない。prepare開始後の失敗では従来どおり二重の回収経路を維持する
-- 改善後最終品質gate: backend 104 files / 1079 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
+- 改善後最終品質gate: backend 104 files / 1080 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests成功、Node/Workers TypeScript build・ESLint・Prettier check成功
 - 実環境実行: 未実施のまま。R7-04〜R7-08の完了状態は変更しない
 
 ### 実際の変更ファイル

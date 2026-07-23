@@ -13,6 +13,7 @@ const RATE_LIMIT_MESSAGE = "リクエストが多すぎます。しばらく待�
 const CSP = "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
 const REQUEST_TIMEOUT_MS = 10_000;
 const RATE_LIMIT_HEADERS = {
+  "Access-Control-Allow-Credentials": "true",
   "Access-Control-Allow-Origin": FRONTEND_ORIGIN,
   "Content-Security-Policy": CSP,
   "Cross-Origin-Resource-Policy": "same-origin",
@@ -234,6 +235,7 @@ describe("staging rate limit evidence", () => {
   it.each([
     ["Retry-Afterなし", { "Retry-After": "" }],
     ["CORS不一致", { "Access-Control-Allow-Origin": "https://example.test" }],
+    ["CORS credentialsなし", { "Access-Control-Allow-Credentials": "" }],
     ["CSP不一致", { "Content-Security-Policy": "default-src *" }],
     ["HSTS不一致", { "Strict-Transport-Security": "" }],
     ["Referrer-Policy不一致", { "Referrer-Policy": "" }],

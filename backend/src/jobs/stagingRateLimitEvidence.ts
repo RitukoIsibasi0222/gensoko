@@ -351,7 +351,9 @@ async function createRateLimitSummary({
   const body = await parseJson(response);
   const bodyContract =
     isRecord(body) && Object.keys(body).length === 1 && body.error === RATE_LIMIT_EXCEEDED_MESSAGE;
-  const corsContract = response.headers.get("Access-Control-Allow-Origin") === frontendOrigin;
+  const corsContract =
+    response.headers.get("Access-Control-Allow-Origin") === frontendOrigin &&
+    response.headers.get("Access-Control-Allow-Credentials") === "true";
   const securityHeadersContract =
     response.headers.get("Content-Security-Policy") === EXPECTED_CONTENT_SECURITY_POLICY &&
     response.headers.get("Cross-Origin-Resource-Policy") === "same-origin" &&
