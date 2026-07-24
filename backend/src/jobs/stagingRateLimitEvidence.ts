@@ -59,15 +59,7 @@ export type StagingRateLimitEvidenceObservedResponseClass =
   | "SAFE_JSON_503_CONTRACT"
   | "EDGE_OR_UNCLASSIFIED_503"
   | "OTHER_UNEXPECTED_STATUS";
-export type StagingRateLimitEvidenceFailedContract =
-  | "EXPECTED_STATUS"
-  | "EXPECTED_CONTENT_TYPE"
-  | "EXPECTED_JSON_BODY"
-  | "EXPECTED_RESPONSE_SHAPE"
-  | "RATE_LIMIT_STATUS"
-  | "RATE_LIMIT_CONTENT_TYPE"
-  | "RETRY_AFTER"
-  | "RATE_LIMIT_BODY"
+export type StagingRateLimitEvidenceResponseHeaderContract =
   | "ACCESS_CONTROL_ALLOW_ORIGIN"
   | "ACCESS_CONTROL_ALLOW_CREDENTIALS"
   | "CONTENT_SECURITY_POLICY"
@@ -80,20 +72,40 @@ export type StagingRateLimitEvidenceFailedContract =
   | "X_PERMITTED_CROSS_DOMAIN_POLICIES"
   | "X_XSS_PROTECTION"
   | "X_POWERED_BY";
+export type StagingRateLimitEvidenceObserved503FailedContract =
+  | "SERVICE_UNAVAILABLE_CONTENT_TYPE"
+  | "SERVICE_UNAVAILABLE_RETRY_AFTER"
+  | "SERVICE_UNAVAILABLE_JSON_BODY"
+  | "SERVICE_UNAVAILABLE_ERROR_BODY"
+  | "SERVICE_UNAVAILABLE_RESPONSE_ACCESS"
+  | StagingRateLimitEvidenceResponseHeaderContract;
+export type StagingRateLimitEvidenceFailedContract =
+  | "EXPECTED_STATUS"
+  | "EXPECTED_CONTENT_TYPE"
+  | "EXPECTED_JSON_BODY"
+  | "EXPECTED_RESPONSE_SHAPE"
+  | "RATE_LIMIT_STATUS"
+  | "RATE_LIMIT_CONTENT_TYPE"
+  | "RETRY_AFTER"
+  | "RATE_LIMIT_BODY"
+  | StagingRateLimitEvidenceResponseHeaderContract;
 
 class StagingRateLimitEvidenceContractError extends Error {
   readonly failedContract: StagingRateLimitEvidenceFailedContract;
   readonly observedResponseClass: StagingRateLimitEvidenceObservedResponseClass | null;
+  readonly observed503FailedContract: StagingRateLimitEvidenceObserved503FailedContract | null;
 
   constructor(
     message: string,
     failedContract: StagingRateLimitEvidenceFailedContract,
     observedResponseClass: StagingRateLimitEvidenceObservedResponseClass | null = null,
+    observed503FailedContract: StagingRateLimitEvidenceObserved503FailedContract | null = null,
   ) {
     super(message);
     this.name = "StagingRateLimitEvidenceContractError";
     this.failedContract = failedContract;
     this.observedResponseClass = observedResponseClass;
+    this.observed503FailedContract = observed503FailedContract;
   }
 }
 
@@ -104,6 +116,7 @@ export class StagingRateLimitEvidenceExecutionError extends Error {
   readonly observedStatus: number | null;
   readonly failedContract: StagingRateLimitEvidenceFailedContract | null;
   readonly observedResponseClass: StagingRateLimitEvidenceObservedResponseClass | null;
+  readonly observed503FailedContract: StagingRateLimitEvidenceObserved503FailedContract | null;
 
   constructor({
     message,
@@ -113,6 +126,7 @@ export class StagingRateLimitEvidenceExecutionError extends Error {
     observedStatus,
     failedContract,
     observedResponseClass,
+    observed503FailedContract,
   }: {
     message: string;
     failureStage: StagingRateLimitEvidenceFailureStage;
@@ -121,6 +135,7 @@ export class StagingRateLimitEvidenceExecutionError extends Error {
     observedStatus: number | null;
     failedContract: StagingRateLimitEvidenceFailedContract | null;
     observedResponseClass: StagingRateLimitEvidenceObservedResponseClass | null;
+    observed503FailedContract: StagingRateLimitEvidenceObserved503FailedContract | null;
   }) {
     super(message);
     this.name = "StagingRateLimitEvidenceExecutionError";
@@ -130,6 +145,7 @@ export class StagingRateLimitEvidenceExecutionError extends Error {
     this.observedStatus = observedStatus;
     this.failedContract = failedContract;
     this.observedResponseClass = observedResponseClass;
+    this.observed503FailedContract = observed503FailedContract;
   }
 }
 
@@ -192,11 +208,12 @@ async function readExpectedJson(
   frontendOrigin: string,
 ): Promise<unknown> {
   if (response.status !== expectedStatus) {
-    const observedResponseClass = await classifyUnexpectedResponse(response, frontendOrigin);
+    const observedResponse = await classifyUnexpectedResponse(response, frontendOrigin);
     throw new StagingRateLimitEvidenceContractError(
       INVALID_PREREQUISITE_RESPONSE_MESSAGE,
       "EXPECTED_STATUS",
-      observedResponseClass,
+      observedResponse.observedResponseClass,
+      observedResponse.observed503FailedContract,
     );
   }
   if (!hasJsonContentType(response)) {
@@ -242,9 +259,9 @@ async function cancelResponseBodyBestEffort(response: Response): Promise<void> {
 function findFailedResponseHeaderContract(
   response: Response,
   frontendOrigin: string,
-): StagingRateLimitEvidenceFailedContract | null {
+): StagingRateLimitEvidenceResponseHeaderContract | null {
   const responseHeaderContractChecks: ReadonlyArray<
-    readonly [StagingRateLimitEvidenceFailedContract, boolean]
+    readonly [StagingRateLimitEvidenceResponseHeaderContract, boolean]
   > = [
     [
       "ACCESS_CONTROL_ALLOW_ORIGIN",
@@ -290,16 +307,27 @@ function findFailedResponseHeaderContract(
 async function classifyUnexpectedResponse(
   response: Response,
   frontendOrigin: string,
-): Promise<StagingRateLimitEvidenceObservedResponseClass> {
+): Promise<
+  Readonly<{
+    observedResponseClass: StagingRateLimitEvidenceObservedResponseClass;
+    observed503FailedContract: StagingRateLimitEvidenceObserved503FailedContract | null;
+  }>
+> {
   if (response.status !== 503) {
     await cancelResponseBodyBestEffort(response);
-    return "OTHER_UNEXPECTED_STATUS";
+    return {
+      observedResponseClass: "OTHER_UNEXPECTED_STATUS",
+      observed503FailedContract: null,
+    };
   }
 
   try {
     if (!hasJsonContentType(response)) {
       await cancelResponseBodyBestEffort(response);
-      return "EDGE_OR_UNCLASSIFIED_503";
+      return {
+        observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+        observed503FailedContract: "SERVICE_UNAVAILABLE_CONTENT_TYPE",
+      };
     }
 
     const retryAfter = response.headers.get("Retry-After");
@@ -311,29 +339,49 @@ async function classifyUnexpectedResponse(
       retryAfterSec === SERVICE_UNAVAILABLE_RETRY_AFTER_SEC;
     if (!hasExpectedRetryAfter) {
       await cancelResponseBodyBestEffort(response);
-      return "EDGE_OR_UNCLASSIFIED_503";
+      return {
+        observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+        observed503FailedContract: "SERVICE_UNAVAILABLE_RETRY_AFTER",
+      };
     }
 
     const failedHeaderContract = findFailedResponseHeaderContract(response, frontendOrigin);
     if (failedHeaderContract !== null) {
       await cancelResponseBodyBestEffort(response);
-      return "EDGE_OR_UNCLASSIFIED_503";
+      return {
+        observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+        observed503FailedContract: failedHeaderContract,
+      };
     }
 
     const body = await parseJson(response);
     if (body === null) {
       await cancelResponseBodyBestEffort(response);
-      return "EDGE_OR_UNCLASSIFIED_503";
+      return {
+        observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+        observed503FailedContract: "SERVICE_UNAVAILABLE_JSON_BODY",
+      };
     }
     const hasExpectedBody =
       isRecord(body) &&
       Object.keys(body).length === 1 &&
       body.error === SERVICE_UNAVAILABLE_MESSAGE;
 
-    return hasExpectedBody ? "SAFE_JSON_503_CONTRACT" : "EDGE_OR_UNCLASSIFIED_503";
+    return hasExpectedBody
+      ? {
+          observedResponseClass: "SAFE_JSON_503_CONTRACT",
+          observed503FailedContract: null,
+        }
+      : {
+          observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+          observed503FailedContract: "SERVICE_UNAVAILABLE_ERROR_BODY",
+        };
   } catch {
     await cancelResponseBodyBestEffort(response);
-    return "EDGE_OR_UNCLASSIFIED_503";
+    return {
+      observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+      observed503FailedContract: "SERVICE_UNAVAILABLE_RESPONSE_ACCESS",
+    };
   }
 }
 
@@ -362,6 +410,7 @@ async function runClassifiedEvidenceRequest<T>({
       observedStatus: null,
       failedContract: null,
       observedResponseClass: null,
+      observed503FailedContract: null,
     });
   }
 
@@ -380,6 +429,7 @@ async function runClassifiedEvidenceRequest<T>({
       observedStatus: response.status,
       failedContract: contractError?.failedContract ?? null,
       observedResponseClass: contractError?.observedResponseClass ?? null,
+      observed503FailedContract: contractError?.observed503FailedContract ?? null,
     });
   }
 }
@@ -613,11 +663,12 @@ async function createRateLimitSummary({
   frontendOrigin: string;
 }): Promise<StagingRateLimitEvidenceSummary> {
   if (response.status !== 429) {
-    const observedResponseClass = await classifyUnexpectedResponse(response, frontendOrigin);
+    const observedResponse = await classifyUnexpectedResponse(response, frontendOrigin);
     throw new StagingRateLimitEvidenceContractError(
       INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
       "RATE_LIMIT_STATUS",
-      observedResponseClass,
+      observedResponse.observedResponseClass,
+      observedResponse.observed503FailedContract,
     );
   }
   if (!hasJsonContentType(response)) {

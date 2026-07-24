@@ -33,6 +33,7 @@ export async function main(): Promise<void> {
             observedStatus: error.observedStatus,
             failedContract: error.failedContract,
             observedResponseClass: error.observedResponseClass,
+            observed503FailedContract: error.observed503FailedContract,
           }
         : {};
     console.error({
