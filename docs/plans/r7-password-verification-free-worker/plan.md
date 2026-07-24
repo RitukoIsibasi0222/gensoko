@@ -183,8 +183,8 @@ cost低下やmain Worker fallbackで回避しない。
     - 根拠: 適用済みmigration履歴を改変せず、Freeで許可されるSQLite backendを明示するため。
 
 12. **rollback**
-    - 選択: review済み直前Worker versionへ戻し、新namespace/migrationは直後に削除しない。
-    - 根拠: migration/resource削除を緊急rollbackへ混ぜず、安定確認後の別承認cleanupへ分離するため。
+    - 選択: v2 lifecycleを共有するstaging専用rollback baselineと通常版のpost-v2 version間だけでrollbackする。pre-v2 versionへは戻さず、新namespace/migrationは直後に削除しない。
+    - 根拠: Durable Object class lifecycle変更を跨ぐversion rollbackは成立しないため。migration/resource削除は緊急rollbackへ混ぜず、安定確認後の別承認cleanupへ分離する。
 
 ## 公開インターフェース案
 
@@ -418,7 +418,7 @@ Content-Type: application/json
 - [x] R7PV-13: backend最終品質gateを通す
 - [x] R7PV-14: API・deployment・R7計画・進捗を同期する
 - [x] R7PV-15: code/docsを分割commitしpush・PRを作成する
-- [ ] R7PV-16: 別承認でFree plan・共有DO quota・resourceをread-only確認する
+- [x] R7PV-16: 別承認でFree plan・共有DO quota・resourceをread-only確認する
 - [ ] R7PV-17: 別承認でstaging deploy・valid login・11回目429・rollback証拠を取得する
 
 ### タブ区切り
@@ -461,7 +461,7 @@ npm run format:check
 
 - Prisma schema/migrationを変更しないため`prisma migrate deploy`とPlaywrightはこのrepository実装gateには含めない。
 - Wrangler `migrations`はCloudflare DO class migrationであり、repository test/dry-runと実環境適用を分ける。
-- staging/production deploy、workflow、実環境requestは品質gateに含めず、R7PV-16/17の別承認まで起動しない。
+- staging/production deploy、workflow、実環境requestは品質gateに含めず、R7PVRB-13〜15/R7PV-17の別承認まで起動しない。
 
 ## rollout・rollback gate
 
@@ -469,7 +469,7 @@ npm run format:check
 
 - local test、workerd、生成型check、staging/production dry-runだけを実行する。
 - Cloudflare API/Dashboard、wrangler deploy、GitHub Actions dispatch、staging URLへ接続しない。
-- 実装PRをmergeしてもR7PV-16/17、R7-05、R7全体は未完了とする。
+- rollback baseline実装PRをmergeしてもR7PVRB-13〜15、R7PV-17、R7-05、R7全体は未完了とする。
 
 ### 別承認preflight
 
@@ -491,7 +491,8 @@ npm run format:check
 ### rollback
 
 - verifier 503増加、binding/migration不一致、DO quota異常、PII露出、main Worker `exceededCpu`再発時はrequestを増やさず停止する。
-- review済み直前Worker versionへrollbackする。
+- pre-v2 versionへrollbackしない。別承認で同じreview済みcommitからbaselineを先行deployし、v2適用後の通常版とbaseline versionだけをrollback候補にする。
+- baselineへrollbackした最小確認後、同じreview済みcommitの通常版を再deployする。
 - `PasswordVerifierDurableObject` namespaceとv2 migrationを直後に削除しない。
 - health/CORS/authの最小確認も別承認範囲に従う。
 - resource cleanupはrollback安定後の別承認作業とする。
@@ -520,7 +521,7 @@ npm run format:check
 
 ### 無料枠修正のstaging証拠完了
 
-- R7PV-16/17を別承認で実施し、valid login 200、main Worker `exceededCpu`非再発、11回目429、cleanup、quota、rollback証拠を記録する。
+- R7PV-16のread-only確認済み証拠を前提に、R7PVRB-13〜15とR7PV-17を別承認で実施し、valid login 200、main Worker `exceededCpu`非再発、11回目429、cleanup、quota、post-v2 rollback証拠を記録する。
 
 ### R7全体
 
@@ -568,6 +569,6 @@ R7-02、R7-10〜R7-20、WAF、監視、production分離、production preflight/s
 
 ### 未実施・未完了
 
-- R7PV-16/17のFree plan・quota・resource preflight、staging deploy/request、valid login、11回目429、rollback証拠は実施していない。
+- R7PV-16のFree plan・共有DO quota・staging resource・review済みSHAはread-onlyで確認済み。R7PVRB-13〜15とR7PV-17の再preflight、staging deploy/request、valid login、11回目429、post-v2 rollback証拠は実施していない。
 - staging/production request、GitHub Actions workflow dispatch、Cloudflare resource/binding/Secret/Environment Variableの実環境変更、dry-runを除く実環境deploy、DB schema/migration変更は実施していない。
 - R7-05、R7全体、v0.1公開gateは未完了のままとする。

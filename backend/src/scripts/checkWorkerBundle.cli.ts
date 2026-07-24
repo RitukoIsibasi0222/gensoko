@@ -1,5 +1,6 @@
 import {
   assertWorkerBundleInputs,
+  isWorkerBundleProfile,
   WORKER_BUNDLE_DEPENDENCY_ERROR_MESSAGE,
 } from "../lib/worker-bundle-contract.js";
 import {
@@ -9,11 +10,12 @@ import {
 
 async function main(): Promise<void> {
   const metadataPath = process.argv[2];
-  if (!metadataPath) {
+  const profile = process.argv[3] ?? "standard";
+  if (!metadataPath || !isWorkerBundleProfile(profile)) {
     throw new Error(INVALID_WORKER_BUNDLE_METADATA_MESSAGE);
   }
 
-  assertWorkerBundleInputs(await readWorkerBundleInputPaths(metadataPath));
+  assertWorkerBundleInputs(await readWorkerBundleInputPaths(metadataPath, profile), profile);
 }
 
 try {

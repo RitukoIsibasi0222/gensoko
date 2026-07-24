@@ -134,6 +134,7 @@ describe("Workers staging build設定", () => {
     expect(nodeTypeScriptConfig.exclude).toEqual(
       expect.arrayContaining([
         "src/worker.ts",
+        "src/worker-staging-rollback-baseline.ts",
         "src/lib/worker-request-adapters.ts",
         "src/lib/durable-object-password-verifier.ts",
       ]),
@@ -141,6 +142,7 @@ describe("Workers staging build設定", () => {
     expect(workersTypeScriptConfig.include).toEqual(
       expect.arrayContaining([
         "src/worker.ts",
+        "src/worker-staging-rollback-baseline.ts",
         "src/lib/worker-request-adapters.ts",
         "src/lib/durable-object-password-verifier.ts",
       ]),
@@ -191,5 +193,34 @@ describe("Workers staging build設定", () => {
     expect(readFileSync("wrangler.jsonc", "utf8")).not.toContain("worker-production.ts");
     expect(productionDryRunCli).toContain("process.cwd()");
     expect(productionDryRunCli).not.toContain("join(outputDirectory");
+  });
+
+  it("常設staging/production configをbaseline entrypointやmodeへ変更しない", () => {
+    const packageJson = readJson("package.json");
+    const scripts = getObject(packageJson.scripts);
+    const stagingConfig = readFileSync("wrangler.jsonc", "utf8");
+    const productionWorker = readFileSync("src/worker-production.ts", "utf8");
+
+    expect(stagingConfig).toContain('"main": "src/worker.ts"');
+    expect(stagingConfig).not.toContain("worker-staging-rollback-baseline.ts");
+    expect(stagingConfig).not.toContain("rollback_mode");
+    expect(productionWorker).not.toContain("worker-staging-rollback-baseline");
+    expect(productionWorker).not.toContain("rollback_mode");
+    expect(scripts["workers:dry-run"]).toContain("bundle-meta.json standard");
+    expect(scripts["workers:production:dry-run"]).toContain("bundle-meta.json production");
+  });
+
+  it("baseline専用dry-runを一時configと専用bundle profileでscript化する", () => {
+    const packageJson = readJson("package.json");
+    const scripts = getObject(packageJson.scripts);
+    const baselineScript = scripts["workers:rollback-baseline:dry-run"];
+
+    expect(baselineScript).toContain("runStagingRollbackBaselineDryRun.cli.ts");
+    expect(baselineScript).toContain("checkWorkerBundle.cli.ts");
+    expect(baselineScript).toContain("staging-rollback-baseline");
+    expect(baselineScript).not.toContain("deploy --env");
+    expect(readFileSync("wrangler.jsonc", "utf8")).not.toContain(
+      "worker-staging-rollback-baseline.ts",
+    );
   });
 });

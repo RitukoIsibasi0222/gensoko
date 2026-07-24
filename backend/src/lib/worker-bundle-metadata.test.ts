@@ -15,15 +15,57 @@ describe("parseWorkerBundleInputPaths", () => {
     ).toEqual(["src/worker.ts", "src/lib/prisma-client.ts"]);
   });
 
-  it("accepts worker-production entrypoint metadata", () => {
+  it("production profileでworker-production entrypoint metadataを受理する", () => {
     expect(
-      parseWorkerBundleInputPaths({
-        inputs: {
-          "src/worker-production.ts": { bytes: 100 },
-          "src/lib/worker-handler.ts": { bytes: 200 },
+      parseWorkerBundleInputPaths(
+        {
+          inputs: {
+            "src/worker-production.ts": { bytes: 100 },
+            "src/lib/worker-handler.ts": { bytes: 200 },
+          },
         },
-      }),
+        "production",
+      ),
     ).toEqual(["src/worker-production.ts", "src/lib/worker-handler.ts"]);
+  });
+
+  it("baseline profileで専用entrypoint metadataを受理する", () => {
+    expect(
+      parseWorkerBundleInputPaths(
+        {
+          inputs: {
+            "src/worker-staging-rollback-baseline.ts": { bytes: 100 },
+            "src/lib/bcrypt-password-verifier.ts": { bytes: 200 },
+          },
+        },
+        "staging-rollback-baseline",
+      ),
+    ).toEqual(["src/worker-staging-rollback-baseline.ts", "src/lib/bcrypt-password-verifier.ts"]);
+  });
+
+  it.each([
+    ["standard", "src/worker-production.ts"],
+    ["production", "src/worker.ts"],
+    ["staging-rollback-baseline", "src/worker.ts"],
+    ["staging-rollback-baseline", "src/worker-production.ts"],
+  ] as const)("%s profileと%sの不一致を拒否する", (profile, entrypoint) => {
+    expect(() => parseWorkerBundleInputPaths({ inputs: { [entrypoint]: {} } }, profile)).toThrow(
+      INVALID_METADATA_MESSAGE,
+    );
+  });
+
+  it("複数profileのentrypointを含むmetadataを拒否する", () => {
+    expect(() =>
+      parseWorkerBundleInputPaths(
+        {
+          inputs: {
+            "src/worker-staging-rollback-baseline.ts": {},
+            "src/worker.ts": {},
+          },
+        },
+        "staging-rollback-baseline",
+      ),
+    ).toThrow(INVALID_METADATA_MESSAGE);
   });
 
   it.each([
