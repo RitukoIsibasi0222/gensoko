@@ -117,7 +117,7 @@ describe("stagingRateLimitEvidence CLI", () => {
     expect(output).not.toContain("attacker.invalid");
   });
 
-  it("既知のauth失敗は固定response classだけを追加しraw値を出力しない", async () => {
+  it("既知のauth失敗は固定response分類だけを追加しraw値を出力しない", async () => {
     const { StagingRateLimitEvidenceExecutionError } =
       await import("./stagingRateLimitEvidence.js");
     runtimeMocks.runEvidence.mockRejectedValue(
@@ -129,7 +129,8 @@ describe("stagingRateLimitEvidence CLI", () => {
         requestNumber: 5,
         observedStatus: 503,
         failedContract: "EXPECTED_STATUS",
-        observedResponseClass: "SAFE_JSON_503_CONTRACT",
+        observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+        observed503FailedContract: "SERVICE_UNAVAILABLE_CONTENT_TYPE",
       }),
     );
 
@@ -144,7 +145,8 @@ describe("stagingRateLimitEvidence CLI", () => {
       requestNumber: 5,
       observedStatus: 503,
       failedContract: "EXPECTED_STATUS",
-      observedResponseClass: "SAFE_JSON_503_CONTRACT",
+      observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+      observed503FailedContract: "SERVICE_UNAVAILABLE_CONTENT_TYPE",
     });
     const output = getConsoleOutput(consoleErrorSpy);
     for (const forbiddenValue of [

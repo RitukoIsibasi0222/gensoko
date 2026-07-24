@@ -229,8 +229,29 @@ describe("staging rate limit evidence", () => {
       observedStatus: 503,
       failedContract: "EXPECTED_STATUS",
       observedResponseClass: "SAFE_JSON_503_CONTRACT",
+      observed503FailedContract: null,
     });
     expect(JSON.stringify(failure)).not.toContain(SERVICE_UNAVAILABLE_MESSAGE);
+  });
+
+  it("第三runと同じrequest番号6で非JSON 503の固定詳細を保持する", async () => {
+    const response = new Response("secret-html-body", {
+      status: 503,
+      headers: { ...SERVICE_UNAVAILABLE_HEADERS, "Content-Type": "text/html" },
+    });
+    const { failure, fetchMock } = await captureAuthFailure(response, 5);
+
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(failure).toMatchObject({
+      failureStage: "AUTH_ALLOWED_REQUEST",
+      failureKind: "RESPONSE_CONTRACT_FAILED",
+      requestNumber: 6,
+      observedStatus: 503,
+      failedContract: "EXPECTED_STATUS",
+      observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+      observed503FailedContract: "SERVICE_UNAVAILABLE_CONTENT_TYPE",
+    });
+    expect(JSON.stringify(failure)).not.toContain("secret-html-body");
   });
 
   it.each([
@@ -241,6 +262,7 @@ describe("staging rate limit evidence", () => {
           status: 503,
           headers: { ...SERVICE_UNAVAILABLE_HEADERS, "Content-Type": "text/html" },
         }),
+      "SERVICE_UNAVAILABLE_CONTENT_TYPE",
     ],
     [
       "JSON parse失敗",
@@ -249,20 +271,32 @@ describe("staging rate limit evidence", () => {
           status: 503,
           headers: { ...SERVICE_UNAVAILABLE_HEADERS, "Content-Type": "application/json" },
         }),
+      "SERVICE_UNAVAILABLE_JSON_BODY",
     ],
     [
       "error以外のfieldを含むbody",
       () => serviceUnavailableResponse({ error: SERVICE_UNAVAILABLE_MESSAGE, detail: "secret" }),
+      "SERVICE_UNAVAILABLE_ERROR_BODY",
     ],
-    ["日本語error message不一致", () => serviceUnavailableResponse({ error: "別のメッセージ" })],
+    [
+      "日本語error message不一致",
+      () => serviceUnavailableResponse({ error: "別のメッセージ" }),
+      "SERVICE_UNAVAILABLE_ERROR_BODY",
+    ],
     [
       "Retry-After欠損",
       () => jsonResponse(503, { error: SERVICE_UNAVAILABLE_MESSAGE }, { ...SAFE_RESPONSE_HEADERS }),
+      "SERVICE_UNAVAILABLE_RETRY_AFTER",
     ],
-    ["Retry-After不正", () => serviceUnavailableResponse(undefined, { "Retry-After": "NaN" })],
+    [
+      "Retry-After不正",
+      () => serviceUnavailableResponse(undefined, { "Retry-After": "NaN" }),
+      "SERVICE_UNAVAILABLE_RETRY_AFTER",
+    ],
     [
       "Retry-After期待値不一致",
       () => serviceUnavailableResponse(undefined, { "Retry-After": "61" }),
+      "SERVICE_UNAVAILABLE_RETRY_AFTER",
     ],
     [
       "CORS不一致",
@@ -270,27 +304,37 @@ describe("staging rate limit evidence", () => {
         serviceUnavailableResponse(undefined, {
           "Access-Control-Allow-Origin": "https://example.test",
         }),
+      "ACCESS_CONTROL_ALLOW_ORIGIN",
     ],
     [
       "production security header不一致",
       () => serviceUnavailableResponse(undefined, { "Strict-Transport-Security": "" }),
+      "STRICT_TRANSPORT_SECURITY",
     ],
-    ["X-Powered-By露出", () => serviceUnavailableResponse(undefined, { "X-Powered-By": "Hono" })],
-  ] as const)("auth 5回目503の%sを固定された未分類503として扱う", async (_name, createResponse) => {
-    const { failure } = await captureAuthFailure(createResponse());
+    [
+      "X-Powered-By露出",
+      () => serviceUnavailableResponse(undefined, { "X-Powered-By": "Hono" }),
+      "X_POWERED_BY",
+    ],
+  ] as const)(
+    "auth 5回目503の%sを固定された未分類503として扱う",
+    async (_name, createResponse, observed503FailedContract) => {
+      const { failure } = await captureAuthFailure(createResponse());
 
-    expect(failure).toMatchObject({
-      failureStage: "AUTH_ALLOWED_REQUEST",
-      failureKind: "RESPONSE_CONTRACT_FAILED",
-      requestNumber: 5,
-      observedStatus: 503,
-      failedContract: "EXPECTED_STATUS",
-      observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
-    });
-    const serializedFailure = JSON.stringify(failure);
-    expect(serializedFailure).not.toContain("secret");
-    expect(serializedFailure).not.toContain(SERVICE_UNAVAILABLE_MESSAGE);
-  });
+      expect(failure).toMatchObject({
+        failureStage: "AUTH_ALLOWED_REQUEST",
+        failureKind: "RESPONSE_CONTRACT_FAILED",
+        requestNumber: 5,
+        observedStatus: 503,
+        failedContract: "EXPECTED_STATUS",
+        observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+        observed503FailedContract,
+      });
+      const serializedFailure = JSON.stringify(failure);
+      expect(serializedFailure).not.toContain("secret");
+      expect(serializedFailure).not.toContain(SERVICE_UNAVAILABLE_MESSAGE);
+    },
+  );
 
   it.each([
     ["Retry-After不一致", () => serviceUnavailableResponse(undefined, { "Retry-After": "61" })],
@@ -312,6 +356,10 @@ describe("staging rate limit evidence", () => {
       observedStatus: 503,
       failedContract: "EXPECTED_STATUS",
       observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+      observed503FailedContract:
+        _name === "Retry-After不一致"
+          ? "SERVICE_UNAVAILABLE_RETRY_AFTER"
+          : "STRICT_TRANSPORT_SECURITY",
     });
   });
 
@@ -331,6 +379,7 @@ describe("staging rate limit evidence", () => {
       observedStatus: 503,
       failedContract: "EXPECTED_STATUS",
       observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+      observed503FailedContract: "SERVICE_UNAVAILABLE_JSON_BODY",
     });
     expect(JSON.stringify(failure)).not.toContain("parse-internal-secret");
   });
@@ -352,6 +401,7 @@ describe("staging rate limit evidence", () => {
       observedStatus: 200,
       failedContract: "EXPECTED_JSON_BODY",
       observedResponseClass: null,
+      observed503FailedContract: null,
     });
     expect(JSON.stringify(failure)).not.toContain("parse-internal-secret");
   });
@@ -373,6 +423,7 @@ describe("staging rate limit evidence", () => {
       observedStatus: 429,
       failedContract: "RATE_LIMIT_BODY",
       observedResponseClass: null,
+      observed503FailedContract: null,
     });
     expect(JSON.stringify(failure)).not.toContain("parse-internal-secret");
   });
@@ -390,6 +441,7 @@ describe("staging rate limit evidence", () => {
         observedStatus: status,
         failedContract: "EXPECTED_STATUS",
         observedResponseClass: "OTHER_UNEXPECTED_STATUS",
+        observed503FailedContract: null,
       });
       expect(JSON.stringify(failure)).not.toContain("secret-response-body");
     },
@@ -416,6 +468,7 @@ describe("staging rate limit evidence", () => {
       observedStatus: 503,
       failedContract: "EXPECTED_STATUS",
       observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+      observed503FailedContract: "SERVICE_UNAVAILABLE_RESPONSE_ACCESS",
     });
     const serializedFailure = JSON.stringify(failure);
     expect(serializedFailure).not.toContain("header-internal-secret");
@@ -434,6 +487,7 @@ describe("staging rate limit evidence", () => {
       observedStatus: 503,
       failedContract: "RATE_LIMIT_STATUS",
       observedResponseClass: "SAFE_JSON_503_CONTRACT",
+      observed503FailedContract: null,
     });
     expect(JSON.stringify(failure)).not.toContain(SERVICE_UNAVAILABLE_MESSAGE);
   });
