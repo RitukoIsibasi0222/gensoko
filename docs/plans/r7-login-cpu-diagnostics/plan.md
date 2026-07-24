@@ -166,7 +166,7 @@ export function classifyLoginCpuMeasurements(
 - [x] R7CPU-06: 診断moduleがproduction bundleへ混入しないことを確認する
 - [x] R7CPU-07: backend最終品質gateを通す
 - [x] R7CPU-08: 正本計画・進捗・診断記録を同期する
-- [ ] R7CPU-09: code/docsを分割commitしpush・PRを作成する
+- [x] R7CPU-09: code/docsを分割commitしpush・PRを作成する
 
 ### タブ区切り
 
@@ -205,6 +205,7 @@ R7CPU-09	code/docs分割commit・push・PR	Git/GitHub	中
 - environment: ローカルworkerd（`@cloudflare/vitest-pool-workers`）
 - 基準commit: `d6e228d9e765b752a28e08e8c71fa0f77682746c`
 - 実装branch: `feature/r7-login-cpu-diagnostics`
+- PR: [#148](https://github.com/RitukoIsibasi0222/gensoko/pull/148)
 - 外部操作: なし。Cloudflare/GitHub Actions/staging/production request、DB、deployment、設定変更を実施していない
 - TDD:
   - Red: 診断module未実装により新規suiteがmodule解決errorで失敗することを確認
@@ -233,6 +234,28 @@ R7CPU-09	code/docs分割commit・push・PR	Git/GitHub	中
   - build / Workers typecheck / ESLint / Prettier check: 成功
 - 次工程: bcrypt costを下げず、Free Workerのvalid login CPU pathからpassword verificationを分離できる無料枠構成を別計画で設計する。設計・実装前にR7-05の429証拠取得方法とrollbackを再承認する
 - R7状態: R7-02、R7-05、R7-10〜R7-20、R7全体、v0.1公開gateは未完了を維持する
+
+## 実装完了
+
+- 完了日: 2026-07-24
+- 実装branch: `feature/r7-login-cpu-diagnostics`
+- PR: [#148](https://github.com/RitukoIsibasi0222/gensoko/pull/148)
+
+### 計画からの変更点
+
+- `createApp`をworkerd testから直接importするとPrisma edge runtimeが先に失敗したため、既存app graphを変えず、test内でPrismaのruntime enumだけを最小mockした
+- 5操作を並列ではなく直列に測定し、bcryptのyield中へ他操作のCPU時間が混入しないようにした
+- production entrypointのbundle確認は実resourceを使わない一時固定設定で実行し、metadataを固定集計後に一時設定を削除した
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+| --- | --- | --- |
+| `backend/src/cloudflare/login-cpu-diagnostics.ts` | 新規 | operation測定・中央値要約・固定分類 |
+| `backend/src/cloudflare/login-cpu-diagnostics.test.ts` | 新規 | workerd実測・validation・値非露出test |
+| `docs/plans/r7-login-cpu-diagnostics/plan.md` | 新規 | 計画・TDD・診断・完了記録 |
+| `docs/plans/r7-rate-limit-environment-gates/plan.md` | 修正 | R7 Evidence E-08と未完了境界 |
+| `docs/05_progress.md` | 修正 | 診断完了とR7継続状態 |
 
 ## 停止条件
 

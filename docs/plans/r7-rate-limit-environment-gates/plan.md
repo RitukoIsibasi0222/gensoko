@@ -1288,6 +1288,7 @@ PII・Secret確認:
 - environment: ローカルworkerd（`@cloudflare/vitest-pool-workers`）
 - 基準commit: `d6e228d9e765b752a28e08e8c71fa0f77682746c`
 - 実装branch: `feature/r7-login-cpu-diagnostics`
+- PR: [#148](https://github.com/RitukoIsibasi0222/gensoko/pull/148)
 - 診断計画: [`r7-login-cpu-diagnostics`](../r7-login-cpu-diagnostics/plan.md)
 - 外部操作境界:
   - Cloudflare/GitHub Actions/staging/production request、workflow dispatch、DB、deployment、Environment Variable、Secret、Workers設定を変更していない
