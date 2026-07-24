@@ -1157,6 +1157,65 @@ PII・Secret確認:
 - [x] password/bodyなし
 - [x] account/zone/resource IDなし
 
+### R7 Evidence E-06
+
+- 実行日時: 2026-07-24 10:10:36〜10:11:59 JST
+- 承認実行時間帯: 2026-07-24 10:10〜10:30 JST
+- environment: staging
+- 基準commit: `dcae128899275c0ec58027c97c9d039427fc5e57`
+- 対象Worker version: staging Worker（versionは本runで再取得していない）
+- 対象policy/rule: auth / 期待policy `AUTH_IP`。429へ到達していないため観測policyは未成立
+- 実行者: Codex
+- 承認者: `RitukoIsibasi0222`
+- 変更記録: `R7-G5-G6-AUTH4-20260724-1015`
+- 事前gate:
+  - PR #145が2026-07-24 10:00:32 JSTに`develop`へmerge済みで、merge commitと最新`develop` SHAが一致
+  - PR #145のbackend-quality/Vercel checks成功。PR headとmerge commitのtree一致を確認
+  - workflow active、Environment許可branchは`develop`
+  - `BATCH_ENVIRONMENT=staging`、fixture flag `false`、必要なEnvironment Secret名のpresenceを確認。Secret値は取得していない
+  - repository全体でqueued/in-progress Actions runなし、`gensoko-batch-jobs`競合なし
+  - 固定staging URL、staging DB target guard、workflow inputs、main/recovery cleanup契約を再確認
+  - 第四run用の新しいG5/G6承認、実行時間帯、停止時通知先、`approved_by`、`change_record`を固定
+  - fixture flagを一時`true`化し、読み取り確認後に1回だけdispatch
+- 手順:
+  - `case=auth`、最新40桁SHA、固定confirmation、承認者、変更記録を入力し、`develop` refから1回だけdispatch
+  - exact synthetic Admin/User fixtureをprepare
+  - auth境界runnerを実行
+  - main cleanupと非成功時recovery cleanupを確認
+  - fixture flagを`false`へ復旧してGitHub APIで読み取り確認
+- 期待結果: 正しいlogin 1〜10回目を許可し、11回目で`AUTH_IP`のHono 429契約を確認する
+- 実結果:
+  - branch/SHA/approval/Environment/DB target gate成功
+  - fixture prepare成功、2件作成・置換0件
+  - auth許可request 1〜4回目はvalidatorを通過
+  - 5回目で`AUTH_ALLOWED_REQUEST` / `RESPONSE_CONTRACT_FAILED` / status 503 / `EXPECTED_STATUS` / `EDGE_OR_UNCLASSIFIED_503` / `SERVICE_UNAVAILABLE_CONTENT_TYPE`として安全に停止
+  - 11回目へ到達せず、429と`AUTH_IP`観測証拠は未成立
+  - main cleanup成功、固定fixture 2件削除
+  - recovery cleanup成功、追加削除0件
+- status/header/body要約: 許可request 5回目のstatus 503と固定分類だけを記録。503応答がHono JSON公開契約のContent-Type条件に一致しなかったことを示す。raw Content-Type値、response body、他のheader値、credential、識別子、raw例外は取得・記録していない
+- 原因境界: `SERVICE_UNAVAILABLE_CONTENT_TYPE`は公開契約の不一致箇所だけを示す。Cloudflare edge、Worker、Durable Object、adapter等の内部原因は断定しない
+- Cloudflare metrics/Security Events確認時間帯: 未実施。R7-02 blockedを維持
+- cleanup: main/recoveryとも成功。workflow上のexact fixture残存なし
+- rollback: fixture flagを`false`へ復旧し、GitHub APIで読み取り確認
+- 停止通知: このCodexタスクへ即時報告。外部通知は行っていない
+- 判定: R7-04 pass / R7-05 fail（未完了）
+- 再実行判断: 想定外503の停止条件に該当するため再実行しない。第五runは未承認・未実施
+- 代替証拠: repository contract testは成功しているが、staging実HTTPの11回目429証拠の代替にはしない
+- 残余リスク: 503の公開契約不一致箇所はContent-Typeと判明したが、内部原因は未特定。R7-05、R7-02、R7全体は未完了を維持する
+- 次工程: 同一条件の再実行やdelay追加は行わず、必要ならWorkers Logs/metricsの読み取り観測をR7-11/R7-15およびG4の別承認として計画する
+- 添付先: [GitHub Actions run 30058262756](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30058262756)
+- production操作: URL、DB、Cloudflare binding/Secret、WAF、deploymentを変更していない
+
+PII・Secret確認:
+
+- [x] raw IPなし
+- [x] email/user IDなし
+- [x] digestなし
+- [x] token/Cookie/Authorizationなし
+- [x] password/bodyなし
+- [x] raw Content-Type/header値なし
+- [x] account/zone/resource IDなし
+
 ## R7完了記録
 
 R7-01〜R7-20と13個の完了条件が揃うまで、このセクションへ完了日を記載しない。
