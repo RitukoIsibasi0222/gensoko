@@ -1326,7 +1326,7 @@ PII・Secret確認:
   - Workers 27 passed
   - build、Workers typecheck、ESLint、Prettier check成功
 - 判定: code-level CPU支配要因は`bcrypt.compare` cost 12。R7-05のstaging実HTTP 11回目429と安全な修正は未完了
-- 次工程: bcrypt costを下げず、Free Workerのvalid login CPU pathからpassword verificationを分離する無料枠構成を別計画・別レビューで設計する。同一条件のstaging auth再実行やdelay追加は行わない
+- 次工程: [`r7-password-verification-free-worker`](../r7-password-verification-free-worker/plan.md)で、bcrypt cost 12を維持したままvalid loginのpassword verificationをSQLite-backed Durable Objectへ分離する無料枠構成を設計した。計画作成だけであり、実装、Cloudflare resource変更、deployment、staging auth再実行は別承認まで行わない
 - R7状態: R7-02、R7-05、R7-10〜R7-20、R7全体、v0.1公開gateは未完了を維持する
 
 PII・Secret確認:

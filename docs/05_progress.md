@@ -279,6 +279,7 @@
   - 503安全分類の別TDD計画: [`r7-auth-503-safe-classification`](plans/r7-auth-503-safe-classification/plan.md) — PR #144はmerge commit `628ce06f90d150ae3dd3eb7e8e6c52ee42deace8`として`develop`へmerge済み。safe JSON 503、非JSON/契約不一致503、その他statusをraw body/header値なしの固定enumで区別し、関連65件、backend 1109件、Workers 15件、build・lint・format checkが成功した。第三runでは6回目503を`EDGE_OR_UNCLASSIFIED_503`へ分類したが、契約内の不一致箇所と内部原因は未特定
   - [x] 503契約不一致詳細分類: [`r7-auth-503-contract-detail`](plans/r7-auth-503-contract-detail/plan.md) / PR: [#145](https://github.com/RitukoIsibasi0222/gensoko/pull/145) — merge commit `dcae128899275c0ec58027c97c9d039427fc5e57`。raw値を出さず503公開契約の不一致箇所だけを固定分類した。server-side診断では5回目の503をmain stateless Workerの`exceededCpu`まで絞ったが、具体的なCPU消費処理は未特定。main/recovery cleanupとflag `false`復旧は成功し、campaign上限到達により追加runを停止した
   - [x] login CPU隔離診断: [`r7-login-cpu-diagnostics`](plans/r7-login-cpu-diagnostics/plan.md) / PR: [#148](https://github.com/RitukoIsibasi0222/gensoko/pull/148) — 実環境runを増やさず、無料枠のローカルworkerdでcost 12の`bcrypt.compare`を`BCRYPT_DOMINANT`へ固定分類した。最終測定はbcrypt中央値209ms、HMAC 3回・JWT・token・app構築は分解能未満（各最大2ms以下）。backend 1110件、Workers 27件、build・lint・format check成功。R7全体と安全な無料枠修正は未完了
+  - [ ] Free Worker password verification分離: [`r7-password-verification-free-worker`](plans/r7-password-verification-free-worker/plan.md) — bcrypt cost 12を維持し、valid loginの照合だけをstorageなしのSQLite-backed Durable Objectへ内部RPCで分離するTDD計画を作成した。Worker fallback禁止、固定503、値非露出、v2 class migration、無料DO quota共有、rollbackを設計済み。実装、Cloudflare resource変更、deployment、staging requestは別承認待ちで、R7-05とR7全体は未完了
 - [ ] R8: headers・CORS・safe error・logを最終確認する
 - [-] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する（code・contract test完了。review・merge後の日次schedule 2回と未失効2世代は観測待ち）
 - [ ] R10: 基本responsive・keyboard/A11Yを確認する
@@ -305,7 +306,7 @@
 - [x] ダークモード（OS設定追従 + 明示toggle） — D1〜D12完了、計画: [`dark-mode`](plans/dark-mode/plan.md)
 - [x] プライバシーポリシーページ`/privacy` — R3 / 計画: [`privacy-policy`](plans/privacy-policy/plan.md)
 - [-] 基本レスポンシブ・keyboard・focus・live region — 実装済み範囲あり、主要画面のrelease確認待ち
-- [-] 認証系・ゲーム送信APIのアプリレベルrate limit — Hono/DO、staging binding、manual境界証拠workflowまで実装済み。server-side診断でauth 5回目の503をmain stateless Workerの`exceededCpu`まで絞り、安全にcleanup・flag復旧して停止した。具体的なCPU消費処理、実HTTP 429成功証拠、制御された503契約、production binding待ち
+- [-] 認証系・ゲーム送信APIのアプリレベルrate limit — Hono/DO、staging binding、manual境界証拠workflowまで実装済み。server-side診断でauth 5回目の503をmain stateless Workerの`exceededCpu`まで絞り、E-08のローカルworkerd診断でcost 12の`bcrypt.compare`を`BCRYPT_DOMINANT`へ分類した。無料枠修正は計画作成のみで、実装、実HTTP 429成功証拠、制御された503契約、production binding待ち
 - [ ] production CORS、HttpOnly/Secure/SameSite Cookie、security headersの実HTTP確認
 - [ ] staging/production logでPII・token・Cookie・Authorization・DB URL・raw error非出力を最終確認
 - [-] 暗号化backupの日次化 — 日次cronのcontract testとworkflowの2行変更はRed→Greenで実装済み。初回Artifact・checksum・復号はrun 29322979476で確認済み。review・`develop`へのmerge後の日次schedule 2回と未失効Artifact 2世代の確認待ち
