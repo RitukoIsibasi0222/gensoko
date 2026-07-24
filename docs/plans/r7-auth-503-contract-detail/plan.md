@@ -183,7 +183,7 @@ R7C-09	分割commit・push・PR	Git/GitHub	中
 - Red test commit: `905fe42`（`test: R7 auth 503契約不一致詳細のRed契約を追加`）
 - Green/Refactor commit: `fa5bd21`（`fix: R7 auth 503契約不一致箇所を安全に分類`）
 - 文書同期commit: `92d0668`（`docs: R7第三auth runと503詳細分類を同期`）
-- PR: [#145](https://github.com/RitukoIsibasi0222/gensoko/pull/145)（review待ち）
+- PR: [#145](https://github.com/RitukoIsibasi0222/gensoko/pull/145)（2026-07-24に`develop`へmerge、merge commit `dcae128899275c0ec58027c97c9d039427fc5e57`）
 
 ### TDD実測
 
@@ -220,3 +220,18 @@ R7C-09	分割commit・push・PR	Git/GitHub	中
 - `docs/04_api.md`は公開API契約を変更していないため更新しない
 - DB変更がないためmigration、DB integration test、Playwrightは実行しない
 - auth requestの間隔は変更しない。10分固定window内の短いdelayでは503回避の根拠にならず、長いdelayは11回目429の証拠契約を壊すためである
+
+## merge後の第四auth run
+
+- 実行run: [30058262756](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30058262756)
+- 実行日時: 2026-07-24 10:10:36〜10:11:59 JST
+- 基準commit: `dcae128899275c0ec58027c97c9d039427fc5e57`
+- 新しいG5/G6承認: `approved_by=RitukoIsibasi0222`、`change_record=R7-G5-G6-AUTH4-20260724-1015`、実行時間帯10:10〜10:30 JST、停止時通知先はこのCodexタスク
+- fixture lifecycle: prepare 2件・置換0件、main cleanup 2件、recovery cleanup追加削除0件、fixture flag `false`復旧確認
+- auth結果: 許可request 1〜4回目は通過し、5回目のstatus 503で安全停止した
+- 固定分類: `AUTH_ALLOWED_REQUEST` / `RESPONSE_CONTRACT_FAILED` / `EXPECTED_STATUS` / `EDGE_OR_UNCLASSIFIED_503` / `SERVICE_UNAVAILABLE_CONTENT_TYPE`
+- 診断結果: このrunの503はHono JSON公開契約のContent-Type条件に一致しなかった。raw Content-Type値、response body、他header値、credential、PII、raw例外は記録していない
+- 原因境界: Content-Type契約不一致から内部原因を推測しない。Cloudflare edge、Worker、Durable Object、adapter等のどこで生成されたかは未特定
+- R7判定: R7-04は完了を維持する。11回目429へ未到達のためR7-05とR7全体は未完了
+- 停止判断: 同一条件で再実行せず、delay追加、直接DB操作、production、Cloudflare、WAF、deployment操作を行っていない。第五runは未承認・未実施
+- 正本証拠: [`R7 Evidence E-06`](../r7-rate-limit-environment-gates/plan.md#r7-evidence-e-06)
