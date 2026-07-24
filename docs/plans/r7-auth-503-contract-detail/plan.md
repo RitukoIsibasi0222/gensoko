@@ -235,3 +235,18 @@ R7C-09	分割commit・push・PR	Git/GitHub	中
 - R7判定: R7-04は完了を維持する。11回目429へ未到達のためR7-05とR7全体は未完了
 - 停止判断: 同一条件で再実行せず、delay追加、直接DB操作、production、Cloudflare、WAF、deployment操作を行っていない。第五runは未承認・未実施
 - 正本証拠: [`R7 Evidence E-06`](../r7-rate-limit-environment-gates/plan.md#r7-evidence-e-06)
+
+## server-side診断campaign
+
+- 実行run: [30059544533](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30059544533)
+- 実行日時: 2026-07-24 10:39:30〜10:40:41 JST
+- 基準commit: `59e73972f584bfa5515444c9e2e0872af894a6fb`
+- 診断承認: `approved_by=RitukoIsibasi0222`、`change_record=R7-SERVER-DIAG-20260724-01`、実行時間帯10:30〜11:30 JST、停止時通知先はこのCodexタスク、追加auth run上限1回
+- 観測方法: Cloudflare設定を変更せず、対象Workerのlive tailをPOSTに限定して併走した。raw eventは文書へ記録せず、安全な固定分類と集計値だけを使用した
+- auth結果: 許可request 1〜4回目は200、5回目は503 / `SERVICE_UNAVAILABLE_CONTENT_TYPE`で安全停止した
+- server-side結果: 対象5 eventは同じstateless Worker/versionで、1〜4件目のoutcomeは`ok`、5件目の503だけ`exceededCpu`
+- 原因判断: 503の原因カテゴリをmain Worker invocationのCPU/resource limit超過まで絞れた。具体的なcode operationは未特定で、valid login pathの`bcrypt.compare`と既存hashのcost 12は有力仮説に留める
+- fixture lifecycle: prepare 2件・置換0件、main cleanup 2件、recovery cleanup追加削除0件、fixture flag `false`復旧確認
+- 停止判断: campaign上限へ到達したため追加runは行わない。次は実環境再実行ではなく、Workers互換の隔離環境におけるlogin CPU costの別TDD診断を優先する
+- R7判定: R7-04は完了を維持する。11回目429へ未到達のためR7-05とR7全体は未完了
+- 正本証拠: [`R7 Evidence E-07`](../r7-rate-limit-environment-gates/plan.md#r7-evidence-e-07)

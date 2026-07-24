@@ -1216,6 +1216,72 @@ PII・Secret確認:
 - [x] raw Content-Type/header値なし
 - [x] account/zone/resource IDなし
 
+### R7 Evidence E-07
+
+- 診断日時: 2026-07-24 10:30〜10:41 JST
+- 承認実行時間帯: 2026-07-24 10:30〜11:30 JST
+- environment: staging
+- 基準commit: `59e73972f584bfa5515444c9e2e0872af894a6fb`
+- 対象Worker: `gensoko-api-staging`
+- 対象policy/rule: auth / 期待policy `AUTH_IP`。429へ到達していないため観測policyは未成立
+- 実行者: Codex
+- 承認者: `RitukoIsibasi0222`
+- 変更記録: `R7-SERVER-DIAG-20260724-01`
+- 診断campaign契約:
+  - stagingの読み取り専用Workers Logs/metrics観測
+  - 追加auth runは最大1回
+  - Cloudflare設定変更、deployment、WAF、production操作は対象外
+  - cleanup不明、fixture flag復旧失敗、追加run上限到達時は自動停止
+- 事前gate:
+  - PR #146 merge後の最新`develop` SHAを基準commitとして固定。PR #145のcodeからの差分はdocs 3ファイルだけで、staging Workerは再配備されていない
+  - staging fixture flag `false`、実行中Actions runなしを確認
+  - Wrangler認証、対象Worker、`RATE_LIMIT_STORE=durable-object`、`RATE_LIMIT_COUNTER` bindingを読み取り確認。account/resource ID、Secret値は記録していない
+  - 過去metricsの詳細取得機能は利用できなかったため、既存のlive tailを設定変更なしで開始
+- 手順:
+  - methodをPOSTに限定したJSON live tailを開始
+  - fixture flagを一時`true`化し、読み取り確認後に`develop` refから追加auth runを1回だけdispatch
+  - run終了後にmain/recovery cleanup、fixture flag `false`復旧、実行中runなしを確認
+  - tailを固定分類と集計値だけへ縮約し、raw eventを保持した一時ファイルを削除
+- 実行run: [30059544533](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30059544533)
+- 実行日時: 2026-07-24 10:39:30〜10:40:41 JST
+- 実結果:
+  - branch/SHA/approval/Environment/DB target gate成功
+  - fixture prepare成功、2件作成・置換0件
+  - auth許可request 1〜4回目はvalidatorを通過
+  - 5回目で`AUTH_ALLOWED_REQUEST` / `RESPONSE_CONTRACT_FAILED` / status 503 / `EXPECTED_STATUS` / `EDGE_OR_UNCLASSIFIED_503` / `SERVICE_UNAVAILABLE_CONTENT_TYPE`として安全に停止
+  - 11回目へ到達せず、429と`AUTH_IP`観測証拠は未成立
+  - main cleanup成功、固定fixture 2件削除
+  - recovery cleanup成功、追加削除0件
+- live tail集計:
+  - 対象POST eventは5件。statusは200が4件、503が1件
+  - 1〜4件目のoutcomeは`ok`、5件目の503だけ`exceededCpu`
+  - 5件すべて同じscript/versionの`stateless`実行で、5件目にはCPU/resource limit系の固定分類に該当するexceptionが1件
+  - Durable Object entrypointを示すeventは取得されず、失敗outcomeはmain stateless Worker requestへ付与されている
+- 原因境界:
+  - 5回目の503はmain staging Worker invocationのCPU/resource limit超過により生成されたと判断する。単なるContent-Type不一致や発生源不明の503という段階から原因カテゴリを絞れた
+  - live tailだけではCPUを消費したcode operationまでは特定できない。DB・Durable Objectの待ち時間そのものをCPU消費と断定せず、各依存の寄与も未確定とする
+  - valid login pathの`bcrypt.compare`と既存hashのcost 12は有力なcode-level仮説だが、この証拠だけで根本原因と断定しない
+- cleanup: main/recoveryとも成功。workflow上のexact fixture残存なし
+- rollback: fixture flagを`false`へ復旧し、GitHub APIで読み取り確認
+- 停止通知: このCodexタスクへ報告。外部通知は行っていない
+- 判定: R7-04 pass / R7-05 fail（未完了）
+- 再実行判断: 診断campaignの追加auth run上限1回へ到達したため自動停止。追加のauth runは行わない
+- 残余リスク: CPUを消費した具体的処理と安全な修正方針、staging実HTTPの11回目429証拠は未確定。R7-05、R7-02、R7全体は未完了を維持する
+- 次工程: 実環境再実行ではなく、Workers互換の隔離環境でlogin CPU costを測る別TDD診断を優先する。観測で不足する場合だけ、安全なserver-side固定分類、correlation ID、isolated canary等を別計画・別承認で検討する
+- production操作: URL、DB、Cloudflare binding/Secret、WAF、deploymentを変更していない
+
+PII・Secret確認:
+
+- [x] raw IPなし
+- [x] email/user IDなし
+- [x] URL/query/bodyなし
+- [x] token/Cookie/Authorizationなし
+- [x] password/hashなし
+- [x] raw header値なし
+- [x] raw exceptionなし
+- [x] account/zone/resource IDなし
+- [x] live tail一時ファイル削除済み
+
 ## R7完了記録
 
 R7-01〜R7-20と13個の完了条件が揃うまで、このセクションへ完了日を記載しない。
