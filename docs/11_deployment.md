@@ -307,6 +307,12 @@ stagingではEnvironmentをPreview、Git Branchを`develop`へ限定する。値
 
 `npm run workers:build`は生成型差分、Workers typecheck、staging dry-run、bundle contractを外部resourceなしで検証する。production相当runtime testは別の`npm run test:workers`で実行する。`backend/wrangler.jsonc`のstaging Hyperdrive IDは、作成済み`gensoko-postgres-staging`の実resource IDへ更新済みであり、production用resourceと共用しない。
 
+R7 Free Worker password verification分離では、main Workerのloginからcost 12 `bcrypt.compare`を除き、同一scriptの`PasswordVerifierDurableObject`へaccount単位の内部RPCで委譲する。`PASSWORD_VERIFIER` bindingをstaging/test/production構成で必須とし、既存`v1`の`RateLimitCounter` migrationは変更せず、`v2`の`new_sqlite_classes`へ新classだけを追加する。DOはSQLite-backed classとして登録するがstorage、alarm、cacheを使用せず、password、hash、result、account識別子を保存・記録しない。Node開発/testだけが隔離したlocal bcrypt adapterを明示注入し、Workers bundle contractはそのadapterの混入を拒否する。
+
+repository実装ではlocal test、workerd、型生成、dry-runだけを行う。Cloudflare plan、既存DOと共有するFreeのrequest/duration quota、実namespace/binding/migration、直前Worker version、rollback権限はR7PV-16の別承認read-only preflightで確認する。R7PV-17の別承認までresource/binding/Secret/Environment Variableを変更せず、deploy、workflow dispatch、staging/production requestを行わない。
+
+password verifierのbinding/RPC/result障害はmain Workerでlocal bcryptへfallbackせず、固定日本語503と`Retry-After: 60`でfail-closedにする。rollbackはreview済み直前Worker versionへ戻し、新namespaceと適用済みv2 migrationを直後に削除しない。traffic停止とrollback安定を確認後、resource cleanupを別承認作業として行う。
+
 Cloudflare account、staging Hyperdrive origin、Worker `gensoko-api-staging`、SQLite-backed DO、7件のWorker secret、公開Workers URLは作成・配備済みである。health 200、CORS、OPTIONS 204、Hyperdrive経由の元素118件を確認済みで、production resourceは作成していない。secret値は読み戻し・文書化しない。
 
 ---
@@ -842,7 +848,7 @@ R7の実行順序、decision gate、テストケース、証拠、停止条件�
 
 - Cloudflare zone plan、Workers plan、rule枠、field、period、action、custom responseの実account上の利用可否
 - staging/production API hostname、対象zone、Custom Domain/Route、`workers.dev`を含む迂回経路
-- staging/productionのDurable Object namespace、migration、`RATE_LIMIT_COUNTER` binding、Secretの分離
+- staging/productionのDurable Object namespace、migration、`RATE_LIMIT_COUNTER` / `PASSWORD_VERIFIER` binding、Secretの分離
 - Security Events、Workers metrics、Durable Objects metrics、必要な場合のWorkers Logs閲覧権限
 - DO request/RPC、alarm、SQLite read/write/delete、storage、Workers Logsの想定利用量
 - staging synthetic fixture、cleanup、実行時間帯、停止時の通知先

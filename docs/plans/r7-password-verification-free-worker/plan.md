@@ -271,6 +271,8 @@ Content-Type: application/json
 | `backend/src/lib/worker-request-adapters.test.ts` | 修正 | verifier factoryとrequest dependency test |
 | `backend/src/lib/worker-bundle-contract.ts` | 修正 | Node local verifierのWorker bundle混入を拒否 |
 | `backend/src/lib/worker-bundle-contract.test.ts` | 修正 | local verifier禁止とDO verifier許可のcontract test |
+| `backend/src/lib/worker-bundle-metadata.ts` | 修正 | staging/production両entrypointのbundle metadataを検証 |
+| `backend/src/lib/worker-bundle-metadata.test.ts` | 修正 | production entrypointのmetadata回帰test |
 | `backend/src/worker.test.ts` | 修正 | environment・dependency伝播・安全な503回帰 |
 | `backend/src/worker.ts` | 修正 | staging class exportとbinding型 |
 | `backend/src/worker-production.ts` | 修正 | production class exportとbinding型 |
@@ -279,11 +281,13 @@ Content-Type: application/json
 | `backend/src/lib/production-worker-config.ts` | 修正 | production bindingとv2 migration生成 |
 | `backend/src/lib/production-worker-config.test.ts` | 修正 | production class/binding/migration分離契約 |
 | `backend/src/worker-config-files.test.ts` | 修正 | staging/test configと生成型契約 |
+| `backend/src/scripts/runProductionWranglerDryRun.cli.ts` | 修正 | production一時configをentrypoint解決可能なrootへ安全に生成・削除 |
+| `backend/tsconfig.json` | 修正 | Node buildからWorker専用DO caller adapterを除外 |
+| `backend/tsconfig.workers.json` | 修正 | Worker buildへDO caller adapterを明示追加 |
 | `backend/worker-configuration.d.ts` | 自動更新 | Wrangler生成binding型 |
-| `backend/src/cloudflare/worker-production.test.ts` | 修正 | production相当graph回帰 |
 | `docs/04_api.md` | 修正 | login 503原因範囲と非変更契約 |
 | `docs/11_deployment.md` | 修正 | v2 DO binding、preflight、rollback、別承認境界 |
-| `docs/plans/r7-password-verification-free-worker/plan.md` | 新規 | 本計画と実装記録 |
+| `docs/plans/r7-password-verification-free-worker/plan.md` | 修正 | 本計画と実装記録 |
 | `docs/plans/r7-rate-limit-environment-gates/plan.md` | 修正 | E-08次工程、実装後の別承認gate、R7未完了境界 |
 | `docs/05_progress.md` | 修正 | 計画・実装・実環境証拠を分離して進捗同期 |
 
@@ -399,21 +403,21 @@ Content-Type: application/json
 | R7PV-16 | review/merge後のFree plan・quota・resource preflight | Cloudflare read-only | 高 | 別承認 |
 | R7PV-17 | staging deploy・valid login・11回目429・rollback証拠 | staging | 高 | 別承認 |
 
-- [ ] R7PV-01: verifier port・DI・fallback禁止のRed testを追加する
-- [ ] R7PV-02: DO RPC・strict result・非永続化のRed testを追加する
-- [ ] R7PV-03: binding・v2 migration・生成型のRed testを追加する
-- [ ] R7PV-04: portと別ファイルへ隔離したNode local adapterをGreen実装する
-- [ ] R7PV-05: password verifier DOとcaller adapterをGreen実装する
-- [ ] R7PV-06: auth serviceとapp dependencyへ必須注入する
-- [ ] R7PV-07: verifier障害をfixed 503へ変換し監査境界を維持する
-- [ ] R7PV-08: Worker adapterとruntime configへbindingを通す
-- [ ] R7PV-09: staging/test/production configへbindingとv2 migrationを追加する
-- [ ] R7PV-10: 値非露出・重複排除・fallback禁止を再レビューする
-- [ ] R7PV-11: 対象unit/workerd/関連回帰testを通す
-- [ ] R7PV-12: 生成型・bundle・production dry-runを通す
-- [ ] R7PV-13: backend最終品質gateを通す
-- [ ] R7PV-14: API・deployment・R7計画・進捗を同期する
-- [ ] R7PV-15: code/docsを分割commitしpush・PRを作成する
+- [x] R7PV-01: verifier port・DI・fallback禁止のRed testを追加する
+- [x] R7PV-02: DO RPC・strict result・非永続化のRed testを追加する
+- [x] R7PV-03: binding・v2 migration・生成型のRed testを追加する
+- [x] R7PV-04: portと別ファイルへ隔離したNode local adapterをGreen実装する
+- [x] R7PV-05: password verifier DOとcaller adapterをGreen実装する
+- [x] R7PV-06: auth serviceとapp dependencyへ必須注入する
+- [x] R7PV-07: verifier障害をfixed 503へ変換し監査境界を維持する
+- [x] R7PV-08: Worker adapterとruntime configへbindingを通す
+- [x] R7PV-09: staging/test/production configへbindingとv2 migrationを追加する
+- [x] R7PV-10: 値非露出・重複排除・fallback禁止を再レビューする
+- [x] R7PV-11: 対象unit/workerd/関連回帰testを通す
+- [x] R7PV-12: 生成型・bundle・production dry-runを通す
+- [x] R7PV-13: backend最終品質gateを通す
+- [x] R7PV-14: API・deployment・R7計画・進捗を同期する
+- [x] R7PV-15: code/docsを分割commitしpush・PRを作成する
 - [ ] R7PV-16: 別承認でFree plan・共有DO quota・resourceをread-only確認する
 - [ ] R7PV-17: 別承認でstaging deploy・valid login・11回目429・rollback証拠を取得する
 
@@ -523,3 +527,47 @@ npm run format:check
 本計画のrepository実装またはstaging証拠だけでR7全体を完了扱いにしない。
 R7-02、R7-10〜R7-20、WAF、監視、production分離、production preflight/smoke、rollback等は
 `r7-rate-limit-environment-gates`の正本に従って継続する。
+
+## 実装完了
+
+- 完了日: 2026-07-24
+- 実装ブランチ: `feature/r7-password-verification-free-worker`
+- PR: [#150](https://github.com/RitukoIsibasi0222/gensoko/pull/150)（develop向けReady）
+- 完了範囲: R7PV-01〜R7PV-15
+
+### TDD実施記録
+
+- Red: verifier port/DI、Worker fallback禁止、503時の状態非変更、DO strict result/非永続化、binding/v2 migration、bundle境界を未実装理由で失敗確認した。
+- Red追加: verifier障害前の期限切れlock更新、production一時configのentrypoint解決、production bundle metadata entrypointを回帰testで失敗確認した。
+- Green: port、Node adapter、DO class/caller adapter、auth/service/Worker DI、固定503、config/migration/生成型を実装し、対象testを通した。
+- Refactor: 503 helperと固定error/eventを共通化し、Node専用bcrypt adapterのbundle混入禁止、credential非露出、Worker fallbackなしを再確認した。
+
+### 計画からの変更点
+
+- verifier障害時にDB状態を完全に不変とするため、期限切れlockのresetをverifier結果確定後まで遅延した。誤password時の既存fail count契約と、成功時のtransaction内resetは維持した。
+- Node buildへWorker専用DO caller adapterを混入させないため、`backend/tsconfig.json`と`backend/tsconfig.workers.json`へruntime境界を明示した。
+- production dry-runの既存一時configが出力ディレクトリ基準でentrypointを解決していたため、repository root隣接のPID付き一時configへ変更し、`finally`削除を維持した。
+- bundle metadata parserへ`worker.ts`と`worker-production.ts`の2 entrypointだけを明示許可し、production bundleにも同じNode依存禁止contractを適用した。
+
+### 実際の変更ファイル
+
+- 上記「対象ファイル一覧」の41ファイルと`git diff --name-status develop...feature/r7-password-verification-free-worker`を一致させた。
+- Prisma schema/migrationは変更していない。Wrangler DO migrationは既存v1を変更せず、v2 `new_sqlite_classes`として追加した。
+
+### 最終品質gate
+
+| Gate | 結果 |
+| --- | --- |
+| `npm run test -- --run` | 1124 passed / 10 skipped |
+| `npm run test:workers` | 32 passed |
+| `npm run build` | 成功 |
+| `npm run workers:build` | 成功 |
+| `npm run workers:production:dry-run` | ローカルダミー値で成功 |
+| `npm run lint` | 成功 |
+| `npm run format:check` | 成功 |
+
+### 未実施・未完了
+
+- R7PV-16/17のFree plan・quota・resource preflight、staging deploy/request、valid login、11回目429、rollback証拠は実施していない。
+- staging/production request、GitHub Actions workflow dispatch、Cloudflare resource/binding/Secret/Environment Variableの実環境変更、dry-runを除く実環境deploy、DB schema/migration変更は実施していない。
+- R7-05、R7全体、v0.1公開gateは未完了のままとする。
