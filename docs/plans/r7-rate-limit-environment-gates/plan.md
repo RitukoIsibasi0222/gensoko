@@ -1282,6 +1282,61 @@ PII・Secret確認:
 - [x] account/zone/resource IDなし
 - [x] live tail一時ファイル削除済み
 
+### R7 Evidence E-08
+
+- 診断日時: 2026-07-24 11:26〜11:42 JST
+- environment: ローカルworkerd（`@cloudflare/vitest-pool-workers`）
+- 基準commit: `d6e228d9e765b752a28e08e8c71fa0f77682746c`
+- 実装branch: `feature/r7-login-cpu-diagnostics`
+- PR: [#148](https://github.com/RitukoIsibasi0222/gensoko/pull/148)
+- 診断計画: [`r7-login-cpu-diagnostics`](../r7-login-cpu-diagnostics/plan.md)
+- 外部操作境界:
+  - Cloudflare/GitHub Actions/staging/production request、workflow dispatch、DB、deployment、Environment Variable、Secret、Workers設定を変更していない
+  - Workers Paidへ変更せず、無料枠のローカル診断だけを実施
+  - bcrypt costを下げず、password securityを変更していない
+- TDD:
+  - Red: 診断module未実装のmodule解決errorを確認
+  - Green: 測定・固定分類・値非露出の新規12件を通過
+  - Refactor: 必須operation定義を共通化し、5操作を直列測定へ変更。新規・関連15件を通過
+- 最終workerd測定:
+
+| operation | sample数 | min | median | max |
+| --- | ---: | ---: | ---: | ---: |
+| `BCRYPT_COMPARE_COST_12` | 3 | 208ms | 209ms | 209ms |
+| `RATE_LIMIT_KEY_DIGEST_X3` | 5 | 0ms | 0ms | 0ms |
+| `JWT_SIGN` | 5 | 0ms | 0ms | 0ms |
+| `REFRESH_TOKEN_CRYPTO` | 5 | 0ms | 0ms | 0ms |
+| `APP_DEPENDENCY_CONSTRUCTION` | 5 | 0ms | 0ms | 2ms |
+
+- 固定classification: `BCRYPT_DOMINANT`
+- 測定解釈:
+  - 0msはCPU消費なしではなく、ローカルworkerd timerの今回の分解能未満を表す
+  - 絶対時間をCloudflare実環境の課金CPU値へ換算しない
+  - medianの10倍基準だけで固定分類し、複数回の対象・関連Workers testでも同じ分類を確認した
+- E-07との原因境界:
+  - E-07でmain stateless Workerの503が`exceededCpu`まで特定済み
+  - E-08ではvalid login pathのcode-level支配要因をcost 12の`bcrypt.compare`へ固定分類した
+  - rate-limit HMAC 3回、JWT、refresh token暗号処理、request単位app構築はbcryptと同じ桁の原因ではない
+  - DB・Durable ObjectのI/O待機をCPU原因とは扱わない
+- production graph非混入:
+  - `src/worker-production.ts`のローカルdry-run metadataは241 inputs、production entrypoint 1件、診断module input 0件
+  - 実production設定は使わず、一時固定設定を検証後に削除した
+- 最終品質gate:
+  - backend 1110 passed / 外部DB統合10件skipped
+  - Workers 27 passed
+  - build、Workers typecheck、ESLint、Prettier check成功
+- 判定: code-level CPU支配要因は`bcrypt.compare` cost 12。R7-05のstaging実HTTP 11回目429と安全な修正は未完了
+- 次工程: bcrypt costを下げず、Free Workerのvalid login CPU pathからpassword verificationを分離する無料枠構成を別計画・別レビューで設計する。同一条件のstaging auth再実行やdelay追加は行わない
+- R7状態: R7-02、R7-05、R7-10〜R7-20、R7全体、v0.1公開gateは未完了を維持する
+
+PII・Secret確認:
+
+- [x] raw password/hashなし
+- [x] email/user ID/IPなし
+- [x] token/Cookie/Authorizationなし
+- [x] Secret/resource IDなし
+- [x] 外部request/DB操作なし
+
 ## R7完了記録
 
 R7-01〜R7-20と13個の完了条件が揃うまで、このセクションへ完了日を記載しない。
