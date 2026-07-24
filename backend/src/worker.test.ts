@@ -31,6 +31,7 @@ function createTestAdapters(prisma: AppPrismaClient): WorkerRequestAdapters {
   return {
     prisma,
     mailSender: { send: async () => undefined },
+    passwordVerifier: { verify: async () => true },
     rateLimit: createRateLimitDependencies(),
   };
 }
@@ -56,6 +57,10 @@ function createValidEnvironment(): WorkerRuntimeEnvironment {
     MAIL_ALLOWED_RECIPIENTS: "tester@example.test",
     HYPERDRIVE: { connectionString: "postgresql://worker-request" },
     RATE_LIMIT_COUNTER: {
+      idFromName: vi.fn(),
+      get: vi.fn(),
+    },
+    PASSWORD_VERIFIER: {
       idFromName: vi.fn(),
       get: vi.fn(),
     },
@@ -127,6 +132,33 @@ describe("createWorkerHandler", () => {
     await expect(response.json()).resolves.toEqual({
       error: "一時的に利用できません。しばらく待ってから再試行してください",
     });
+  });
+
+  it("password verifier binding欠損はlocal fallbackせず固定503で閉じる", async () => {
+    const createRequestAdapters = vi.fn();
+    const worker = createWorkerHandler({
+      expectedTarget: "staging",
+      createRequestAdapters,
+    });
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const environment = {
+      ...createValidEnvironment(),
+      PASSWORD_VERIFIER: undefined,
+    };
+
+    try {
+      const response = await worker.fetch(createWorkerRequest("/api/v1/auth/login"), environment);
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get("Retry-After")).toBe("60");
+      await expect(response.json()).resolves.toEqual({
+        error: "一時的に利用できません。しばらく待ってから再試行してください",
+      });
+      expect(createRequestAdapters).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalledWith("password_verification_unavailable");
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it("同じfail-closed応答ではerror appを再構築しない", async () => {

@@ -11,6 +11,10 @@ const FORBIDDEN_DEPENDENCIES = [
     id: "memory-rate-limit-store",
     suffix: "/src/middleware/ratelimit/in-memory-store.ts",
   },
+  {
+    id: "node-bcrypt-password-verifier",
+    suffix: "/src/lib/bcrypt-password-verifier.ts",
+  },
 ] as const;
 
 function normalizeBundleInputPath(inputPath: string): string {

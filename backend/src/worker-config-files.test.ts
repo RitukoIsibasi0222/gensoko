@@ -69,10 +69,32 @@ describe("Workers staging build設定", () => {
       name: "RATE_LIMIT_COUNTER",
       class_name: "RateLimitCounter",
     });
+    expect(durableObjectBindings).toContainEqual({
+      name: "PASSWORD_VERIFIER",
+      class_name: "PasswordVerifierDurableObject",
+    });
+    expect(staging.migrations).toEqual([
+      { tag: "v1", new_sqlite_classes: ["RateLimitCounter"] },
+      { tag: "v2", new_sqlite_classes: ["PasswordVerifierDurableObject"] },
+    ]);
     expect(hyperdriveBindings).toContainEqual({
       binding: "HYPERDRIVE",
       id: "514d12df5d3544b79c269aeb95ce7dc5",
     });
+  });
+
+  it("local workerdも同じpassword verifier bindingとv2 migrationを持つ", () => {
+    const config = readJson("wrangler.test.jsonc");
+    const bindings = getObject(config.durable_objects).bindings as JsonObject[];
+
+    expect(bindings).toContainEqual({
+      name: "PASSWORD_VERIFIER",
+      class_name: "PasswordVerifierDurableObject",
+    });
+    expect(config.migrations).toEqual([
+      { tag: "v1", new_sqlite_classes: ["RateLimitCounter"] },
+      { tag: "v2", new_sqlite_classes: ["PasswordVerifierDurableObject"] },
+    ]);
   });
 
   it("Wrangler設定へsecret値や外部接続情報を保存しない", () => {
@@ -110,10 +132,18 @@ describe("Workers staging build設定", () => {
     expect(scripts["workers:build"]).toContain("workers:dry-run");
     expect(readFileSync("src/lib/wrangler-dry-run.ts", "utf8")).toContain('"--dry-run"');
     expect(nodeTypeScriptConfig.exclude).toEqual(
-      expect.arrayContaining(["src/worker.ts", "src/lib/worker-request-adapters.ts"]),
+      expect.arrayContaining([
+        "src/worker.ts",
+        "src/lib/worker-request-adapters.ts",
+        "src/lib/durable-object-password-verifier.ts",
+      ]),
     );
     expect(workersTypeScriptConfig.include).toEqual(
-      expect.arrayContaining(["src/worker.ts", "src/lib/worker-request-adapters.ts"]),
+      expect.arrayContaining([
+        "src/worker.ts",
+        "src/lib/worker-request-adapters.ts",
+        "src/lib/durable-object-password-verifier.ts",
+      ]),
     );
     expect(readFileSync("src/worker.ts", "utf8")).toMatch(/Required<\s*WorkerRuntimeEnvironment/);
     expect(readFileSync("src/lib/worker-request-adapters.ts", "utf8")).not.toContain(
@@ -139,6 +169,7 @@ describe("Workers staging build設定", () => {
       "MAIL_ALLOWED_RECIPIENTS",
       "HYPERDRIVE",
       "RATE_LIMIT_COUNTER",
+      "PASSWORD_VERIFIER",
     ]) {
       expect(generatedTypes).toContain(bindingName);
     }
@@ -148,11 +179,17 @@ describe("Workers staging build設定", () => {
     const packageJson = readJson("package.json");
     const scripts = getObject(packageJson.scripts);
     const productionWorker = readFileSync("src/worker-production.ts", "utf8");
+    const productionDryRunCli = readFileSync(
+      "src/scripts/runProductionWranglerDryRun.cli.ts",
+      "utf8",
+    );
 
     expect(productionWorker).toContain('expectedTarget: "production"');
     expect(productionWorker).not.toContain('expectedTarget: "staging"');
     expect(scripts["workers:production:dry-run"]).toContain("runProductionWranglerDryRun.cli.ts");
     expect(scripts["workers:production:dry-run"]).not.toContain("deploy");
     expect(readFileSync("wrangler.jsonc", "utf8")).not.toContain("worker-production.ts");
+    expect(productionDryRunCli).toContain("process.cwd()");
+    expect(productionDryRunCli).not.toContain("join(outputDirectory");
   });
 });

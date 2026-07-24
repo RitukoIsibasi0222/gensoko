@@ -1,12 +1,16 @@
 import { RateLimitCounter } from "./cloudflare/rate-limit-counter.js";
+import { PasswordVerifierDurableObject } from "./cloudflare/password-verifier.js";
 import type { WorkerRuntimeEnvironment } from "./lib/worker-config.js";
 import { createWorkerRequestAdapters } from "./lib/worker-request-adapters.js";
 import { createWorkerHandler } from "./worker-handler.js";
 
-export { RateLimitCounter };
+export { PasswordVerifierDurableObject, RateLimitCounter };
 
 type StagingWorkerRuntimeEnvironment = Required<
-  WorkerRuntimeEnvironment<DurableObjectNamespace<RateLimitCounter>>
+  WorkerRuntimeEnvironment<
+    DurableObjectNamespace<RateLimitCounter>,
+    DurableObjectNamespace<PasswordVerifierDurableObject>
+  >
 >;
 
 function requireStagingWorkerEnvironment(

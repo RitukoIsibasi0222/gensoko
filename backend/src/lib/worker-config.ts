@@ -1,5 +1,6 @@
 import { getFrontendUrl, getRateLimitConfig } from "./config.js";
 import { normalizeMailAddress, parseSafeHttpsUrl } from "./mail-runtime-validation.js";
+import { PasswordVerificationUnavailableError } from "./password-verifier.js";
 
 const INVALID_WORKER_RUNTIME_CONFIG_MESSAGE = "Workers runtime設定が不正です";
 const MIN_PRODUCTION_JWT_SECRET_LENGTH = 64;
@@ -27,6 +28,8 @@ export type DurableObjectNamespaceBindingConstraint = Readonly<{
 export type WorkerRuntimeEnvironment<
   TRateLimitNamespace extends DurableObjectNamespaceBindingConstraint =
     DurableObjectNamespaceBinding,
+  TPasswordVerifierNamespace extends DurableObjectNamespaceBindingConstraint =
+    DurableObjectNamespaceBinding,
 > = Readonly<{
   DEPLOYMENT_ENVIRONMENT?: string;
   DATABASE_TARGET?: string;
@@ -42,18 +45,23 @@ export type WorkerRuntimeEnvironment<
   MAIL_TIMEOUT_MS?: string;
   HYPERDRIVE?: HyperdriveBinding;
   RATE_LIMIT_COUNTER?: TRateLimitNamespace;
+  PASSWORD_VERIFIER?: TPasswordVerifierNamespace;
 }>;
 
 export type WorkerRuntimeConfigOptions<
   TRateLimitNamespace extends DurableObjectNamespaceBindingConstraint =
     DurableObjectNamespaceBinding,
+  TPasswordVerifierNamespace extends DurableObjectNamespaceBindingConstraint =
+    DurableObjectNamespaceBinding,
 > = Readonly<{
   expectedTarget: WorkerDeploymentTarget;
-  environment: WorkerRuntimeEnvironment<TRateLimitNamespace>;
+  environment: WorkerRuntimeEnvironment<TRateLimitNamespace, TPasswordVerifierNamespace>;
 }>;
 
 export type WorkerRuntimeConfig<
   TRateLimitNamespace extends DurableObjectNamespaceBindingConstraint =
+    DurableObjectNamespaceBinding,
+  TPasswordVerifierNamespace extends DurableObjectNamespaceBindingConstraint =
     DurableObjectNamespaceBinding,
 > = Readonly<{
   target: WorkerDeploymentTarget;
@@ -64,6 +72,9 @@ export type WorkerRuntimeConfig<
     store: "durable-object";
     keySecret: string;
     namespace: TRateLimitNamespace;
+  }>;
+  passwordVerifier: Readonly<{
+    namespace: TPasswordVerifierNamespace;
   }>;
   hyperdrive: HyperdriveBinding;
   mail: Readonly<{
@@ -154,10 +165,20 @@ function validateHyperdriveBinding(binding: HyperdriveBinding | undefined): Hype
 }
 
 function validateDurableObjectNamespaceBinding<
-  TRateLimitNamespace extends DurableObjectNamespaceBindingConstraint,
->(binding: TRateLimitNamespace | undefined): TRateLimitNamespace {
+  TNamespace extends DurableObjectNamespaceBindingConstraint,
+>(binding: TNamespace | undefined): TNamespace {
   if (!binding || typeof binding.idFromName !== "function" || typeof binding.get !== "function") {
     rejectInvalidWorkerRuntimeConfig();
+  }
+
+  return binding;
+}
+
+function validatePasswordVerifierNamespaceBinding<
+  TNamespace extends DurableObjectNamespaceBindingConstraint,
+>(binding: TNamespace | undefined): TNamespace {
+  if (!binding || typeof binding.idFromName !== "function" || typeof binding.get !== "function") {
+    throw new PasswordVerificationUnavailableError();
   }
 
   return binding;
@@ -169,10 +190,15 @@ function validateDurableObjectNamespaceBinding<
 export function getWorkerRuntimeConfig<
   TRateLimitNamespace extends DurableObjectNamespaceBindingConstraint =
     DurableObjectNamespaceBinding,
+  TPasswordVerifierNamespace extends DurableObjectNamespaceBindingConstraint =
+    DurableObjectNamespaceBinding,
 >({
   expectedTarget,
   environment,
-}: WorkerRuntimeConfigOptions<TRateLimitNamespace>): WorkerRuntimeConfig<TRateLimitNamespace> {
+}: WorkerRuntimeConfigOptions<
+  TRateLimitNamespace,
+  TPasswordVerifierNamespace
+>): WorkerRuntimeConfig<TRateLimitNamespace, TPasswordVerifierNamespace> {
   try {
     const target = requireString(environment.DEPLOYMENT_ENVIRONMENT);
     const databaseTarget = requireString(environment.DATABASE_TARGET);
@@ -208,6 +234,9 @@ export function getWorkerRuntimeConfig<
 
     const hyperdrive = validateHyperdriveBinding(environment.HYPERDRIVE);
     const rateLimitCounter = validateDurableObjectNamespaceBinding(environment.RATE_LIMIT_COUNTER);
+    const passwordVerifier = validatePasswordVerifierNamespaceBinding(
+      environment.PASSWORD_VERIFIER,
+    );
 
     return {
       target: expectedTarget,
@@ -218,6 +247,9 @@ export function getWorkerRuntimeConfig<
         store: "durable-object",
         keySecret: rateLimitConfig.keySecret,
         namespace: rateLimitCounter,
+      },
+      passwordVerifier: {
+        namespace: passwordVerifier,
       },
       hyperdrive,
       mail: {
@@ -231,7 +263,10 @@ export function getWorkerRuntimeConfig<
         timeoutMs: parseMailTimeoutMs(environment.MAIL_TIMEOUT_MS),
       },
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof PasswordVerificationUnavailableError) {
+      throw error;
+    }
     rejectInvalidWorkerRuntimeConfig();
   }
 }

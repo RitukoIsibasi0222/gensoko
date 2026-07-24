@@ -40,6 +40,10 @@ vi.mock("hono/jwt", () => ({
 
 import bcrypt from "bcryptjs";
 import { prisma } from "../../lib/prisma.js";
+import {
+  PasswordVerificationUnavailableError,
+  type PasswordVerifier,
+} from "../../lib/password-verifier.js";
 const authRouter = createAuthTestRouter(prisma as never);
 const productionAuthRouter = createAuthTestRouter(prisma as never, { isProduction: true });
 import { STRONG_PASSWORD_73_BYTES } from "../../test/password-byte-boundary-fixtures.js";
@@ -91,6 +95,35 @@ afterEach(() => {
 });
 
 describe("POST /auth/login", () => {
+  it("正しいpasswordをinjected verifierへ1回だけ渡す", async () => {
+    const verify = vi.fn<PasswordVerifier["verify"]>().mockResolvedValue(true);
+    const verifierApp = new Hono();
+    verifierApp.route(
+      "/auth",
+      createAuthTestRouter(prisma as never, { passwordVerifier: { verify } }),
+    );
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(ACTIVE_USER as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+    vi.mocked(prisma.userStats.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.userStats.upsert).mockResolvedValue({} as never);
+    vi.mocked(prisma.refreshToken.create).mockResolvedValue({} as never);
+
+    const res = await verifierApp.request("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "taro@example.com", password: "Pass1234!" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(verify).toHaveBeenCalledOnce();
+    expect(verify).toHaveBeenCalledWith({
+      userId: ACTIVE_USER.id,
+      password: "Pass1234!",
+      passwordHash: ACTIVE_USER.passwordHash,
+    });
+    expect(bcrypt.compare).not.toHaveBeenCalled();
+  });
+
   it("正常系: 正しい認証情報で 200 と accessToken・user を返す", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue(ACTIVE_USER as never);
     vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
@@ -234,6 +267,67 @@ describe("POST /auth/login", () => {
     expect(bcrypt.compare).not.toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["存在しないaccount", null, 401],
+    ["停止中account", { ...ACTIVE_USER, isActive: false }, 403],
+    ["未確認account", { ...ACTIVE_USER, emailVerified: false }, 403],
+    ["lock中account", { ...ACTIVE_USER, lockedUntil: new Date(Date.now() + 15 * 60 * 1000) }, 401],
+  ])("%sではinjected verifierを呼ばない", async (_name, user, status) => {
+    const verify = vi.fn<PasswordVerifier["verify"]>();
+    const verifierApp = new Hono();
+    verifierApp.route(
+      "/auth",
+      createAuthTestRouter(prisma as never, { passwordVerifier: { verify } }),
+    );
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(user as never);
+
+    const res = await verifierApp.request("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "taro@example.com", password: "Pass1234!" }),
+    });
+
+    expect(res.status).toBe(status);
+    expect(verify).not.toHaveBeenCalled();
+  });
+
+  it("verifier障害は固定503とRetry-Afterを返し認証状態を変更しない", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const verify = vi
+      .fn<PasswordVerifier["verify"]>()
+      .mockRejectedValue(new PasswordVerificationUnavailableError());
+    const verifierApp = new Hono();
+    verifierApp.route(
+      "/auth",
+      createAuthTestRouter(prisma as never, { passwordVerifier: { verify } }),
+    );
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      ...ACTIVE_USER,
+      loginFailCount: 5,
+      lockedUntil: new Date(Date.now() - 1_000),
+    } as never);
+
+    const res = await verifierApp.request("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "taro@example.com", password: "Pass1234!" }),
+    });
+
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe("60");
+    await expect(res.json()).resolves.toEqual({
+      error: "一時的に利用できません。しばらく待ってから再試行してください",
+    });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    expect(prisma.userStats.upsert).not.toHaveBeenCalled();
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    expect(prisma.auditLog.create).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledWith("password_verification_unavailable");
+    consoleErrorSpy.mockRestore();
   });
 
   it("異常系: パスワードが誤りの場合は 401 を返す", async () => {

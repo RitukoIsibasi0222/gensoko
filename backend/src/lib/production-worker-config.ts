@@ -125,10 +125,16 @@ export function buildProductionWorkerConfig(
       FRONTEND_URL: frontendOrigin,
     },
     durable_objects: {
-      bindings: [{ name: "RATE_LIMIT_COUNTER", class_name: "RateLimitCounter" }],
+      bindings: [
+        { name: "RATE_LIMIT_COUNTER", class_name: "RateLimitCounter" },
+        { name: "PASSWORD_VERIFIER", class_name: "PasswordVerifierDurableObject" },
+      ],
     },
     hyperdrive: [{ binding: "HYPERDRIVE", id: hyperdriveId }],
-    migrations: [{ tag: "v1", new_sqlite_classes: ["RateLimitCounter"] }],
+    migrations: [
+      { tag: "v1", new_sqlite_classes: ["RateLimitCounter"] },
+      { tag: "v2", new_sqlite_classes: ["PasswordVerifierDurableObject"] },
+    ],
   } as const;
 }
 

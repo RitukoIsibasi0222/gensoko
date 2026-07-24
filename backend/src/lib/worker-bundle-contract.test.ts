@@ -15,13 +15,15 @@ describe("Workers bundle contract", () => {
       "node_modules/pg/lib/index.js",
       "src/lib/fetch-mail-sender.ts",
       "src/middleware/rateLimit/durable-object-store.ts",
+      "src/lib/durable-object-password-verifier.ts",
+      "src/cloudflare/password-verifier.ts",
     ];
 
     expect(findForbiddenWorkerBundleDependencies(inputs)).toEqual([]);
     expect(() => assertWorkerBundleInputs(inputs)).not.toThrow();
   });
 
-  it("Node entrypoint・Nodemailer・SMTP・memory fallback・Node Prisma singletonを拒否する", () => {
+  it("Node entrypoint・Nodemailer・SMTP・memory fallback・Node Prisma・bcrypt adapterを拒否する", () => {
     const inputs = [
       "src/index.ts",
       "node_modules/@hono/node-server/dist/index.mjs",
@@ -29,6 +31,7 @@ describe("Workers bundle contract", () => {
       "src/lib/mail.ts",
       "src/lib/prisma.ts",
       "src/middleware/rateLimit/in-memory-store.ts",
+      "src/lib/bcrypt-password-verifier.ts",
     ];
 
     expect(findForbiddenWorkerBundleDependencies(inputs)).toEqual([
@@ -38,6 +41,7 @@ describe("Workers bundle contract", () => {
       "node-mail-adapter",
       "node-prisma-singleton",
       "memory-rate-limit-store",
+      "node-bcrypt-password-verifier",
     ]);
     expect(() => assertWorkerBundleInputs(inputs)).toThrow(
       "Workers bundleにNode専用依存が含まれています",
