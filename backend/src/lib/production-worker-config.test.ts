@@ -105,6 +105,9 @@ describe("production Worker config", () => {
       "MAIL_API_KEY",
       "postgresql://",
       INPUT.stagingHyperdriveId,
+      "worker-staging-rollback-baseline",
+      "rollback_mode",
+      "bcrypt-password-verifier",
     ]) {
       expect(serialized).not.toContain(forbidden);
     }

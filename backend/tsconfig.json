@@ -17,6 +17,8 @@
     "src/cloudflare/**",
     "src/worker.ts",
     "src/worker-production.ts",
+    "src/worker-staging-rollback-baseline.ts",
+    "src/worker-staging-rollback-baseline.test.ts",
     "src/lib/worker-request-adapters.ts",
     "src/lib/worker-request-adapters.test.ts",
     "src/lib/durable-object-password-verifier.ts",
