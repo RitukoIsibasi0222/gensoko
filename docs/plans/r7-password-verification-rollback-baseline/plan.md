@@ -242,6 +242,7 @@ baselineはv2 binding/class lifecycleを保持するため、local adapterがbin
 | `backend/src/lib/staging-rollback-worker-config.test.ts`           | 新規     | entrypoint以外同一、staging限定、v1/v2固定test     |
 | `backend/src/scripts/runStagingRollbackBaselineDryRun.cli.ts`      | 新規     | 一時config生成・dry-run・確実な削除                |
 | `backend/src/scripts/runStagingRollbackBaselineDryRun.cli.test.ts` | 新規     | dry-run成功・失敗時の削除と固定error契約           |
+| `backend/src/lib/worker-bundle-profile.ts`                         | 新規     | bundle profileとentrypoint対応の一元管理           |
 | `backend/src/lib/worker-bundle-contract.ts`                        | 修正     | profile別default denyとbaseline限定許可            |
 | `backend/src/lib/worker-bundle-contract.test.ts`                   | 修正     | 通常/production混入拒否、baseline限定許可          |
 | `backend/src/lib/worker-bundle-metadata.ts`                        | 修正     | baseline entrypointをprofile付きで検証             |
@@ -250,6 +251,7 @@ baselineはv2 binding/class lifecycleを保持するため、local adapterがbin
 | `backend/src/worker-config-files.test.ts`                          | 修正     | 常設configがbaseline entrypointを参照しない契約    |
 | `backend/src/lib/production-worker-config.test.ts`                 | 修正     | production生成物へbaseline path/modeがない契約     |
 | `backend/tsconfig.workers.json`                                    | 修正     | baseline専用Workers graphを型検査対象へ追加        |
+| `backend/tsconfig.json`                                            | 修正     | Node buildからbaseline Workers entrypointを分離    |
 | `backend/package.json`                                             | 修正     | baseline dry-run/build検証script                   |
 | `docs/11_deployment.md`                                            | 修正     | post-v2 baseline rollout/rollback runbook          |
 | `docs/plans/r7-password-verification-free-worker/plan.md`          | 修正     | pre-v2 rollback記述を互換baseline依存へ訂正        |
@@ -365,17 +367,17 @@ baselineはv2 binding/class lifecycleを保持するため、local adapterがbin
 | R7PVRB-14 | baseline先行deploy・通常版deploy                    | staging             | 高     | 別承認   |
 | R7PVRB-15 | R7PV-17証拠・rollback drill・通常版復旧             | staging             | 高     | 別承認   |
 
-- [ ] R7PVRB-01: baseline明示DI・自動fallback禁止のRed testを追加する
-- [ ] R7PVRB-02: profile別bundle・metadata境界のRed testを追加する
-- [ ] R7PVRB-03: v2同一config・staging限定・一時fileのRed testを追加する
-- [ ] R7PVRB-04: baseline entrypointで既存local adapterを明示DIする
-- [ ] R7PVRB-05: profile別bundle contract/CLIをGreen実装する
-- [ ] R7PVRB-06: baseline config builderをGreen実装する
-- [ ] R7PVRB-07: baseline dry-run CLIと一時file削除をGreen実装する
-- [ ] R7PVRB-08: default deny・値非露出・重複を再レビューする
-- [ ] R7PVRB-09: 対象unit/config/bundle/Workers回帰testを通す
-- [ ] R7PVRB-10: backend最終品質gateを通す
-- [ ] R7PVRB-11: deployment・R7計画・進捗を同期する
+- [x] R7PVRB-01: baseline明示DI・自動fallback禁止のRed testを追加する
+- [x] R7PVRB-02: profile別bundle・metadata境界のRed testを追加する
+- [x] R7PVRB-03: v2同一config・staging限定・一時fileのRed testを追加する
+- [x] R7PVRB-04: baseline entrypointで既存local adapterを明示DIする
+- [x] R7PVRB-05: profile別bundle contract/CLIをGreen実装する
+- [x] R7PVRB-06: baseline config builderをGreen実装する
+- [x] R7PVRB-07: baseline dry-run CLIと一時file削除をGreen実装する
+- [x] R7PVRB-08: default deny・値非露出・重複を再レビューする
+- [x] R7PVRB-09: 対象unit/config/bundle/Workers回帰testを通す
+- [x] R7PVRB-10: backend最終品質gateを通す
+- [x] R7PVRB-11: deployment・R7計画・進捗を同期する
 - [ ] R7PVRB-12: code/docsを分割commitしpush・PRを作成する
 - [ ] R7PVRB-13: 別承認でreview済みSHA・v2構成・version lifecycleをread-only再確認する
 - [ ] R7PVRB-14: 別承認でbaselineを先行deployし、同一SHAの通常版をdeployする

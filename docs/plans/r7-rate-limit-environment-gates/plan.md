@@ -1340,13 +1340,24 @@ PII・Secret確認:
 ### R7 password verification repository実装
 
 - 実装branch: `feature/r7-password-verification-free-worker`
-- 対象: R7PV-01〜R7PV-15。R7PV-16/17は別承認の実環境作業として未実施
+- 対象: R7PV-01〜R7PV-15。R7PV-16のFree plan・共有DO quota・staging resource・review済みSHAはread-only確認済み。R7PV-17は未実施
 - bcrypt cost 12を維持し、main Workerのvalid loginからdirect `bcrypt.compare`を除去した
 - account単位のstorage/alarm/cacheなしSQLite-backed Password Verifier DO、strict boolean RPC、固定503、Worker fallback禁止をTDD実装した
 - 既存v1 migrationを不変のままv2 `new_sqlite_classes`を追加し、staging/test/production generatorと生成型を同期した
 - raw password、hash、user ID、token、Cookie、DB URL、raw errorをlog、response、storageへ出力しない
 - Cloudflare resource/binding/Secret/Environment Variable変更、workflow dispatch、deploy、staging/production request、DB schema/migration変更は実施していない
 - R7-05、R7全体、v0.1公開gateは未完了を維持する
+
+### R7 password verification rollback互換baseline repository実装
+
+- 実装branch: `feature/r7-password-verification-rollback-baseline`
+- 対象: R7PVRB-01〜R7PVRB-12。R7PVRB-13〜15は別承認のCloudflare/staging作業として未実施
+- baseline専用entrypointだけが既存cost 12 local bcrypt adapterを明示DIし、通常staging/productionはDO verifierを維持する。自動fallbackや環境変数mode切替は追加していない
+- 通常staging、production、baselineをprofile別bundle contractで分離し、通常/productionへのbaseline entrypoint・local bcrypt混入を拒否する
+- checked-in `wrangler.jsonc`を変更せず、strict検証した一時configだけが通常stagingと同じWorker名、binding、Hyperdrive、v1/v2 migrationをbaseline entrypointへ接続する。production config/entrypointにはbaseline pathやmodeを含めない
+- pre-v2 versionへrollbackせず、別承認で同一review済みcommitのbaseline先行deploy、通常版deploy、post-v2 version間rollback drill、通常版復旧の順に実施する
+- Cloudflare resource変更、deploy、version rollback、staging/production request、workflow dispatch、fixture・flag操作、namespace cleanup、Prisma schema/migration変更は実施していない
+- R7PVRB-13〜15、R7PV-17、R7-05、R7全体、v0.1公開gateは未完了を維持する
 
 ## R7完了記録
 
