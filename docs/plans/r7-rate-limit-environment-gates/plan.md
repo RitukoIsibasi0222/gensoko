@@ -781,7 +781,7 @@ R7実行ごとに次を同期する。
 - 実装branch: `feature/r7-auth-503-safe-classification`
 - base `develop` SHA: `647ea6b17c6994e2e953b6c26224173d658eac5c`
 - commit: `0247510`（Red contract test）、`a9cb3db`（Green/Refactor実装）
-- PR: [#144](https://github.com/RitukoIsibasi0222/gensoko/pull/144)（追加review対応済み・review待ち）
+- PR: [#144](https://github.com/RitukoIsibasi0222/gensoko/pull/144)（2026-07-24に`develop`へmerge、merge commit `628ce06f90d150ae3dd3eb7e8e6c52ee42deace8`）
 - TDD Red: runner 49 tests中18 testsが固定class欠如とbody二重cancelを理由に失敗し、CLI 4 tests中1 testが固定class未出力を理由に失敗した
 - TDD Green/Refactor: 完全なHono 503公開契約だけを`SAFE_JSON_503_CONTRACT`、非JSONまたは契約不一致503を`EDGE_OR_UNCLASSIFIED_503`、その他の想定外statusを`OTHER_UNEXPECTED_STATUS`へ分類する。request失敗はclass `null`を維持する
 - 回帰確認: PR #144追加review対応後、runner/CLI/workflow 3 files / 65 tests成功。backend 104 files / 1109 tests成功（外部DB用10 tests skip）、Workers runtime 2 files / 15 tests、Node/Workers TypeScript build、ESLint、Prettier check成功
@@ -791,6 +791,15 @@ R7実行ごとに次を同期する。
 - 非変更範囲: workflow、API、Worker、rate-limit middleware、Durable Object、DB、Cloudflare設定、frontend、production resourceを変更していない
 - 実環境操作: staging HTTP request、fixture、Environment Variable、DB、workflow dispatchを行っておらず、第三runは未実施
 - 判定: 過去のrun 30010266297はbody/headerを記録していないため新classを遡及適用できない。R7-04/R7-05、R7-02、R7-06以降、R7全体は未完了を維持する
+
+### PR #144 merge後の第三auth runと後続詳細分類
+
+- 第三run: [30056294929](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30056294929)を2026-07-24 09:28〜09:30 JSTに`develop` SHA `628ce06f90d150ae3dd3eb7e8e6c52ee42deace8`で1回だけ実施した
+- 実結果: auth許可request 1〜5回目は通過し、6回目のstatus 503を`EDGE_OR_UNCLASSIFIED_503`として安全停止した。11回目429へは到達していない
+- cleanup: fixture prepare 2件、main cleanup 2件、recovery cleanup追加削除0件。fixture flagは`false`へ復旧して読み取り確認した
+- task判定: 新しいG5/G6承認とfixture lifecycleが成立したためR7-04は完了する。429境界未到達のためR7-05とR7全体は未完了を維持する
+- 診断限界: PR #144の固定classは公開503契約不一致までしか示さず、第三runのどの契約が不一致だったか、内部原因が何かは特定できない
+- 後続task: [`r7-auth-503-contract-detail`](../r7-auth-503-contract-detail/plan.md)で、実環境操作を増やさず固定契約不一致箇所だけをTDD分類する。第三runへ新分類を遡及適用しない
 
 #### 初回失敗後の診断変更ファイル
 
@@ -848,7 +857,7 @@ R7実行ごとに次を同期する。
 - [x] R7-01: 基準SHAとrepository contract testを固定する
 - [ ] R7-02: Cloudflare plan/zone/hostname/権限を確認する
 - [x] R7-03: staging resource分離とconfigを確認する
-- [ ] R7-04: synthetic fixtureとcleanupを承認する
+- [x] R7-04: synthetic fixtureとcleanupを承認する
 - [ ] R7-05: auth 11回目を確認する
 - [ ] R7-06: questions 31回目を確認する
 - [ ] R7-07: game submit 21回目を確認する
@@ -1081,6 +1090,62 @@ PII・Secret確認:
 - 残余リスク: 許可request 5回目の503原因は未特定。R7-04/R7-05は未完了を維持し、読み取り調査または別TDD修正タスクのreview後に新しい承認で別runを検討する
 - 次工程: [`r7-auth-503-safe-classification`](../r7-auth-503-safe-classification/plan.md) — safe JSON 503とedge/non-JSONまたは契約不一致503を固定enumで区別するTDD実装と初回review対応は完了し、PR #144でreview待ち。過去runへの遡及判定はせず、mergeと新しい実環境承認まで第三runは行わない
 - 添付先: [GitHub Actions run 30010266297](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30010266297)
+- production操作: URL、DB、Cloudflare binding/Secret、WAF、deploymentを変更していない
+
+PII・Secret確認:
+
+- [x] raw IPなし
+- [x] email/user IDなし
+- [x] digestなし
+- [x] token/Cookie/Authorizationなし
+- [x] password/bodyなし
+- [x] account/zone/resource IDなし
+
+### R7 Evidence E-05
+
+- 実行日時: 2026-07-24 09:28:44〜09:30:04 JST
+- 承認実行時間帯: 2026-07-24 09:28〜09:45 JST
+- environment: staging
+- 基準commit: `628ce06f90d150ae3dd3eb7e8e6c52ee42deace8`
+- 対象Worker version: staging Worker（versionは本runで再取得していない）
+- 対象policy/rule: auth / 期待policy `AUTH_IP`。429へ到達していないため観測policyは未成立
+- 実行者: Codex
+- 承認者: `RitukoIsibasi0222`
+- 変更記録: `R7-G5-G6-AUTH3-20260724-0925`
+- 事前gate:
+  - PR #144が`develop`へmerge済みで、merge commitと最新`develop` SHAが一致
+  - PR #144のchecks成功、workflow active、Environment許可branchは`develop`
+  - `BATCH_ENVIRONMENT=staging`、fixture flag `false`、必要なEnvironment Secret名のpresenceを確認。Secret値は取得していない
+  - repository全体でqueued/in-progress Actions runなし、`gensoko-batch-jobs`競合なし
+  - 固定staging URL、staging DB target、workflow inputs、main/recovery cleanup契約を再確認
+  - 新しいG5/G6承認、新しい実行時間帯、停止時通知先、`approved_by`、`change_record`を固定
+  - fixture flagを一時`true`化し、読み取り確認後に1回だけdispatch
+- 手順:
+  - `case=auth`、最新40桁SHA、固定confirmation、承認者、変更記録を入力し、`develop` refから1回だけdispatch
+  - exact synthetic Admin/User fixtureをprepare
+  - auth境界runnerを実行
+  - main cleanupと非成功時recovery cleanupを確認
+  - fixture flagを`false`へ復旧してGitHub APIで読み取り確認
+- 期待結果: 正しいlogin 1〜10回目を許可し、11回目で`AUTH_IP`のHono 429契約を確認する
+- 実結果:
+  - branch/SHA/approval/Environment/DB target gate成功
+  - fixture prepare成功、2件作成・置換0件
+  - auth許可request 1〜5回目はvalidatorを通過
+  - 6回目で`AUTH_ALLOWED_REQUEST` / `RESPONSE_CONTRACT_FAILED` / status 503 / `EXPECTED_STATUS` / `EDGE_OR_UNCLASSIFIED_503`として安全に停止
+  - 11回目へ到達せず、429と`AUTH_IP`観測証拠は未成立
+  - main cleanup成功、固定fixture 2件削除
+  - recovery cleanup成功、追加削除0件
+- status/header/body要約: 許可request 6回目のstatus 503と固定response classだけを記録。response body、header値、credential、識別子、raw例外は記録していない。第三run時点の実装では詳細な不一致契約を保持しないため、後続分類を遡及適用しない
+- Cloudflare metrics/Security Events確認時間帯: 未実施。R7-02 blockedを維持
+- cleanup: main/recoveryとも成功。workflow上のexact fixture残存なし
+- rollback: fixture flagを`false`へ復旧し、GitHub APIで読み取り確認
+- 停止通知: このCodexタスクへ即時報告。外部通知は行っていない
+- 判定: R7-04 pass / R7-05 fail（未完了）
+- 再実行判断: 想定外503の停止条件に該当するため、同一条件で再実行しない。第四runは未承認・未実施
+- 代替証拠: repository contract testは成功しているが、staging実HTTPの11回目429証拠の代替にはしない
+- 残余リスク: 許可request 6回目の503契約不一致箇所と内部原因は未特定。R7-05、R7-02、R7全体は未完了を維持する
+- 次工程: [`r7-auth-503-contract-detail`](../r7-auth-503-contract-detail/plan.md) — raw値を記録せず、503公開契約の不一致箇所だけを固定値で分類する別TDD task。実環境操作やdelay追加は含めない
+- 添付先: [GitHub Actions run 30056294929](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30056294929)
 - production操作: URL、DB、Cloudflare binding/Secret、WAF、deploymentを変更していない
 
 PII・Secret確認:

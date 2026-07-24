@@ -419,7 +419,7 @@ npm run format:check
 - base `develop` SHA: `647ea6b17c6994e2e953b6c26224173d658eac5c`
 - Red test commit: `0247510`（`test: R7 auth 503安全分類のRed契約を追加`）
 - Green/Refactor commit: `a9cb3db`（`fix: R7 auth 503応答を固定契約で安全に分類`）
-- PR: [#144](https://github.com/RitukoIsibasi0222/gensoko/pull/144)（review待ち）
+- PR: [#144](https://github.com/RitukoIsibasi0222/gensoko/pull/144)（2026-07-24に`develop`へmerge、merge commit `628ce06f90d150ae3dd3eb7e8e6c52ee42deace8`）
 
 ### TDD実測
 
@@ -487,3 +487,13 @@ npm run format:check
 - 想定外503時に再実行しない停止条件
 
 Workers Logs/metricsを使って内部原因まで切り分ける場合は、R7-04/R7-05の範囲を越えるため、G4およびR7-11/R7-15として別途承認する。
+
+## merge後の第三auth run
+
+- PR #144 merge後、新しいG5/G6承認のもと、[run 30056294929](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30056294929)を`develop` SHA `628ce06f90d150ae3dd3eb7e8e6c52ee42deace8`で1回だけ実施した
+- auth許可request 1〜5回目は通過し、6回目のstatus 503を`EDGE_OR_UNCLASSIFIED_503`として安全停止した
+- fixture prepare 2件、main cleanup 2件、recovery cleanup追加削除0件で、fixture flagは`false`へ復旧確認した
+- 新しいG5/G6承認とfixture lifecycleが成立したためR7-04は完了する。11回目429へ未到達のためR7-05とR7全体は未完了を維持する
+- 本実装の固定classは503公開契約不一致までを示し、どの契約が不一致だったか、内部原因が何かは示さない
+- 第三run時点でbody/headerを保持していないため、後続の詳細分類をこのrunへ遡及適用しない
+- 後続task: [`r7-auth-503-contract-detail`](../r7-auth-503-contract-detail/plan.md)で、raw値を保持せず不一致箇所だけを固定値で追加分類する。実環境再実行、delay追加、Environment/DB/Cloudflare変更は含めない
