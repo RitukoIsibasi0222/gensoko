@@ -133,7 +133,7 @@ export class StagingRateLimitEvidenceExecutionError extends Error {
 - [x] R7C-06: 対象・関連testを通す
 - [x] R7C-07: backend最終品質gateを通す
 - [x] R7C-08: 第三run・進捗・計画を同期する
-- [ ] R7C-09: 分割commit・push・PRを作成する
+- [x] R7C-09: 分割commit・push・PRを作成する
 
 ### タブ区切り
 
@@ -180,7 +180,10 @@ R7C-09	分割commit・push・PR	Git/GitHub	中
 - 実装日: 2026-07-24
 - 実装branch: `feature/r7-auth-503-contract-detail`
 - base `develop` SHA: `628ce06f90d150ae3dd3eb7e8e6c52ee42deace8`
-- PR: 作成後に追記する
+- Red test commit: `905fe42`（`test: R7 auth 503契約不一致詳細のRed契約を追加`）
+- Green/Refactor commit: `fa5bd21`（`fix: R7 auth 503契約不一致箇所を安全に分類`）
+- 文書同期commit: `92d0668`（`docs: R7第三auth runと503詳細分類を同期`）
+- PR: [#145](https://github.com/RitukoIsibasi0222/gensoko/pull/145)（review待ち）
 
 ### TDD実測
 
