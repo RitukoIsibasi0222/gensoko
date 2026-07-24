@@ -30,6 +30,16 @@ describe("production Worker config", () => {
         FRONTEND_URL: "https://app.example.com",
       },
       hyperdrive: [{ binding: "HYPERDRIVE", id: "a".repeat(32) }],
+      durable_objects: {
+        bindings: [
+          { name: "RATE_LIMIT_COUNTER", class_name: "RateLimitCounter" },
+          { name: "PASSWORD_VERIFIER", class_name: "PasswordVerifierDurableObject" },
+        ],
+      },
+      migrations: [
+        { tag: "v1", new_sqlite_classes: ["RateLimitCounter"] },
+        { tag: "v2", new_sqlite_classes: ["PasswordVerifierDurableObject"] },
+      ],
     });
   });
 

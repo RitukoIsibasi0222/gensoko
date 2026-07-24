@@ -1,5 +1,6 @@
 import type { MailSender } from "./mail-sender.js";
 import type { AppPrismaClient } from "./prisma-client.js";
+import type { PasswordVerifier } from "./password-verifier.js";
 import { createSerializableTransactionRunner } from "./serializable-transaction-core.js";
 import { createAuthMiddlewares } from "../middleware/auth/index.js";
 import { createAdminService } from "../services/admin.service.js";
@@ -17,6 +18,7 @@ export type CreateAppDependenciesOptions = Readonly<{
   jwtSecret: string;
   frontendUrl: string;
   mailFrom: string;
+  passwordVerifier: PasswordVerifier;
 }>;
 
 export function createAppDependencies({
@@ -25,6 +27,7 @@ export function createAppDependencies({
   jwtSecret,
   frontendUrl,
   mailFrom,
+  passwordVerifier,
 }: CreateAppDependenciesOptions) {
   const auditService = createAuditService(prisma);
   const runSerializableTransaction = createSerializableTransactionRunner(prisma);
@@ -42,6 +45,7 @@ export function createAppDependencies({
         frontendUrl,
         mailFrom,
         auditService,
+        passwordVerifier,
       }),
       elementMastery: createElementMasteryService(prisma),
       game: createGameService(prisma),

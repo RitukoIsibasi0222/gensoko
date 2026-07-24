@@ -5,6 +5,7 @@ import { sign } from "hono/jwt";
 import type { MailSender } from "../lib/mail-sender.js";
 import { normalizePassword } from "../lib/normalize.js";
 import { hashPassword } from "../lib/password.js";
+import type { PasswordVerifier } from "../lib/password-verifier.js";
 import type { AppPrismaClient } from "../lib/prisma-client.js";
 import { AUDIT_ACTIONS, AUDIT_FAILURE_REASONS, AUDIT_TARGET_TYPES } from "./audit-events.js";
 import { recordAuditEvent, type AuditService } from "./audit.service.js";
@@ -26,6 +27,7 @@ type AuthServiceDependencies = Readonly<{
   frontendUrl: string;
   mailFrom: string;
   auditService: AuditService;
+  passwordVerifier: PasswordVerifier;
 }>;
 
 async function register(
@@ -294,7 +296,7 @@ async function login(
 }
 
 async function loginWithRequiredAudit(
-  { prisma, jwtSecret }: AuthServiceDependencies,
+  { prisma, jwtSecret, passwordVerifier }: AuthServiceDependencies,
   input: {
     email: string;
     password: string;
@@ -325,21 +327,26 @@ async function loginWithRequiredAudit(
   // 2. アカウント状態チェック
   assertLoginAccountIsUsable(user);
 
-  // ロック期限切れの場合は failCount をリセットしてから検証（再ロックを防ぐ）
-  let currentFailCount = user.loginFailCount;
-  if (user.lockedUntil && user.lockedUntil <= new Date()) {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { loginFailCount: 0, lockedUntil: null },
-      select: { id: true },
-    });
-    currentFailCount = 0;
-  }
+  // verifier障害では認証状態を変えないため、期限切れlockのDB resetは照合結果の確定後に行う。
+  const hasExpiredLock = user.lockedUntil !== null && user.lockedUntil <= new Date();
+  const currentFailCount = hasExpiredLock ? 0 : user.loginFailCount;
 
   // 5. パスワード検証
-  const isValid = await bcrypt.compare(password, user.passwordHash);
+  const isValid = await passwordVerifier.verify({
+    userId: user.id,
+    password,
+    passwordHash: user.passwordHash,
+  });
 
   if (!isValid) {
+    if (hasExpiredLock) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { loginFailCount: 0, lockedUntil: null },
+        select: { id: true },
+      });
+    }
+
     const newFailCount = Math.min(currentFailCount + 1, MAX_LOGIN_FAIL);
     const updateData: { loginFailCount: number; lockedUntil?: Date } = {
       loginFailCount: newFailCount,

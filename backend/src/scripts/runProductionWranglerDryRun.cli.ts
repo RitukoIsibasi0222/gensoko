@@ -1,5 +1,5 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { parseConfigFileTextToJson } from "typescript";
 import {
   buildProductionWorkerConfigFromEnvironment,
@@ -26,13 +26,12 @@ if (!outputDirectory) {
   console.error(PRODUCTION_WORKER_CONFIG_ERROR_MESSAGE);
   process.exitCode = 1;
 } else {
-  const configPath = join(outputDirectory, "wrangler.production.generated.json");
+  const configPath = join(process.cwd(), `.wrangler.production.generated.${process.pid}.json`);
   try {
     const config = buildProductionWorkerConfigFromEnvironment(
       process.env,
       readStagingHyperdriveId(),
     );
-    mkdirSync(dirname(configPath), { recursive: true });
     writeFileSync(configPath, JSON.stringify(config), { encoding: "utf8", mode: 0o600 });
     runWranglerDryRun({ configPath, outputDirectory });
   } catch {

@@ -126,6 +126,8 @@ Error:
 - 成功監査はlogin状態更新・refresh token保存と同一transactionで記録し、監査保存失敗時は全体をrollbackして500を返す。失敗監査はbest-effortで、保存失敗時も元の401/403/409を維持する。
 - password検証後にアカウント状態やroleが変わった場合に古い状態で成功させないよう、成功transaction内で状態を再確認する。再確認直後の競合は条件付き更新で検出し、409で再試行を求める。
 - 物理削除後の旧資格情報と、cleanup前に残るlegacy soft-deleted rowは、存在しないaccountと同じ401・汎用messageを返す。削除済み専用messageでaccount状態を外部へ開示しない。
+- Workersではpassword照合をaccount単位のSQLite-backed Durable Objectへ内部RPCで分離する。RPCへ渡すのはpasswordとbcrypt hashだけで、戻り値はbooleanだけとする。main Workerはlocal bcryptへfallbackしない。
+- password verifierのbinding欠損、RPC例外、不正resultは503と`Retry-After: 60`へ縮約する。この場合、fail count、lock、last login、streak、refresh token、成功/失敗監査を変更しない。
 
 ### POST `/auth/refresh`
 
@@ -618,7 +620,7 @@ Error:
 | 429    | Too Many Requests     | レート制限超過                           |
 | 500    | Internal Server Error | サーバー内部エラー                       |
 | 502    | Bad Gateway           | サーバーダウン（リバースプロキシ）       |
-| 503    | Service Unavailable   | sensitive APIのレート制限store障害       |
+| 503    | Service Unavailable   | sensitive APIのrate limit/password verifier障害 |
 | 504    | Gateway Timeout       | サーバータイムアウト                     |
 
 #### レート制限の共通レスポンス
@@ -641,7 +643,7 @@ Content-Type: application/json
 - 複数バケットが超過した場合は、失敗したバケットのうち最大の待ち時間を返します。
 - 成功レスポンスへ `RateLimit` / `RateLimit-*` ヘッダーは付けません。一般・専用・edgeの残回数を単一の値で正確に表せないためです。
 
-sensitive policyでレート制限storeが利用できない場合は、処理を継続せず次を返します。
+sensitive policyのレート制限store、またはloginのpassword verifierが利用できない場合は、処理を継続せず次を返します。
 
 ```http
 HTTP/1.1 503 Service Unavailable

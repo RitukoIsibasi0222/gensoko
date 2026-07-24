@@ -7,9 +7,14 @@ const workerBundleMetadataSchema = z.object({
   inputs: z.record(z.string(), z.unknown()),
 });
 
-function isProductionWorkerEntrypoint(inputPath: string): boolean {
+const WORKER_ENTRYPOINTS = ["worker.ts", "worker-production.ts"] as const;
+
+function isWorkerEntrypoint(inputPath: string): boolean {
   const normalizedPath = inputPath.replaceAll("\\", "/");
-  return normalizedPath === "src/worker.ts" || normalizedPath.endsWith("/src/worker.ts");
+  return WORKER_ENTRYPOINTS.some(
+    (entrypoint) =>
+      normalizedPath === `src/${entrypoint}` || normalizedPath.endsWith(`/src/${entrypoint}`),
+  );
 }
 
 export function parseWorkerBundleInputPaths(metadata: unknown): readonly string[] {
@@ -19,7 +24,7 @@ export function parseWorkerBundleInputPaths(metadata: unknown): readonly string[
   }
 
   const inputPaths = Object.keys(parsedMetadata.data.inputs);
-  if (inputPaths.length === 0 || !inputPaths.some(isProductionWorkerEntrypoint)) {
+  if (inputPaths.length === 0 || !inputPaths.some(isWorkerEntrypoint)) {
     throw new Error(INVALID_WORKER_BUNDLE_METADATA_MESSAGE);
   }
 

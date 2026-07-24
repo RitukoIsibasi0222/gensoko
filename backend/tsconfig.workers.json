@@ -10,6 +10,7 @@
     "src/worker-production.ts",
     "src/lib/worker-request-adapters.ts",
     "src/lib/worker-request-adapters.test.ts",
+    "src/lib/durable-object-password-verifier.ts",
     "src/cloudflare/**/*.ts",
     "src/middleware/rateLimit/durable-object-store.ts"
   ],

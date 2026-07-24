@@ -8,6 +8,7 @@ import {
   getRateLimitStore,
 } from "../../middleware/rateLimit/buckets.js";
 import { rateLimit } from "../../middleware/rateLimit/index.js";
+import { createServiceUnavailableResponse } from "../../lib/http-error-responses.js";
 import { emailSchema, strongPasswordSchema, usernameSchema } from "../../lib/validation/auth.js";
 import {
   clearLegacyRefreshTokenCookie,
@@ -16,6 +17,10 @@ import {
   getRefreshTokenCookieOptions,
 } from "../../lib/refresh-token-cookie.js";
 import { AuthError, type AuthService } from "../../services/auth.service.js";
+import {
+  PASSWORD_VERIFICATION_UNAVAILABLE_EVENT,
+  PasswordVerificationUnavailableError,
+} from "../../lib/password-verifier.js";
 import type { AppVariables } from "../../types/index.js";
 
 const registerSchema = z.object({
@@ -129,6 +134,10 @@ export function createAuthRouter({ service, isProduction }: AuthRouterDependenci
         clearLegacyRefreshTokenCookie(c, c.req.path, isProduction);
         return c.json({ accessToken: result.accessToken, user: result.user }, 200);
       } catch (err) {
+        if (err instanceof PasswordVerificationUnavailableError) {
+          console.error(PASSWORD_VERIFICATION_UNAVAILABLE_EVENT);
+          return createServiceUnavailableResponse(c);
+        }
         if (err instanceof AuthError) {
           return c.json({ error: err.message }, err.status);
         }

@@ -15,6 +15,17 @@ describe("parseWorkerBundleInputPaths", () => {
     ).toEqual(["src/worker.ts", "src/lib/prisma-client.ts"]);
   });
 
+  it("accepts worker-production entrypoint metadata", () => {
+    expect(
+      parseWorkerBundleInputPaths({
+        inputs: {
+          "src/worker-production.ts": { bytes: 100 },
+          "src/lib/worker-handler.ts": { bytes: 200 },
+        },
+      }),
+    ).toEqual(["src/worker-production.ts", "src/lib/worker-handler.ts"]);
+  });
+
   it.each([
     ["inputs欠落", {}],
     ["inputsが配列", { inputs: [] }],

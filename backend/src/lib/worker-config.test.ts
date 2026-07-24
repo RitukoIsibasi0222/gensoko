@@ -6,6 +6,7 @@ import {
   type HyperdriveBinding,
   type WorkerRuntimeEnvironment,
 } from "./worker-config.js";
+import { PasswordVerificationUnavailableError } from "./password-verifier.js";
 
 const INVALID_WORKER_RUNTIME_CONFIG_MESSAGE = "Workers runtime設定が不正です";
 const VALID_JWT_SECRET = "j".repeat(64);
@@ -34,6 +35,10 @@ const RATE_LIMIT_COUNTER_BINDING: DurableObjectNamespaceBinding = {
   idFromName: (name) => ({ name }),
   get: (id) => ({ id }),
 };
+const PASSWORD_VERIFIER_BINDING: DurableObjectNamespaceBinding = {
+  idFromName: (name) => ({ name }),
+  get: (id) => ({ id }),
+};
 
 function createEnvironment(
   overrides: Partial<WorkerRuntimeEnvironment> = {},
@@ -52,6 +57,7 @@ function createEnvironment(
     MAIL_ALLOWED_RECIPIENTS: "synthetic-user@example.invalid",
     HYPERDRIVE: HYPERDRIVE_BINDING,
     RATE_LIMIT_COUNTER: RATE_LIMIT_COUNTER_BINDING,
+    PASSWORD_VERIFIER: PASSWORD_VERIFIER_BINDING,
     ...overrides,
   };
 }
@@ -86,6 +92,9 @@ describe("getWorkerRuntimeConfig", () => {
         store: "durable-object",
         keySecret: VALID_RATE_LIMIT_KEY_SECRET,
         namespace: RATE_LIMIT_COUNTER_BINDING,
+      },
+      passwordVerifier: {
+        namespace: PASSWORD_VERIFIER_BINDING,
       },
       hyperdrive: HYPERDRIVE_BINDING,
       mail: {
@@ -266,6 +275,18 @@ describe("getWorkerRuntimeConfig", () => {
         }),
       }),
     ).toThrow(INVALID_WORKER_RUNTIME_CONFIG_MESSAGE);
+  });
+
+  it.each([
+    ["欠落", undefined],
+    ["Durable Object APIなし", {} as DurableObjectNamespaceBinding],
+  ])("password verifier bindingの%sを値非表示で拒否する", (_name, binding) => {
+    expect(() =>
+      getWorkerRuntimeConfig({
+        expectedTarget: "staging",
+        environment: createEnvironment({ PASSWORD_VERIFIER: binding }),
+      }),
+    ).toThrow(PasswordVerificationUnavailableError);
   });
 
   it("設定値・接続先・binding内部値をerrorへ含めない", () => {

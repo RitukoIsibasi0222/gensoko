@@ -1,4 +1,5 @@
 import { createAppDependencies } from "../lib/app-dependencies.js";
+import { createBcryptPasswordVerifier } from "../lib/bcrypt-password-verifier.js";
 
 export function createTestAppDependencies() {
   return createAppDependencies({
@@ -7,5 +8,6 @@ export function createTestAppDependencies() {
     jwtSecret: "test-jwt-secret",
     frontendUrl: "http://localhost:5174",
     mailFrom: "noreply@example.test",
+    passwordVerifier: createBcryptPasswordVerifier(),
   });
 }

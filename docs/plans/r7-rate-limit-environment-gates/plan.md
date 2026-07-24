@@ -1326,7 +1326,7 @@ PII・Secret確認:
   - Workers 27 passed
   - build、Workers typecheck、ESLint、Prettier check成功
 - 判定: code-level CPU支配要因は`bcrypt.compare` cost 12。R7-05のstaging実HTTP 11回目429と安全な修正は未完了
-- 次工程: [`r7-password-verification-free-worker`](../r7-password-verification-free-worker/plan.md)で、bcrypt cost 12を維持したままvalid loginのpassword verificationをSQLite-backed Durable Objectへ分離する無料枠構成を設計した。計画作成だけであり、実装、Cloudflare resource変更、deployment、staging auth再実行は別承認まで行わない
+- 次工程: [`r7-password-verification-free-worker`](../r7-password-verification-free-worker/plan.md)に従い、bcrypt cost 12を維持したままvalid loginのpassword verificationをSQLite-backed Durable Objectへ分離するrepository実装を進める。repository test/dry-runと、R7PV-16/17のCloudflare preflight・staging証拠を分離し、後者は別承認まで行わない
 - R7状態: R7-02、R7-05、R7-10〜R7-20、R7全体、v0.1公開gateは未完了を維持する
 
 PII・Secret確認:
@@ -1336,6 +1336,17 @@ PII・Secret確認:
 - [x] token/Cookie/Authorizationなし
 - [x] Secret/resource IDなし
 - [x] 外部request/DB操作なし
+
+### R7 password verification repository実装
+
+- 実装branch: `feature/r7-password-verification-free-worker`
+- 対象: R7PV-01〜R7PV-15。R7PV-16/17は別承認の実環境作業として未実施
+- bcrypt cost 12を維持し、main Workerのvalid loginからdirect `bcrypt.compare`を除去した
+- account単位のstorage/alarm/cacheなしSQLite-backed Password Verifier DO、strict boolean RPC、固定503、Worker fallback禁止をTDD実装した
+- 既存v1 migrationを不変のままv2 `new_sqlite_classes`を追加し、staging/test/production generatorと生成型を同期した
+- raw password、hash、user ID、token、Cookie、DB URL、raw errorをlog、response、storageへ出力しない
+- Cloudflare resource/binding/Secret/Environment Variable変更、workflow dispatch、deploy、staging/production request、DB schema/migration変更は実施していない
+- R7-05、R7全体、v0.1公開gateは未完了を維持する
 
 ## R7完了記録
 

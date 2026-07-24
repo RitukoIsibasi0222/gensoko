@@ -1,15 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RateLimitCounter } from "../cloudflare/rate-limit-counter.js";
+import type { PasswordVerifierDurableObject } from "../cloudflare/password-verifier.js";
 import type { AppPrismaClient } from "./prisma-client.js";
 import type { WorkerRuntimeConfig, WorkerRuntimeEnvironment } from "./worker-config.js";
 import { createWorkerRequestAdapters } from "./worker-request-adapters.js";
 import type { MailSender } from "./mail-sender.js";
 import type { RateLimitStore } from "../middleware/rateLimit/store.js";
+import type { PasswordVerifier } from "./password-verifier.js";
 
 const RATE_LIMIT_SECRET = "test-rate-limit-secret";
 type WorkerRateLimitNamespace = DurableObjectNamespace<RateLimitCounter>;
+type WorkerPasswordVerifierNamespace = DurableObjectNamespace<PasswordVerifierDurableObject>;
 
-function createConfig(): WorkerRuntimeConfig<WorkerRateLimitNamespace> {
+function createConfig(): WorkerRuntimeConfig<
+  WorkerRateLimitNamespace,
+  WorkerPasswordVerifierNamespace
+> {
   return {
     target: "staging",
     databaseTarget: "staging",
@@ -23,6 +29,12 @@ function createConfig(): WorkerRuntimeConfig<WorkerRateLimitNamespace> {
         idFromName: vi.fn(),
         get: vi.fn(),
       } as unknown as WorkerRateLimitNamespace,
+    },
+    passwordVerifier: {
+      namespace: {
+        idFromName: vi.fn(),
+        get: vi.fn(),
+      } as unknown as WorkerPasswordVerifierNamespace,
     },
     mail: {
       apiUrl: "https://mail.example.invalid/send",
@@ -39,6 +51,7 @@ describe("createWorkerRequestAdapters", () => {
     const prismaClients: AppPrismaClient[] = [];
     const stores: RateLimitStore[] = [];
     const mailSenders: MailSender[] = [];
+    const passwordVerifiers: PasswordVerifier[] = [];
     const createPrismaClient = vi.fn(() => {
       const prisma = { requestNumber: prismaClients.length + 1 } as unknown as AppPrismaClient;
       prismaClients.push(prisma);
@@ -54,13 +67,22 @@ describe("createWorkerRequestAdapters", () => {
       mailSenders.push(mailSender);
       return mailSender;
     });
+    const createPasswordVerifier = vi.fn(() => {
+      const passwordVerifier = { verify: vi.fn() } as unknown as PasswordVerifier;
+      passwordVerifiers.push(passwordVerifier);
+      return passwordVerifier;
+    });
     const createAdapters = createWorkerRequestAdapters({
       createPrismaClient,
       createRateLimitStore,
       createMailSender,
+      createPasswordVerifier,
     });
     const config = createConfig();
-    const environment: WorkerRuntimeEnvironment<WorkerRateLimitNamespace> = {};
+    const environment: WorkerRuntimeEnvironment<
+      WorkerRateLimitNamespace,
+      WorkerPasswordVerifierNamespace
+    > = {};
 
     const first = await createAdapters({
       request: new Request("https://api.example.invalid/", {
@@ -82,6 +104,8 @@ describe("createWorkerRequestAdapters", () => {
     expect(first?.prisma).not.toBe(second?.prisma);
     expect(first?.mailSender).toBe(mailSenders[0]);
     expect(second?.mailSender).toBe(mailSenders[1]);
+    expect(first?.passwordVerifier).toBe(passwordVerifiers[0]);
+    expect(second?.passwordVerifier).toBe(passwordVerifiers[1]);
     expect(first?.rateLimit.getStore({} as never)).toBe(stores[0]);
     expect(second?.rateLimit.getStore({} as never)).toBe(stores[1]);
     expect(await first?.rateLimit.resolveIp({} as never)).toBe("203.0.113.10");
@@ -90,6 +114,7 @@ describe("createWorkerRequestAdapters", () => {
     expect(createPrismaClient).toHaveBeenNthCalledWith(2, config.hyperdrive.connectionString);
     expect(createRateLimitStore).toHaveBeenCalledTimes(2);
     expect(createMailSender).toHaveBeenCalledTimes(2);
+    expect(createPasswordVerifier).toHaveBeenCalledTimes(2);
   });
 
   it("CF-Connecting-IPだけを信頼しforwarded headerへfallbackしない", async () => {

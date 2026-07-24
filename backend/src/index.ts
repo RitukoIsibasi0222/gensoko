@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { createApp } from "./app.js";
 import { createAppDependencies } from "./lib/app-dependencies.js";
+import { createBcryptPasswordVerifier } from "./lib/bcrypt-password-verifier.js";
 import { getFrontendUrl, getRateLimitConfig } from "./lib/config.js";
 import { nodeMailSender } from "./lib/mail.js";
 import { prisma } from "./lib/prisma.js";
@@ -44,6 +45,7 @@ const dependencies = createAppDependencies({
   jwtSecret: requireEnvironmentValue("JWT_SECRET"),
   frontendUrl,
   mailFrom: requireEnvironmentValue("MAIL_FROM"),
+  passwordVerifier: createBcryptPasswordVerifier(),
 });
 const app = createApp({
   isProduction,

@@ -18,6 +18,10 @@
             "name": "RATE_LIMIT_COUNTER",
             "class_name": "RateLimitCounter",
           },
+          {
+            "name": "PASSWORD_VERIFIER",
+            "class_name": "PasswordVerifierDurableObject",
+          },
         ],
       },
       "hyperdrive": [
@@ -30,6 +34,10 @@
         {
           "tag": "v1",
           "new_sqlite_classes": ["RateLimitCounter"],
+        },
+        {
+          "tag": "v2",
+          "new_sqlite_classes": ["PasswordVerifierDurableObject"],
         },
       ],
     },
