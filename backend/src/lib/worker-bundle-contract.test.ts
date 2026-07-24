@@ -50,7 +50,7 @@ describe("Workers bundle contract", () => {
       "node-bcrypt-password-verifier",
     ]);
     expect(() => assertWorkerBundleInputs(inputs)).toThrow(
-      "Workers bundleにNode専用依存が含まれています",
+      "Workers bundleに許可されない依存が含まれています",
     );
   });
 
@@ -76,7 +76,7 @@ describe("Workers bundle contract", () => {
         "node-bcrypt-password-verifier",
       ]);
       expect(() => assertWorkerBundleInputs(inputs, profile)).toThrow(
-        "Workers bundleにNode専用依存が含まれています",
+        "Workers bundleに許可されない依存が含まれています",
       );
     },
   );
@@ -112,7 +112,7 @@ describe("Workers bundle contract", () => {
       "memory-rate-limit-store",
     ]);
     expect(() => assertWorkerBundleInputs(inputs, "staging-rollback-baseline")).toThrow(
-      "Workers bundleにNode専用依存が含まれています",
+      "Workers bundleに許可されない依存が含まれています",
     );
   });
 });

@@ -6,7 +6,7 @@ import {
 } from "./worker-bundle-profile.js";
 
 export const WORKER_BUNDLE_DEPENDENCY_ERROR_MESSAGE =
-  "Workers bundleにNode専用依存が含まれています";
+  "Workers bundleに許可されない依存が含まれています";
 
 export { isWorkerBundleProfile, WORKER_BUNDLE_PROFILES, type WorkerBundleProfile };
 
