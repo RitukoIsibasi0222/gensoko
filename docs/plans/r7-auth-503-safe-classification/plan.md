@@ -304,15 +304,15 @@ table-driven testで最低限次を追加する。
 | R7D-08   | 正本計画・進捗・本計画を実態へ同期                         | docs                               | 中     |
 | R7D-09   | 詳細な日本語commit・PRを作成しreview待ち                   | Git/GitHub                         | 中     |
 
-- [ ] R7D-01: Redでauth 5回目503を再現する
-- [ ] R7D-02: 503境界・非露出・body lifecycleのRed testを追加する
-- [ ] R7D-03: 固定response classをGreen実装する
-- [ ] R7D-04: CLIのRed→Greenを完了する
-- [ ] R7D-05: 重複を除去してRefactorする
-- [ ] R7D-06: 対象・関連testを通す
-- [ ] R7D-07: 最終品質gateを通す
-- [ ] R7D-08: 文書を実態へ同期する
-- [ ] R7D-09: review用PRを作成する
+- [x] R7D-01: Redでauth 5回目503を再現する
+- [x] R7D-02: 503境界・非露出・body lifecycleのRed testを追加する
+- [x] R7D-03: 固定response classをGreen実装する
+- [x] R7D-04: CLIのRed→Greenを完了する
+- [x] R7D-05: 重複を除去してRefactorする
+- [x] R7D-06: 対象・関連testを通す
+- [x] R7D-07: 最終品質gateを通す
+- [x] R7D-08: 文書を実態へ同期する
+- [x] R7D-09: review用PR #144を作成する
 
 ### タブ区切り
 
@@ -378,18 +378,18 @@ npm run format:check
 
 ## 合格条件
 
-- [ ] auth 5回目503再現testが固定classを検証する
-- [ ] 完全な既存503契約だけが`SAFE_JSON_503_CONTRACT`になる
-- [ ] 非JSONまたは契約不一致503は`EDGE_OR_UNCLASSIFIED_503`になる
-- [ ] その他の想定外statusは`OTHER_UNEXPECTED_STATUS`になる
-- [ ] request失敗はclass `null`を維持する
-- [ ] response body・header値・URL・credential・識別子・raw例外をerror/consoleへ出さない
-- [ ] body parse/cancel/header getter失敗でも固定分類を維持する
-- [ ] 既存429、CORS、security headers、`X-Powered-By`非露出判定が回帰しない
-- [ ] questions/game-submitの既存testが回帰しない
-- [ ] workflow、API、DB schema、Cloudflare設定を変更しない
-- [ ] backend最終品質gateがすべて成功する
-- [ ] R7-04/R7-05を未完了のまま維持する
+- [x] auth 5回目503再現testが固定classを検証する
+- [x] 完全な既存503契約だけが`SAFE_JSON_503_CONTRACT`になる
+- [x] 非JSONまたは契約不一致503は`EDGE_OR_UNCLASSIFIED_503`になる
+- [x] その他の想定外statusは`OTHER_UNEXPECTED_STATUS`になる
+- [x] request失敗はclass `null`を維持する
+- [x] response body・header値・URL・credential・識別子・raw例外をerror/consoleへ出さない
+- [x] body parse/cancel/header getter失敗でも固定分類を維持する
+- [x] 既存429、CORS、security headers、`X-Powered-By`非露出判定が回帰しない
+- [x] questions/game-submitの既存testが回帰しない
+- [x] workflow、API、DB schema、Cloudflare設定を変更しない
+- [x] backend最終品質gateがすべて成功する
+- [x] R7-04/R7-05を未完了のまま維持する
 
 ## 停止条件
 
@@ -411,6 +411,67 @@ npm run format:check
 - `docs/05_progress.md`を実態へ同期する。
 - API契約を変更していない場合、`docs/04_api.md`は変更しない。
 - portfolio release計画はR7状態が実際に変わる場合だけ更新する。
+
+## 実装完了
+
+- 実装日: 2026-07-23
+- 実装branch: `feature/r7-auth-503-safe-classification`
+- base `develop` SHA: `647ea6b17c6994e2e953b6c26224173d658eac5c`
+- Red test commit: `0247510`（`test: R7 auth 503安全分類のRed契約を追加`）
+- Green/Refactor commit: `a9cb3db`（`fix: R7 auth 503応答を固定契約で安全に分類`）
+- PR: [#144](https://github.com/RitukoIsibasi0222/gensoko/pull/144)（review待ち）
+
+### TDD実測
+
+- Red 1: runner 49 tests中、既存31 testsは成功し、固定response class未実装とbody二重cancelを理由に18 testsが失敗した
+- Green 1: safe JSON 503、非JSON/契約不一致503、500/502/504、auth 5回目/11回目、header getter・cancel拒否、request失敗nullを実装し、runner 49 testsが成功した
+- Red 2: CLI 4 tests中、既存3 testsは成功し、`observedResponseClass`未出力だけを理由に1 testが失敗した
+- Green 2: known errorへ固定enumだけを追加し、runner/CLI 2 files / 53 testsが成功した
+- Refactor: 429/503のCORS/security判定を共通化し、contract errorが処理済みのbodyをouter layerで再cancelしない構造へ整理した。初回時点でrunner/CLI/workflow 3 files / 60 testsが成功した
+- 最終品質gate: PR #144追加review対応後、backend 104 files / 1109 tests成功、外部DB用10 testsは既定どおりskip。Workers runtime 2 files / 15 tests、Node/Workers TypeScript build、ESLint、Prettier checkが成功した
+
+### PR #144 review対応
+
+- 対象review: [pullrequestreview-4765099785](https://github.com/RitukoIsibasi0222/gensoko/pull/144#pullrequestreview-4765099785)
+- 文書2件: 「PR未作成」「ユーザー確認待ち」の不整合は、PR作成直後のcommit `37671b5`でPR #144 review待ちへ更新済み
+- code 1件 Red: `Retry-After`またはheader契約不一致503でbodyをparseしない契約を2 tests追加し、runner 51 tests中49 tests成功・2 tests失敗を確認した
+- code 1件 Green: `Retry-After`、header、bodyの順に短絡評価し、先行契約不一致ではbodyをbest-effort cancelして`EDGE_OR_UNCLASSIFIED_503`を維持する。runner 51 tests、関連3 files / 62 testsが成功した
+- review対応commit: `f3b156d`（`fix: 503契約不一致時のbody解析を短絡`）
+- security: 完全なsafe 503候補だけがbody JSON parseへ進むため、response bodyを扱う範囲と不要な解析コストを縮小した。raw値の保持・出力は追加していない
+
+### PR #144追加review対応
+
+- 対象review: [pullrequestreview-4768836627](https://github.com/RitukoIsibasi0222/gensoko/pull/144#pullrequestreview-4768836627)
+- Red: auth許可200、auth 5回目503、auth 11回目429のJSON parse失敗時にも未消費bodyを解放する3 testsを追加し、runner 54 tests中51 tests成功・3 tests失敗を確認した
+- Green: parse失敗を所有する`readExpectedJson`、`classifyUnexpectedResponse`、`createRateLimitSummary`でbodyをbest-effort cancelし、既存の固定契約違反・503分類とraw例外非露出を維持した。runner 54 tests、関連3 files / 65 testsが成功した
+- 追加review対応commit: `74cc588`（`fix: JSON parse失敗時にresponse bodyを解放`）
+- security: cancel自体が失敗しても元の固定分類を上書きせず、parse例外、response body、credential、PIIをerror metadataやCLIへ保持・出力しない
+
+### 設計判断と安全性
+
+- `SAFE_JSON_503_CONTRACT`は既存Hono 503公開契約との一致だけを示し、Durable Object、adapter、edge等の内部原因を断定しない
+- response bodyは分類中だけmemory上で検証し、error metadata・CLI・文書へ保持しない。headerも固定契約との一致だけを判定し、値を返さない
+- workflow、API route、Worker、rate-limit middleware、Durable Object、DB schema、Cloudflare設定、frontend、production resourceは変更していない
+- staging HTTP request、fixture、Environment Variable、DB、workflow dispatchは行っていない。第三runは未実施
+- 過去のrun 30010266297はbody/headerを記録していないため、新classを遡及適用できない。R7-04/R7-05とR7全体は未完了を維持する
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+| --- | --- | --- |
+| `backend/src/jobs/stagingRateLimitEvidence.test.ts` | 修正 | 503分類境界、非露出、body lifecycle、既存429回帰のcontract test |
+| `backend/src/jobs/stagingRateLimitEvidence.ts` | 修正 | 固定response class、503契約分類、error metadata、header共通判定 |
+| `backend/src/jobs/stagingRateLimitEvidence.cli.test.ts` | 修正 | 固定class出力とcredential・PII・raw値非露出test |
+| `backend/src/jobs/stagingRateLimitEvidence.cli.ts` | 修正 | known errorへ固定`observedResponseClass`を追加 |
+| `docs/plans/r7-auth-503-safe-classification/plan.md` | 修正 | TDD・品質gate・実変更・未完了境界を記録 |
+| `docs/plans/r7-rate-limit-environment-gates/plan.md` | 修正 | 診断能力追加と第三run未実施を正本へ同期 |
+| `docs/05_progress.md` | 修正 | R7-04/R7-05未完了のまま実装進捗を同期 |
+
+### 計画からの変更点
+
+- portfolio release計画はR7の実環境状態が変わっていないため更新しない
+- `docs/04_api.md`は公開API契約を変更していないため更新しない
+- DB変更がないためmigration・DB integration test・Playwrightは実行しない
 
 ## 実装後も必要な別承認
 

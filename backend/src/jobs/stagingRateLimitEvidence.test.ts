@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  SERVICE_UNAVAILABLE_MESSAGE,
+  SERVICE_UNAVAILABLE_RETRY_AFTER_SEC,
+} from "../lib/http-error-messages.js";
+import {
   runStagingRateLimitEvidence,
   StagingRateLimitEvidenceExecutionError,
   validateStagingRateLimitEvidenceEnvironment,
@@ -13,7 +17,7 @@ const USER_PASSWORD = "SyntheticUser1!password";
 const RATE_LIMIT_MESSAGE = "リクエストが多すぎます。しばらく待ってから再試行してください";
 const CSP = "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
 const REQUEST_TIMEOUT_MS = 10_000;
-const RATE_LIMIT_HEADERS = {
+const SAFE_RESPONSE_HEADERS = {
   "Access-Control-Allow-Credentials": "true",
   "Access-Control-Allow-Origin": FRONTEND_ORIGIN,
   "Content-Security-Policy": CSP,
@@ -25,7 +29,14 @@ const RATE_LIMIT_HEADERS = {
   "X-Frame-Options": "DENY",
   "X-Permitted-Cross-Domain-Policies": "none",
   "X-XSS-Protection": "0",
+} as const;
+const RATE_LIMIT_HEADERS = {
+  ...SAFE_RESPONSE_HEADERS,
   "Retry-After": "42",
+} as const;
+const SERVICE_UNAVAILABLE_HEADERS = {
+  ...SAFE_RESPONSE_HEADERS,
+  "Retry-After": String(SERVICE_UNAVAILABLE_RETRY_AFTER_SEC),
 } as const;
 
 const VALID_ENVIRONMENT = {
@@ -54,6 +65,16 @@ function rateLimitedResponse(overrides: Record<string, string> = {}) {
       ...overrides,
     },
   );
+}
+
+function serviceUnavailableResponse(
+  body: unknown = { error: SERVICE_UNAVAILABLE_MESSAGE },
+  overrides: Record<string, string> = {},
+) {
+  return jsonResponse(503, body, {
+    ...SERVICE_UNAVAILABLE_HEADERS,
+    ...overrides,
+  });
 }
 
 function loginResponse() {
@@ -101,6 +122,29 @@ function sessionResponse(sequence: number) {
       },
     ],
   });
+}
+
+async function captureAuthFailure(response: Response, allowedRequestsBeforeFailure = 4) {
+  let callCount = 0;
+  const fetchMock = vi.fn<typeof fetch>(async () => {
+    callCount += 1;
+    return callCount <= allowedRequestsBeforeFailure ? loginResponse() : response;
+  });
+  let failure: unknown;
+
+  try {
+    await runStagingRateLimitEvidence({
+      apiBaseUrl: API_BASE_URL,
+      frontendOrigin: FRONTEND_ORIGIN,
+      evidenceCase: "auth",
+      userPassword: USER_PASSWORD,
+      fetchImpl: fetchMock,
+    });
+  } catch (error) {
+    failure = error;
+  }
+
+  return { failure, fetchMock };
 }
 
 describe("staging rate limit evidence", () => {
@@ -170,6 +214,228 @@ describe("staging rate limit evidence", () => {
     expect(fetchMock.mock.calls.every(([, init]) => init?.signal instanceof AbortSignal)).toBe(
       true,
     );
+  });
+
+  it("authは1〜4回目成功後の完全な503契約をrequest 5の固定classへ分類する", async () => {
+    const { failure, fetchMock } = await captureAuthFailure(serviceUnavailableResponse());
+
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(failure).toBeInstanceOf(StagingRateLimitEvidenceExecutionError);
+    expect(failure).toMatchObject({
+      message: "staging rate limit evidenceの前提応答が不正です",
+      failureStage: "AUTH_ALLOWED_REQUEST",
+      failureKind: "RESPONSE_CONTRACT_FAILED",
+      requestNumber: 5,
+      observedStatus: 503,
+      failedContract: "EXPECTED_STATUS",
+      observedResponseClass: "SAFE_JSON_503_CONTRACT",
+    });
+    expect(JSON.stringify(failure)).not.toContain(SERVICE_UNAVAILABLE_MESSAGE);
+  });
+
+  it.each([
+    [
+      "非JSON Content-Type",
+      () =>
+        new Response("secret-html-body", {
+          status: 503,
+          headers: { ...SERVICE_UNAVAILABLE_HEADERS, "Content-Type": "text/html" },
+        }),
+    ],
+    [
+      "JSON parse失敗",
+      () =>
+        new Response("{secret-invalid-json", {
+          status: 503,
+          headers: { ...SERVICE_UNAVAILABLE_HEADERS, "Content-Type": "application/json" },
+        }),
+    ],
+    [
+      "error以外のfieldを含むbody",
+      () => serviceUnavailableResponse({ error: SERVICE_UNAVAILABLE_MESSAGE, detail: "secret" }),
+    ],
+    ["日本語error message不一致", () => serviceUnavailableResponse({ error: "別のメッセージ" })],
+    [
+      "Retry-After欠損",
+      () => jsonResponse(503, { error: SERVICE_UNAVAILABLE_MESSAGE }, { ...SAFE_RESPONSE_HEADERS }),
+    ],
+    ["Retry-After不正", () => serviceUnavailableResponse(undefined, { "Retry-After": "NaN" })],
+    [
+      "Retry-After期待値不一致",
+      () => serviceUnavailableResponse(undefined, { "Retry-After": "61" }),
+    ],
+    [
+      "CORS不一致",
+      () =>
+        serviceUnavailableResponse(undefined, {
+          "Access-Control-Allow-Origin": "https://example.test",
+        }),
+    ],
+    [
+      "production security header不一致",
+      () => serviceUnavailableResponse(undefined, { "Strict-Transport-Security": "" }),
+    ],
+    ["X-Powered-By露出", () => serviceUnavailableResponse(undefined, { "X-Powered-By": "Hono" })],
+  ] as const)("auth 5回目503の%sを固定された未分類503として扱う", async (_name, createResponse) => {
+    const { failure } = await captureAuthFailure(createResponse());
+
+    expect(failure).toMatchObject({
+      failureStage: "AUTH_ALLOWED_REQUEST",
+      failureKind: "RESPONSE_CONTRACT_FAILED",
+      requestNumber: 5,
+      observedStatus: 503,
+      failedContract: "EXPECTED_STATUS",
+      observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+    });
+    const serializedFailure = JSON.stringify(failure);
+    expect(serializedFailure).not.toContain("secret");
+    expect(serializedFailure).not.toContain(SERVICE_UNAVAILABLE_MESSAGE);
+  });
+
+  it.each([
+    ["Retry-After不一致", () => serviceUnavailableResponse(undefined, { "Retry-After": "61" })],
+    [
+      "header契約不一致",
+      () => serviceUnavailableResponse(undefined, { "Strict-Transport-Security": "" }),
+    ],
+  ] as const)("auth 5回目503の%sではbodyをparseせずcancelする", async (_name, createResponse) => {
+    const response = createResponse();
+    const jsonSpy = vi.spyOn(response, "json");
+    const cancelSpy = vi.spyOn(response.body!, "cancel");
+
+    const { failure } = await captureAuthFailure(response);
+
+    expect(jsonSpy).not.toHaveBeenCalled();
+    expect(cancelSpy).toHaveBeenCalledOnce();
+    expect(failure).toMatchObject({
+      requestNumber: 5,
+      observedStatus: 503,
+      failedContract: "EXPECTED_STATUS",
+      observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+    });
+  });
+
+  it("auth 5回目503のJSON parse例外ではbodyをcancelして固定分類を維持する", async () => {
+    const response = serviceUnavailableResponse();
+    const jsonSpy = vi
+      .spyOn(response, "json")
+      .mockRejectedValue(new Error("parse-internal-secret"));
+    const cancelSpy = vi.spyOn(response.body!, "cancel");
+
+    const { failure } = await captureAuthFailure(response);
+
+    expect(jsonSpy).toHaveBeenCalledOnce();
+    expect(cancelSpy).toHaveBeenCalledOnce();
+    expect(failure).toMatchObject({
+      requestNumber: 5,
+      observedStatus: 503,
+      failedContract: "EXPECTED_STATUS",
+      observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+    });
+    expect(JSON.stringify(failure)).not.toContain("parse-internal-secret");
+  });
+
+  it("auth許可200のJSON parse例外ではbodyをcancelして固定契約違反にする", async () => {
+    const response = loginResponse();
+    const jsonSpy = vi
+      .spyOn(response, "json")
+      .mockRejectedValue(new Error("parse-internal-secret"));
+    const cancelSpy = vi.spyOn(response.body!, "cancel");
+
+    const { failure } = await captureAuthFailure(response, 0);
+
+    expect(jsonSpy).toHaveBeenCalledOnce();
+    expect(cancelSpy).toHaveBeenCalledOnce();
+    expect(failure).toMatchObject({
+      failureStage: "AUTH_ALLOWED_REQUEST",
+      requestNumber: 1,
+      observedStatus: 200,
+      failedContract: "EXPECTED_JSON_BODY",
+      observedResponseClass: null,
+    });
+    expect(JSON.stringify(failure)).not.toContain("parse-internal-secret");
+  });
+
+  it("auth 11回目429のJSON parse例外ではbodyをcancelして固定契約違反にする", async () => {
+    const response = rateLimitedResponse();
+    const jsonSpy = vi
+      .spyOn(response, "json")
+      .mockRejectedValue(new Error("parse-internal-secret"));
+    const cancelSpy = vi.spyOn(response.body!, "cancel");
+
+    const { failure } = await captureAuthFailure(response, 10);
+
+    expect(jsonSpy).toHaveBeenCalledOnce();
+    expect(cancelSpy).toHaveBeenCalledOnce();
+    expect(failure).toMatchObject({
+      failureStage: "AUTH_LIMITED_REQUEST",
+      requestNumber: 11,
+      observedStatus: 429,
+      failedContract: "RATE_LIMIT_BODY",
+      observedResponseClass: null,
+    });
+    expect(JSON.stringify(failure)).not.toContain("parse-internal-secret");
+  });
+
+  it.each([500, 502, 504] as const)(
+    "auth 5回目のstatus %iを503と混同しない固定classへ分類する",
+    async (status) => {
+      const { failure } = await captureAuthFailure(
+        jsonResponse(status, { error: "secret-response-body" }),
+      );
+
+      expect(failure).toMatchObject({
+        failureStage: "AUTH_ALLOWED_REQUEST",
+        requestNumber: 5,
+        observedStatus: status,
+        failedContract: "EXPECTED_STATUS",
+        observedResponseClass: "OTHER_UNEXPECTED_STATUS",
+      });
+      expect(JSON.stringify(failure)).not.toContain("secret-response-body");
+    },
+  );
+
+  it("auth 5回目503のheader getter例外とbody cancel拒否をraw値なしで固定分類する", async () => {
+    const response = new Response("secret-response-body", { status: 503 });
+    const cancelSpy = vi
+      .spyOn(response.body!, "cancel")
+      .mockRejectedValue(new Error("cancel-internal-secret"));
+    Object.defineProperty(response, "headers", {
+      value: {
+        get: vi.fn(() => {
+          throw new Error("header-internal-secret");
+        }),
+      },
+    });
+
+    const { failure } = await captureAuthFailure(response);
+
+    expect(cancelSpy).toHaveBeenCalledOnce();
+    expect(failure).toMatchObject({
+      requestNumber: 5,
+      observedStatus: 503,
+      failedContract: "EXPECTED_STATUS",
+      observedResponseClass: "EDGE_OR_UNCLASSIFIED_503",
+    });
+    const serializedFailure = JSON.stringify(failure);
+    expect(serializedFailure).not.toContain("header-internal-secret");
+    expect(serializedFailure).not.toContain("cancel-internal-secret");
+    expect(serializedFailure).not.toContain("secret-response-body");
+  });
+
+  it("auth 11回目503をlimited段階とRATE_LIMIT_STATUSを保って固定分類する", async () => {
+    const { failure, fetchMock } = await captureAuthFailure(serviceUnavailableResponse(), 10);
+
+    expect(fetchMock).toHaveBeenCalledTimes(11);
+    expect(failure).toMatchObject({
+      failureStage: "AUTH_LIMITED_REQUEST",
+      failureKind: "RESPONSE_CONTRACT_FAILED",
+      requestNumber: 11,
+      observedStatus: 503,
+      failedContract: "RATE_LIMIT_STATUS",
+      observedResponseClass: "SAFE_JSON_503_CONTRACT",
+    });
+    expect(JSON.stringify(failure)).not.toContain(SERVICE_UNAVAILABLE_MESSAGE);
   });
 
   it("questionsはlogin後に30回許可し、31回目を429として確認する", async () => {
@@ -438,6 +704,7 @@ describe("staging rate limit evidence", () => {
       requestNumber: 1,
       observedStatus: null,
       failedContract: null,
+      observedResponseClass: null,
     });
     const serializedFailure = JSON.stringify(failure);
     expect(serializedFailure).not.toContain("secret");
@@ -474,6 +741,7 @@ describe("staging rate limit evidence", () => {
       requestNumber: 11,
       observedStatus: 429,
       failedContract: "STRICT_TRANSPORT_SECURITY",
+      observedResponseClass: null,
     });
   });
 

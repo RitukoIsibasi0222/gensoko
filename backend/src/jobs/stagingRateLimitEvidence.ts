@@ -1,4 +1,8 @@
 import { normalizePassword } from "../lib/normalize.js";
+import {
+  SERVICE_UNAVAILABLE_MESSAGE,
+  SERVICE_UNAVAILABLE_RETRY_AFTER_SEC,
+} from "../lib/http-error-messages.js";
 import { strongPasswordSchema } from "../lib/validation/auth.js";
 import { RATE_LIMIT_POLICIES } from "../middleware/rateLimit/policies.js";
 import { STAGING_SYNTHETIC_E2E_USER } from "./stagingSyntheticAdminE2eFixtures.js";
@@ -51,6 +55,10 @@ export type StagingRateLimitEvidenceSummary = Readonly<{
 
 export type StagingRateLimitEvidenceFailureStage = "AUTH_ALLOWED_REQUEST" | "AUTH_LIMITED_REQUEST";
 export type StagingRateLimitEvidenceFailureKind = "REQUEST_FAILED" | "RESPONSE_CONTRACT_FAILED";
+export type StagingRateLimitEvidenceObservedResponseClass =
+  | "SAFE_JSON_503_CONTRACT"
+  | "EDGE_OR_UNCLASSIFIED_503"
+  | "OTHER_UNEXPECTED_STATUS";
 export type StagingRateLimitEvidenceFailedContract =
   | "EXPECTED_STATUS"
   | "EXPECTED_CONTENT_TYPE"
@@ -75,11 +83,17 @@ export type StagingRateLimitEvidenceFailedContract =
 
 class StagingRateLimitEvidenceContractError extends Error {
   readonly failedContract: StagingRateLimitEvidenceFailedContract;
+  readonly observedResponseClass: StagingRateLimitEvidenceObservedResponseClass | null;
 
-  constructor(message: string, failedContract: StagingRateLimitEvidenceFailedContract) {
+  constructor(
+    message: string,
+    failedContract: StagingRateLimitEvidenceFailedContract,
+    observedResponseClass: StagingRateLimitEvidenceObservedResponseClass | null = null,
+  ) {
     super(message);
     this.name = "StagingRateLimitEvidenceContractError";
     this.failedContract = failedContract;
+    this.observedResponseClass = observedResponseClass;
   }
 }
 
@@ -89,6 +103,7 @@ export class StagingRateLimitEvidenceExecutionError extends Error {
   readonly requestNumber: number;
   readonly observedStatus: number | null;
   readonly failedContract: StagingRateLimitEvidenceFailedContract | null;
+  readonly observedResponseClass: StagingRateLimitEvidenceObservedResponseClass | null;
 
   constructor({
     message,
@@ -97,6 +112,7 @@ export class StagingRateLimitEvidenceExecutionError extends Error {
     requestNumber,
     observedStatus,
     failedContract,
+    observedResponseClass,
   }: {
     message: string;
     failureStage: StagingRateLimitEvidenceFailureStage;
@@ -104,6 +120,7 @@ export class StagingRateLimitEvidenceExecutionError extends Error {
     requestNumber: number;
     observedStatus: number | null;
     failedContract: StagingRateLimitEvidenceFailedContract | null;
+    observedResponseClass: StagingRateLimitEvidenceObservedResponseClass | null;
   }) {
     super(message);
     this.name = "StagingRateLimitEvidenceExecutionError";
@@ -112,6 +129,7 @@ export class StagingRateLimitEvidenceExecutionError extends Error {
     this.requestNumber = requestNumber;
     this.observedStatus = observedStatus;
     this.failedContract = failedContract;
+    this.observedResponseClass = observedResponseClass;
   }
 }
 
@@ -168,12 +186,17 @@ function hasJsonContentType(response: Response): boolean {
   return contentType !== null && /^application\/json(?:\s*;|$)/i.test(contentType);
 }
 
-async function readExpectedJson(response: Response, expectedStatus: number): Promise<unknown> {
+async function readExpectedJson(
+  response: Response,
+  expectedStatus: number,
+  frontendOrigin: string,
+): Promise<unknown> {
   if (response.status !== expectedStatus) {
-    await cancelResponseBodyBestEffort(response);
+    const observedResponseClass = await classifyUnexpectedResponse(response, frontendOrigin);
     throw new StagingRateLimitEvidenceContractError(
       INVALID_PREREQUISITE_RESPONSE_MESSAGE,
       "EXPECTED_STATUS",
+      observedResponseClass,
     );
   }
   if (!hasJsonContentType(response)) {
@@ -186,6 +209,7 @@ async function readExpectedJson(response: Response, expectedStatus: number): Pro
 
   const body = await parseJson(response);
   if (body === null) {
+    await cancelResponseBodyBestEffort(response);
     throw new StagingRateLimitEvidenceContractError(
       INVALID_PREREQUISITE_RESPONSE_MESSAGE,
       "EXPECTED_JSON_BODY",
@@ -215,6 +239,104 @@ async function cancelResponseBodyBestEffort(response: Response): Promise<void> {
   }
 }
 
+function findFailedResponseHeaderContract(
+  response: Response,
+  frontendOrigin: string,
+): StagingRateLimitEvidenceFailedContract | null {
+  const responseHeaderContractChecks: ReadonlyArray<
+    readonly [StagingRateLimitEvidenceFailedContract, boolean]
+  > = [
+    [
+      "ACCESS_CONTROL_ALLOW_ORIGIN",
+      response.headers.get("Access-Control-Allow-Origin") === frontendOrigin,
+    ],
+    [
+      "ACCESS_CONTROL_ALLOW_CREDENTIALS",
+      response.headers.get("Access-Control-Allow-Credentials") === "true",
+    ],
+    [
+      "CONTENT_SECURITY_POLICY",
+      response.headers.get("Content-Security-Policy") === EXPECTED_CONTENT_SECURITY_POLICY,
+    ],
+    [
+      "CROSS_ORIGIN_RESOURCE_POLICY",
+      response.headers.get("Cross-Origin-Resource-Policy") === "same-origin",
+    ],
+    [
+      "PERMISSIONS_POLICY",
+      response.headers.get("Permissions-Policy") === "camera=(), microphone=(), geolocation=()",
+    ],
+    [
+      "REFERRER_POLICY",
+      response.headers.get("Referrer-Policy") === "strict-origin-when-cross-origin",
+    ],
+    [
+      "STRICT_TRANSPORT_SECURITY",
+      response.headers.get("Strict-Transport-Security") === "max-age=31536000; includeSubDomains",
+    ],
+    ["X_CONTENT_TYPE_OPTIONS", response.headers.get("X-Content-Type-Options") === "nosniff"],
+    ["X_FRAME_OPTIONS", response.headers.get("X-Frame-Options") === "DENY"],
+    [
+      "X_PERMITTED_CROSS_DOMAIN_POLICIES",
+      response.headers.get("X-Permitted-Cross-Domain-Policies") === "none",
+    ],
+    ["X_XSS_PROTECTION", response.headers.get("X-XSS-Protection") === "0"],
+    ["X_POWERED_BY", response.headers.get("X-Powered-By") === null],
+  ];
+
+  return responseHeaderContractChecks.find(([, passed]) => !passed)?.[0] ?? null;
+}
+
+async function classifyUnexpectedResponse(
+  response: Response,
+  frontendOrigin: string,
+): Promise<StagingRateLimitEvidenceObservedResponseClass> {
+  if (response.status !== 503) {
+    await cancelResponseBodyBestEffort(response);
+    return "OTHER_UNEXPECTED_STATUS";
+  }
+
+  try {
+    if (!hasJsonContentType(response)) {
+      await cancelResponseBodyBestEffort(response);
+      return "EDGE_OR_UNCLASSIFIED_503";
+    }
+
+    const retryAfter = response.headers.get("Retry-After");
+    const retryAfterSec = retryAfter === null ? Number.NaN : Number(retryAfter);
+    const hasExpectedRetryAfter =
+      retryAfter !== null &&
+      /^[1-9]\d*$/.test(retryAfter) &&
+      Number.isSafeInteger(retryAfterSec) &&
+      retryAfterSec === SERVICE_UNAVAILABLE_RETRY_AFTER_SEC;
+    if (!hasExpectedRetryAfter) {
+      await cancelResponseBodyBestEffort(response);
+      return "EDGE_OR_UNCLASSIFIED_503";
+    }
+
+    const failedHeaderContract = findFailedResponseHeaderContract(response, frontendOrigin);
+    if (failedHeaderContract !== null) {
+      await cancelResponseBodyBestEffort(response);
+      return "EDGE_OR_UNCLASSIFIED_503";
+    }
+
+    const body = await parseJson(response);
+    if (body === null) {
+      await cancelResponseBodyBestEffort(response);
+      return "EDGE_OR_UNCLASSIFIED_503";
+    }
+    const hasExpectedBody =
+      isRecord(body) &&
+      Object.keys(body).length === 1 &&
+      body.error === SERVICE_UNAVAILABLE_MESSAGE;
+
+    return hasExpectedBody ? "SAFE_JSON_503_CONTRACT" : "EDGE_OR_UNCLASSIFIED_503";
+  } catch {
+    await cancelResponseBodyBestEffort(response);
+    return "EDGE_OR_UNCLASSIFIED_503";
+  }
+}
+
 async function runClassifiedEvidenceRequest<T>({
   request,
   validate,
@@ -239,21 +361,25 @@ async function runClassifiedEvidenceRequest<T>({
       requestNumber,
       observedStatus: null,
       failedContract: null,
+      observedResponseClass: null,
     });
   }
 
   try {
     return await validate(response);
   } catch (error) {
-    await cancelResponseBodyBestEffort(response);
+    const contractError = error instanceof StagingRateLimitEvidenceContractError ? error : null;
+    if (contractError === null) {
+      await cancelResponseBodyBestEffort(response);
+    }
     throw new StagingRateLimitEvidenceExecutionError({
       message: validationFailureMessage,
       failureStage,
       failureKind: "RESPONSE_CONTRACT_FAILED",
       requestNumber,
       observedStatus: response.status,
-      failedContract:
-        error instanceof StagingRateLimitEvidenceContractError ? error.failedContract : null,
+      failedContract: contractError?.failedContract ?? null,
+      observedResponseClass: contractError?.observedResponseClass ?? null,
     });
   }
 }
@@ -297,8 +423,11 @@ async function requestLogin({
   );
 }
 
-async function parseLoginResponse(response: Response): Promise<LoginResponse> {
-  const body = await readExpectedJson(response, 200);
+async function parseLoginResponse(
+  response: Response,
+  frontendOrigin: string,
+): Promise<LoginResponse> {
+  const body = await readExpectedJson(response, 200, frontendOrigin);
   if (
     !isRecord(body) ||
     !isNonEmptyString(body.accessToken) ||
@@ -323,8 +452,11 @@ async function parseLoginResponse(response: Response): Promise<LoginResponse> {
   };
 }
 
-async function parseQuestionsResponse(response: Response): Promise<GameQuestionsResponse> {
-  const body = await readExpectedJson(response, 200);
+async function parseQuestionsResponse(
+  response: Response,
+  frontendOrigin: string,
+): Promise<GameQuestionsResponse> {
+  const body = await readExpectedJson(response, 200, frontendOrigin);
   if (
     !isRecord(body) ||
     !isNonEmptyString(body.questionSetId) ||
@@ -445,8 +577,11 @@ function isGameSessionResult(value: unknown): boolean {
   );
 }
 
-async function assertGameSessionResponse(response: Response): Promise<void> {
-  const body = await readExpectedJson(response, 201);
+async function assertGameSessionResponse(
+  response: Response,
+  frontendOrigin: string,
+): Promise<void> {
+  const body = await readExpectedJson(response, 201, frontendOrigin);
   if (
     !isRecord(body) ||
     !isNonEmptyString(body.sessionId) ||
@@ -478,10 +613,11 @@ async function createRateLimitSummary({
   frontendOrigin: string;
 }): Promise<StagingRateLimitEvidenceSummary> {
   if (response.status !== 429) {
-    await cancelResponseBodyBestEffort(response);
+    const observedResponseClass = await classifyUnexpectedResponse(response, frontendOrigin);
     throw new StagingRateLimitEvidenceContractError(
       INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
       "RATE_LIMIT_STATUS",
+      observedResponseClass,
     );
   }
   if (!hasJsonContentType(response)) {
@@ -494,6 +630,9 @@ async function createRateLimitSummary({
 
   const retryAfter = response.headers.get("Retry-After");
   const body = await parseJson(response);
+  if (body === null) {
+    await cancelResponseBodyBestEffort(response);
+  }
   const bodyContract =
     isRecord(body) && Object.keys(body).length === 1 && body.error === RATE_LIMIT_EXCEEDED_MESSAGE;
   const retryAfterSec = retryAfter === null ? Number.NaN : Number(retryAfter);
@@ -516,56 +655,11 @@ async function createRateLimitSummary({
       "RATE_LIMIT_BODY",
     );
   }
-  if (response.headers.get("Access-Control-Allow-Origin") !== frontendOrigin) {
+  const failedResponseHeaderContract = findFailedResponseHeaderContract(response, frontendOrigin);
+  if (failedResponseHeaderContract !== null) {
     throw new StagingRateLimitEvidenceContractError(
       INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
-      "ACCESS_CONTROL_ALLOW_ORIGIN",
-    );
-  }
-  if (response.headers.get("Access-Control-Allow-Credentials") !== "true") {
-    throw new StagingRateLimitEvidenceContractError(
-      INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
-      "ACCESS_CONTROL_ALLOW_CREDENTIALS",
-    );
-  }
-
-  const securityContractChecks: ReadonlyArray<
-    readonly [StagingRateLimitEvidenceFailedContract, boolean]
-  > = [
-    [
-      "CONTENT_SECURITY_POLICY",
-      response.headers.get("Content-Security-Policy") === EXPECTED_CONTENT_SECURITY_POLICY,
-    ],
-    [
-      "CROSS_ORIGIN_RESOURCE_POLICY",
-      response.headers.get("Cross-Origin-Resource-Policy") === "same-origin",
-    ],
-    [
-      "PERMISSIONS_POLICY",
-      response.headers.get("Permissions-Policy") === "camera=(), microphone=(), geolocation=()",
-    ],
-    [
-      "REFERRER_POLICY",
-      response.headers.get("Referrer-Policy") === "strict-origin-when-cross-origin",
-    ],
-    [
-      "STRICT_TRANSPORT_SECURITY",
-      response.headers.get("Strict-Transport-Security") === "max-age=31536000; includeSubDomains",
-    ],
-    ["X_CONTENT_TYPE_OPTIONS", response.headers.get("X-Content-Type-Options") === "nosniff"],
-    ["X_FRAME_OPTIONS", response.headers.get("X-Frame-Options") === "DENY"],
-    [
-      "X_PERMITTED_CROSS_DOMAIN_POLICIES",
-      response.headers.get("X-Permitted-Cross-Domain-Policies") === "none",
-    ],
-    ["X_XSS_PROTECTION", response.headers.get("X-XSS-Protection") === "0"],
-    ["X_POWERED_BY", response.headers.get("X-Powered-By") === null],
-  ];
-  const failedSecurityContract = securityContractChecks.find(([, passed]) => !passed)?.[0];
-  if (failedSecurityContract !== undefined) {
-    throw new StagingRateLimitEvidenceContractError(
-      INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
-      failedSecurityContract,
+      failedResponseHeaderContract,
     );
   }
 
@@ -636,7 +730,7 @@ export async function runStagingRateLimitEvidence({
             requestTimeoutMs,
             fetchImpl,
           }),
-        validate: parseLoginResponse,
+        validate: async (response) => await parseLoginResponse(response, frontendOrigin),
       });
     }
     const limitedRequestNumber = RATE_LIMIT_POLICIES.AUTH_IP.limit + 1;
@@ -670,7 +764,7 @@ export async function runStagingRateLimitEvidence({
     requestTimeoutMs,
     fetchImpl,
   });
-  const { accessToken } = await parseLoginResponse(loginResponse);
+  const { accessToken } = await parseLoginResponse(loginResponse, frontendOrigin);
 
   if (evidenceCase === "questions") {
     for (
@@ -685,7 +779,7 @@ export async function runStagingRateLimitEvidence({
         requestTimeoutMs,
         fetchImpl,
       });
-      await parseQuestionsResponse(response);
+      await parseQuestionsResponse(response, frontendOrigin);
     }
     const response = await getQuestions({
       apiBaseUrl,
@@ -715,7 +809,7 @@ export async function runStagingRateLimitEvidence({
       requestTimeoutMs,
       fetchImpl,
     });
-    const questions = await parseQuestionsResponse(questionsResponse);
+    const questions = await parseQuestionsResponse(questionsResponse, frontendOrigin);
     const submitResponse = await submitGame({
       apiBaseUrl,
       frontendOrigin,
@@ -724,7 +818,7 @@ export async function runStagingRateLimitEvidence({
       requestTimeoutMs,
       fetchImpl,
     });
-    await assertGameSessionResponse(submitResponse);
+    await assertGameSessionResponse(submitResponse, frontendOrigin);
   }
 
   const questionsResponse = await getQuestions({
@@ -734,7 +828,7 @@ export async function runStagingRateLimitEvidence({
     requestTimeoutMs,
     fetchImpl,
   });
-  const questions = await parseQuestionsResponse(questionsResponse);
+  const questions = await parseQuestionsResponse(questionsResponse, frontendOrigin);
   const response = await submitGame({
     apiBaseUrl,
     frontendOrigin,
