@@ -28,7 +28,7 @@ Gensokoを、一般ユーザーが登録・メール認証・ログイン・学�
 
 - `POST /api/v1/auth/register` — 一般ユーザー登録と確認メール送信。
 - `POST /api/v1/auth/verify-email` — メール認証。
-- `POST /api/v1/auth/login` / `refresh` / `logout` — access tokenとHttpOnly refresh tokenのライフサイクル。
+- `POST /api/v1/auth/login` / `POST /api/v1/auth/refresh` / `POST /api/v1/auth/logout` — access tokenとHttpOnly refresh tokenのライフサイクル。
 - `GET /api/v1/game/questions` / `POST /api/v1/game/sessions` — 認証済みゲーム導線。
 - `DELETE /api/v1/users/me` — 本人によるアカウント物理削除。
 
