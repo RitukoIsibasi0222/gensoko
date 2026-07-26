@@ -248,7 +248,7 @@
 
 - [x] Supabase staging・production project作成、東京region・Session pooler接続設定
 - [x] 本番DBバックアップ・Prismaマイグレーション運用（Free plan容量確認・暗号化backup・migration gateをproductionで確認済み） — 計画書: [`docs/plans/audit-log-production-operations/plan.md`](plans/audit-log-production-operations/plan.md)
-- [-] 本番DBバックアップ耐障害性強化 — v0.1公開前は日次化・未失効2世代を必須とし、最大3回retry・recovery・36時間鮮度監視・通常7世代・四半期隔離restoreは公開後に継続 — 計画書: [`docs/plans/backup-resilience/plan.md`](plans/backup-resilience/plan.md)
+- [-] 本番DBバックアップ耐障害性強化 — M1の空DB・初回配備条件が成立するv0.1は24時間以内の暗号化済み1世代と日次scheduleを必須とし、2世代目以降、最大3回retry・recovery・36時間鮮度監視・通常7世代・四半期隔離restoreは公開後に継続 — 計画書: [`docs/plans/backup-resilience/plan.md`](plans/backup-resilience/plan.md)
 - [-] staging frontend/API配備基盤（Workers専用entrypoint・Prisma/mail runtime境界・Wrangler・Vercel Preview・T34実機確認） — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md) / PR: #117 — SD1〜SD13・SD15完了。Vercel `develop` Preview、Cloudflare staging Worker/DO/Hyperdrive/secret、Supabase migration、health/CORS/OPTIONS、元素118件、synthetic登録・認証・ゲーム・password reset・本人退会を確認済み。production resource・deploy・DB操作は未実施
   - [x] SD16実環境検証: PR #125で管理者linkのSPA遷移をTDD固定し、run 29802327100でAdmin login、`/admin` dashboard、強制退会、旧credential 401、main cleanupが成功した。flagは`false`へ復旧済み。production・migration・実メール・再配備・追加の直接DB queryは未実行
 - [-] Cloudflare Workers Wrangler + Prisma `@prisma/adapter-pg`/接続binding設定・デプロイ — stagingはHyperdrive方式で設定・配備・実機確認済み。production resource・binding・deployは未実施
@@ -259,13 +259,22 @@
 
 ## ポートフォリオ版 v0.1 公開計画
 
-> リリース範囲の正本: [`docs/plans/portfolio-release-v0-1/plan.md`](plans/portfolio-release-v0-1/plan.md)
+> 現在の正本: [`docs/plans/portfolio-release-v0-1-minimal/plan.md`](plans/portfolio-release-v0-1-minimal/plan.md)
 >
-> 個別計画の未完了項目をこの区分だけで完了扱いにしない。本番DBに実利用者がいないことは未確認であり、証拠なしの簡略化を適用しない。
+> 旧R1〜R18の履歴: [`docs/plans/portfolio-release-v0-1/plan.md`](plans/portfolio-release-v0-1/plan.md)
 >
-> R1〜R18の詳細・完了条件はリリース計画を正本とし、この一覧には全体進捗を同期する。P1〜P12など個別機能のサブタスクは各個別計画だけで管理する。
+> 一般登録・認証・ゲーム・本人退会は公開する。基本セキュリティは維持し、商用運用相当の長期観測・drill・高度な自動化だけを公開後へ移す。
 
-### リリース実行タスク（R1〜R18）
+### 最小リリース工程（M1〜M6）
+
+- [ ] M1: productionの全User・legacy・関連row 0件、旧配備・個人data入り旧backupなしを承認付きread-only証拠で確認する
+- [ ] M2: 同じrelease候補SHAで、stagingの登録〜退会、通常password verifier DO、auth 429、基本keyboard/320px、cleanupを1回確認する
+- [ ] M3: release候補SHAのtest・Workers test・build・lint・format・Prisma validateを通し、production依存Critical/High 0件を確認する
+- [ ] M4: 24時間以内の暗号化backup 1世代、checksum、平文非保存、日次schedule有効を確認する
+- [ ] M5: same-site URL、Cookie、CORS、メール送信元、Secret/binding分離を値非表示でpreflightし、別承認でproductionへdeployする
+- [ ] M6: productionでsynthetic Userの登録・メール受信〜退会、game、refresh、securityを確認し、cleanup・release記録・公開後引継ぎを完了する
+
+### 旧リリース実行タスク（R1〜R18・履歴）
 
 - [x] R1: Admin E2E修正後runを記録する
 - [x] R2: ダークモードをTDD実装する
@@ -280,7 +289,7 @@
   - [x] 503契約不一致詳細分類: [`r7-auth-503-contract-detail`](plans/r7-auth-503-contract-detail/plan.md) / PR: [#145](https://github.com/RitukoIsibasi0222/gensoko/pull/145) — merge commit `dcae128899275c0ec58027c97c9d039427fc5e57`。raw値を出さず503公開契約の不一致箇所だけを固定分類した。server-side診断では5回目の503をmain stateless Workerの`exceededCpu`まで絞ったが、具体的なCPU消費処理は未特定。main/recovery cleanupとflag `false`復旧は成功し、campaign上限到達により追加runを停止した
   - [x] login CPU隔離診断: [`r7-login-cpu-diagnostics`](plans/r7-login-cpu-diagnostics/plan.md) / PR: [#148](https://github.com/RitukoIsibasi0222/gensoko/pull/148) — 実環境runを増やさず、無料枠のローカルworkerdでcost 12の`bcrypt.compare`を`BCRYPT_DOMINANT`へ固定分類した。最終測定はbcrypt中央値209ms、HMAC 3回・JWT・token・app構築は分解能未満（各最大2ms以下）。backend 1110件、Workers 27件、build・lint・format check成功。R7全体と安全な無料枠修正は未完了
   - [x] Free Worker password verification分離: [`r7-password-verification-free-worker`](plans/r7-password-verification-free-worker/plan.md) / PR: [#150](https://github.com/RitukoIsibasi0222/gensoko/pull/150) — R7PV-01〜R7PV-15のrepository実装を完了した。bcrypt cost 12を維持し、valid loginの照合だけをstorageなしのSQLite-backed Durable Objectへaccount単位の内部RPCで分離した。Worker fallback禁止、固定503 + `Retry-After: 60`、値非露出、既存v1を変えないv2 class migration、Node adapter bundle禁止をTDDで固定し、backend 1124件、Workers 32件、build・staging/production dry-run・lint・format checkが成功した。Cloudflare resource変更、deployment、staging requestは未実施でR7PV-16/17の別承認待ち、R7-05とR7全体は未完了
-  - [x] Password verification rollback互換baseline repository実装: [`r7-password-verification-rollback-baseline`](plans/r7-password-verification-rollback-baseline/plan.md) — v2 lifecycleを共有するstaging専用baseline、既存cost 12 local adapterの専用entrypoint明示DI、profile別bundle contract、一時Wrangler config、通常/baseline/production dry-runをR7PVRB-01〜12としてPR #152へ実装した。Cloudflare resource変更、deploy、version rollback、staging/production request、workflow dispatch、fixture・flag操作、namespace cleanupは未実施。R7PVRB-13〜15、R7PV-17、R7-05、R7全体、v0.1公開gateは未完了
+  - [x] Password verification rollback互換baseline repository実装: [`r7-password-verification-rollback-baseline`](plans/r7-password-verification-rollback-baseline/plan.md) — v2 lifecycleを共有するstaging専用baseline、既存cost 12 local adapterの専用entrypoint明示DI、profile別bundle contract、一時Wrangler config、通常/baseline/production dry-runをR7PVRB-01〜12としてPR #152へ実装した。Cloudflare resource変更、deploy、version rollback、staging/production request、workflow dispatch、fixture・flag操作、namespace cleanupは未実施。R7PVRB-13〜15、R7PV-17、R7-05、R7全体は未完了だが、rollback drillはM1の空DB・初回配備条件が成立するv0.1のblockerにしない
 - [ ] R8: headers・CORS・safe error・logを最終確認する
 - [-] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する（code・contract test完了。review・merge後の日次schedule 2回と未失効2世代は観測待ち）
 - [ ] R10: 基本responsive・keyboard/A11Yを確認する
@@ -294,9 +303,9 @@
 - [ ] R17: release recordと進捗を同期する
 - [ ] R18: 公開後タスクを引き継ぐ
 
-### 公開前リリースゲート
+### 旧公開前リリースゲート（履歴）
 
-> 以下はR1〜R18を完了するための横断的な公開条件であり、実行順は上のリリース実行タスクで管理する。
+> 以下は旧R1〜R18全体の完了条件であり、現在のv0.1公開条件はM1〜M6とする。
 
 - [x] staging synthetic Admin E2Eの`/admin`到達・強制退会・旧credential拒否・cleanup — run 29802327100
 - [x] bcryptjsハッシュ、UTF-8 72バイト境界、Zod入力検証、安全な日本語errorのコード契約
@@ -322,9 +331,13 @@
 - [ ] Hono RPC導入
 - [ ] ゲームAPIテスト追加補強 — 計画: [`game-api-tests`](plans/game-api-tests/plan.md)
 - [ ] 高度なWAF tuning
+- [ ] R7PVRB-13〜15のbaseline deploy・post-v2 rollback drill・通常版復旧
+- [ ] R7の全境界case、staging 24時間・production 48時間観測
 - [ ] 本番公開後の監査ログ実負荷7日baseline（公開前0件baselineは2026-07-21完了）
 - [ ] 高度な容量監視・通知
 - [ ] backup最大3回retry・2時間後recovery・36時間鮮度監視・通常7世代・四半期隔離restore — 計画: [`backup-resilience`](plans/backup-resilience/plan.md)
+- [ ] 日次backupの2世代目以降を確認する
+- [ ] staging T35 legacy cleanupを実演する（M1でlegacy row 0件を確認できない場合は公開前へ戻す）
 - [ ] 完全自動CI/CD
 - [ ] 管理画面Playwright網羅
 - [ ] 複数screen reader/browserの高度検証
@@ -340,6 +353,6 @@
 
 - [x] privacyの運営主体、問い合わせ先、監査正式保持期間・目的、backup/replay説明、発効日をowner承認する（2026-07-22。全損時replayの完全保証がない残存リスクを含む）
 - [ ] production hostname、same-site Cookie、CORS origin、Cloudflare DO binding/secret、rollback先を値非表示で確認する
-- [ ] 日次backup実装後にschedule runを連続成功させ、未失効Artifact 2世代以上と平文非保存を確認する
+- [ ] 24時間以内の暗号化backup 1世代、checksum、平文非保存、日次schedule有効を確認する
 - [ ] T33/T35とproduction完全削除gateのうち、DB空証拠で対象外にできない項目を承認付きで実行する
-- [ ] review済みrelease候補SHAをproductionへ配備し、smokeとrollback記録を残す
+- [ ] review済みrelease候補SHAをproductionへ配備し、smokeとfix-forward時の公開停止手順を記録する

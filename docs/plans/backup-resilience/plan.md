@@ -8,7 +8,7 @@ Supabase Free planで運用するproduction DBの暗号化論理backupを、週�
 
 個人情報を含み得るbackupの保持上限は、アカウント完全削除計画との整合を優先して7日のまま維持する。長期保持によって削除済みデータの残存期間を延ばさず、頻度を日次化することで通常時は最大7世代を確保する。
 
-ポートフォリオ版v0.1では、週次の単一障害点を解消する日次schedule、既存の暗号化・7日保持契約、未失効Artifact 2世代の確認までを公開前必須とする。最大3回retry、2時間後recovery、36時間鮮度監視、通常7世代の定常確認、四半期restore drillは、日次化後の運用強化として公開後へ分離する。
+ポートフォリオ版v0.1の現在の正本は[`portfolio-release-v0-1-minimal`](../portfolio-release-v0-1-minimal/plan.md)である。M1でproductionのUser・legacy・関連row 0件と初回配備を確認できた場合、公開前は日次schedule、既存の暗号化・7日保持契約、24時間以内の成功Artifact 1世代を必須とする。2世代目以降、最大3回retry、2時間後recovery、36時間鮮度監視、通常7世代の定常確認、四半期restore drillは公開後へ分離する。M1が成立しない場合は、本計画の通常gateを維持する。
 
 ## 背景と現状
 
@@ -31,29 +31,30 @@ Supabase Free planで運用するproduction DBの暗号化論理backupを、週�
 4. 四半期ごとに隔離Supabase projectへ復元し、実際に利用可能なbackupであることを確認する。
 5. backup・通知・復元の証跡に個人情報、内部ID、DB接続情報、passphraseを残さない。
 
-## v0.1公開境界
+## v0.1最小公開境界
 
 ### 公開前に完了する項目
 
 - T2: 日次scheduleの契約testをRedで追加する。
 - T3: backup cronをJST毎日04:41へ変更し、暗号化・7日保持・手動実行・migration gateを回帰させる。
-- T6: 日次runを連続成功させ、未失効Artifactが2世代以上あることを確認する。
+- M4: 24時間以内の成功Artifact 1世代、暗号化・checksum・平文非保存、日次schedule有効を確認する。
 - T10・T11のうち、日次化に関するrunbook・リリース計画・進捗を実態へ同期する。
 
 ### 初回公開後に継続する項目
 
 - 最大3回retry、当日Artifact欠落時の2時間後recovery、36時間鮮度監視。
 - failed workflow通知の意図的な安全性・受信検証。
+- T6の日次run 2回と未失効Artifact 2世代の確認。
 - 通常7世代の定常運用と7日失効境界の確認。
 - 手動restore drill workflow、四半期ごとの隔離restore、隔離data削除確認。
 
-公開後項目を未実装のまま日次化だけを完了しても、本計画全体は完了扱いにしない。v0.1のR9だけを、本セクションの公開前項目と証拠が揃った時点で完了できる。
+公開後項目を未実装のまま日次化だけを完了しても、本計画全体または旧R9を完了扱いにしない。v0.1の公開判定はM4の公開前項目と証拠で行う。
 
-## R9実装計画（v0.1公開前）
+## 旧R9実装計画（履歴・本計画全体の継続管理）
 
 ### 本計画内での責務
 
-R9は本計画のT2・T3・T6と、T10・T11の日次化に関する部分を実行する作業単位である。重複する新規計画書は作成せず、本計画をR9の実装・実環境証拠の正本として更新する。retry・recovery・鮮度監視・通常7世代・restore drillは本計画に残すが、R9の完了条件へ混在させない。
+旧R9は本計画のT2・T3・T6と、T10・T11の日次化に関する部分を実行する作業単位である。T6の2世代確認は本計画と旧R9の完了条件として保持するが、現在のv0.1 blockerにはしない。retry・recovery・鮮度監視・通常7世代・restore drillも本計画で継続管理する。
 
 ### R9実装PR時点の契約
 
@@ -101,6 +102,8 @@ GitHub ActionsのscheduleはUTCで解釈され、default branch `develop`の最�
 - R5、R11A、R11、R14、R15等の別release task。
 
 ### R9完了条件
+
+以下は旧R9とbackup計画全体の完了条件であり、v0.1のM4は「v0.1公開完了条件」を使う。
 
 - [x] 日次cronのcontract testが存在し、現行週次cronを理由に意図したRedを確認している。
 - [x] workflowのschedule宣言とoperation解決だけを必要最小限変更してGreenになっている。
@@ -156,7 +159,7 @@ R9実装PRでは上記の対象ファイルを変更する。実環境のrun ID�
    - 根拠: package変更なしで、実装上必要な2箇所と非変更対象を直接固定できるため。
 
 3. **未失効2世代をmigration gateへ組み込むか**
-   - 選択: 組み込まない。既存gateは24時間以内の成功backup 1件を維持し、2世代はR9とreleaseの観測完了条件として扱う。
+   - 選択: 組み込まない。既存gateは24時間以内の成功backup 1件を維持し、2世代は旧R9とbackup計画全体の観測完了条件として扱う。
    - 根拠: migration直前性とrelease耐障害性は目的が異なり、R9で既存operation契約を不用意に変更しないため。
 
 4. **実環境証拠をいつ取得するか**
@@ -508,7 +511,7 @@ R9-10	実変更・公開後task・rollback境界を最終照合	完了確認	Git
 | T3       | backupを日次化                                  | v0.1公開前   | `production-database.yml`                              | 高     | JST毎日04:41、手動実行、7日保持、既存backup gateが成立              |
 | T4       | 最大3回retry・recovery・36時間鮮度確認をTDD実装 | 初回公開後   | workflow / contract test                               | 高     | 一時失敗を回復し、当日欠落・36時間超過・Artifact失効をfailureにする |
 | T5       | 失敗通知の安全性と受信を検証                    | 初回公開後   | Actions / runbook                                      | 高     | 固定文言のみのsafe failureで登録メール受信を確認                    |
-| T6       | 日次backupを連続実行し最低2世代を確認           | v0.1公開前   | Actions                                                | 高     | 未失効Artifactが2世代以上                                           |
+| T6       | 日次backupを連続実行し最低2世代を確認           | 初回公開後   | Actions                                                | 高     | 未失効Artifactが2世代以上                                           |
 | T6A      | 通常7世代と7日失効境界を確認                    | 初回公開後   | Actions                                                | 高     | 日次run 7回と、保持上限を超えたArtifactの失効を確認                 |
 | T7       | restore drill workflowのRed testを追加          | 初回公開後   | `productionDatabaseRestoreDrillWorkflow.test.ts`       | 高     | manual限定・環境分離・production拒否testが失敗                      |
 | T8       | 手動restore drill workflowを実装                | 初回公開後   | `production-database-restore-drill.yml`                | 高     | checksumから隔離restore・検証・平文cleanupまで成功                  |
@@ -547,8 +550,8 @@ R9-10	実変更・公開後task・rollback境界を最終照合	完了確認	Git
 ### 実環境
 
 1. 確認済み: 手動run 29322979476と週次schedule run 29658935594で暗号化・復号検証・uploadが成功した。前者は7日保持どおり失効し、2026-07-22調査時点では後者だけが未失効である。
-2. v0.1: 日次runを2回以上成功させ、未失効Artifact 2世代と7日保持を確認する。
-3. v0.1: logとArtifactにPII・接続情報・passphrase・平文dumpがないことを再確認する。
+2. 初回公開後: 日次runを2回以上成功させ、未失効Artifact 2世代と7日保持を確認する。
+3. v0.1: M4で使う1世代のlogとArtifactにPII・接続情報・passphrase・平文dumpがないことを再確認する。
 4. 初回公開後: 接続前に失敗する安全な条件で通知testを行い、固定文言のメール受信を確認する。
 5. 初回公開後: 日次run 7回と7日失効境界を確認する。
 6. 初回公開後: 期限内Artifactを隔離projectへrestoreし、Prisma migration・主要table・参照整合性を確認する。
@@ -580,6 +583,17 @@ R9-10	実変更・公開後task・rollback境界を最終照合	完了確認	Git
 
 ## 障害時の停止条件
 
+### M1成立時のv0.1公開前
+
+- release前24時間以内の成功backupに対応する未失効の暗号化Artifact 1世代を確認できない。
+- checksum、復号、Artifact uploadのいずれかが失敗した。
+- 日次scheduleがdefault branchで有効であることを確認できない。
+- Artifactまたはlogに平文dump、PII、接続情報、passphraseが含まれる。
+
+上記のいずれかに該当する間はM5のproduction deployへ進まず、production migration、legacy cleanup、contract migration、その他の破壊的DB操作を停止する。
+
+### M1不成立時、または初回公開後の通常gate
+
 - 最新成功backupが36時間を超えた。
 - 未失効の成功Artifactが2世代未満になった。
 - checksum、復号、Artifact uploadのいずれかが失敗した。
@@ -587,7 +601,7 @@ R9-10	実変更・公開後task・rollback境界を最終照合	完了確認	Git
 - restore drillが失敗した、または隔離dataの削除を確認できない。
 - productionとrestore-drillの接続先分離を検証できない。
 
-上記のいずれかに該当する間は、production migration、legacy cleanup、contract migration、その他の破壊的DB操作を停止する。
+上記の通常gateのいずれかに該当する間は、production migration、legacy cleanup、contract migration、その他の破壊的DB操作を停止する。2世代要件は旧R9とbackup計画全体の耐障害性条件であり、M1成立時のv0.1公開前には適用しない。
 
 ## ロールバック方針
 
@@ -602,10 +616,12 @@ R9-10	実変更・公開後task・rollback境界を最終照合	完了確認	Git
 - [x] 初回production backupのArtifact・暗号化・復号検証が成功している（run 29322979476）。
 - [x] 日次cronの契約testがRedからGreenになり、JST毎日04:41に設定される。
 - [x] 暗号化archiveとchecksumだけを7日保持し、平文dump非保存の既存契約が回帰している。
-- [ ] 未失効の成功Artifactを2世代以上確認している。
+- [ ] M1の空DB・初回配備条件が成立している。
+- [ ] release前24時間以内の成功Artifact 1世代が未失効である。
+- [ ] 日次scheduleがdefault branchで有効である。
 - [ ] `docs/11_deployment.md`、v0.1公開計画、`docs/05_progress.md`が実装と実環境証拠に一致している。
 
-最大3回retry、recovery、36時間鮮度監視、通常7世代、restore drillは本計画全体の完了条件だが、v0.1公開完了条件には含めない。
+2世代目以降、最大3回retry、recovery、36時間鮮度監視、通常7世代、restore drillは本計画全体の完了条件だが、M1が成立するv0.1公開完了条件には含めない。
 
 ## 本計画全体の実装完了条件
 
@@ -640,7 +656,7 @@ T2	日次scheduleのRed testを追加	v0.1公開前	backend/src/jobs/productionD
 T3	backupをJST毎日04:41へ日次化	v0.1公開前	.github/workflows/production-database.yml	高
 T4	最大3回retry・recovery・36時間鮮度確認をTDD実装	初回公開後	workflow・contract test	高
 T5	失敗通知の安全性と受信を検証	初回公開後	Actions・runbook	高
-T6	日次backupを連続実行し最低2世代を確認	v0.1公開前	Actions	高
+T6	日次backupを連続実行し最低2世代を確認	初回公開後	Actions	高
 T6A	通常7世代と7日失効境界を確認	初回公開後	Actions	高
 T7	restore drill workflowのRed testを追加	初回公開後	backend/src/jobs/productionDatabaseRestoreDrillWorkflow.test.ts	高
 T8	手動restore drill workflowを実装	初回公開後	.github/workflows/production-database-restore-drill.yml	高
