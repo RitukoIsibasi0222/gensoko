@@ -583,6 +583,17 @@ R9-10	実変更・公開後task・rollback境界を最終照合	完了確認	Git
 
 ## 障害時の停止条件
 
+### M1成立時のv0.1公開前
+
+- release前24時間以内の成功backupに対応する未失効の暗号化Artifact 1世代を確認できない。
+- checksum、復号、Artifact uploadのいずれかが失敗した。
+- 日次scheduleがdefault branchで有効であることを確認できない。
+- Artifactまたはlogに平文dump、PII、接続情報、passphraseが含まれる。
+
+上記のいずれかに該当する間はM5のproduction deployへ進まず、production migration、legacy cleanup、contract migration、その他の破壊的DB操作を停止する。
+
+### M1不成立時、または初回公開後の通常gate
+
 - 最新成功backupが36時間を超えた。
 - 未失効の成功Artifactが2世代未満になった。
 - checksum、復号、Artifact uploadのいずれかが失敗した。
@@ -590,7 +601,7 @@ R9-10	実変更・公開後task・rollback境界を最終照合	完了確認	Git
 - restore drillが失敗した、または隔離dataの削除を確認できない。
 - productionとrestore-drillの接続先分離を検証できない。
 
-上記のいずれかに該当する間は、production migration、legacy cleanup、contract migration、その他の破壊的DB操作を停止する。
+上記の通常gateのいずれかに該当する間は、production migration、legacy cleanup、contract migration、その他の破壊的DB操作を停止する。2世代要件は旧R9とbackup計画全体の耐障害性条件であり、M1成立時のv0.1公開前には適用しない。
 
 ## ロールバック方針
 
