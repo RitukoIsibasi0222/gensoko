@@ -1,6 +1,11 @@
 # R6 アカウント完全削除 v0.1 ゲート実装計画
 
 > 設計者ロール: シニアフルスタックエンジニア / セキュリティエンジニア / リリースマネージャー
+>
+> 2026-07-26以降のv0.1は[`portfolio-release-v0-1-minimal`](../portfolio-release-v0-1-minimal/plan.md)を正本とする。
+> M1でproductionのUser・legacy・関連row 0件、旧配備・個人data入り旧backupなしを確認できる場合、
+> T35と既存利用者向けmigration/soakは「v0.1対象外」とし、M6のproduction本人退会smokeだけを公開条件にする。
+> M1が成立しない場合は本計画の通常gateをすべて維持する。
 
 ## 概要
 
@@ -27,7 +32,7 @@ Release Task R6「完全削除の残る v0.1 gate を完了する」では、実
 
 ## 目的と完了境界
 
-R6 は次のすべてを満たした時点で完了とする。
+R6全体は次のすべてを満たした時点で完了とする。M1が成立するv0.1公開では、1・2・5を公開後へ移して未完了のまま保持できる。
 
 1. staging T35 で完全一致 synthetic legacy fixture の dry-run、execute、実行後 0 件、再実行 0 件、sentinel/Element 保持、flag `false` 復旧を確認する。
 2. production cleanup の実行者、承認者、実行時間帯、通知先を T1B に記録する。架空の担当者や連絡先は置かない。

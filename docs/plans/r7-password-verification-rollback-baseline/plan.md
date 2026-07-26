@@ -1,6 +1,9 @@
 # R7 Password verification rollback互換baseline TDD実装計画
 
 > 設計者ロール: シニアバックエンドエンジニア / Cloudflare Workersエンジニア / セキュリティエンジニア
+>
+> repository実装は緊急時の選択肢として保持する。2026-07-26以降のv0.1では通常DO版をM2/M5で配備し、
+> R7PVRB-13〜15のbaseline deploy・rollback drillは公開後へ移す。本計画全体は未完了のまま継続する。
 
 ## 概要
 
@@ -25,7 +28,7 @@ staging/production request、workflow dispatch、fixture操作は別承認まで
 - PR #150は基準commitとして`develop`へmerge済み
 - R7PV-01〜R7PV-15: repository実装完了
 - R7PV-16: Free plan、共有DO quota、staging resource、review済みSHAをread-only確認済み
-- R7PV-17: 未実施。v2からpre-v2 versionへ直接rollbackできないため停止中
+- R7PV-17: 未実施。v0.1は通常DO版のdeploy・valid login・auth 429だけをM2で確認し、rollback証拠は公開後へ移す
 - staging/production resource値、version ID、hostname、Secretは本計画へ記録しない
 
 ## 前提条件・依存関係
@@ -506,7 +509,7 @@ R7の残るWAF、監視、production分離、production preflight/smoke等は
 - 実装ブランチ: `feature/r7-password-verification-rollback-baseline`
 - PR: [#152](https://github.com/RitukoIsibasi0222/gensoko/pull/152)
 - 完了範囲: R7PVRB-01〜R7PVRB-12
-- 未完了範囲: R7PVRB-13〜15、R7PV-17、R7-05、R7全体、v0.1公開gate
+- 未完了範囲: R7PVRB-13〜15、R7PV-17全体、R7-05、R7全体。v0.1はM1〜M6で別判定する
 
 ### TDD記録
 

@@ -124,6 +124,21 @@ type CreateAppOptions = {
 
 G1〜G8、R14 preflight、R15 production migration/deploy、R16 smokeは未実施である。このためR5は`[-]`のままとし、本節をproduction適用済み証拠として扱わない。
 
+## ポートフォリオ版 v0.1 最小公開手順
+
+現在の正本は[`portfolio-release-v0-1-minimal`](plans/portfolio-release-v0-1-minimal/plan.md)である。一般登録・認証・ゲーム・本人退会は維持し、次のM1〜M6だけを初回公開のblockerとする。
+
+1. **M1**: 承認付きread-only workflowでproductionのUser・legacy・関連row 0件、旧配備・個人data入り旧backupなしを値非表示で確認する。
+2. **M2**: 同じrelease候補SHAの通常password verifier DO版をstagingへdeployし、登録〜退会、valid login、auth 429、基本keyboard/320px、cleanupを1 campaignで確認する。
+3. **M3**: backend/frontendの最終品質gateを1回実行し、production依存のCritical/Highを0件にする。Moderateは到達可能性、回避策、更新期限を記録する。
+4. **M4**: release前24時間以内の暗号化済み成功Artifact 1世代、checksum、平文非保存、日次schedule有効を確認する。
+5. **M5**: same-site URL、Cookie、CORS、productionメール送信元、production専用Secret/binding、review済みSHAを値非表示でpreflightし、別承認で必要なmigration、API、frontendの順にdeployする。
+6. **M6**: synthetic User 1件で登録・メール受信〜退会、game、refresh、securityを確認し、同じchange内でcleanup・flag復旧・release記録を完了する。
+
+M1が0件・初回配備を証明できない場合はこの最小手順を使わず、R6/R7/R9/R13〜R16の通常gateへ戻る。WAF、24/48時間soak、rollback baseline drill、backup 2世代目以降、restore drill、T35 legacy cleanup実演はM1が成立する場合だけ公開後へ移す。
+
+初回productionでv2より前の互換versionがない間は、障害時にCloudflareのproduction公開routeを停止してAPI trafficを遮断し、pre-v2 rollbackを行わずfix-forwardする。未実装のapplication flagやmaintenance UIを前提にしない。v2適用後の互換versionが複数揃った後は通常のversion rollbackを利用できる。
+
 ## staging frontend/API配備runbook
 
 ### コード基盤の現在地点
@@ -311,9 +326,9 @@ R7 Free Worker password verification分離では、main Workerのloginからcost
 
 v2適用後のrollback先にはpre-v2 versionを使わない。rollback互換baselineは`worker-staging-rollback-baseline.ts`だけが既存cost 12 local adapterを明示DIし、通常stagingと同じWorker名、binding、Hyperdrive、v1/v2 migration、2 class exportを持つ。`wrangler.jsonc`は通常entrypointのまま変更せず、`npm run workers:rollback-baseline:dry-run`がstrict検証済みの一時configを権限`0600`で生成し、成功・失敗とも削除する。通常staging、production、baselineは別bundle profileで検証し、production config/entrypointへbaseline pathやmodeを含めない。
 
-repository実装ではlocal test、workerd、型生成、通常/baseline/production dry-runだけを行う。Cloudflare plan、既存DOと共有するFreeのrequest/duration quota、実namespace/binding/migration、review済みSHA、rollback権限はR7PVRB-13の別承認read-only preflightで確認する。R7PVRB-14/15の別承認までresource/binding/Secret/Environment Variableを変更せず、deploy、workflow dispatch、staging/production request、fixture・flag操作、namespace cleanupを行わない。
+repository実装ではlocal test、workerd、型生成、通常/baseline/production dry-runだけを行った。M2では別承認後に通常版だけをstagingへdeployし、v2 migration、binding、valid login、auth 429、cleanupを確認する。R7PVRB-13〜15のbaseline deploy・rollback drillは実施せず、公開後の運用訓練として未完了のまま保持する。
 
-password verifierのbinding/RPC/result障害はmain Workerでlocal bcryptへfallbackせず、固定日本語503と`Retry-After: 60`でfail-closedにする。別承認rolloutではcleanな同一review済みcommitからbaselineを先行deployし、v2 lifecycle適用後5分以内に通常版をdeployする。rollback drillは通常版とpost-v2 baseline versionの間だけで行い、最小確認後に同一commitの通常版を再deployする。新namespaceと適用済みv2 migrationは直後に削除せず、traffic停止と復旧安定を確認した後の別承認cleanupへ分離する。
+password verifierのbinding/RPC/result障害はmain Workerでlocal bcryptへfallbackせず、固定日本語503と`Retry-After: 60`でfail-closedにする。M2/M5はcleanな同一review済みcommitの通常版をdeployする。v2 migration後に障害が起き、互換versionへrollbackできない場合はrequestを増やさず公開停止・fix-forwardとする。新namespaceと適用済みv2 migrationは直後に削除せず、cleanupは公開後の別承認へ分離する。
 
 Cloudflare account、staging Hyperdrive origin、Worker `gensoko-api-staging`、SQLite-backed DO、7件のWorker secret、公開Workers URLは作成・配備済みである。health 200、CORS、OPTIONS 204、Hyperdrive経由の元素118件を確認済みで、production resourceは作成していない。secret値は読み戻し・文書化しない。
 
@@ -357,13 +372,13 @@ productionはSupabase Free planで運用する。[Supabase pricing](https://supa
 | `backup`         | UTC毎日19:41（JST毎日04:41） | roles・schema・dataをdumpし、AES-256で暗号化・復号検証してArtifactへ7日保存              |
 | `migrate-deploy` | 手動のみ                     | 24時間以内に成功したbackup run IDと期限内Artifactを確認後、`prisma migrate deploy`を実行 |
 
-上表の日次cronは2026-07-22にR9実装branchでcode・contract testまで完了した。capacity-check、暗号化・復号検証・7日保持・手動実行・24時間以内backup gateは維持している。review・`develop`へのmerge後の日次scheduleを2回以上観測し、未失効Artifact 2世代以上を確認するまで、v0.1のR9と本番公開を完了扱いにしない。
+上表の日次cronはcode・contract testまで完了した。capacity-check、暗号化・復号検証・7日保持・手動実行・24時間以内backup gateは維持している。M1の空DB・初回配備条件が成立するv0.1では、release前24時間以内の成功Artifact 1世代と日次schedule有効をM4で確認する。2世代目以降は公開後に観測し、旧R9とbackup計画全体は未完了のまま継続する。
 
 最大3回retry、2時間後recovery、36時間鮮度監視、通常7世代の定常確認、四半期restore drillは初回公開後の強化とする。これらを日次化の完了条件へ混在させず、未実装項目は同計画で継続管理する。
 
 ### R9日次scheduleの観測とrollback
 
-実装PRのreview・`develop`へのmerge後、原則として自動scheduleを待ち、次を2回以上確認する。
+次は旧R9とbackup計画全体の公開後観測手順であり、M4の完了条件ではない。原則として自動scheduleを待ち、2回以上確認する。
 
 1. eventが`schedule`、head branchが`develop`で、head SHAが日次化commitを含む。
 2. `Resolve requested operation`が`backup`を解決し、暗号化backup作成・復号検証・uploadが成功する。
@@ -840,6 +855,8 @@ T19では次の順序を変更しない。
 ## 本番レート制限設定
 
 > 2026-07-23時点: Honoのpolicy・HMAC key・middleware・route配線、SQLite-backed Durable Object、Workers runtime test、staging namespace/bindingは実装・配備済みである。production entrypoint/config/dry-run契約もrepositoryに存在する。一方、rate limit専用のstaging実HTTP 429/503、WAF、DO cleanup/利用量、production実resource、監視、rollbackは未完了であり、本番適用済みとは扱わない。
+>
+> 本節はR7全体を完了するための公開後強化runbookである。ポートフォリオ版v0.1ではM2のauth 429とM5/M6のproduction binding・smokeだけをblockerとし、WAF、全境界case、24/48時間観測は延期する。
 
 R7の実行順序、decision gate、テストケース、証拠、停止条件、監視期間、rollback、production依存は
 [`docs/plans/r7-rate-limit-environment-gates/plan.md`](plans/r7-rate-limit-environment-gates/plan.md)を正本とする。本節はdeployment全体からR7 runbookへ入るための要約だけを保持する。
@@ -902,343 +919,15 @@ Free planの場合はexactな高リスクpath 1本を候補にし、OPTIONS消�
 ## 本番デプロイのチェックリスト
 
 ポートフォリオ版v0.1の公開範囲とrelease blockerは
-[`docs/plans/portfolio-release-v0-1/plan.md`](plans/portfolio-release-v0-1/plan.md)を正本とし、個別計画の未完了gateをこの一覧だけで完了扱いにしない。
+[`docs/plans/portfolio-release-v0-1-minimal/plan.md`](plans/portfolio-release-v0-1-minimal/plan.md)を正本とする。以下はM1〜M6の進捗確認用であり、個別計画の全項目を公開前に完了させる一覧ではない。
 
 ```
-[ ] ダークモードを実装し、主要画面のlight/dark・keyboard・contrastを確認
-[ ] プライバシーポリシー /privacy を公開し、Footer・register・settings導線とowner承認を確認
-[ ] 一般ユーザー登録・メール認証・login・refresh・logoutをstagingで最終確認
-[ ] production frontend/APIをSameSite=Strict Cookieが成立するsite構成にし、reload後refreshを確認
-[ ] 本人退会の物理削除・旧auth拒否・再登録契約をstagingで確認
-[x] staging synthetic Admin E2Eで /admin・強制退会・旧credential拒否・cleanupを確認
-[ ] 基本responsive・keyboard・focus・live regionを主要画面で確認
-[x] Supabase staging・production project作成、Session pooler接続設定
-[ ] Vercelアカウント作成・プロジェクトインポート
-[ ] Vercelに VITE_API_BASE_URL 環境変数を設定
-[x] Cloudflareアカウント作成・Wrangler導入、staging Worker配備を確認
-[x] `backend/wrangler.jsonc`とproduction config生成・dry-run契約を実装
-[ ] Cloudflare Workers に production の FRONTEND_URL を設定（未設定では起動不可）
-[ ] productionの`HYPERDRIVE` bindingを設定し、JWT_SECRET、RATE_LIMIT_KEY_SECRETをWrangler Secretsに設定
-[ ] staging/productionのSQLite-backed Durable Object namespace・migration・bindingを分離
-[ ] productionでRATE_LIMIT_STORE=durable-object以外を拒否することを確認
-[ ] 本番API hostnameが対象zoneのWAFを通り、直接到達・迂回経路がないことを確認
-[x] GitHub Actions production Environmentの DATABASE_URL Secret を設定（migrate deploy 用）
-[x] GitHub Actions Variables に AUDIT_LOG_RETENTION_DAYS と AUDIT_LOG_CLEANUP_ENABLED=false を設定
-[x] 本番DB暗号化backup workflowを実装し、初回Artifact・暗号化・復号検証を確認（run #29322979476）
-[-] backupをJST毎日04:41へ日次化し、暗号化・7日保持をcodeで回帰済み。review・merge後の日次schedule 2回と未失効Artifact 2世代は観測待ち
-[x] 監査ログの正式保持期間・内部ID保持・承認者・通知先を記録
-[x] DB容量70%/85% workflowを実装し、初回capacity run成功・Disk 13%・GitHub Actions failureの受信者を確認（run #29322946812）
-[-] production dry-runと公開前7日baselineは成功。初回executeは全release gate完了後に実施
-[x] 24時間以内のbackup成功後にprisma migrate deployを実行する順序と初回成功を確認（run #29323085012）
-[ ] wrangler deploy で初回デプロイ
-[ ] GitHub Actions の Secrets 設定（CI/CD）
-[ ] エラートラッキングまたは構造化ログの通知先を設定
-[ ] WAF ruleの全設定値・設定者・確認日・rollback手順を記録
-[ ] Honoの429/503/Retry-AfterとWAFのedge responseをstaging実HTTPで確認
-[ ] DO request/alarm/storage利用量とFree/Paid移行条件を確認
-[ ] 本番環境での動作確認（ログイン・ゲーム・メール）
-[ ] CORS設定の確認（フロントエンドのURLが正しく許可されているか）
-[ ] backend/frontendのtest・Workers test・build・lint・format・Prisma validateをrelease候補SHAで確認
-[ ] backend/frontendのnpm audit結果と未解決項目の影響・期限を記録
-[ ] production smokeでhealth・auth/refresh・game・delete・privacy/theme・headers/CORSを確認
+[ ] M1: productionが空の初回公開であることをread-only・値非表示で証明
+[ ] M2: 同一候補SHAでstagingの登録〜退会、auth 429、基本UI、cleanupを1 campaignで確認
+[ ] M3: 最終品質gateと依存監査を実行し、候補SHAを確定
+[ ] M4: 24時間以内の暗号化backup 1世代、checksum、平文非保存、日次schedule有効を確認
+[ ] M5: URL/Cookie/CORS/メール/Secret/bindingを値非表示でpreflightし、承認後にdeploy
+[ ] M6: production synthetic userでメール受信を含む主要導線を確認し、退会・cleanup・記録を完了
 ```
 
-| サービス             | 役割                   | 費用目安                 |
-| -------------------- | ---------------------- | ------------------------ |
-| **Firebase Hosting** | SvelteKitの画面を配信  | 無料枠あり（月10GBまで） |
-| **Railway**          | LaravelのAPIサーバー   | 月5〜10ドル程度          |
-| **Railway**          | PostgreSQLデータベース | 上記に含む               |
-
----
-
-## Firebase Hosting の基本知識
-
-### できること・できないこと
-
-| できること                     | できないこと                           |
-| ------------------------------ | -------------------------------------- |
-| HTML / CSS / JS ファイルの配信 | PHP / Python / Ruby などのサーバー処理 |
-| SvelteKit のビルド成果物を公開 | データベースの直接操作                 |
-| 独自ドメインの設定（無料）     | Laravel を動かすこと                   |
-| 世界中のCDNで高速配信          |                                        |
-
-### SvelteKit のビルド設定
-
-Firebase Hosting に乗せるには SvelteKit を「静的サイト」としてビルドする必要があります。
-
-`frontend/svelte.config.js` に以下を設定：
-
-```javascript
-import adapter from "@sveltejs/adapter-static";
-
-export default {
-  kit: {
-    adapter: adapter({
-      fallback: "index.html", // SPAとして動作させる設定
-    }),
-  },
-};
-```
-
-> ✅ `adapter-static` を使うと、SvelteKit が HTML/JS/CSS ファイルだけを出力します
-> ✅ ページ移動やデータ取得はすべてブラウザ側で行い、Laravel API を呼び出します
-
----
-
-## Railway の基本知識
-
-### できること
-
-- PHP + Laravel をそのまま動かせる
-- PostgreSQL データベースをセットで管理できる
-- GitHubと連携して、コードをpushすると自動デプロイ
-- 環境変数（.env）をWeb画面から設定できる
-
-### 初期設定手順（大まかな流れ）
-
-```
-1. railway.app でアカウント作成
-2. 「New Project」→「Deploy from GitHub repo」
-3. リポジトリの「backend/」フォルダを選択
-4. 「Add Database」→「PostgreSQL」を追加
-5. 環境変数を設定
-6. デプロイ完了 → URLが発行される（例: gensoko-api.railway.app）
-```
-
----
-
-## ドメイン設計
-
-### 開発環境（ローカル）
-
-| サービス    | URL                     |
-| ----------- | ----------------------- |
-| SvelteKit   | `http://localhost:5173` |
-| Laravel API | `http://localhost:80`   |
-
-### 本番環境
-
-| サービス    | URL                                             | サービス         |
-| ----------- | ----------------------------------------------- | ---------------- |
-| SvelteKit   | `https://gensoko.web.app`（または独自ドメイン） | Firebase Hosting |
-| Laravel API | `https://gensoko-api.railway.app`               | Railway          |
-
-> 💡 **独自ドメイン**（例: `gensoko.com`）を取得した場合：
->
-> - `gensoko.com` → Firebase Hosting（フロントエンド）
-> - `api.gensoko.com` → Railway（API）
->   これにより URL が分かりやすくなります。独自ドメインは Firebase Hosting に無料で設定できます。
-
----
-
-## 認証方式の変更（重要）
-
-### なぜ変更が必要か
-
-Laravel Sanctum の「SPA認証（Cookie方式）」は**同じドメイン上でしか動きません**。
-Firebase Hosting（`gensoko.web.app`）と Railway（`gensoko-api.railway.app`）は**別ドメイン**なので、
-Cookie方式ではなく**トークン方式**に変更します。
-
-### 変更後の認証フロー
-
-```
-① ログイン
-SvelteKit → POST /api/v1/auth/login → Laravel
-         ← { "token": "1|xxxxxxxx" } を返す
-
-② トークンを保存
-SvelteKitの認証Storeにトークンを保持（メモリ内）
-ページリロードに備えてsessionStorageにも保存
-
-③ API呼び出し（ログイン後）
-SvelteKit → GET /api/v1/elements
-  リクエストヘッダーに: Authorization: Bearer 1|xxxxxxxx
-         ← Laravel がトークンを検証して応答
-
-④ ログアウト
-SvelteKit → POST /api/v1/auth/logout
-  Laravel側でトークンを削除
-  SvelteKit側のStoreとsessionStorageもクリア
-```
-
----
-
-## CORS（クロスオリジン）設定
-
-別ドメイン間の通信を許可するために Laravel の CORS 設定が必要です。
-
-`backend/config/cors.php`:
-
-```php
-return [
-    'paths' => ['api/*', 'sanctum/csrf-cookie'],
-    'allowed_methods' => ['*'],
-    'allowed_origins' => [
-        'https://gensoko.web.app',    // 本番フロントエンド
-        'http://localhost:5173',       // 開発フロントエンド
-    ],
-    'allowed_headers' => ['*'],
-    'exposed_headers' => [],
-    'max_age' => 0,
-    'supports_credentials' => false,  // トークン方式なのでfalse
-];
-```
-
----
-
-## Firebase CLIのセットアップ手順
-
-### 1. インストール
-
-```bash
-# ローカルPC（Dockerの外）で実行
-npm install -g firebase-tools
-
-# Googleアカウントでログイン
-firebase login
-```
-
-### 2. Firebase プロジェクト作成
-
-1. https://console.firebase.google.com にアクセス
-2. 「プロジェクトを追加」をクリック
-3. プロジェクト名: `gensoko`
-4. Google アナリティクス: スキップでOK
-
-### 3. Firebase Hosting の初期化
-
-```bash
-# frontendフォルダで実行
-cd frontend
-firebase init hosting
-```
-
-対話形式で質問されます：
-
-```
-? What do you want to use as your public directory? build
-? Configure as a single-page app? Yes
-? Set up automatic builds with GitHub? Yes（後でも設定可）
-```
-
-`firebase.json` が生成されます：
-
-```json
-{
-  "hosting": {
-    "public": "build",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  }
-}
-```
-
-### 4. デプロイ
-
-```bash
-# SvelteKitをビルド
-npm run build
-
-# Firebase Hostingにデプロイ
-firebase deploy --only hosting
-```
-
----
-
-## GitHub Actions による自動デプロイ（CI/CD）
-
-コードを `main` ブランチに push したら自動でデプロイする設定です。
-
-`.github/workflows/deploy.yml`:
-
-```yaml
-name: Deploy
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy-frontend:
-    name: Deploy SvelteKit to Firebase
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Install & Build
-        working-directory: frontend
-        run: |
-          npm install
-          npm run build
-        env:
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
-      - name: Deploy to Firebase
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          channelId: live
-          projectId: gensoko
-
-  # Railwayはpush時に自動デプロイされるので設定不要
-```
-
-> ✅ `secrets.VITE_API_BASE_URL` などの秘密情報は GitHub の「Settings > Secrets」に登録します
-> ✅ Railway は GitHub と連携すると push 時に自動でデプロイされます（設定不要）
-
----
-
-## 本番環境の環境変数まとめ
-
-### SvelteKit（frontend/.env.production）
-
-```env
-# Laravelのデプロイ先URL（Railwayが発行したURL）
-VITE_API_BASE_URL=https://gensoko-api.railway.app/api/v1
-```
-
-> `VITE_` で始まる変数はブラウザから見えます。秘密情報を入れないこと。
-
-### Laravel（Railwayの環境変数設定画面で入力）
-
-```env
-APP_NAME=Gensoko
-APP_ENV=production
-APP_DEBUG=false
-APP_URL=https://gensoko-api.railway.app
-
-DB_CONNECTION=pgsql
-DB_HOST=（Railwayが自動で設定）
-DB_PORT=5432
-DB_DATABASE=（Railwayが自動で設定）
-DB_USERNAME=（Railwayが自動で設定）
-DB_PASSWORD=（Railwayが自動で設定）
-
-FRONTEND_URL=https://gensoko.web.app
-```
-
----
-
-## デプロイまでのチェックリスト
-
-```
-[ ] Firebaseプロジェクト作成
-[ ] Firebase CLIインストール・ログイン
-[ ] firebase init hosting（frontendフォルダ）
-[ ] adapter-static インストール・設定
-[ ] Railwayアカウント作成
-[ ] RailwayにGitHubリポジトリ連携
-[ ] Railway に PostgreSQL 追加
-[ ] Railwayの環境変数設定
-[ ] CORS設定の更新
-[ ] 認証をトークン方式に変更（Sanctum Personal Access Token）
-[ ] GitHub Actions の secrets 設定
-[ ] 本番環境での動作確認
-```
+WAF、24/48時間soak、全rate-limit境界、rollback baseline drill、backup 2世代目以降、restore drill、高度なA11Yは公開後の強化項目とする。ただしM1で空の初回公開を証明できない場合は延期せず、通常のR計画へ戻る。

@@ -1,6 +1,9 @@
 # R7 Free Worker password verification分離 TDD実装計画
 
 > 設計者ロール: シニアバックエンドエンジニア / Cloudflare Workersエンジニア / セキュリティエンジニア
+>
+> 2026-07-26以降のv0.1では、M2で通常DO版のstaging deploy・valid login・auth 429・cleanupを確認する。
+> R7PV-17のrollback証拠は公開後へ移し、本計画全体は未完了のまま継続する。
 
 ## 概要
 
@@ -24,7 +27,7 @@ workflow dispatchは別承認まで実施しない。
 - merge commit: `419231173b4d4c8ac1ce1b55ebb4bc49f46b2a3a`
 - E-07: auth request 1〜4は200、5件目だけmain stateless Workerの`exceededCpu`
 - E-08: cost 12 `bcrypt.compare` median 209ms、固定classification `BCRYPT_DOMINANT`
-- R7状態: R7-02、R7-05、R7-10〜R7-20、R7全体、v0.1公開gateは未完了
+- R7状態: R7-02、R7-05、R7-10〜R7-20、R7全体は未完了。v0.1はM1〜M6で別判定する
 
 ## 前提条件・依存関係
 
