@@ -519,34 +519,34 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 
 ## テストケース一覧
 
-| ケース                                                         | 期待結果                                              |
-| -------------------------------------------------------------- | ----------------------------------------------------- |
-| 全DB対象0、全provider履歴なし、backup履歴なし、attestation成立 | 全status `clear`、Path A候補、workflow成功            |
-| Userが1件以上                                                  | `allUsers=present`、count非表示、Path B、workflow失敗 |
-| legacy Userが1件以上                                           | `legacyUsers=present`、ID非表示、Path B               |
-| User所有tableのいずれかが1件以上                               | `userRelatedRows=present`、table別count非表示、Path B |
-| AuditLogが1件以上                                              | `auditLogs=present`、actor/target非表示、Path B       |
-| Elementだけ存在                                                | DB個人data checksは`clear`                            |
-| production DB target不一致                                     | `databaseTarget=unknown`、query前停止                 |
-| DB query/transaction失敗                                       | DB group `unknown`、raw error非表示、Path B           |
-| Vercel Previewだけ存在                                         | production deployment checkは`clear`                  |
-| Vercel production deploymentあり                               | `present`、URL/ID/author非表示、Path B                |
-| Cloudflare期待scriptなしをaccount全一覧で確認                  | `clear`                                               |
-| Cloudflare個別API 404だけ                                      | `unknown`、不存在扱いにしない                         |
-| Cloudflare deploymentあり                                      | `present`、version/deployment ID非表示、Path B        |
-| GitHub Artifactが現存またはexpired                             | backup history `present`                              |
-| Artifact削除済みだが過去backup step成功                        | backup history `present`                              |
-| owner attestation未確認・未入力                                | required inputを埋めずdispatchしない、Path Bを記録    |
-| owner attestation不一致の誤dispatch                            | checkout前に停止、全status `unknown`、Path B          |
-| production変更凍結attestation未確認                            | required inputを埋めずdispatchしない、Path Bを記録    |
-| production変更凍結attestation不一致の誤dispatch                | checkout前に停止、全status `unknown`、Path B          |
-| M1実行中にproduction変更を検出                                 | 証拠無効、Path B、変更内容を値非表示で別review        |
-| pagination途中で429/timeout/schema不一致                       | 対象check `unknown`、部分結果を`clear`にしない        |
-| provider raw errorにSecret/ID fixtureを含む                    | stdout/stderr/markerへ出力されない                    |
-| workflowをschedule/push/PRで起動しようとする                   | triggerが存在せず起動不可                             |
-| feature branchまたはreviewed SHA不一致                         | checkout/DB/API前に失敗                               |
-| workflow sourceにwrite endpoint/command追加                    | source contract test失敗                              |
-| M1成功後にproduction state・scope・SHA変更                     | 既存証拠を失効し再実行                                |
+| ケース                                                         | 期待結果                                                          |
+| -------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 全DB対象0、全provider履歴なし、backup履歴なし、attestation成立 | 全status `clear`、Path A候補、workflow成功                        |
+| Userが1件以上                                                  | `allUsers=present`、count非表示、Path B、workflow失敗             |
+| legacy Userが1件以上                                           | `legacyUsers=present`、ID非表示、Path B                           |
+| User所有tableのいずれかが1件以上                               | `userRelatedRows=present`、table別count非表示、Path B             |
+| AuditLogが1件以上                                              | `auditLogs=present`、actor/target非表示、Path B                   |
+| Elementだけ存在                                                | DB個人data checksは`clear`                                        |
+| production DB target不一致                                     | `databaseTarget=unknown`、query前停止                             |
+| DB query/transaction失敗                                       | `databaseTarget`を含むDB group `unknown`、raw error非表示、Path B |
+| Vercel Previewだけ存在                                         | production deployment checkは`clear`                              |
+| Vercel production deploymentあり                               | `present`、URL/ID/author非表示、Path B                            |
+| Cloudflare期待scriptなしをaccount全一覧で確認                  | `clear`                                                           |
+| Cloudflare個別API 404だけ                                      | `unknown`、不存在扱いにしない                                     |
+| Cloudflare deploymentあり                                      | `present`、version/deployment ID非表示、Path B                    |
+| GitHub Artifactが現存またはexpired                             | backup history `present`                                          |
+| Artifact削除済みだが過去backup step成功                        | backup history `present`                                          |
+| owner attestation未確認・未入力                                | required inputを埋めずdispatchしない、Path Bを記録                |
+| owner attestation不一致の誤dispatch                            | checkout前に停止、全status `unknown`、Path B                      |
+| production変更凍結attestation未確認                            | required inputを埋めずdispatchしない、Path Bを記録                |
+| production変更凍結attestation不一致の誤dispatch                | checkout前に停止、全status `unknown`、Path B                      |
+| M1実行中にproduction変更を検出                                 | 証拠無効、Path B、変更内容を値非表示で別review                    |
+| pagination途中で429/timeout/schema不一致                       | 対象check `unknown`、部分結果を`clear`にしない                    |
+| provider raw errorにSecret/ID fixtureを含む                    | stdout/stderr/markerへ出力されない                                |
+| workflowをschedule/push/PRで起動しようとする                   | triggerが存在せず起動不可                                         |
+| feature branchまたはreviewed SHA不一致                         | checkout/DB/API前に失敗                                           |
+| workflow sourceにwrite endpoint/command追加                    | source contract test失敗                                          |
+| M1成功後にproduction state・scope・SHA変更                     | 既存証拠を失効し再実行                                            |
 
 ## 実装完了
 
@@ -562,6 +562,7 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 - 共通Supabase validatorで顕在化した既存staging synthetic E2E testのproject ref fixtureを、小文字英数字の実契約へ同期した。
 - PR review [#4785098125](https://github.com/RitukoIsibasi0222/gensoko/pull/155#pullrequestreview-4785098125)で検出されたfallback markerの秒精度timestampを、通常markerと同じミリ秒付きUTC形式へ修正し、source contractで固定した。
 - PR review [#4785241679](https://github.com/RitukoIsibasi0222/gensoko/pull/155#pullrequestreview-4785241679)を受け、attestation不能時はplaceholderで誤dispatchせずPath Bを記録する境界、誤dispatch時だけ全項目`unknown`のfallbackを残す境界、証拠日時のミリ秒形式をworkflow・runbook・親計画・R6計画・source contractで同期した。
+- PR review [#4785483509](https://github.com/RitukoIsibasi0222/gensoko/pull/155#pullrequestreview-4785483509)で検出されたDB query/transaction失敗時の`databaseTarget=clear`を、DB evidenceが全項目確定した場合だけ`clear`とするfail-closed判定へ修正した。
 - schema/migrationは変更していないため、`prisma migrate deploy`とPlaywrightは計画どおり実行していない。
 
 ### 実際の変更ファイル
@@ -594,7 +595,8 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 - 厳格review: 秘密非出力、GET-only、Prisma count-only、pagination完全性、404/429/timeout/schema不一致の`unknown`化、TOCTOU変更凍結を再確認した。
 - PR review対応: fallback `executedAt`の形式不一致をRed確認後に修正し、marker・CLI・workflow直接関連test 17件とGNU `date`出力形式を確認した。
 - PR review対応（#4785241679）: attestation不能時のno-dispatch契約と証拠日時形式の不整合をsource contract 1件のRedで確認後に修正し、対象7件・直接関連18件をGreen確認した。親計画・R6計画を含む横断監査でno-run Path Bを同期した。
-- backend test: 1,215件成功、外部DB前提10件skip
+- PR review対応（#4785483509）: DB transaction失敗時に`databaseTarget`だけ`clear`となる回帰test 1件をRed確認後、DB evidence完了判定を追加して対象32件・直接関連50件をGreen確認した。
+- backend test: 1,216件成功、外部DB前提10件skip
 - Workers runtime test: 32件成功
 - build、Workers build/dry-run、lint、format、Prisma validate、workflow/Markdown Prettier、`git diff --check`: すべて成功
 - production DB接続、provider API request、workflow dispatch、Environment/Secret/Variable変更、backup、migration、cleanup、deploy、smoke: すべて未実施
