@@ -190,7 +190,7 @@ async function readExpectedJson(
   frontendOrigin: string,
 ): Promise<unknown> {
   if (response.status !== expectedStatus) {
-    const observedResponse = await classifyUnexpectedResponse(response, frontendOrigin);
+    const observedResponse = await classifyStagingUnexpectedResponse(response, frontendOrigin);
     throw new StagingRateLimitEvidenceContractError(
       INVALID_PREREQUISITE_RESPONSE_MESSAGE,
       "EXPECTED_STATUS",
@@ -217,7 +217,7 @@ async function readExpectedJson(
   return body;
 }
 
-async function classifyUnexpectedResponse(
+export async function classifyStagingUnexpectedResponse(
   response: Response,
   frontendOrigin: string,
 ): Promise<
@@ -581,7 +581,7 @@ async function createRateLimitSummary({
   frontendOrigin: string;
 }): Promise<StagingRateLimitEvidenceSummary> {
   if (response.status !== 429) {
-    const observedResponse = await classifyUnexpectedResponse(response, frontendOrigin);
+    const observedResponse = await classifyStagingUnexpectedResponse(response, frontendOrigin);
     throw new StagingRateLimitEvidenceContractError(
       INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
       "RATE_LIMIT_STATUS",

@@ -5,7 +5,10 @@ import {
   parseJson,
   requestStagingEvidence,
 } from "./stagingEvidenceHttp.js";
-import { StagingRateLimitEvidenceExecutionError } from "./stagingRateLimitEvidence.js";
+import {
+  classifyStagingUnexpectedResponse,
+  StagingRateLimitEvidenceExecutionError,
+} from "./stagingRateLimitEvidence.js";
 import type { M2EvidenceStatus } from "./stagingReleaseCandidateEvidence.js";
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -140,6 +143,13 @@ async function requestResponse({
   } catch {
     throw new M2CampaignExecutionError("unknown", stage);
   }
+  if (response.status === 503) {
+    const classification = await classifyStagingUnexpectedResponse(response, frontendOrigin);
+    throw new M2CampaignExecutionError(
+      classification.observedResponseClass === "SAFE_JSON_503_CONTRACT" ? "present" : "unknown",
+      stage,
+    );
+  }
   assertSafeHeaders(response, frontendOrigin, stage);
   return response;
 }
@@ -171,14 +181,22 @@ async function expectMessageResponse(
 }
 
 function extractRefreshCookie(response: Response, stage: M2CampaignStage): string {
-  const setCookie = response.headers.get("Set-Cookie") ?? "";
-  const match = /^refreshToken=([^;]+);/i.exec(setCookie);
+  const issuedCookies = response.headers
+    .getSetCookie()
+    .filter(
+      (cookie) => /^refreshToken=/i.test(cookie) && !/(?:^|;)\s*Max-Age=0(?:;|$)/i.test(cookie),
+    );
+  const issuedCookie = issuedCookies[0] ?? "";
+  const match = /^refreshToken=([^;]+);/i.exec(issuedCookie);
   if (
+    issuedCookies.length !== 1 ||
     !match?.[1] ||
-    !/;\s*HttpOnly(?:;|$)/i.test(setCookie) ||
-    !/;\s*Secure(?:;|$)/i.test(setCookie) ||
-    !/;\s*SameSite=Strict(?:;|$)/i.test(setCookie) ||
-    !/;\s*Path=\/api\/v1\/auth(?:;|$)/i.test(setCookie)
+    !/;\s*HttpOnly(?:;|$)/i.test(issuedCookie) ||
+    !/;\s*Secure(?:;|$)/i.test(issuedCookie) ||
+    !/;\s*SameSite=Strict(?:;|$)/i.test(issuedCookie) ||
+    !/;\s*Path=\/api\/v1\/auth(?:;|$)/i.test(issuedCookie) ||
+    !/;\s*Max-Age=604800(?:;|$)/i.test(issuedCookie) ||
+    /;\s*Domain=/i.test(issuedCookie)
   ) {
     throw new M2CampaignExecutionError("present", stage);
   }
