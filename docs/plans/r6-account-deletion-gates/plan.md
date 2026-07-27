@@ -391,7 +391,7 @@ config loader は値を error message に含めず、URL、reserved identity、p
 - [ ] T9: production cleanup 体制を承認する
 - [ ] T10: R13 の証拠で Path A/B を選択する
 
-2026-07-27時点では、R13/M1のread-only実行基盤を`feature/m1-production-read-only-evidence`で実装・厳格review・品質gateまで完了し、develop向けPR [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155) を作成済み・未mergeである。production workflowは未dispatchで、R13 read-only run URLとPath A/Bは未確定のため、T10は未完了のまま維持する。実装PRのreview・merge後も、Environment準備とproduction実行は別承認とし、`unknown`または`present`が1件でもあればPath Bを選ぶ。
+2026-07-27時点では、R13/M1のread-only実行基盤を`feature/m1-production-read-only-evidence`で実装・厳格review・品質gateまで完了し、develop向けPR [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155) を作成済み・未mergeである。production workflowは未dispatchで、R13 read-only run URLとPath A/Bは未確定のため、T10は未完了のまま維持する。実装PRのreview・merge後も、Environment準備とproduction実行は別承認とし、read-only scopeまたはattestationを確認できなければdispatchせずPath Bを記録する。実行した場合も`unknown`または`present`が1件でもあればPath Bを選ぶ。
 
 - [ ] T11: R14 preflight へ R6 gate を統合する
 - [ ] T12: R15 で選択 path の migration/deploy を実行する

@@ -935,17 +935,21 @@ M1の正本は[`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-p
 
 値、DB URL、project/account/resource ID、token、メール、User IDをIssue、PR、文書、Step Summaryへ記載しない。Secret/Variableの作成・変更は本runbookのread-only観測には含めず、承認されたM1P-15でのみ行う。
 
+owner attestationを確認できない場合はworkflowをdispatchしない。required inputにnegative/unknown用の値は設けず、placeholderや不一致の固定文字列を意図的に入力してrunを作成しない。run URLやsafe markerは作らず、確認不能という値非表示の判断根拠とPath Bを関連計画へ記録し、M1P-16は未完了のまま通常gateへ戻る。
+
 ### dispatchと確認
 
 1. Actionsの`Production Initial State Evidence`を`develop`から選ぶ。
 2. `reviewed_sha`に実行中の`develop` SHA、`confirmation`に`READ_ONLY_PRODUCTION_INITIAL_STATE`を入力する。
 3. `approver`と`change_record`には正規表現で許可された非秘密識別子だけを使う。
-4. 削除済みdeployment・外部backup copyがないことを確認できる場合だけ`history_attestation=NO_DELETED_DEPLOYMENT_OR_EXTERNAL_BACKUP_COPY`を入力する。
-5. M1開始からreview完了までproduction変更を凍結できる場合だけ`change_freeze_attestation=NO_CONCURRENT_PRODUCTION_CHANGE`を入力する。
+4. 削除済みdeployment・外部backup copyがないことを確認済みの場合だけ`history_attestation=NO_DELETED_DEPLOYMENT_OR_EXTERNAL_BACKUP_COPY`を入力する。
+5. M1開始からreview完了までproduction変更を凍結できることを確認済みの場合だけ`change_freeze_attestation=NO_CONCURRENT_PRODUCTION_CHANGE`を入力する。
 6. production Environment approval画面でworkflow名、ref、SHA、read-only scopeを再確認して承認する。
 7. workflow完了後、security/release reviewerがEnvironment approval、Step Summary、1日保持のsafe marker Artifact、run URLを確認する。
 
 workflowはprovider履歴を先にGETで確認し、最後にSupabase接続先を値非表示で検証してPrisma `count`だけをRepeatable Read transaction内で実行する。migration、backup、cleanup、deploy、smoke、raw SQLは実行しない。404、429、timeout、認可不足、pagination不完了、schema不一致、DB target/query失敗は履歴なしと推測せず`unknown`にする。
+
+手順4または5を確認できない場合は手順6へ進まず、`Run workflow`を押さない。UI/API操作ミスで不一致のattestationを含むrunが作られた場合は、checkout・DB・provider APIより前のvalidationを失敗させ、`always()`のsafe markerを全項目`unknown`・`path-b`として保存した後にjobを失敗させる。このfallbackは誤dispatch時のfail-closed境界であり、確認不能時に意図的に実行する手順ではない。
 
 ### 判定・失効・停止
 

@@ -6,10 +6,19 @@ import { describe, expect, it } from "vitest";
 const WORKFLOW_PATH = fileURLToPath(
   new URL("../../../.github/workflows/production-initial-state-evidence.yml", import.meta.url),
 );
+const RUNBOOK_PATH = fileURLToPath(new URL("../../../docs/11_deployment.md", import.meta.url));
+const PLAN_PATH = fileURLToPath(
+  new URL("../../../docs/plans/m1-production-read-only-evidence/plan.md", import.meta.url),
+);
 
 function readWorkflow(): string {
   expect(existsSync(WORKFLOW_PATH)).toBe(true);
   return readFileSync(WORKFLOW_PATH, "utf8");
+}
+
+function readDocument(path: string): string {
+  expect(existsSync(path)).toBe(true);
+  return readFileSync(path, "utf8");
 }
 
 describe("production initial state evidence workflow", () => {
@@ -44,6 +53,23 @@ describe("production initial state evidence workflow", () => {
     expect(workflow).toContain('if [ "$REVIEWED_SHA" != "$GITHUB_SHA" ]; then');
     expect(validationIndex).toBeGreaterThanOrEqual(0);
     expect(checkoutIndex).toBeGreaterThan(validationIndex);
+  });
+
+  it("attestation不能時はplaceholderを使わずdispatchを停止してPath Bを記録する", () => {
+    const workflow = readWorkflow();
+    const runbook = readDocument(RUNBOOK_PATH);
+    const plan = readDocument(PLAN_PATH);
+
+    expect(workflow).toContain(
+      "確認済みの場合のみNO_DELETED_DEPLOYMENT_OR_EXTERNAL_BACKUP_COPYを入力。確認不能ならdispatchしない",
+    );
+    expect(workflow).toContain(
+      "確認済みの場合のみNO_CONCURRENT_PRODUCTION_CHANGEを入力。確認不能ならdispatchしない",
+    );
+    expect(runbook).toContain("attestationを確認できない場合はworkflowをdispatchしない");
+    expect(runbook).toContain("placeholderや不一致の固定文字列を意図的に入力してrunを作成しない");
+    expect(plan).toContain("attestation不能ならworkflowをdispatchせずPath Bを記録する");
+    expect(plan).toContain("YYYY-MM-DDTHH:mm:ss.sssZ");
   });
 
   it("Secretとresource identifierをinspection stepだけへ渡す", () => {

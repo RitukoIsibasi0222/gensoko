@@ -78,8 +78,8 @@ repository内の実装とproduction実行を分離する。まず専用CLI・pro
 - 全pageを走査できない、API schemaが変わった、rate limit、timeout、401/403/404の意味を安全に確定できない、対象account/project/script/repositoryを照合できない場合は`unknown`とする。
 - 404を自動的に「配備なし」と扱わない。Cloudflareはaccount全体のscript一覧から期待名の不存在を確認できた場合だけ`clear`とし、認可不足と不存在を区別する。Vercelも承認済みscope全体を走査できた場合だけ`clear`とする。
 - GitHub Actions Artifact一覧だけで「過去backupなし」を判定しない。全workflow run/job stepも走査し、成功済みbackup stepが1件でもあれば、当時の空DB証拠が別にない限り`present`とする。
-- providerから削除されたdeployment履歴、expired後に削除されたrun、手元や外部storageへ保存されたbackup copyはAPIだけでは不存在を証明できない。承認者が確認文言で明示attestationできない場合は`unknown`とする。
-- DB・Vercel・Cloudflare・GitHubを単一transactionにできないため、M1開始からreview完了までproduction deploy、DB write、backup、cleanup、provider設定変更を凍結する。凍結をattestationできない、または実行中の変更を検出した場合は`unknown`とする。
+- providerから削除されたdeployment履歴、expired後に削除されたrun、手元や外部storageへ保存されたbackup copyはAPIだけでは不存在を証明できない。承認者が確認文言で明示attestationできない場合は、実行前ならdispatchせず判定上`unknown`のPath Bを記録し、誤dispatch後ならsafe markerのstatusを`unknown`とする。
+- DB・Vercel・Cloudflare・GitHubを単一transactionにできないため、M1開始からreview完了までproduction deploy、DB write、backup、cleanup、provider設定変更を凍結する。凍結をattestationできない場合はdispatchせず判定上`unknown`のPath Bを記録し、実行中の変更を検出した場合は証拠を`unknown`として無効化する。
 - M1証拠はworkflow実行時点のsnapshotであり、以後のproduction変更を承認しない。production state、provider scope、対象識別子、証拠CLI、workflow SHAが変わった場合はM1を再実行する。
 - M1成功後もM4の新鮮な暗号化backup、M5の値非表示preflight、M6のproduction smokeを省略しない。
 
@@ -191,20 +191,20 @@ repository内の実装とproduction実行を分離する。まず専用CLI・pro
 - repository Artifact一覧を全page確認し、`production-db-backup-` prefixの現存・expired metadataを検出する。
 - `Production Database Operations`の全runとjob stepを全page確認し、`Create and verify encrypted logical backup`または同じ契約名のbackup step成功を検出する。
 - 過去backup成功が1件でもあり、そのrunより前または同一snapshotの空DB証拠がない場合は`present`。
-- run/artifactが削除されている可能性と外部copyはowner attestationで補完し、attestation不能なら`unknown`。
+- run/artifactが削除されている可能性と外部copyはowner attestationで補完し、attestation不能ならdispatchせず判定上`unknown`のPath Bを記録する。
 
 ## workflow仕様
 
 ### dispatch入力
 
-| input                       | 形式           | 用途                                                           |
-| --------------------------- | -------------- | -------------------------------------------------------------- |
-| `reviewed_sha`              | 40桁commit SHA | `develop`の実行SHAとの完全一致                                 |
-| `confirmation`              | 固定文字列     | `READ_ONLY_PRODUCTION_INITIAL_STATE`以外を拒否                 |
-| `approver`                  | 安全な識別子   | 承認記録。email等の個人値は使わない                            |
-| `change_record`             | 安全な識別子   | 計画・issue・PRとの対応                                        |
-| `history_attestation`       | 固定文字列     | `NO_DELETED_DEPLOYMENT_OR_EXTERNAL_BACKUP_COPY`以外は`unknown` |
-| `change_freeze_attestation` | 固定文字列     | `NO_CONCURRENT_PRODUCTION_CHANGE`以外は`unknown`               |
+| input                       | 形式           | 用途                                                                                          |
+| --------------------------- | -------------- | --------------------------------------------------------------------------------------------- |
+| `reviewed_sha`              | 40桁commit SHA | `develop`の実行SHAとの完全一致                                                                |
+| `confirmation`              | 固定文字列     | `READ_ONLY_PRODUCTION_INITIAL_STATE`以外を拒否                                                |
+| `approver`                  | 安全な識別子   | 承認記録。email等の個人値は使わない                                                           |
+| `change_record`             | 安全な識別子   | 計画・issue・PRとの対応                                                                       |
+| `history_attestation`       | 固定文字列     | 確認済みの場合だけ`NO_DELETED_DEPLOYMENT_OR_EXTERNAL_BACKUP_COPY`。確認不能ならdispatchしない |
+| `change_freeze_attestation` | 固定文字列     | 確認済みの場合だけ`NO_CONCURRENT_PRODUCTION_CHANGE`。確認不能ならdispatchしない               |
 
 ### job境界
 
@@ -216,6 +216,7 @@ repository内の実装とproduction実行を分離する。まず専用CLI・pro
 - M1 CLIは安全なJSON markerをrunner tempへ書き、Step Summaryにはrun SHA、実行日時、check status、Path A/B候補、再確認条件だけを記録する。
 - markerはstatus keyだけをallowlist再構成してから短期Artifactへ保存する。raw provider response、count、identifier、Secretは保存しない。
 - `present`または`unknown`でも安全なsummary/markerを`always()`で残し、最後に非0終了してM1未完了を明示する。
+- required attestationを確認できなければrunを作成しない。不一致値を含む誤dispatchはcheckout前に失敗させ、全項目`unknown`のsafe markerとPath Bだけを`always()`で残す。
 - workflowの成功だけでM1完了にしない。security/release reviewerがsummary、Environment approval、Artifact allowlist、run URLを確認し、docsへ記録して初めてM1完了とする。
 
 ## 証拠形式
@@ -463,11 +464,11 @@ DB schema/migrationは変更しないため、`prisma migrate deploy`とPlaywrig
 2. production Environmentのrequired reviewer、対象repository、branch policy、concurrencyを値非表示で確認する。
 3. DB/project/provider scope、read-only credential、GitHub permissions、外部backup copy attestation、実行中のproduction変更凍結の対象と限界を提示し、別承認を得る。
 4. Secret/Variableの新規登録・変更が必要な場合は、workflow dispatchとは別の外部変更として承認を得る。
-5. credentialがread契約を満たさない、対象scopeが不明、owner attestation不能ならdispatchせずPath Bとする。
+5. credentialがread契約を満たさない、対象scopeが不明、owner attestation不能ならworkflowをdispatchせずPath Bを記録する。placeholderや不一致値でrunを意図的に作成しない。
 
 ### 実行
 
-1. `develop`のreview済みSHAを選び、固定確認文言・approver・change record・history attestation・change freeze attestationを入力する。
+1. 両attestationが成立している場合だけ`develop`のreview済みSHAを選び、固定確認文言・approver・change record・history attestation・change freeze attestationを入力する。
 2. production Environment approval画面で対象SHA、workflow名、read-only scope、実行者を再確認して承認する。
 3. workflowはprovider履歴を確認し、最後に同一snapshot内のDB countを実行する。write commandは実行しない。
 4. `present` / `unknown`でもsummaryとsafe markerを残した後に失敗させる。
@@ -487,7 +488,7 @@ DB schema/migrationは変更しないため、`prisma migrate deploy`とPlaywrig
 
 - reviewed SHA: `<SHA>`
 - workflow run: `<URL>`
-- executed at: `YYYY-MM-DDTHH:mm:ssZ`
+- executed at: `YYYY-MM-DDTHH:mm:ss.sssZ`
 - approval: production Environment review済み
 - database target: clear / present / unknown
 - all User: clear / present / unknown
@@ -535,8 +536,10 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 | Cloudflare deploymentあり                                      | `present`、version/deployment ID非表示、Path B        |
 | GitHub Artifactが現存またはexpired                             | backup history `present`                              |
 | Artifact削除済みだが過去backup step成功                        | backup history `present`                              |
-| owner attestation不一致・未入力                                | attestation `unknown`、dispatch停止またはPath B       |
-| production変更凍結attestation不成立                            | freeze status `unknown`、dispatch停止またはPath B     |
+| owner attestation未確認・未入力                                | required inputを埋めずdispatchしない、Path Bを記録    |
+| owner attestation不一致の誤dispatch                            | checkout前に停止、全status `unknown`、Path B          |
+| production変更凍結attestation未確認                            | required inputを埋めずdispatchしない、Path Bを記録    |
+| production変更凍結attestation不一致の誤dispatch                | checkout前に停止、全status `unknown`、Path B          |
 | M1実行中にproduction変更を検出                                 | 証拠無効、Path B、変更内容を値非表示で別review        |
 | pagination途中で429/timeout/schema不一致                       | 対象check `unknown`、部分結果を`clear`にしない        |
 | provider raw errorにSecret/ID fixtureを含む                    | stdout/stderr/markerへ出力されない                    |
@@ -558,6 +561,7 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 - Vercel paginationのpage count不一致とpage上限を`unknown`へ倒す契約を追加した。
 - 共通Supabase validatorで顕在化した既存staging synthetic E2E testのproject ref fixtureを、小文字英数字の実契約へ同期した。
 - PR review [#4785098125](https://github.com/RitukoIsibasi0222/gensoko/pull/155#pullrequestreview-4785098125)で検出されたfallback markerの秒精度timestampを、通常markerと同じミリ秒付きUTC形式へ修正し、source contractで固定した。
+- PR review [#4785241679](https://github.com/RitukoIsibasi0222/gensoko/pull/155#pullrequestreview-4785241679)を受け、attestation不能時はplaceholderで誤dispatchせずPath Bを記録する境界、誤dispatch時だけ全項目`unknown`のfallbackを残す境界、証拠日時のミリ秒形式をworkflow・runbook・親計画・R6計画・source contractで同期した。
 - schema/migrationは変更していないため、`prisma migrate deploy`とPlaywrightは計画どおり実行していない。
 
 ### 実際の変更ファイル
@@ -589,7 +593,8 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 - Green/Refactor: 対象7 test fileと既存staging互換test 71件を通過し、共通GET/pagination/validator、safe marker再構成へ整理した。
 - 厳格review: 秘密非出力、GET-only、Prisma count-only、pagination完全性、404/429/timeout/schema不一致の`unknown`化、TOCTOU変更凍結を再確認した。
 - PR review対応: fallback `executedAt`の形式不一致をRed確認後に修正し、marker・CLI・workflow直接関連test 17件とGNU `date`出力形式を確認した。
-- backend test: 1,214件成功、外部DB前提10件skip
+- PR review対応（#4785241679）: attestation不能時のno-dispatch契約と証拠日時形式の不整合をsource contract 1件のRedで確認後に修正し、対象7件・直接関連18件をGreen確認した。親計画・R6計画を含む横断監査でno-run Path Bを同期した。
+- backend test: 1,215件成功、外部DB前提10件skip
 - Workers runtime test: 32件成功
 - build、Workers build/dry-run、lint、format、Prisma validate、workflow/Markdown Prettier、`git diff --check`: すべて成功
 - production DB接続、provider API request、workflow dispatch、Environment/Secret/Variable変更、backup、migration、cleanup、deploy、smoke: すべて未実施

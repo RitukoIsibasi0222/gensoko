@@ -20,11 +20,11 @@ on:
         required: true
         type: string
       history_attestation:
-        description: NO_DELETED_DEPLOYMENT_OR_EXTERNAL_BACKUP_COPYを入力
+        description: 確認済みの場合のみNO_DELETED_DEPLOYMENT_OR_EXTERNAL_BACKUP_COPYを入力。確認不能ならdispatchしない
         required: true
         type: string
       change_freeze_attestation:
-        description: NO_CONCURRENT_PRODUCTION_CHANGEを入力
+        description: 確認済みの場合のみNO_CONCURRENT_PRODUCTION_CHANGEを入力。確認不能ならdispatchしない
         required: true
         type: string
 
