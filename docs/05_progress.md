@@ -267,7 +267,7 @@
 
 ### 最小リリース工程（M1〜M6）
 
-- [-] M1: productionの全User・legacy・関連row 0件、旧配備・個人data入り旧backupなしを承認付きread-only証拠で確認する — 計画書: [`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-production-read-only-evidence/plan.md)
+- [-] M1: productionの全User・legacy・関連row 0件、旧配備・個人data入り旧backupなしを承認付きread-only証拠で確認する — 計画書: [`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-production-read-only-evidence/plan.md) — M1P-01〜M1P-14のread-only実行基盤・厳格review・品質gate・develop向けPR [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155) 作成まで完了（未merge）。M1P-15〜M1P-16のEnvironment準備、production dispatch、証拠review、Path判定は別承認のため未実施
 - [ ] M2: 同じrelease候補SHAで、stagingの登録〜退会、通常password verifier DO、auth 429、基本keyboard/320px、cleanupを1回確認する
 - [ ] M3: release候補SHAのtest・Workers test・build・lint・format・Prisma validateを通し、production依存Critical/High 0件を確認する
 - [ ] M4: 24時間以内の暗号化backup 1世代、checksum、平文非保存、日次schedule有効を確認する

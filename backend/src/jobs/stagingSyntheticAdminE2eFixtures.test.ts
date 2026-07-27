@@ -12,11 +12,14 @@ import {
 
 const ADMIN_PASSWORD = "SyntheticAdmin1!password";
 const USER_PASSWORD = "SyntheticUser1!password";
+const STAGING_PROJECT_REF = "abcdefghijklmnopqrst";
 const VALID_ENVIRONMENT = {
   BATCH_ENVIRONMENT: "staging",
-  STAGING_SUPABASE_PROJECT_REF: "staging-ref",
+  STAGING_SUPABASE_PROJECT_REF: STAGING_PROJECT_REF,
   DATABASE_URL:
-    "postgresql://postgres.staging-ref:secret@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres",
+    "postgresql://postgres." +
+    STAGING_PROJECT_REF +
+    ":secret@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres",
   STAGING_SYNTHETIC_E2E_FIXTURES_ENABLED: "true",
   STAGING_SYNTHETIC_ADMIN_PASSWORD: ADMIN_PASSWORD,
   STAGING_SYNTHETIC_USER_PASSWORD: USER_PASSWORD,

@@ -62,6 +62,7 @@ repository内の実装とproduction実行を分離する。まず専用CLI・pro
 - [Cloudflare Workers List Deployments](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/methods/list/) — production Worker deployment履歴の取得。`Workers Scripts Read` tokenを使用する。
 - [GitHub Actions Artifacts API](https://docs.github.com/en/rest/actions/artifacts) — 現存・expired Artifact metadataの取得。
 - [GitHub Actions Workflow Jobs API](https://docs.github.com/en/rest/actions/workflow-jobs) — Artifact削除後も含め、過去runでbackup作成stepが成功したかを確認する。
+- [GitHub Actions workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax) — job/step timeoutとcancel境界の確認。
 
 ### 重要な制約
 
@@ -76,10 +77,11 @@ repository内の実装とproduction実行を分離する。まず専用CLI・pro
 - CLIはprovider responseをそのまま例外causeやconsoleへ渡さず、安全な日本語の一般化messageへ変換する。
 - `set -x`、HTTP verbose/debug、trace、screenshot、provider response Artifact、shell引数へのSecret展開を禁止する。
 - 全pageを走査できない、API schemaが変わった、rate limit、timeout、401/403/404の意味を安全に確定できない、対象account/project/script/repositoryを照合できない場合は`unknown`とする。
+- Vercel・Cloudflare・GitHubとGitHub run/job反復はmonotonic clockによる10分の総時間予算を共有する。各GETの前後で残時間を検証し、予算切れ後は追加requestを送らず未完了checkを`unknown`とする。
 - 404を自動的に「配備なし」と扱わない。Cloudflareはaccount全体のscript一覧から期待名の不存在を確認できた場合だけ`clear`とし、認可不足と不存在を区別する。Vercelも承認済みscope全体を走査できた場合だけ`clear`とする。
 - GitHub Actions Artifact一覧だけで「過去backupなし」を判定しない。全workflow run/job stepも走査し、成功済みbackup stepが1件でもあれば、当時の空DB証拠が別にない限り`present`とする。
-- providerから削除されたdeployment履歴、expired後に削除されたrun、手元や外部storageへ保存されたbackup copyはAPIだけでは不存在を証明できない。承認者が確認文言で明示attestationできない場合は`unknown`とする。
-- DB・Vercel・Cloudflare・GitHubを単一transactionにできないため、M1開始からreview完了までproduction deploy、DB write、backup、cleanup、provider設定変更を凍結する。凍結をattestationできない、または実行中の変更を検出した場合は`unknown`とする。
+- providerから削除されたdeployment履歴、expired後に削除されたrun、手元や外部storageへ保存されたbackup copyはAPIだけでは不存在を証明できない。承認者が確認文言で明示attestationできない場合は、実行前ならdispatchせず判定上`unknown`のPath Bを記録し、誤dispatch後ならsafe markerのstatusを`unknown`とする。
+- DB・Vercel・Cloudflare・GitHubを単一transactionにできないため、M1開始からreview完了までproduction deploy、DB write、backup、cleanup、provider設定変更を凍結する。凍結をattestationできない場合はdispatchせず判定上`unknown`のPath Bを記録し、実行中の変更を検出した場合は証拠を`unknown`として無効化する。
 - M1証拠はworkflow実行時点のsnapshotであり、以後のproduction変更を承認しない。production state、provider scope、対象識別子、証拠CLI、workflow SHAが変わった場合はM1を再実行する。
 - M1成功後もM4の新鮮な暗号化backup、M5の値非表示preflight、M6のproduction smokeを省略しない。
 
@@ -99,7 +101,7 @@ repository内の実装とproduction実行を分離する。まず専用CLI・pro
 | `backend/src/lib/supabase-database-target.ts`                     | 新規     | environment別Supabase接続先の共通値非表示validator              |
 | `backend/src/lib/supabase-database-target.test.ts`                | 新規     | staging/production、URL境界、Secret非出力test                   |
 | `backend/src/lib/staging-database-target.ts`                      | 修正     | 共通validatorを利用する既存互換wrapperへ整理                    |
-| `backend/src/lib/staging-database-target.test.ts`                 | 修正     | 共通化後も既存staging契約を維持するtest                         |
+| `backend/src/jobs/stagingSyntheticAdminE2eFixtures.test.ts`       | 修正     | Supabase project refの既存fixtureを実契約へ同期                 |
 | `backend/src/jobs/productionInitialStateEvidence.ts`              | 新規     | check status、Path判定、安全な証拠形式の純粋ロジック            |
 | `backend/src/jobs/productionInitialStateEvidence.test.ts`         | 新規     | `clear` / `present` / `unknown`と非出力契約のunit test          |
 | `backend/src/jobs/inspectProductionInitialState.ts`               | 新規     | Prisma集計とVercel/Cloudflare/GitHub read clientの調停          |
@@ -191,20 +193,20 @@ repository内の実装とproduction実行を分離する。まず専用CLI・pro
 - repository Artifact一覧を全page確認し、`production-db-backup-` prefixの現存・expired metadataを検出する。
 - `Production Database Operations`の全runとjob stepを全page確認し、`Create and verify encrypted logical backup`または同じ契約名のbackup step成功を検出する。
 - 過去backup成功が1件でもあり、そのrunより前または同一snapshotの空DB証拠がない場合は`present`。
-- run/artifactが削除されている可能性と外部copyはowner attestationで補完し、attestation不能なら`unknown`。
+- run/artifactが削除されている可能性と外部copyはowner attestationで補完し、attestation不能ならdispatchせず判定上`unknown`のPath Bを記録する。
 
 ## workflow仕様
 
 ### dispatch入力
 
-| input                       | 形式           | 用途                                                           |
-| --------------------------- | -------------- | -------------------------------------------------------------- |
-| `reviewed_sha`              | 40桁commit SHA | `develop`の実行SHAとの完全一致                                 |
-| `confirmation`              | 固定文字列     | `READ_ONLY_PRODUCTION_INITIAL_STATE`以外を拒否                 |
-| `approver`                  | 安全な識別子   | 承認記録。email等の個人値は使わない                            |
-| `change_record`             | 安全な識別子   | 計画・issue・PRとの対応                                        |
-| `history_attestation`       | 固定文字列     | `NO_DELETED_DEPLOYMENT_OR_EXTERNAL_BACKUP_COPY`以外は`unknown` |
-| `change_freeze_attestation` | 固定文字列     | `NO_CONCURRENT_PRODUCTION_CHANGE`以外は`unknown`               |
+| input                       | 形式           | 用途                                                                                          |
+| --------------------------- | -------------- | --------------------------------------------------------------------------------------------- |
+| `reviewed_sha`              | 40桁commit SHA | `develop`の実行SHAとの完全一致                                                                |
+| `confirmation`              | 固定文字列     | `READ_ONLY_PRODUCTION_INITIAL_STATE`以外を拒否                                                |
+| `approver`                  | 安全な識別子   | 承認記録。email等の個人値は使わない                                                           |
+| `change_record`             | 安全な識別子   | 計画・issue・PRとの対応                                                                       |
+| `history_attestation`       | 固定文字列     | 確認済みの場合だけ`NO_DELETED_DEPLOYMENT_OR_EXTERNAL_BACKUP_COPY`。確認不能ならdispatchしない |
+| `change_freeze_attestation` | 固定文字列     | 確認済みの場合だけ`NO_CONCURRENT_PRODUCTION_CHANGE`。確認不能ならdispatchしない               |
 
 ### job境界
 
@@ -216,6 +218,8 @@ repository内の実装とproduction実行を分離する。まず専用CLI・pro
 - M1 CLIは安全なJSON markerをrunner tempへ書き、Step Summaryにはrun SHA、実行日時、check status、Path A/B候補、再確認条件だけを記録する。
 - markerはstatus keyだけをallowlist再構成してから短期Artifactへ保存する。raw provider response、count、identifier、Secretは保存しない。
 - `present`または`unknown`でも安全なsummary/markerを`always()`で残し、最後に非0終了してM1未完了を明示する。
+- jobの30分timeoutとは別にinspection stepを15分で停止し、総時間予算を超えた外部確認は10分以内に`unknown`へ倒してsafe marker・Summary・Artifact処理の時間を残す。
+- required attestationを確認できなければrunを作成しない。不一致値を含む誤dispatchはcheckout前に失敗させ、全項目`unknown`のsafe markerとPath Bだけを`always()`で残す。
 - workflowの成功だけでM1完了にしない。security/release reviewerがsummary、Environment approval、Artifact allowlist、run URLを確認し、docsへ記録して初めてM1完了とする。
 
 ## 証拠形式
@@ -360,24 +364,24 @@ export function toSafeProductionInitialStateMarker(
 | M1P-11   | 秘密非出力・GET-only・pagination・未知responseを再テスト  | 対象test一式                                     | 高     | Refactor  |
 | M1P-12   | M1 runbookと各計画の実装状態を同期                        | `docs/`                                          | 高     | Docs      |
 | M1P-13   | backend最終品質gateとworkflow/Markdown formatを実行       | `backend/`・`.github/`・`docs/`                  | 高     | Quality   |
-| M1P-14   | 厳格review、PR、mergeを完了                               | GitHub                                           | 高     | Review    |
+| M1P-14   | 厳格review、develop向けPR作成を完了                       | GitHub                                           | 高     | Review    |
 | M1P-15   | Environment/Secret準備を別承認し、review済みSHAでdispatch | GitHub production Environment                    | 高     | Execute   |
 | M1P-16   | 証拠review、docs記録、Path A/B決定、M1状態更新            | `docs/`                                          | 高     | Evidence  |
 
-- [ ] M1P-01: workflow/source contract testを追加し、未実装理由でRedを確認する
-- [ ] M1P-02: Supabase接続先validatorを共通化する
-- [ ] M1P-03: status・Path判定・safe markerをTDD実装する
-- [ ] M1P-04: production DB初回状態のPrisma集計をTDD実装する
-- [ ] M1P-05: Vercel production履歴確認をTDD実装する
-- [ ] M1P-06: Cloudflare Worker deployment履歴確認をTDD実装する
-- [ ] M1P-07: GitHub deployment・backup履歴確認をTDD実装する
-- [ ] M1P-08: CLI config・attestation・safe outputをTDD実装する
-- [ ] M1P-09: M1専用npm scriptを追加する
-- [ ] M1P-10: 承認付きmanual-only workflowを実装する
-- [ ] M1P-11: 秘密非出力・GET-only・fail-closedを再レビューする
-- [ ] M1P-12: runbookと関連計画を同期する
-- [ ] M1P-13: 最終品質gateを通過する
-- [ ] M1P-14: 実装PRを厳格reviewして`develop`へmergeする
+- [x] M1P-01: workflow/source contract testを追加し、未実装理由でRedを確認する
+- [x] M1P-02: Supabase接続先validatorを共通化する
+- [x] M1P-03: status・Path判定・safe markerをTDD実装する
+- [x] M1P-04: production DB初回状態のPrisma集計をTDD実装する
+- [x] M1P-05: Vercel production履歴確認をTDD実装する
+- [x] M1P-06: Cloudflare Worker deployment履歴確認をTDD実装する
+- [x] M1P-07: GitHub deployment・backup履歴確認をTDD実装する
+- [x] M1P-08: CLI config・attestation・safe outputをTDD実装する
+- [x] M1P-09: M1専用npm scriptを追加する
+- [x] M1P-10: 承認付きmanual-only workflowを実装する
+- [x] M1P-11: 秘密非出力・GET-only・fail-closedを再レビューする
+- [x] M1P-12: runbookと関連計画を同期する
+- [x] M1P-13: 最終品質gateを通過する
+- [x] M1P-14: 実装PRを厳格reviewして`develop`向けに作成する（mergeは行わない）
 - [ ] M1P-15: 別承認後にproduction read-only workflowを実行する
 - [ ] M1P-16: 証拠を記録し、Path A/BとM1完了可否を確定する
 
@@ -398,7 +402,7 @@ M1P-10	manual-only production workflow実装	.github/workflows/production-initia
 M1P-11	秘密非出力・GET-only・fail-closed再review	backend/src/jobs/*.test.ts	高
 M1P-12	runbook・関連計画同期	docs/	高
 M1P-13	最終品質gate	backend・.github・docs	高
-M1P-14	実装PR review・merge	GitHub	高
+M1P-14	実装PR review・develop向け作成	GitHub	高
 M1P-15	別承認production dispatch	GitHub production Environment	高
 M1P-16	証拠記録・Path確定	docs/	高
 ```
@@ -463,11 +467,11 @@ DB schema/migrationは変更しないため、`prisma migrate deploy`とPlaywrig
 2. production Environmentのrequired reviewer、対象repository、branch policy、concurrencyを値非表示で確認する。
 3. DB/project/provider scope、read-only credential、GitHub permissions、外部backup copy attestation、実行中のproduction変更凍結の対象と限界を提示し、別承認を得る。
 4. Secret/Variableの新規登録・変更が必要な場合は、workflow dispatchとは別の外部変更として承認を得る。
-5. credentialがread契約を満たさない、対象scopeが不明、owner attestation不能ならdispatchせずPath Bとする。
+5. credentialがread契約を満たさない、対象scopeが不明、owner attestation不能ならworkflowをdispatchせずPath Bを記録する。placeholderや不一致値でrunを意図的に作成しない。
 
 ### 実行
 
-1. `develop`のreview済みSHAを選び、固定確認文言・approver・change record・history attestation・change freeze attestationを入力する。
+1. 両attestationが成立している場合だけ`develop`のreview済みSHAを選び、固定確認文言・approver・change record・history attestation・change freeze attestationを入力する。
 2. production Environment approval画面で対象SHA、workflow名、read-only scope、実行者を再確認して承認する。
 3. workflowはprovider履歴を確認し、最後に同一snapshot内のDB countを実行する。write commandは実行しない。
 4. `present` / `unknown`でもsummaryとsafe markerを残した後に失敗させる。
@@ -487,7 +491,7 @@ DB schema/migrationは変更しないため、`prisma migrate deploy`とPlaywrig
 
 - reviewed SHA: `<SHA>`
 - workflow run: `<URL>`
-- executed at: `YYYY-MM-DDTHH:mm:ssZ`
+- executed at: `YYYY-MM-DDTHH:mm:ss.sssZ`
 - approval: production Environment review済み
 - database target: clear / present / unknown
 - all User: clear / present / unknown
@@ -511,6 +515,7 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 
 - workflow準備中にwrite permission、write endpoint、deploy command、migration、backup、cleanupを検出した場合はmergeしない。
 - production target不一致、branch/SHA不一致、Secret不足、provider scope不明、pagination不完了、API error、Zod parse failure、DB query failureはすべて`unknown`で停止する。
+- 外部確認の10分総時間予算またはinspection stepの15分timeoutへ到達した場合は証拠を`unknown`のPath Bへ倒し、page上限まで待ち続けない。
 - nonzeroを検出してもcleanup・削除・Artifact削除・deployment削除を続けて実行しない。M1は観測だけで終了する。
 - workflow timeout/cancel時は証拠を不完全としてPath Bへ倒し、同じrunを成功扱いにしない。再実行には改めてproduction Environment approvalを要求する。
 - SecretやPIIがlog/Artifactへ露出した可能性がある場合は、値を会話やPRへ転載せず、credential rotation、Artifact/log処理、incident記録を別承認で行う。
@@ -518,41 +523,101 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 
 ## テストケース一覧
 
-| ケース                                                         | 期待結果                                              |
-| -------------------------------------------------------------- | ----------------------------------------------------- |
-| 全DB対象0、全provider履歴なし、backup履歴なし、attestation成立 | 全status `clear`、Path A候補、workflow成功            |
-| Userが1件以上                                                  | `allUsers=present`、count非表示、Path B、workflow失敗 |
-| legacy Userが1件以上                                           | `legacyUsers=present`、ID非表示、Path B               |
-| User所有tableのいずれかが1件以上                               | `userRelatedRows=present`、table別count非表示、Path B |
-| AuditLogが1件以上                                              | `auditLogs=present`、actor/target非表示、Path B       |
-| Elementだけ存在                                                | DB個人data checksは`clear`                            |
-| production DB target不一致                                     | `databaseTarget=unknown`、query前停止                 |
-| DB query/transaction失敗                                       | DB group `unknown`、raw error非表示、Path B           |
-| Vercel Previewだけ存在                                         | production deployment checkは`clear`                  |
-| Vercel production deploymentあり                               | `present`、URL/ID/author非表示、Path B                |
-| Cloudflare期待scriptなしをaccount全一覧で確認                  | `clear`                                               |
-| Cloudflare個別API 404だけ                                      | `unknown`、不存在扱いにしない                         |
-| Cloudflare deploymentあり                                      | `present`、version/deployment ID非表示、Path B        |
-| GitHub Artifactが現存またはexpired                             | backup history `present`                              |
-| Artifact削除済みだが過去backup step成功                        | backup history `present`                              |
-| owner attestation不一致・未入力                                | attestation `unknown`、dispatch停止またはPath B       |
-| production変更凍結attestation不成立                            | freeze status `unknown`、dispatch停止またはPath B     |
-| M1実行中にproduction変更を検出                                 | 証拠無効、Path B、変更内容を値非表示で別review        |
-| pagination途中で429/timeout/schema不一致                       | 対象check `unknown`、部分結果を`clear`にしない        |
-| provider raw errorにSecret/ID fixtureを含む                    | stdout/stderr/markerへ出力されない                    |
-| workflowをschedule/push/PRで起動しようとする                   | triggerが存在せず起動不可                             |
-| feature branchまたはreviewed SHA不一致                         | checkout/DB/API前に失敗                               |
-| workflow sourceにwrite endpoint/command追加                    | source contract test失敗                              |
-| M1成功後にproduction state・scope・SHA変更                     | 既存証拠を失効し再実行                                |
+| ケース                                                         | 期待結果                                                          |
+| -------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 全DB対象0、全provider履歴なし、backup履歴なし、attestation成立 | 全status `clear`、Path A候補、workflow成功                        |
+| Userが1件以上                                                  | `allUsers=present`、count非表示、Path B、workflow失敗             |
+| legacy Userが1件以上                                           | `legacyUsers=present`、ID非表示、Path B                           |
+| User所有tableのいずれかが1件以上                               | `userRelatedRows=present`、table別count非表示、Path B             |
+| AuditLogが1件以上                                              | `auditLogs=present`、actor/target非表示、Path B                   |
+| Elementだけ存在                                                | DB個人data checksは`clear`                                        |
+| production DB target不一致                                     | `databaseTarget=unknown`、query前停止                             |
+| DB query/transaction失敗                                       | `databaseTarget`を含むDB group `unknown`、raw error非表示、Path B |
+| Vercel Previewだけ存在                                         | production deployment checkは`clear`                              |
+| Vercel production deploymentあり                               | `present`、URL/ID/author非表示、Path B                            |
+| Cloudflare期待scriptなしをaccount全一覧で確認                  | `clear`                                                           |
+| Cloudflare個別API 404だけ                                      | `unknown`、不存在扱いにしない                                     |
+| Cloudflare deploymentあり                                      | `present`、version/deployment ID非表示、Path B                    |
+| GitHub Artifactが現存またはexpired                             | backup history `present`                                          |
+| Artifact削除済みだが過去backup step成功                        | backup history `present`                                          |
+| owner attestation未確認・未入力                                | required inputを埋めずdispatchしない、Path Bを記録                |
+| owner attestation不一致の誤dispatch                            | checkout前に停止、全status `unknown`、Path B                      |
+| production変更凍結attestation未確認                            | required inputを埋めずdispatchしない、Path Bを記録                |
+| production変更凍結attestation不一致の誤dispatch                | checkout前に停止、全status `unknown`、Path B                      |
+| M1実行中にproduction変更を検出                                 | 証拠無効、Path B、変更内容を値非表示で別review                    |
+| pagination途中で429/timeout/schema不一致                       | 対象check `unknown`、部分結果を`clear`にしない                    |
+| provider間またはGitHub run/job反復で10分予算へ到達             | 追加GETを止め、未完了checkを`unknown`にする                       |
+| provider raw errorにSecret/ID fixtureを含む                    | stdout/stderr/markerへ出力されない                                |
+| workflowをschedule/push/PRで起動しようとする                   | triggerが存在せず起動不可                                         |
+| feature branchまたはreviewed SHA不一致                         | checkout/DB/API前に失敗                                           |
+| workflow sourceにwrite endpoint/command追加                    | source contract test失敗                                          |
+| M1成功後にproduction state・scope・SHA変更                     | 既存証拠を失効し再実行                                            |
+
+## 実装完了
+
+- 完了日: 2026-07-27
+- 実装ブランチ: `feature/m1-production-read-only-evidence`
+- PR: [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155)（`develop`向け・未merge）
+
+### 計画からの変更点
+
+- ユーザーの明示条件に従い、M1P-14はPR作成までとし、mergeを本作業の範囲から除外した。merge済みであることはM1P-15の別承認実行前提として維持する。
+- safe marker再構成でouter/evidenceのexact key、reviewed SHA完全一致、statusからのdecision再計算を追加し、未検証inputはsummaryへ出さない形に強化した。
+- Vercel paginationのpage count不一致とpage上限を`unknown`へ倒す契約を追加した。
+- 共通Supabase validatorで顕在化した既存staging synthetic E2E testのproject ref fixtureを、小文字英数字の実契約へ同期した。
+- PR review [#4785098125](https://github.com/RitukoIsibasi0222/gensoko/pull/155#pullrequestreview-4785098125)で検出されたfallback markerの秒精度timestampを、通常markerと同じミリ秒付きUTC形式へ修正し、source contractで固定した。
+- PR review [#4785241679](https://github.com/RitukoIsibasi0222/gensoko/pull/155#pullrequestreview-4785241679)を受け、attestation不能時はplaceholderで誤dispatchせずPath Bを記録する境界、誤dispatch時だけ全項目`unknown`のfallbackを残す境界、証拠日時のミリ秒形式をworkflow・runbook・親計画・R6計画・source contractで同期した。
+- PR review [#4785483509](https://github.com/RitukoIsibasi0222/gensoko/pull/155#pullrequestreview-4785483509)で検出されたDB query/transaction失敗時の`databaseTarget=clear`を、DB evidenceが全項目確定した場合だけ`clear`とするfail-closed判定へ修正した。
+- PR review [#4785617213](https://github.com/RitukoIsibasi0222/gensoko/pull/155#pullrequestreview-4785617213)のsuppressed指摘を受け、外部確認全体へ10分の共有時間予算、inspection stepへ15分timeoutを追加し、job timeout前にfail-closed marker処理へ進める境界を固定した。
+- schema/migrationは変更していないため、`prisma migrate deploy`とPlaywrightは計画どおり実行していない。
+
+### 実際の変更ファイル
+
+| ファイル                                                          | 変更種別 | 内容                                               |
+| ----------------------------------------------------------------- | -------- | -------------------------------------------------- |
+| `backend/package.json`                                            | 修正     | M1専用CLI scriptを追加                             |
+| `backend/src/lib/supabase-database-target.ts`                     | 新規     | environment別Supabase接続先validator               |
+| `backend/src/lib/supabase-database-target.test.ts`                | 新規     | URL境界・環境分離・秘密非出力test                  |
+| `backend/src/lib/staging-database-target.ts`                      | 修正     | 共通validatorを利用するwrapperへ整理               |
+| `backend/src/jobs/stagingSyntheticAdminE2eFixtures.test.ts`       | 修正     | 既存project ref fixtureを実契約へ同期              |
+| `backend/src/jobs/productionInitialStateEvidence.ts`              | 新規     | status・Path・safe markerの純粋ロジック            |
+| `backend/src/jobs/productionInitialStateEvidence.test.ts`         | 新規     | status・Path・marker allowlist test                |
+| `backend/src/jobs/inspectProductionInitialState.ts`               | 新規     | Prisma集計とprovider/backup GET client             |
+| `backend/src/jobs/inspectProductionInitialState.test.ts`          | 新規     | DB・provider・pagination・fail-closed test         |
+| `backend/src/jobs/inspectProductionInitialState.cli.ts`           | 新規     | config・safe output・marker・終了code              |
+| `backend/src/jobs/inspectProductionInitialState.cli.test.ts`      | 新規     | CLI正常系・異常系・秘密非出力test                  |
+| `backend/src/jobs/productionInitialStateEvidenceWorkflow.test.ts` | 新規     | manual-only・GET-only・safe marker source contract |
+| `.github/workflows/production-initial-state-evidence.yml`         | 新規     | production承認付きmanual-only read-only workflow   |
+| `docs/05_progress.md`                                             | 修正     | 実装PRとproduction未実施状態を同期                 |
+| `docs/11_deployment.md`                                           | 修正     | M1準備・dispatch・判定・失効・停止runbook          |
+| `docs/plans/portfolio-release-v0-1-minimal/plan.md`               | 修正     | M1実装基盤と別承認境界を同期                       |
+| `docs/plans/r6-account-deletion-gates/plan.md`                    | 修正     | R13 run/Path未確定と再着手条件を同期               |
+| `docs/plans/m1-production-read-only-evidence/plan.md`             | 修正     | task、実変更、TDD、review、品質gate、PR記録を同期  |
+
+### TDD・厳格review・品質gate記録
+
+- Red: workflow未実装、marker exact allowlist欠落、reviewed SHA再照合欠落、Vercel page count不一致をそれぞれ意図した理由で失敗確認した。
+- Green/Refactor: 対象7 test fileと既存staging互換test 71件を通過し、共通GET/pagination/validator、safe marker再構成へ整理した。
+- 厳格review: 秘密非出力、GET-only、Prisma count-only、pagination完全性、404/429/timeout/schema不一致の`unknown`化、TOCTOU変更凍結を再確認した。
+- PR review対応: fallback `executedAt`の形式不一致をRed確認後に修正し、marker・CLI・workflow直接関連test 17件とGNU `date`出力形式を確認した。
+- PR review対応（#4785241679）: attestation不能時のno-dispatch契約と証拠日時形式の不整合をsource contract 1件のRedで確認後に修正し、対象7件・直接関連18件をGreen確認した。親計画・R6計画を含む横断監査でno-run Path Bを同期した。
+- PR review対応（#4785483509）: DB transaction失敗時に`databaseTarget`だけ`clear`となる回帰test 1件をRed確認後、DB evidence完了判定を追加して対象32件・直接関連50件をGreen確認した。
+- PR review対応（#4785617213）: provider間共有予算とworkflow step timeoutの回帰test 2件をRed確認し、GitHub run/job反復の応答完了時境界も追加testで固定した。対象41件をGreen/Refactor確認した。
+- backend test: 1,218件成功、外部DB前提10件skip
+- Workers runtime test: 32件成功
+- build、Workers build/dry-run、lint、format、Prisma validate、workflow/Markdown Prettier、`git diff --check`: すべて成功
+- production DB接続、provider API request、workflow dispatch、Environment/Secret/Variable変更、backup、migration、cleanup、deploy、smoke: すべて未実施
+- M1P-15〜M1P-16、M1証拠review、Path A/B確定: 別承認のため未実施
 
 ## 完了条件
 
 ### 実行基盤
 
-- M1P-01〜M1P-14が完了し、実装PRが`develop`へmergeされている。
+- M1P-01〜M1P-14が完了し、実装PRが`develop`向けに作成されている。本作業ではmergeしない。
 - manual-only、production Environment approval、develop/review済みSHA固定、GET-only、Prisma read-only、safe evidence、fail-closedがtestで固定されている。
 - backend品質gate、workflow/Markdown Prettier、`git diff --check`が成功している。
 - production DB query、provider API request、workflow dispatch、Environment/Secret変更を実装PRでは実行していない。
+- 実装PRのmergeはM1P-15の実行前提として別途reviewし、本作業の権限では行わない。
 
 ### M1
 
