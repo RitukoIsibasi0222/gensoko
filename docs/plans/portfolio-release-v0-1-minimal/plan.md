@@ -158,7 +158,7 @@ APIのリクエスト、レスポンス、status、error messageは変更しな�
 - [ ] M5: 値非表示preflightでURL・Cookie・CORS・送信元・Secret/bindingを確認し、別承認でproductionへdeployする
 - [ ] M6: production smoke、synthetic cleanup、release record、公開後引継ぎを完了する
 
-2026-07-27時点で、M1のmanual-only・GET-only実行基盤は`feature/m1-production-read-only-evidence`で実装・厳格review・品質gateを完了し、develop向けPR [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155) を作成済み・未mergeである。production Environment/Secret/Variableは変更しておらず、workflow dispatch、production DB接続、provider API requestも実施していない。M1は未完了のまま維持し、実装PRのreview・merge後にM1P-15〜M1P-16を別承認で実行してPath A/Bを確定する。ただしread-only scopeまたはattestationを確認できない場合はM1P-16を実行せず、M1を未完了のままPath Bを記録する。
+2026-07-27時点で、M1のmanual-only・GET-only実行基盤は`feature/m1-production-read-only-evidence`で実装・厳格review・品質gateを完了し、PR [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155) はmerge commit `13e005ba8bf2670612d2ba6ce6547bd389fa3acc`として`develop`へmerge済みである。production Environment/Secret/Variableは変更しておらず、workflow dispatch、production DB接続、provider API requestも実施していない。M1P-15〜M1P-16の別承認実行、証拠review、Path A/B確定は未実施であり、PRのmergeだけでM1を完了扱いにしない。read-only scopeまたはattestationを確認できない場合はdispatchせず、M1を未完了のままPath Bを記録する。M2の詳細は[`docs/plans/m2-staging-release-candidate-campaign/plan.md`](../m2-staging-release-candidate-campaign/plan.md)を正本とし、M1が同じrelease候補SHAでPath Aに確定するまでstaging deploy/requestへ進まない。
 
 ### 旧Rタスクとの対応
 

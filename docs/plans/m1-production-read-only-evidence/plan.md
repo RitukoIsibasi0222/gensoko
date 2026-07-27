@@ -557,11 +557,11 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 
 - 完了日: 2026-07-27
 - 実装ブランチ: `feature/m1-production-read-only-evidence`
-- PR: [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155)（`develop`向け・未merge）
+- PR: [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155)（merge commit `13e005ba8bf2670612d2ba6ce6547bd389fa3acc`として`develop`へmerge済み）
 
 ### 計画からの変更点
 
-- ユーザーの明示条件に従い、M1P-14はPR作成までとし、mergeを本作業の範囲から除外した。merge済みであることはM1P-15の別承認実行前提として維持する。
+- ユーザーの明示条件に従い、M1P-14の当初作業はPR作成までとした。その後PR #155は`develop`へmerge済みだが、M1P-15〜M1P-16は未実施であり、mergeだけでM1を完了扱いにしない。
 - safe marker再構成でouter/evidenceのexact key、reviewed SHA完全一致、statusからのdecision再計算を追加し、未検証inputはsummaryへ出さない形に強化した。
 - Vercel paginationのpage count不一致とpage上限を`unknown`へ倒す契約を追加した。
 - 共通Supabase validatorで顕在化した既存staging synthetic E2E testのproject ref fixtureを、小文字英数字の実契約へ同期した。
@@ -613,11 +613,11 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 
 ### 実行基盤
 
-- M1P-01〜M1P-14が完了し、実装PRが`develop`向けに作成されている。本作業ではmergeしない。
+- M1P-01〜M1P-14が完了し、実装PR #155が`develop`へmerge済みである。
 - manual-only、production Environment approval、develop/review済みSHA固定、GET-only、Prisma read-only、safe evidence、fail-closedがtestで固定されている。
 - backend品質gate、workflow/Markdown Prettier、`git diff --check`が成功している。
 - production DB query、provider API request、workflow dispatch、Environment/Secret変更を実装PRでは実行していない。
-- 実装PRのmergeはM1P-15の実行前提として別途reviewし、本作業の権限では行わない。
+- 実装PRのmerge前提は満たしたが、M1P-15のEnvironment準備・dispatchとM1P-16の証拠reviewは引き続き別承認とする。
 
 ### M1
 
