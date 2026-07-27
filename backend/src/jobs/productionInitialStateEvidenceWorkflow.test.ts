@@ -105,8 +105,11 @@ describe("production initial state evidence workflow", () => {
 
   it("safe markerとStep Summaryをalwaysで保存してからfail-closed判定する", () => {
     const workflow = readWorkflow();
+    const inspectionIndex = workflow.indexOf("- name: Inspect production initial state");
+    const markerIndex = workflow.indexOf("- name: Create safe marker and Step Summary");
 
     expect(workflow).toContain("if: always()");
+    expect(workflow.slice(inspectionIndex, markerIndex)).toContain("timeout-minutes: 15");
     expect(workflow).toContain("production-initial-state-evidence.json");
     expect(workflow).toContain("actions/upload-artifact@v4");
     expect(workflow).toContain("retention-days: 1");

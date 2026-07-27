@@ -499,6 +499,57 @@ describe("inspectGitHubProductionHistory", () => {
     expect(result.productionBackupHistory).toBe("present");
   });
 
+  it("GitHubのrunからjobへの反復も総時間予算を共有し、境界到達時はunknownにする", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (input) => {
+        const url = new URL(String(input));
+        vi.advanceTimersByTime(2 * 60 * 1_000);
+        if (url.pathname.endsWith("/deployments")) {
+          return githubResponse([]);
+        }
+        if (url.pathname.endsWith("/actions/artifacts")) {
+          return githubResponse({ total_count: 0, artifacts: [] });
+        }
+        if (url.pathname.endsWith("/actions/runs")) {
+          return githubResponse({
+            total_count: 2,
+            workflow_runs: [
+              { id: 201, name: "Production Database Operations" },
+              { id: 202, name: "Production Database Operations" },
+            ],
+          });
+        }
+        if (url.pathname.includes("/actions/runs/") && url.pathname.endsWith("/jobs")) {
+          return githubResponse({
+            total_count: 1,
+            jobs: [
+              {
+                steps: [
+                  {
+                    name: "Create and verify encrypted logical backup",
+                    conclusion: "skipped",
+                  },
+                ],
+              },
+            ],
+          });
+        }
+        throw new Error("unexpected fixture URL");
+      });
+
+      const result = await inspectGitHubProductionHistory(fetch, GITHUB_CONFIG);
+
+      expect(result).toEqual({
+        githubProductionDeployments: "clear",
+        productionBackupHistory: "unknown",
+      });
+      expect(fetch).toHaveBeenCalledTimes(5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("pagination不完了・404・schema不一致をunknownへ倒す", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (input) => {
       const url = new URL(String(input));
@@ -640,6 +691,33 @@ describe("inspectProductionInitialState", () => {
     expect(evidence.legacyUsers).toBe("unknown");
     expect(evidence.userRelatedRows).toBe("unknown");
     expect(evidence.auditLogs).toBe("unknown");
+  });
+
+  it("外部確認の総時間予算をprovider間で共有し、超過後は追加requestせずunknownにする", async () => {
+    const { prisma, transactionCall } = createPrismaMock();
+    let nowMs = 0;
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      expect(url.origin).toBe("https://api.vercel.com");
+      nowMs += 5 * 60 * 1_000;
+      return jsonResponse({
+        deployments: [],
+        pagination: { count: 0, next: nowMs },
+      });
+    });
+
+    const evidence = await inspectProductionInitialState(
+      { prisma, fetch, now: () => nowMs },
+      PRODUCTION_CONFIG,
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(evidence.vercelProductionDeployments).toBe("unknown");
+    expect(evidence.cloudflareProductionDeployments).toBe("unknown");
+    expect(evidence.githubProductionDeployments).toBe("unknown");
+    expect(evidence.productionBackupHistory).toBe("unknown");
+    expect(evidence.databaseTarget).toBe("clear");
+    expect(transactionCall).toHaveBeenCalledOnce();
   });
 
   it("attestationまたはconfig不一致は外部確認前に全項目unknownへ倒す", async () => {

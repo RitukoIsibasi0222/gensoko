@@ -11,6 +11,7 @@ import {
 
 const LEGACY_USER_WHERE = { deletedAt: { not: null } } as const;
 const EXTERNAL_REQUEST_TIMEOUT_MS = 10_000;
+const EXTERNAL_INSPECTION_BUDGET_MS = 10 * 60 * 1_000;
 const MAX_EXTERNAL_PAGES = 10_000;
 const VERCEL_DEPLOYMENTS_ENDPOINT = "https://api.vercel.com/v6/deployments";
 const CLOUDFLARE_API_ORIGIN = "https://api.cloudflare.com";
@@ -110,6 +111,7 @@ export type ProductionInitialStateConfig = z.infer<typeof productionInitialState
 export type ProductionInitialStateDependencies = Readonly<{
   prisma: AppPrismaClient;
   fetch: typeof globalThis.fetch;
+  now?: () => number;
 }>;
 
 export type VercelProductionDeploymentConfig = Readonly<{
@@ -171,21 +173,54 @@ function toPresenceStatus(count: number): M1CheckStatus {
   return count === 0 ? "clear" : "present";
 }
 
+type ExternalInspectionBudget = Readonly<{
+  deadlineAtMs: number;
+  now: () => number;
+}>;
+
+function createExternalInspectionBudget(
+  now: () => number = () => performance.now(),
+): ExternalInspectionBudget {
+  const startedAtMs = now();
+  if (!Number.isFinite(startedAtMs)) {
+    throw new Error("外部read-only APIの時間基準が不正です");
+  }
+  return {
+    deadlineAtMs: startedAtMs + EXTERNAL_INSPECTION_BUDGET_MS,
+    now,
+  };
+}
+
+function getExternalInspectionRemainingMs(budget: ExternalInspectionBudget): number {
+  const remainingMs = budget.deadlineAtMs - budget.now();
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
+    throw new Error("外部read-only APIの総時間予算を超えました");
+  }
+  return remainingMs;
+}
+
+function getExternalRequestTimeoutMs(budget: ExternalInspectionBudget): number {
+  const remainingMs = getExternalInspectionRemainingMs(budget);
+  return Math.max(1, Math.min(EXTERNAL_REQUEST_TIMEOUT_MS, Math.ceil(remainingMs)));
+}
+
 async function fetchJson(
   fetchImplementation: typeof globalThis.fetch,
   url: URL,
   headers: Readonly<Record<string, string>>,
+  budget: ExternalInspectionBudget,
 ): Promise<unknown> {
-  return (await fetchJsonPage(fetchImplementation, url, headers)).body;
+  return (await fetchJsonPage(fetchImplementation, url, headers, budget)).body;
 }
 
 async function fetchJsonPage(
   fetchImplementation: typeof globalThis.fetch,
   url: URL,
   headers: Readonly<Record<string, string>>,
+  budget: ExternalInspectionBudget,
 ): Promise<Readonly<{ body: unknown; hasNextPage: boolean }>> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), EXTERNAL_REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), getExternalRequestTimeoutMs(budget));
 
   try {
     const response = await fetchImplementation(url, {
@@ -198,6 +233,7 @@ async function fetchJsonPage(
     }
     try {
       const body: unknown = await response.json();
+      getExternalInspectionRemainingMs(budget);
       return {
         body,
         hasNextPage: response.headers.get("link")?.includes('rel="next"') ?? false,
@@ -215,12 +251,13 @@ async function fetchAllGitHubPages<T>(
   createUrl: (page: number) => URL,
   headers: Readonly<Record<string, string>>,
   parsePage: (body: unknown) => Readonly<{ items: T[]; totalCount?: number }>,
+  budget: ExternalInspectionBudget,
 ): Promise<T[]> {
   const items: T[] = [];
   let expectedTotalCount: number | undefined;
 
   for (let pageNumber = 1; pageNumber <= MAX_EXTERNAL_PAGES; pageNumber += 1) {
-    const page = await fetchJsonPage(fetchImplementation, createUrl(pageNumber), headers);
+    const page = await fetchJsonPage(fetchImplementation, createUrl(pageNumber), headers, budget);
     const parsedPage = parsePage(page.body);
 
     if (parsedPage.totalCount !== undefined) {
@@ -300,9 +337,10 @@ export async function inspectProductionDatabaseInitialState(
   }
 }
 
-export async function inspectVercelProductionDeployments(
+async function inspectVercelProductionDeploymentsWithBudget(
   fetchImplementation: typeof globalThis.fetch,
   config: VercelProductionDeploymentConfig,
+  budget: ExternalInspectionBudget,
 ): Promise<M1CheckStatus> {
   const visitedCursors = new Set<number>();
   let cursor: number | undefined;
@@ -317,10 +355,15 @@ export async function inspectVercelProductionDeployments(
         url.searchParams.set("until", String(cursor));
       }
 
-      const body = await fetchJson(fetchImplementation, url, {
-        accept: "application/json",
-        authorization: `Bearer ${config.accessToken}`,
-      });
+      const body = await fetchJson(
+        fetchImplementation,
+        url,
+        {
+          accept: "application/json",
+          authorization: `Bearer ${config.accessToken}`,
+        },
+        budget,
+      );
       const page = vercelDeploymentsPageSchema.parse(body);
       if (page.pagination.count !== page.deployments.length) {
         return "unknown";
@@ -351,9 +394,21 @@ export async function inspectVercelProductionDeployments(
   }
 }
 
-export async function inspectCloudflareProductionDeployments(
+export async function inspectVercelProductionDeployments(
+  fetchImplementation: typeof globalThis.fetch,
+  config: VercelProductionDeploymentConfig,
+): Promise<M1CheckStatus> {
+  return await inspectVercelProductionDeploymentsWithBudget(
+    fetchImplementation,
+    config,
+    createExternalInspectionBudget(),
+  );
+}
+
+async function inspectCloudflareProductionDeploymentsWithBudget(
   fetchImplementation: typeof globalThis.fetch,
   config: CloudflareProductionDeploymentConfig,
+  budget: ExternalInspectionBudget,
 ): Promise<M1CheckStatus> {
   const accountPath = `/client/v4/accounts/${encodeURIComponent(config.accountId)}`;
   const headers = {
@@ -363,7 +418,7 @@ export async function inspectCloudflareProductionDeployments(
 
   try {
     const scriptsUrl = new URL(`${accountPath}/workers/scripts`, CLOUDFLARE_API_ORIGIN);
-    const scriptsBody = await fetchJson(fetchImplementation, scriptsUrl, headers);
+    const scriptsBody = await fetchJson(fetchImplementation, scriptsUrl, headers, budget);
     const scripts = cloudflareScriptsSchema.parse(scriptsBody);
     if (!scripts.result.some((script) => script.id === config.workerName)) {
       return "clear";
@@ -373,12 +428,23 @@ export async function inspectCloudflareProductionDeployments(
       `${accountPath}/workers/scripts/${encodeURIComponent(config.workerName)}/deployments`,
       CLOUDFLARE_API_ORIGIN,
     );
-    const deploymentsBody = await fetchJson(fetchImplementation, deploymentUrl, headers);
+    const deploymentsBody = await fetchJson(fetchImplementation, deploymentUrl, headers, budget);
     const deployments = cloudflareDeploymentsSchema.parse(deploymentsBody);
     return deployments.result.deployments.length === 0 ? "clear" : "present";
   } catch {
     return "unknown";
   }
+}
+
+export async function inspectCloudflareProductionDeployments(
+  fetchImplementation: typeof globalThis.fetch,
+  config: CloudflareProductionDeploymentConfig,
+): Promise<M1CheckStatus> {
+  return await inspectCloudflareProductionDeploymentsWithBudget(
+    fetchImplementation,
+    config,
+    createExternalInspectionBudget(),
+  );
 }
 
 function createGitHubRequestContext(config: GitHubProductionHistoryConfig): Readonly<{
@@ -404,6 +470,7 @@ async function inspectGitHubProductionDeployments(
   fetchImplementation: typeof globalThis.fetch,
   repositoryPath: string,
   headers: Readonly<Record<string, string>>,
+  budget: ExternalInspectionBudget,
 ): Promise<M1CheckStatus> {
   const deployments = await fetchAllGitHubPages(
     fetchImplementation,
@@ -416,6 +483,7 @@ async function inspectGitHubProductionDeployments(
     },
     headers,
     (body) => ({ items: githubDeploymentsPageSchema.parse(body) }),
+    budget,
   );
   return deployments.some((deployment) => deployment.environment === "production")
     ? "present"
@@ -426,6 +494,7 @@ async function inspectGitHubBackupHistory(
   fetchImplementation: typeof globalThis.fetch,
   repositoryPath: string,
   headers: Readonly<Record<string, string>>,
+  budget: ExternalInspectionBudget,
 ): Promise<M1CheckStatus> {
   const artifacts = await fetchAllGitHubPages(
     fetchImplementation,
@@ -440,6 +509,7 @@ async function inspectGitHubBackupHistory(
       const parsed = githubArtifactsPageSchema.parse(body);
       return { items: parsed.artifacts, totalCount: parsed.total_count };
     },
+    budget,
   );
   if (artifacts.some((artifact) => artifact.name.startsWith(BACKUP_ARTIFACT_PREFIX))) {
     return "present";
@@ -458,6 +528,7 @@ async function inspectGitHubBackupHistory(
       const parsed = githubRunsPageSchema.parse(body);
       return { items: parsed.workflow_runs, totalCount: parsed.total_count };
     },
+    budget,
   );
 
   for (const workflowRun of workflowRuns) {
@@ -481,6 +552,7 @@ async function inspectGitHubBackupHistory(
         const parsed = githubJobsPageSchema.parse(body);
         return { items: parsed.jobs, totalCount: parsed.total_count };
       },
+      budget,
     );
     if (
       jobs.some((job) =>
@@ -494,9 +566,10 @@ async function inspectGitHubBackupHistory(
   return "clear";
 }
 
-export async function inspectGitHubProductionHistory(
+async function inspectGitHubProductionHistoryWithBudget(
   fetchImplementation: typeof globalThis.fetch,
   config: GitHubProductionHistoryConfig,
+  budget: ExternalInspectionBudget,
 ): Promise<GitHubProductionHistoryEvidence> {
   let githubProductionDeployments: M1CheckStatus = "unknown";
   let productionBackupHistory: M1CheckStatus = "unknown";
@@ -508,6 +581,7 @@ export async function inspectGitHubProductionHistory(
         fetchImplementation,
         context.repositoryPath,
         context.headers,
+        budget,
       );
     } catch {
       githubProductionDeployments = "unknown";
@@ -517,6 +591,7 @@ export async function inspectGitHubProductionHistory(
         fetchImplementation,
         context.repositoryPath,
         context.headers,
+        budget,
       );
     } catch {
       productionBackupHistory = "unknown";
@@ -531,6 +606,17 @@ export async function inspectGitHubProductionHistory(
   };
 }
 
+export async function inspectGitHubProductionHistory(
+  fetchImplementation: typeof globalThis.fetch,
+  config: GitHubProductionHistoryConfig,
+): Promise<GitHubProductionHistoryEvidence> {
+  return await inspectGitHubProductionHistoryWithBudget(
+    fetchImplementation,
+    config,
+    createExternalInspectionBudget(),
+  );
+}
+
 export async function inspectProductionInitialState(
   dependencies: ProductionInitialStateDependencies,
   configInput: ProductionInitialStateConfig,
@@ -541,24 +627,34 @@ export async function inspectProductionInitialState(
   }
   const config = parsedConfig.data;
   const evidence = createUnknownProductionInitialStateEvidence();
+  const externalInspectionBudget = createExternalInspectionBudget(dependencies.now);
 
-  const vercelProductionDeployments = await inspectVercelProductionDeployments(dependencies.fetch, {
-    accessToken: config.vercelAccessToken,
-    scopeId: config.vercelScopeId,
-    repository: config.vercelRepository,
-  });
-  const cloudflareProductionDeployments = await inspectCloudflareProductionDeployments(
+  const vercelProductionDeployments = await inspectVercelProductionDeploymentsWithBudget(
+    dependencies.fetch,
+    {
+      accessToken: config.vercelAccessToken,
+      scopeId: config.vercelScopeId,
+      repository: config.vercelRepository,
+    },
+    externalInspectionBudget,
+  );
+  const cloudflareProductionDeployments = await inspectCloudflareProductionDeploymentsWithBudget(
     dependencies.fetch,
     {
       apiToken: config.cloudflareApiToken,
       accountId: config.cloudflareAccountId,
       workerName: config.cloudflareWorkerName,
     },
+    externalInspectionBudget,
   );
-  const githubHistory = await inspectGitHubProductionHistory(dependencies.fetch, {
-    repository: config.githubRepository,
-    token: config.githubToken,
-  });
+  const githubHistory = await inspectGitHubProductionHistoryWithBudget(
+    dependencies.fetch,
+    {
+      repository: config.githubRepository,
+      token: config.githubToken,
+    },
+    externalInspectionBudget,
+  );
 
   let databaseTarget: M1CheckStatus;
   let databaseEvidence: ProductionDatabaseInitialStateEvidence = UNKNOWN_DATABASE_EVIDENCE;

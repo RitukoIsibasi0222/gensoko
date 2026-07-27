@@ -110,6 +110,7 @@ jobs:
       - name: Inspect production initial state
         id: inspect
         continue-on-error: true
+        timeout-minutes: 15
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
