@@ -887,6 +887,7 @@ M2P-22	M2完了記録とM3 handoffを同期	docs	高	Evidence
 | `backend/src/jobs/stagingReleaseCandidateCampaign.ts` / `.cli.ts` / tests | 新規       | single campaign runner、CLI、workflow source contract         |
 | `backend/src/jobs/stagingRateLimitEvidence.ts` / `.m2.test.ts`            | 修正・新規 | M2 credential注入と既存runner回帰contract                     |
 | `frontend/package.json`                                                   | 修正       | M2 Playwright script                                          |
+| `frontend/package-lock.json`                                              | 修正       | PR CIで検出したmoderate/high advisoryの非breaking更新         |
 | `frontend/e2e/staging-release-candidate-config.ts` / tests                | 新規       | staging origin・cross-site・秘密入力contract                  |
 | `frontend/e2e/staging-release-candidate.spec.ts`                          | 新規       | keyboard、320px、game、本人退会spec                           |
 | `frontend/playwright.staging-release-candidate.config.ts`                 | 新規       | 1 worker、retry/attachment無効config                          |
@@ -899,6 +900,7 @@ fixture/evidence、各CLI、campaign、rate runner再利用、frontend config/so
 ### Repository品質gate
 
 - backend: 外部DB不要 1,255 tests、Workers runtime 32 tests、Node build、Workers build、ESLint、Prettier、Prisma validate成功
-- frontend: 680 tests、ESLint、Svelte check 0 errors/0 warnings、Prettier、Vite build成功
+- frontend: 680 tests、ESLint、Svelte check 0 errors/0 warnings、Prettier、Vite build、`npm audit --audit-level=moderate`成功
+- dependency audit: `brace-expansion`と`tar`を非breaking更新。強制breaking変更が必要な`cookie`由来low 3件は別管理
 - Playwright: M2 staging configで1 specを`--list`し、外部requestなしで収集成功
 - repository: workflow/docs Prettier、`git diff --check`成功
