@@ -37,6 +37,9 @@
     "inspect:production-initial-state": "tsx src/jobs/inspectProductionInitialState.cli.ts",
     "staging:account-deletion-performance": "tsx src/jobs/stagingAccountDeletionPerformance.cli.ts",
     "staging:rate-limit-evidence": "tsx src/jobs/stagingRateLimitEvidence.cli.ts",
+    "staging:release-candidate-fixtures": "tsx src/jobs/stagingReleaseCandidateFixtures.cli.ts",
+    "staging:release-candidate-campaign": "tsx src/jobs/stagingReleaseCandidateCampaign.cli.ts",
+    "staging:release-candidate-evidence": "tsx src/jobs/stagingReleaseCandidateEvidence.cli.ts",
     "cleanup:game-question-sets": "tsx src/jobs/cleanupGameQuestionSets.cli.ts",
     "reset:weekly-scores": "tsx src/jobs/resetWeeklyScores.cli.ts",
     "batch:scheduled": "tsx src/jobs/scheduled.cli.ts"
