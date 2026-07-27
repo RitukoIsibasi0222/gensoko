@@ -216,7 +216,7 @@ jobs:
               decision: (if $all_clear then "path-a" else "path-b" end)
             }' "$marker_path" > "$safe_marker_path"
           else
-            executed_at="$(date --utc +%Y-%m-%dT%H:%M:%SZ)"
+            executed_at="$(date --utc +%Y-%m-%dT%H:%M:%S.%3NZ)"
             jq -n --arg reviewed_sha "$SAFE_REVIEWED_SHA" --arg executed_at "$executed_at" '{
                 schemaVersion: 1,
                 reviewedSha: $reviewed_sha,

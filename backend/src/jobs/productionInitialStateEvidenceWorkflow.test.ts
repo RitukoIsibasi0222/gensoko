@@ -101,6 +101,7 @@ describe("production initial state evidence workflow", () => {
     expect(workflow).toContain("(.evidence | keys) == [");
     expect(workflow).toContain('"productionChangeFreezeAttestation"');
     expect(workflow).toContain(".reviewedSha == $expected_sha");
+    expect(workflow).toContain("date --utc +%Y-%m-%dT%H:%M:%S.%3NZ");
     expect(workflow).toContain('select(.key != "schemaVersion")');
     expect(workflow).toContain('all(. == "clear")');
   });
