@@ -1,0 +1,286 @@
+name: Production Initial State Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: develop上のreview済み40桁commit SHA
+        required: true
+        type: string
+      confirmation:
+        description: READ_ONLY_PRODUCTION_INITIAL_STATEを入力
+        required: true
+        type: string
+      approver:
+        description: production read-only確認の承認者識別子
+        required: true
+        type: string
+      change_record:
+        description: 対応する計画・issue・PRの安全な識別子
+        required: true
+        type: string
+      history_attestation:
+        description: NO_DELETED_DEPLOYMENT_OR_EXTERNAL_BACKUP_COPYを入力
+        required: true
+        type: string
+      change_freeze_attestation:
+        description: NO_CONCURRENT_PRODUCTION_CHANGEを入力
+        required: true
+        type: string
+
+jobs:
+  production-initial-state-evidence:
+    name: Inspect production initial state
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    concurrency:
+      group: gensoko-batch-jobs
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: read
+      deployments: read
+    env:
+      BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
+
+    steps:
+      - name: Validate read-only request
+        env:
+          REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          APPROVER: ${{ inputs.approver }}
+          CHANGE_RECORD: ${{ inputs.change_record }}
+          HISTORY_ATTESTATION: ${{ inputs.history_attestation }}
+          CHANGE_FREEZE_ATTESTATION: ${{ inputs.change_freeze_attestation }}
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_REF_NAME" != "develop" ]; then
+            echo "production初回状態確認はdevelop branchから実行してください"
+            exit 1
+          fi
+          if ! [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "reviewed SHAの形式が不正です"
+            exit 1
+          fi
+          if [ "$REVIEWED_SHA" != "$GITHUB_SHA" ]; then
+            echo "reviewed SHAと実行SHAが一致しません"
+            exit 1
+          fi
+          if [ "$CONFIRMATION" != "READ_ONLY_PRODUCTION_INITIAL_STATE" ]; then
+            echo "read-only確認文字列が一致しません"
+            exit 1
+          fi
+          if ! [[ "$APPROVER" =~ ^[A-Za-z0-9._/-]{1,100}$ ]]; then
+            echo "approverの形式が不正です"
+            exit 1
+          fi
+          if ! [[ "$CHANGE_RECORD" =~ ^[A-Za-z0-9._:/-]{1,200}$ ]]; then
+            echo "change recordの形式が不正です"
+            exit 1
+          fi
+          if [ "$HISTORY_ATTESTATION" != "NO_DELETED_DEPLOYMENT_OR_EXTERNAL_BACKUP_COPY" ]; then
+            echo "削除済み履歴・外部backup copyのattestationが一致しません"
+            exit 1
+          fi
+          if [ "$CHANGE_FREEZE_ATTESTATION" != "NO_CONCURRENT_PRODUCTION_CHANGE" ]; then
+            echo "production変更凍結のattestationが一致しません"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: Inspect production initial state
+        id: inspect
+        continue-on-error: true
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PRODUCTION_SUPABASE_PROJECT_REF: ${{ secrets.PRODUCTION_SUPABASE_PROJECT_REF }}
+          GITHUB_TOKEN: ${{ github.token }}
+          M1_VERCEL_ACCESS_TOKEN: ${{ secrets.M1_VERCEL_ACCESS_TOKEN }}
+          M1_VERCEL_SCOPE_ID: ${{ secrets.M1_VERCEL_SCOPE_ID }}
+          M1_VERCEL_REPOSITORY: ${{ secrets.M1_VERCEL_REPOSITORY }}
+          M1_CLOUDFLARE_API_TOKEN: ${{ secrets.M1_CLOUDFLARE_API_TOKEN }}
+          M1_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.M1_CLOUDFLARE_ACCOUNT_ID }}
+          M1_CLOUDFLARE_WORKER_NAME: ${{ secrets.M1_CLOUDFLARE_WORKER_NAME }}
+          M1_REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          M1_HISTORY_ATTESTATION: ${{ inputs.history_attestation }}
+          M1_CHANGE_FREEZE_ATTESTATION: ${{ inputs.change_freeze_attestation }}
+          M1_EVIDENCE_MARKER_PATH: ${{ runner.temp }}/production-initial-state-evidence.json
+        run: |
+          set -uo pipefail
+
+          npm run inspect:production-initial-state
+          inspection_exit_code=$?
+          echo "exit_code=$inspection_exit_code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Create safe marker and Step Summary
+        if: always()
+        env:
+          REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          APPROVER: ${{ inputs.approver }}
+          CHANGE_RECORD: ${{ inputs.change_record }}
+        run: |
+          set -euo pipefail
+
+          marker_path="$RUNNER_TEMP/production-initial-state-evidence.json"
+          safe_dir="$RUNNER_TEMP/production-initial-state-safe"
+          safe_marker_path="$safe_dir/production-initial-state-evidence.json"
+          mkdir -p "$safe_dir"
+
+          SAFE_REVIEWED_SHA="$REVIEWED_SHA"
+          if ! [[ "$SAFE_REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            SAFE_REVIEWED_SHA="0000000000000000000000000000000000000000"
+          fi
+          SAFE_APPROVER="$APPROVER"
+          if ! [[ "$SAFE_APPROVER" =~ ^[A-Za-z0-9._/-]{1,100}$ ]]; then
+            SAFE_APPROVER="[invalid]"
+          fi
+          SAFE_CHANGE_RECORD="$CHANGE_RECORD"
+          if ! [[ "$SAFE_CHANGE_RECORD" =~ ^[A-Za-z0-9._:/-]{1,200}$ ]]; then
+            SAFE_CHANGE_RECORD="[invalid]"
+          fi
+
+          if [ -f "$marker_path" ] &&
+             jq -e --arg expected_sha "$SAFE_REVIEWED_SHA" '
+               (. | keys) == ["decision", "evidence", "executedAt", "reviewedSha", "schemaVersion"] and
+               .schemaVersion == 1 and
+               .reviewedSha == $expected_sha and
+               (.executedAt | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$")) and
+               (.decision == "path-a" or .decision == "path-b") and
+               (.evidence | keys) == [
+                 "allUsers",
+                 "auditLogs",
+                 "cloudflareProductionDeployments",
+                 "databaseTarget",
+                 "deletedHistoryAndExternalCopyAttestation",
+                 "githubProductionDeployments",
+                 "legacyUsers",
+                 "productionBackupHistory",
+                 "productionChangeFreezeAttestation",
+                 "schemaVersion",
+                 "userRelatedRows",
+                 "vercelProductionDeployments"
+               ] and
+               .evidence.schemaVersion == 1 and
+               (
+                 [.evidence | to_entries[] | select(.key != "schemaVersion") | .value] |
+                 length == 11 and
+                 all(. == "clear" or . == "present" or . == "unknown")
+               )
+             ' "$marker_path" >/dev/null; then
+            jq '
+              (
+                [.evidence | to_entries[] | select(.key != "schemaVersion") | .value] |
+                all(. == "clear")
+              ) as $all_clear |
+              {
+              schemaVersion: 1,
+              reviewedSha,
+              executedAt,
+              evidence: {
+                schemaVersion: 1,
+                databaseTarget: .evidence.databaseTarget,
+                allUsers: .evidence.allUsers,
+                legacyUsers: .evidence.legacyUsers,
+                userRelatedRows: .evidence.userRelatedRows,
+                auditLogs: .evidence.auditLogs,
+                vercelProductionDeployments: .evidence.vercelProductionDeployments,
+                cloudflareProductionDeployments: .evidence.cloudflareProductionDeployments,
+                githubProductionDeployments: .evidence.githubProductionDeployments,
+                productionBackupHistory: .evidence.productionBackupHistory,
+                deletedHistoryAndExternalCopyAttestation:
+                  .evidence.deletedHistoryAndExternalCopyAttestation,
+                productionChangeFreezeAttestation:
+                  .evidence.productionChangeFreezeAttestation
+              },
+              decision: (if $all_clear then "path-a" else "path-b" end)
+            }' "$marker_path" > "$safe_marker_path"
+          else
+            executed_at="$(date --utc +%Y-%m-%dT%H:%M:%SZ)"
+            jq -n --arg reviewed_sha "$SAFE_REVIEWED_SHA" --arg executed_at "$executed_at" '{
+                schemaVersion: 1,
+                reviewedSha: $reviewed_sha,
+                executedAt: $executed_at,
+                evidence: {
+                  schemaVersion: 1,
+                  databaseTarget: "unknown",
+                  allUsers: "unknown",
+                  legacyUsers: "unknown",
+                  userRelatedRows: "unknown",
+                  auditLogs: "unknown",
+                  vercelProductionDeployments: "unknown",
+                  cloudflareProductionDeployments: "unknown",
+                  githubProductionDeployments: "unknown",
+                  productionBackupHistory: "unknown",
+                  deletedHistoryAndExternalCopyAttestation: "unknown",
+                  productionChangeFreezeAttestation: "unknown"
+                },
+                decision: "path-b"
+              }' > "$safe_marker_path"
+          fi
+
+          decision="$(jq --raw-output '.decision' "$safe_marker_path")"
+          executed_at="$(jq --raw-output '.executedAt' "$safe_marker_path")"
+          {
+            echo "### Production initial state read-only evidence"
+            echo
+            echo "- Reviewed SHA: $SAFE_REVIEWED_SHA"
+            echo "- Executed at: $executed_at"
+            echo "- Approver: $SAFE_APPROVER"
+            echo "- Change record: $SAFE_CHANGE_RECORD"
+            echo "- Decision candidate: $decision"
+            echo "- Invalidation: production state・scope・workflow SHA変更時は再実行"
+            echo
+            echo "| Check | Status |"
+            echo "| --- | --- |"
+            jq --raw-output '
+              .evidence |
+              to_entries[] |
+              select(.key != "schemaVersion") |
+              "| \(.key) | \(.value) |"
+            ' "$safe_marker_path"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload safe marker
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-initial-state-evidence
+          path: ${{ runner.temp }}/production-initial-state-safe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Finalize M1 decision
+        if: always()
+        env:
+          INSPECTION_EXIT_CODE: ${{ steps.inspect.outputs.exit_code }}
+        run: |
+          set -euo pipefail
+
+          safe_marker_path="$RUNNER_TEMP/production-initial-state-safe/production-initial-state-evidence.json"
+          decision="$(jq --raw-output '.decision' "$safe_marker_path")"
+          if [ "$INSPECTION_EXIT_CODE" != "0" ] || [ "$decision" != "path-a" ]; then
+            echo "M1は未完了です。Path Bとして通常gateへ戻してください"
+            exit 1
+          fi
+          echo "全checkがclearです。review完了までM1は未完了のままです"
