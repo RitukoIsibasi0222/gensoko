@@ -805,7 +805,7 @@ quality gateではstaging/production URLへrequestせず、Playwrightは`--list`
 - [x] M2P-13: workflow source contractのRed testを作成する
 - [x] M2P-14: M1 gate・deploy・campaign・cleanup workflowを実装する
 - [x] M2P-15: runbook、R7PV-17、親計画、progressを同期する
-- [ ] M2P-16: 厳格review、repository品質gate、実装PRを完了する
+- [x] M2P-16: 厳格review、repository品質gate、実装PRを完了する
 - [ ] M2P-17: 別承認でM1P-15〜M1P-16を実行しsame SHA Path Aを確定する
 - [ ] M2P-18: 別承認でstaging Environment/resource/credential/schemaをpreflightする
 - [ ] M2P-19: 別承認でsame SHAの通常API Workerとfrontendを順次deployする
@@ -864,7 +864,7 @@ M2P-22	M2完了記録とM3 handoffを同期	docs	高	Evidence
 
 - 完了日: 2026-07-28
 - 実装ブランチ: `feature/m2-staging-release-candidate-campaign`
-- PR: 作成後に追記
+- PR: [#157](https://github.com/RitukoIsibasi0222/gensoko/pull/157)
 - 境界: M2P-01〜M2P-16のみ。M2P-17〜M2P-22の外部実行は未実施
 
 ### 計画からの変更点
@@ -894,7 +894,7 @@ M2P-22	M2完了記録とM3 handoffを同期	docs	高	Evidence
 
 ### TDD記録
 
-fixture/evidence、各CLI、campaign、rate runner再利用、frontend config/source、workflow source contractごとに対象testを先に失敗させ、実装後にGreen、共通HTTP helper抽出後に回帰testを通した。最終品質gateとPR作成後にM2P-16、PR番号、品質結果を追記する。
+fixture/evidence、各CLI、campaign、rate runner再利用、frontend config/source、workflow source contractごとに対象testを先に失敗させ、実装後にGreen、共通HTTP helper抽出後に回帰testを通した。最終品質gateとdevelop向けPR #157の作成を完了し、M2P-16までを完了した。
 
 ### Repository品質gate
 
