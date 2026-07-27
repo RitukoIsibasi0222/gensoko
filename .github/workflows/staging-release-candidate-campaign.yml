@@ -1,0 +1,649 @@
+name: M2 Staging Release Candidate Campaign
+
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: レビュー済みdevelop commit SHA（40桁lowercase）
+        required: true
+        type: string
+      m1_run_id:
+        description: 同一SHAでPath AになったM1 workflow run ID
+        required: true
+        type: string
+      confirmation:
+        description: RUN_M2_STAGING_RELEASE_CANDIDATE と入力
+        required: true
+        type: string
+      approved_by:
+        description: 実行承認者（英数字・._-、100文字以内）
+        required: true
+        type: string
+      change_record:
+        description: 承認記録（英数字・._:/-、100文字以内）
+        required: true
+        type: string
+      change_freeze_attestation:
+        description: NO_CONCURRENT_STAGING_CHANGE と入力
+        required: true
+        type: string
+
+concurrency:
+  group: gensoko-batch-jobs
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare M2 gates without deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    permissions:
+      actions: read
+      contents: read
+      deployments: read
+    outputs:
+      started_at: ${{ steps.gates.outputs.started_at }}
+    env:
+      BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
+      M2_STAGING_FIXTURE_ENABLED: ${{ vars.M2_STAGING_FIXTURE_ENABLED }}
+
+    steps:
+      - name: Validate branch, SHA and approval gates
+        id: gates
+        shell: bash
+        env:
+          REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          M1_RUN_ID: ${{ inputs.m1_run_id }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          APPROVED_BY: ${{ inputs.approved_by }}
+          CHANGE_RECORD: ${{ inputs.change_record }}
+          CHANGE_FREEZE_ATTESTATION: ${{ inputs.change_freeze_attestation }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_NAME" != "develop" ]; then
+            echo "M2 campaignはdevelop branchから実行してください"
+            exit 1
+          fi
+          if [[ ! "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]] || [ "$REVIEWED_SHA" != "$GITHUB_SHA" ]; then
+            echo "review済みSHAが実行commitと一致しません"
+            exit 1
+          fi
+          if [[ ! "$M1_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "M1 run指定が不正です"
+            exit 1
+          fi
+          if [ "$CONFIRMATION" != "RUN_M2_STAGING_RELEASE_CANDIDATE" ]; then
+            echo "M2 campaignの確認文字列が不正です"
+            exit 1
+          fi
+          if [[ ! "$APPROVED_BY" =~ ^[A-Za-z0-9._-]{1,100}$ ]]; then
+            echo "M2 campaignの承認者形式が不正です"
+            exit 1
+          fi
+          if [[ ! "$CHANGE_RECORD" =~ ^[A-Za-z0-9._:/-]{1,100}$ ]]; then
+            echo "M2 campaignの承認記録形式が不正です"
+            exit 1
+          fi
+          if [ "$CHANGE_FREEZE_ATTESTATION" != "NO_CONCURRENT_STAGING_CHANGE" ]; then
+            echo "staging変更凍結を確認できません"
+            exit 1
+          fi
+          if [ "$BATCH_ENVIRONMENT" != "staging" ] || [ "$M2_STAGING_FIXTURE_ENABLED" != "true" ]; then
+            echo "M2 staging Environment設定が不正です"
+            exit 1
+          fi
+          echo "started_at=$(date --utc +%Y-%m-%dT%H:%M:%S.%3NZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Validate exact M1 workflow run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          M1_RUN_ID: ${{ inputs.m1_run_id }}
+        run: |
+          set -euo pipefail
+          run_state="$RUNNER_TEMP/m1-run.json"
+          if ! gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$M1_RUN_ID" >"$run_state" 2>/dev/null; then
+            rm -f "$run_state"
+            echo "M1 workflow runを確認できません"
+            exit 1
+          fi
+          if ! jq -e --arg sha "$GITHUB_SHA" '
+            .event == "workflow_dispatch" and
+            .status == "completed" and
+            .conclusion == "success" and
+            .head_sha == $sha and
+            .head_branch == "develop" and
+            .path == ".github/workflows/production-initial-state-evidence.yml"
+          ' "$run_state" >/dev/null; then
+            rm -f "$run_state"
+            echo "M1 workflow runがPath A前提と一致しません"
+            exit 1
+          fi
+          rm -f "$run_state"
+
+      - name: Download exact M1 safe evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: production-initial-state-evidence
+          path: ${{ runner.temp }}/m1-evidence
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.m1_run_id }}
+
+      - name: Checkout reviewed candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.reviewed_sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Validate M1 Path A and same SHA
+        working-directory: backend
+        run: >-
+          npm run staging:release-candidate-evidence --
+          --operation validate-m1
+          --input "$RUNNER_TEMP/m1-evidence/production-initial-state-evidence.json"
+          --expected-sha "$GITHUB_SHA"
+
+      - name: Validate database target, migration state and fixture absence
+        working-directory: backend
+        timeout-minutes: 5
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+        run: |
+          set -euo pipefail
+          npm run staging:validate-database-target
+          npx prisma generate >/dev/null 2>&1
+          migration_log="$RUNNER_TEMP/m2-migration-status.log"
+          if ! npx prisma migrate status >"$migration_log" 2>&1; then
+            rm -f "$migration_log"
+            echo "staging migration状態を確認できません"
+            exit 1
+          fi
+          rm -f "$migration_log"
+          npm run staging:release-candidate-fixtures -- --operation preflight
+
+  deploy-api:
+    name: Deploy normal API Worker candidate
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout reviewed candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.reviewed_sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Validate normal entrypoint and PasswordVerifier binding
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          grep -F '"main": "src/worker.ts"' wrangler.jsonc >/dev/null
+          grep -F '"name": "PASSWORD_VERIFIER"' wrangler.jsonc >/dev/null
+          grep -F 'PasswordVerifierDurableObject' wrangler.jsonc >/dev/null
+          npm run workers:build
+
+      - name: Deploy reviewed normal Worker to staging
+        working-directory: backend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          deploy_log="$RUNNER_TEMP/m2-worker-deploy.log"
+          if ! npx wrangler deploy --config wrangler.jsonc --env staging --message "release-candidate:$GITHUB_SHA" >"$deploy_log" 2>&1; then
+            rm -f "$deploy_log"
+            echo "staging API deployに失敗しました"
+            exit 1
+          fi
+          rm -f "$deploy_log"
+
+      - name: Validate deployed API SHA and health contract
+        working-directory: backend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          M2_API_BASE_URL: https://gensoko-api-staging.rituko-labs.workers.dev/api/v1
+          M2_FRONTEND_ORIGIN: https://gensoko-frontend-staging-develop.vercel.app
+        run: |
+          set -euo pipefail
+          deployment_state="$RUNNER_TEMP/m2-worker-state.json"
+          if ! npx wrangler deployments status --config wrangler.jsonc --env staging --json >"$deployment_state" 2>/dev/null; then
+            rm -f "$deployment_state"
+            echo "staging API deployment状態を確認できません"
+            exit 1
+          fi
+          if ! EXPECTED_SHA="$GITHUB_SHA" DEPLOYMENT_STATE="$deployment_state" node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const expected = process.env.EXPECTED_SHA;
+            const worker = readFileSync(process.env.DEPLOYMENT_STATE, "utf8");
+            if (!worker.includes(expected)) process.exit(1);
+          '; then
+            rm -f "$deployment_state"
+            echo "staging API deployment SHAが一致しません"
+            exit 1
+          fi
+          rm -f "$deployment_state"
+          npm run staging:release-candidate-health
+
+  deploy-frontend:
+    name: Deploy and alias frontend candidate
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout reviewed candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.reviewed_sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build and deploy reviewed frontend to staging alias
+        working-directory: frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          provider_log="$RUNNER_TEMP/m2-vercel-provider.log"
+          deployment_ref="$RUNNER_TEMP/m2-vercel-deployment-ref"
+          export VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA"
+          export VERCEL_GIT_COMMIT_REF="develop"
+          if ! npx --yes vercel@50.17.1 pull --yes --environment=preview --git-branch=develop --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+            rm -f "$provider_log" "$deployment_ref"
+            echo "staging frontend設定取得に失敗しました"
+            exit 1
+          fi
+          if ! npx --yes vercel@50.17.1 build --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+            rm -f "$provider_log" "$deployment_ref"
+            echo "staging frontend buildに失敗しました"
+            exit 1
+          fi
+          if ! npx --yes vercel@50.17.1 deploy --prebuilt --target preview --meta githubCommitSha="$GITHUB_SHA" --token="$VERCEL_TOKEN" >"$deployment_ref" 2>"$provider_log"; then
+            rm -f "$provider_log" "$deployment_ref"
+            echo "staging frontend deployに失敗しました"
+            exit 1
+          fi
+          if ! npx --yes vercel@50.17.1 alias set "$(tail -n 1 "$deployment_ref")" gensoko-frontend-staging-develop.vercel.app --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+            rm -f "$provider_log" "$deployment_ref"
+            echo "staging frontend alias更新に失敗しました"
+            exit 1
+          fi
+          if ! npx --yes vercel@50.17.1 inspect https://gensoko-frontend-staging-develop.vercel.app --json --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+            rm -f "$provider_log" "$deployment_ref"
+            echo "staging frontend deployment状態を確認できません"
+            exit 1
+          fi
+          if ! EXPECTED_SHA="$GITHUB_SHA" FRONTEND_STATE="$provider_log" node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const expected = process.env.EXPECTED_SHA;
+            const frontend = readFileSync(process.env.FRONTEND_STATE, "utf8");
+            if (!frontend.includes(expected)) process.exit(1);
+          '; then
+            rm -f "$provider_log" "$deployment_ref"
+            echo "staging frontend deployment SHAが一致しません"
+            exit 1
+          fi
+          rm -f "$provider_log" "$deployment_ref"
+
+  campaign:
+    name: Run one M2 synthetic campaign and main cleanup
+    needs: deploy-frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: staging
+    permissions:
+      contents: read
+    outputs:
+      main_cleanup: ${{ steps.main_cleanup.outputs.status }}
+      campaign_status: ${{ steps.campaign.outputs.status }}
+    env:
+      BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
+      M2_STAGING_FIXTURE_ENABLED: ${{ vars.M2_STAGING_FIXTURE_ENABLED }}
+      M2_API_BASE_URL: https://gensoko-api-staging.rituko-labs.workers.dev/api/v1
+      M2_FRONTEND_ORIGIN: https://gensoko-frontend-staging-develop.vercel.app
+      M2_E2E_BASE_URL: https://gensoko-frontend-staging-develop.vercel.app
+      M2_E2E_API_BASE_URL: https://gensoko-api-staging.rituko-labs.workers.dev/api/v1
+      M2_SYNTHETIC_USERNAME: m2_release_candidate_user
+      M2_SYNTHETIC_EMAIL: m2-release-candidate-user@example.test
+
+    steps:
+      - name: Checkout reviewed candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.reviewed_sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install campaign dependencies
+        run: |
+          npm --prefix backend ci
+          npm --prefix frontend ci
+          npx --prefix frontend playwright install --with-deps chromium
+
+      - name: Generate Prisma Client
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma generate
+
+      - name: Run campaign between active SHA checks
+        id: campaign
+        working-directory: backend
+        timeout-minutes: 30
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          verify_active_sha() {
+            worker_state="$RUNNER_TEMP/m2-worker-state.json"
+            frontend_state="$RUNNER_TEMP/m2-frontend-state.json"
+            if ! npx wrangler deployments status --config wrangler.jsonc --env staging --json >"$worker_state" 2>/dev/null; then
+              rm -f "$worker_state" "$frontend_state"
+              return 1
+            fi
+            if ! npx --yes vercel@50.17.1 inspect https://gensoko-frontend-staging-develop.vercel.app --json --token="$VERCEL_TOKEN" >"$frontend_state" 2>/dev/null; then
+              rm -f "$worker_state" "$frontend_state"
+              return 1
+            fi
+            if ! EXPECTED_SHA="$GITHUB_SHA" WORKER_STATE="$worker_state" FRONTEND_STATE="$frontend_state" node --input-type=module -e '
+              import { readFileSync } from "node:fs";
+              const expected = process.env.EXPECTED_SHA;
+              const worker = readFileSync(process.env.WORKER_STATE, "utf8");
+              const frontend = readFileSync(process.env.FRONTEND_STATE, "utf8");
+              if (!worker.includes(expected) || !frontend.includes(expected)) process.exit(1);
+            '; then
+              rm -f "$worker_state" "$frontend_state"
+              return 1
+            fi
+            rm -f "$worker_state" "$frontend_state"
+          }
+
+          if ! verify_active_sha; then
+            echo "active deployment SHAを確認できません"
+            exit 1
+          fi
+          M2_SYNTHETIC_PASSWORD="$(node --input-type=module -e 'import { randomBytes } from "node:crypto"; process.stdout.write("Aa1!" + randomBytes(24).toString("base64url"));')"
+          M2_VERIFICATION_TOKEN="$(node --input-type=module -e 'import { randomBytes } from "node:crypto"; process.stdout.write(randomBytes(32).toString("hex"));')"
+          echo "::add-mask::$M2_SYNTHETIC_PASSWORD"
+          echo "::add-mask::$M2_VERIFICATION_TOKEN"
+          export M2_SYNTHETIC_PASSWORD M2_VERIFICATION_TOKEN
+          export M2_CAMPAIGN_MARKER_PATH="$RUNNER_TEMP/m2-campaign.json"
+          npm run staging:release-candidate-campaign
+          unset M2_SYNTHETIC_PASSWORD M2_VERIFICATION_TOKEN
+          if ! verify_active_sha; then
+            rm -f "$RUNNER_TEMP/m2-campaign.json"
+            echo "campaign後のactive deployment SHAを確認できません"
+            exit 1
+          fi
+          rm -f "$RUNNER_TEMP/m2-campaign.json"
+          echo "status=clear" >> "$GITHUB_OUTPUT"
+
+      - name: Main cleanup exact M2 fixture
+        id: main_cleanup
+        if: ${{ always() }}
+        timeout-minutes: 5
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+        run: |
+          set -euo pipefail
+          if npm run staging:release-candidate-fixtures -- --operation cleanup; then
+            echo "status=clear" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=unknown" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+  recovery-cleanup:
+    name: Independently recover M2 fixture cleanup
+    needs: campaign
+    if: ${{ always() && (needs.campaign.result != 'success' || needs.campaign.outputs.main_cleanup != 'clear') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging
+    permissions:
+      contents: read
+    outputs:
+      status: ${{ steps.cleanup.outputs.status }}
+    env:
+      BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
+      M2_STAGING_FIXTURE_ENABLED: ${{ vars.M2_STAGING_FIXTURE_ENABLED }}
+
+    steps:
+      - name: Checkout reviewed candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.reviewed_sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma generate
+
+      - name: Recovery cleanup exact M2 fixture
+        id: cleanup
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+        run: |
+          set -euo pipefail
+          if npm run staging:release-candidate-fixtures -- --operation cleanup; then
+            echo "status=clear" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=unknown" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+  final-evidence:
+    name: Reconstruct and upload final safe M2 evidence
+    needs: [prepare, deploy-api, deploy-frontend, campaign, recovery-cleanup]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging
+    permissions:
+      contents: read
+    env:
+      REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+      STARTED_AT: ${{ needs.prepare.outputs.started_at }}
+      M1_STATUS: ${{ needs.prepare.result == 'success' && 'clear' || 'unknown' }}
+      API_STATUS: ${{ needs.deploy-api.result == 'success' && 'clear' || 'unknown' }}
+      FRONTEND_STATUS: ${{ needs.deploy-frontend.result == 'success' && 'clear' || 'unknown' }}
+      CAMPAIGN_STATUS: ${{ needs.campaign.outputs.campaign_status == 'clear' && 'clear' || 'unknown' }}
+      MAIN_STATUS: ${{ needs.campaign.outputs.main_cleanup == 'clear' && 'clear' || 'unknown' }}
+      RECOVERY_RESULT: ${{ needs.recovery-cleanup.result }}
+      RECOVERY_STATUS: ${{ needs.recovery-cleanup.outputs.status }}
+
+    steps:
+      - name: Checkout reviewed candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.reviewed_sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Build exact safe evidence
+        id: evidence
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          input="$RUNNER_TEMP/m2-evidence-input.json"
+          output="$RUNNER_TEMP/m2-staging-release-candidate-evidence.json"
+          completed_at="$(date --utc +%Y-%m-%dT%H:%M:%S.%3NZ)"
+          started_at="$STARTED_AT"
+          if [[ ! "$started_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]]; then
+            started_at="$completed_at"
+          fi
+          recovery="unknown"
+          if [ "$RECOVERY_RESULT" = "skipped" ] && [ "$MAIN_STATUS" = "clear" ]; then
+            recovery="not-required"
+          elif [ "$RECOVERY_RESULT" = "success" ] && [ "$RECOVERY_STATUS" = "clear" ]; then
+            recovery="clear"
+          fi
+          residue="unknown"
+          if [ "$MAIN_STATUS" = "clear" ] || [ "$recovery" = "clear" ]; then
+            residue="clear"
+          fi
+          jq -n \
+            --arg sha "$REVIEWED_SHA" \
+            --arg started "$started_at" \
+            --arg completed "$completed_at" \
+            --arg m1 "$M1_STATUS" \
+            --arg api "$API_STATUS" \
+            --arg frontend "$FRONTEND_STATUS" \
+            --arg campaign "$CAMPAIGN_STATUS" \
+            --arg main "$MAIN_STATUS" \
+            --arg recovery "$recovery" \
+            --arg residue "$residue" \
+            '{
+              schemaVersion: 1,
+              workflowName: "staging-release-candidate-campaign",
+              evidenceVersion: "m2-v1",
+              releaseCandidateSha: $sha,
+              startedAt: $started,
+              completedAt: $completed,
+              m1Gate: $m1,
+              deployment: {
+                databaseTarget: $m1,
+                apiCandidate: $api,
+                frontendCandidate: $frontend,
+                passwordVerifierBinding: $api
+              },
+              campaign: {
+                registration: $campaign,
+                emailVerification: $campaign,
+                validLogin: $campaign,
+                refreshProtocol: $campaign,
+                mainWorkerCpu: $campaign,
+                authAllowedTen: $campaign,
+                authEleventh429: $campaign,
+                authRetryAfter: $campaign,
+                authReset: $campaign,
+                game: $campaign,
+                keyboard: $campaign,
+                viewport320: $campaign,
+                selfDeletion: $campaign,
+                oldCredentialRejection: $campaign,
+                headersCorsSafeErrors: $campaign
+              },
+              cleanup: { main: $main, recovery: $recovery, residue: $residue },
+              authAllowedRequests: 10,
+              authLimitedRequest: 11,
+              decision: "unknown"
+            }' > "$input"
+          npm run staging:release-candidate-evidence -- --input "$input" --output "$output"
+          rm -f "$input"
+          echo "path=$output" >> "$GITHUB_OUTPUT"
+
+      - name: Write allowlisted Step Summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="${{ steps.evidence.outputs.path }}"
+          {
+            echo "### M2 staging release candidate evidence"
+            echo "- SHA: \`$(jq -r '.releaseCandidateSha' "$evidence")\`"
+            echo "- M1 gate: \`$(jq -r '.m1Gate' "$evidence")\`"
+            echo "- Deployment: \`$(jq -r '[.deployment[]] | unique | join(",")' "$evidence")\`"
+            echo "- Campaign: \`$(jq -r '[.campaign[]] | unique | join(",")' "$evidence")\`"
+            echo "- Main cleanup: \`$(jq -r '.cleanup.main' "$evidence")\`"
+            echo "- Recovery cleanup: \`$(jq -r '.cleanup.recovery' "$evidence")\`"
+            echo "- Residue: \`$(jq -r '.cleanup.residue' "$evidence")\`"
+            echo "- Decision: \`$(jq -r '.decision' "$evidence")\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload exact M2 safe Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-staging-release-candidate-evidence
+          path: ${{ steps.evidence.outputs.path }}
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
+
+      - name: Finalize M2 decision
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$(jq -r '.decision' '${{ steps.evidence.outputs.path }}')" != "clear" ]; then
+            echo "M2 evidenceはclearではありません"
+            exit 1
+          fi

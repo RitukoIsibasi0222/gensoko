@@ -5,13 +5,19 @@ import {
 } from "../lib/http-error-messages.js";
 import { strongPasswordSchema } from "../lib/validation/auth.js";
 import { RATE_LIMIT_POLICIES } from "../middleware/rateLimit/policies.js";
+import {
+  cancelResponseBodyBestEffort,
+  findFailedResponseHeaderContract,
+  hasJsonContentType,
+  parseJson,
+  requestStagingEvidence,
+  type StagingEvidenceResponseHeaderContract,
+} from "./stagingEvidenceHttp.js";
 import { STAGING_SYNTHETIC_E2E_USER } from "./stagingSyntheticAdminE2eFixtures.js";
 
 const STAGING_API_BASE_URL = "https://gensoko-api-staging.rituko-labs.workers.dev/api/v1";
 const STAGING_FRONTEND_ORIGIN = "https://gensoko-frontend-staging-develop.vercel.app";
 const RATE_LIMIT_EXCEEDED_MESSAGE = "リクエストが多すぎます。しばらく待ってから再試行してください";
-const EXPECTED_CONTENT_SECURITY_POLICY =
-  "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
 const INVALID_ENVIRONMENT_MESSAGE = "staging rate limit evidence設定が不正です";
 const INVALID_PREREQUISITE_RESPONSE_MESSAGE = "staging rate limit evidenceの前提応答が不正です";
 const INVALID_RATE_LIMIT_RESPONSE_MESSAGE = "staging rate limit evidenceの429契約が不正です";
@@ -59,19 +65,7 @@ export type StagingRateLimitEvidenceObservedResponseClass =
   | "SAFE_JSON_503_CONTRACT"
   | "EDGE_OR_UNCLASSIFIED_503"
   | "OTHER_UNEXPECTED_STATUS";
-export type StagingRateLimitEvidenceResponseHeaderContract =
-  | "ACCESS_CONTROL_ALLOW_ORIGIN"
-  | "ACCESS_CONTROL_ALLOW_CREDENTIALS"
-  | "CONTENT_SECURITY_POLICY"
-  | "CROSS_ORIGIN_RESOURCE_POLICY"
-  | "PERMISSIONS_POLICY"
-  | "REFERRER_POLICY"
-  | "STRICT_TRANSPORT_SECURITY"
-  | "X_CONTENT_TYPE_OPTIONS"
-  | "X_FRAME_OPTIONS"
-  | "X_PERMITTED_CROSS_DOMAIN_POLICIES"
-  | "X_XSS_PROTECTION"
-  | "X_POWERED_BY";
+export type StagingRateLimitEvidenceResponseHeaderContract = StagingEvidenceResponseHeaderContract;
 export type StagingRateLimitEvidenceObserved503FailedContract =
   | "SERVICE_UNAVAILABLE_CONTENT_TYPE"
   | "SERVICE_UNAVAILABLE_RETRY_AFTER"
@@ -154,6 +148,7 @@ type RunStagingRateLimitEvidenceOptions = Omit<
   "requestTimeoutMs"
 > &
   Readonly<{
+    userEmail?: string;
     fetchImpl?: typeof fetch;
     requestTimeoutMs?: number;
   }>;
@@ -185,21 +180,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-async function parseJson(response: Response): Promise<unknown | null> {
-  try {
-    return (await response.json()) as unknown;
-  } catch {
-    return null;
-  }
-}
-
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
-}
-
-function hasJsonContentType(response: Response): boolean {
-  const contentType = response.headers.get("Content-Type");
-  return contentType !== null && /^application\/json(?:\s*;|$)/i.test(contentType);
 }
 
 async function readExpectedJson(
@@ -208,7 +190,7 @@ async function readExpectedJson(
   frontendOrigin: string,
 ): Promise<unknown> {
   if (response.status !== expectedStatus) {
-    const observedResponse = await classifyUnexpectedResponse(response, frontendOrigin);
+    const observedResponse = await classifyStagingUnexpectedResponse(response, frontendOrigin);
     throw new StagingRateLimitEvidenceContractError(
       INVALID_PREREQUISITE_RESPONSE_MESSAGE,
       "EXPECTED_STATUS",
@@ -235,76 +217,7 @@ async function readExpectedJson(
   return body;
 }
 
-async function requestEvidence(
-  fetchImpl: typeof fetch,
-  input: string,
-  init: RequestInit,
-  requestTimeoutMs: number,
-): Promise<Response> {
-  return await fetchImpl(input, {
-    ...init,
-    redirect: "error",
-    signal: AbortSignal.timeout(requestTimeoutMs),
-  });
-}
-
-async function cancelResponseBodyBestEffort(response: Response): Promise<void> {
-  try {
-    await response.body?.cancel();
-  } catch {
-    // body解放の失敗で、安全な分類errorを上書きしない
-  }
-}
-
-function findFailedResponseHeaderContract(
-  response: Response,
-  frontendOrigin: string,
-): StagingRateLimitEvidenceResponseHeaderContract | null {
-  const responseHeaderContractChecks: ReadonlyArray<
-    readonly [StagingRateLimitEvidenceResponseHeaderContract, boolean]
-  > = [
-    [
-      "ACCESS_CONTROL_ALLOW_ORIGIN",
-      response.headers.get("Access-Control-Allow-Origin") === frontendOrigin,
-    ],
-    [
-      "ACCESS_CONTROL_ALLOW_CREDENTIALS",
-      response.headers.get("Access-Control-Allow-Credentials") === "true",
-    ],
-    [
-      "CONTENT_SECURITY_POLICY",
-      response.headers.get("Content-Security-Policy") === EXPECTED_CONTENT_SECURITY_POLICY,
-    ],
-    [
-      "CROSS_ORIGIN_RESOURCE_POLICY",
-      response.headers.get("Cross-Origin-Resource-Policy") === "same-origin",
-    ],
-    [
-      "PERMISSIONS_POLICY",
-      response.headers.get("Permissions-Policy") === "camera=(), microphone=(), geolocation=()",
-    ],
-    [
-      "REFERRER_POLICY",
-      response.headers.get("Referrer-Policy") === "strict-origin-when-cross-origin",
-    ],
-    [
-      "STRICT_TRANSPORT_SECURITY",
-      response.headers.get("Strict-Transport-Security") === "max-age=31536000; includeSubDomains",
-    ],
-    ["X_CONTENT_TYPE_OPTIONS", response.headers.get("X-Content-Type-Options") === "nosniff"],
-    ["X_FRAME_OPTIONS", response.headers.get("X-Frame-Options") === "DENY"],
-    [
-      "X_PERMITTED_CROSS_DOMAIN_POLICIES",
-      response.headers.get("X-Permitted-Cross-Domain-Policies") === "none",
-    ],
-    ["X_XSS_PROTECTION", response.headers.get("X-XSS-Protection") === "0"],
-    ["X_POWERED_BY", response.headers.get("X-Powered-By") === null],
-  ];
-
-  return responseHeaderContractChecks.find(([, passed]) => !passed)?.[0] ?? null;
-}
-
-async function classifyUnexpectedResponse(
+export async function classifyStagingUnexpectedResponse(
   response: Response,
   frontendOrigin: string,
 ): Promise<
@@ -448,14 +361,19 @@ function createAuthenticatedHeaders(frontendOrigin: string, accessToken: string)
 async function requestLogin({
   apiBaseUrl,
   frontendOrigin,
+  userEmail,
   userPassword,
   requestTimeoutMs,
   fetchImpl,
-}: Pick<
-  Required<RunStagingRateLimitEvidenceOptions>,
-  "apiBaseUrl" | "frontendOrigin" | "userPassword" | "requestTimeoutMs" | "fetchImpl"
->): Promise<Response> {
-  return await requestEvidence(
+}: Readonly<{
+  apiBaseUrl: string;
+  frontendOrigin: string;
+  userEmail: string;
+  userPassword: string;
+  requestTimeoutMs: number;
+  fetchImpl: typeof fetch;
+}>): Promise<Response> {
+  return await requestStagingEvidence(
     fetchImpl,
     `${apiBaseUrl}/auth/login`,
     {
@@ -465,7 +383,7 @@ async function requestLogin({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        email: STAGING_SYNTHETIC_E2E_USER.email,
+        email: userEmail,
         password: userPassword,
       }),
     },
@@ -559,7 +477,7 @@ async function getQuestions({
 > &
   Readonly<{ accessToken: string }>): Promise<Response> {
   const searchParams = new URLSearchParams({ mode: GAME_MODE });
-  return await requestEvidence(
+  return await requestStagingEvidence(
     fetchImpl,
     `${apiBaseUrl}/game/questions?${searchParams.toString()}`,
     {
@@ -585,7 +503,7 @@ async function submitGame({
     accessToken: string;
     questions: GameQuestionsResponse;
   }>): Promise<Response> {
-  return await requestEvidence(
+  return await requestStagingEvidence(
     fetchImpl,
     `${apiBaseUrl}/game/sessions`,
     {
@@ -663,7 +581,7 @@ async function createRateLimitSummary({
   frontendOrigin: string;
 }): Promise<StagingRateLimitEvidenceSummary> {
   if (response.status !== 429) {
-    const observedResponse = await classifyUnexpectedResponse(response, frontendOrigin);
+    const observedResponse = await classifyStagingUnexpectedResponse(response, frontendOrigin);
     throw new StagingRateLimitEvidenceContractError(
       INVALID_RATE_LIMIT_RESPONSE_MESSAGE,
       "RATE_LIMIT_STATUS",
@@ -759,6 +677,7 @@ export async function runStagingRateLimitEvidence({
   apiBaseUrl,
   frontendOrigin,
   evidenceCase,
+  userEmail = STAGING_SYNTHETIC_E2E_USER.email,
   userPassword,
   requestTimeoutMs = STAGING_RATE_LIMIT_REQUEST_TIMEOUT_MS,
   fetchImpl = fetch,
@@ -777,6 +696,7 @@ export async function runStagingRateLimitEvidence({
           await requestLogin({
             apiBaseUrl,
             frontendOrigin,
+            userEmail,
             userPassword,
             requestTimeoutMs,
             fetchImpl,
@@ -793,6 +713,7 @@ export async function runStagingRateLimitEvidence({
         await requestLogin({
           apiBaseUrl,
           frontendOrigin,
+          userEmail,
           userPassword,
           requestTimeoutMs,
           fetchImpl,
@@ -811,6 +732,7 @@ export async function runStagingRateLimitEvidence({
   const loginResponse = await requestLogin({
     apiBaseUrl,
     frontendOrigin,
+    userEmail,
     userPassword,
     requestTimeoutMs,
     fetchImpl,

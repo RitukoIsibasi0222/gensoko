@@ -4,6 +4,7 @@
 >
 > 2026-07-26以降のv0.1では、M2で通常DO版のstaging deploy・valid login・auth 429・cleanupを確認する。
 > R7PV-17のrollback証拠は公開後へ移し、本計画全体は未完了のまま継続する。
+> 2026-07-28にR7PV-17のうち通常DO版deploy・valid login・auth 11回目429・cleanupをM2 manual-only repository基盤へ統合した。外部実行とrollback証拠は未実施のためR7PV-17は未完了を維持する。
 
 ## 概要
 
@@ -127,14 +128,14 @@ Client
 
 ### 無料枠の成立条件
 
-| 項目 | 設計上の扱い |
-| --- | --- |
-| main Worker CPU | bcryptを実行せず、DO RPCの結果待ちと後続の軽量処理だけを残す |
-| DO CPU | 既定30秒/invocation内でcost 12 compareを1回だけ実行する |
-| DO request | verifier RPC 1回を追加。既存rate-limit DOと100,000 requests/dayを共有する |
-| DO duration | storageなし・alarmなし。13,000 GB-s/dayを既存DOと共有する |
-| storage | SQLite classとしてmigrationするがpassword/hash/resultを保存しない |
-| 課金判断 | E-08の209msはcapacity合格値へ換算せず、実装後の別承認preflightで最新quotaを再確認する |
+| 項目            | 設計上の扱い                                                                          |
+| --------------- | ------------------------------------------------------------------------------------- |
+| main Worker CPU | bcryptを実行せず、DO RPCの結果待ちと後続の軽量処理だけを残す                          |
+| DO CPU          | 既定30秒/invocation内でcost 12 compareを1回だけ実行する                               |
+| DO request      | verifier RPC 1回を追加。既存rate-limit DOと100,000 requests/dayを共有する             |
+| DO duration     | storageなし・alarmなし。13,000 GB-s/dayを既存DOと共有する                             |
+| storage         | SQLite classとしてmigrationするがpassword/hash/resultを保存しない                     |
+| 課金判断        | E-08の209msはcapacity合格値へ換算せず、実装後の別承認preflightで最新quotaを再確認する |
 
 無料枠は「無制限」を意味しない。DO request/duration上限へ達した場合は照合を継続せず503に倒し、
 cost低下やmain Worker fallbackで回避しない。
@@ -214,10 +215,12 @@ export function createDurableObjectPasswordVerifier(
 ): PasswordVerifier;
 
 export class PasswordVerifierDurableObject extends DurableObject {
-  verify(input: Readonly<{
-    password: string;
-    passwordHash: string;
-  }>): Promise<boolean>;
+  verify(
+    input: Readonly<{
+      password: string;
+      passwordHash: string;
+    }>,
+  ): Promise<boolean>;
 }
 ```
 
@@ -250,49 +253,49 @@ Content-Type: application/json
 
 ## 対象ファイル一覧
 
-| ファイル | 変更種別 | 内容 |
-| --- | --- | --- |
-| `backend/src/lib/password-verifier.ts` | 新規 | runtime共通portと固定unavailable error |
-| `backend/src/lib/bcrypt-password-verifier.ts` | 新規 | Node/test専用local bcrypt adapter |
-| `backend/src/lib/bcrypt-password-verifier.test.ts` | 新規 | local adapterのboolean・固定error test |
-| `backend/src/lib/durable-object-password-verifier.ts` | 新規 | namespace選択、RPC result検証、fail-closed adapter |
-| `backend/src/cloudflare/password-verifier.ts` | 新規 | storageなしのcost 12 bcrypt compare DO |
-| `backend/src/cloudflare/password-verifier.test.ts` | 新規 | workerd実compare、分離、非永続化、固定error test |
-| `backend/src/services/auth.service.ts` | 修正 | direct `bcrypt.compare`をinjected verifierへ置換 |
-| `backend/src/lib/app-dependencies.ts` | 修正 | verifierを必須dependencyとしてauth serviceへ渡す |
-| `backend/src/lib/worker-request-adapters.ts` | 修正 | `PASSWORD_VERIFIER` bindingからDO adapterを生成 |
-| `backend/src/worker-handler.ts` | 修正 | request adapterのverifierをapp dependenciesへ渡す |
-| `backend/src/index.ts` | 修正 | Node専用local bcrypt adapterを明示注入 |
-| `backend/src/test/app-dependencies.ts` | 修正 | test dependencyへlocal/stub verifierを明示注入 |
-| `backend/src/routes/auth/index.ts` | 修正 | verifier unavailableを共通503 + Retry-Afterへ変換 |
-| `backend/src/routes/auth/test-helpers.ts` | 修正 | auth service testへverifierを明示注入 |
-| `backend/src/routes/auth/login.test.ts` | 修正 | verifier呼出し、fallback禁止、503、状態非変更test |
-| `backend/src/lib/http-error-responses.ts` | 新規 | rate limit/login共通の503 response helper |
-| `backend/src/middleware/rateLimit/index.ts` | 修正 | 既存503生成を共通helperへ移す |
-| `backend/src/lib/worker-config.ts` | 修正 | `PASSWORD_VERIFIER` bindingを必須検証 |
-| `backend/src/lib/worker-config.test.ts` | 修正 | binding欠損・不正・値非露出test |
-| `backend/src/lib/worker-request-adapters.test.ts` | 修正 | verifier factoryとrequest dependency test |
-| `backend/src/lib/worker-bundle-contract.ts` | 修正 | Node local verifierのWorker bundle混入を拒否 |
-| `backend/src/lib/worker-bundle-contract.test.ts` | 修正 | local verifier禁止とDO verifier許可のcontract test |
-| `backend/src/lib/worker-bundle-metadata.ts` | 修正 | staging/production両entrypointのbundle metadataを検証 |
-| `backend/src/lib/worker-bundle-metadata.test.ts` | 修正 | production entrypointのmetadata回帰test |
-| `backend/src/worker.test.ts` | 修正 | environment・dependency伝播・安全な503回帰 |
-| `backend/src/worker.ts` | 修正 | staging class exportとbinding型 |
-| `backend/src/worker-production.ts` | 修正 | production class exportとbinding型 |
-| `backend/wrangler.jsonc` | 修正 | staging bindingとv2 SQLite class migration |
-| `backend/wrangler.test.jsonc` | 修正 | local workerd bindingとv2 migration |
-| `backend/src/lib/production-worker-config.ts` | 修正 | production bindingとv2 migration生成 |
-| `backend/src/lib/production-worker-config.test.ts` | 修正 | production class/binding/migration分離契約 |
-| `backend/src/worker-config-files.test.ts` | 修正 | staging/test configと生成型契約 |
-| `backend/src/scripts/runProductionWranglerDryRun.cli.ts` | 修正 | production一時configをentrypoint解決可能なrootへ安全に生成・削除 |
-| `backend/tsconfig.json` | 修正 | Node buildからWorker専用DO caller adapterを除外 |
-| `backend/tsconfig.workers.json` | 修正 | Worker buildへDO caller adapterを明示追加 |
-| `backend/worker-configuration.d.ts` | 自動更新 | Wrangler生成binding型 |
-| `docs/04_api.md` | 修正 | login 503原因範囲と非変更契約 |
-| `docs/11_deployment.md` | 修正 | v2 DO binding、preflight、rollback、別承認境界 |
-| `docs/plans/r7-password-verification-free-worker/plan.md` | 修正 | 本計画と実装記録 |
-| `docs/plans/r7-rate-limit-environment-gates/plan.md` | 修正 | E-08次工程、実装後の別承認gate、R7未完了境界 |
-| `docs/05_progress.md` | 修正 | 計画・実装・実環境証拠を分離して進捗同期 |
+| ファイル                                                  | 変更種別 | 内容                                                             |
+| --------------------------------------------------------- | -------- | ---------------------------------------------------------------- |
+| `backend/src/lib/password-verifier.ts`                    | 新規     | runtime共通portと固定unavailable error                           |
+| `backend/src/lib/bcrypt-password-verifier.ts`             | 新規     | Node/test専用local bcrypt adapter                                |
+| `backend/src/lib/bcrypt-password-verifier.test.ts`        | 新規     | local adapterのboolean・固定error test                           |
+| `backend/src/lib/durable-object-password-verifier.ts`     | 新規     | namespace選択、RPC result検証、fail-closed adapter               |
+| `backend/src/cloudflare/password-verifier.ts`             | 新規     | storageなしのcost 12 bcrypt compare DO                           |
+| `backend/src/cloudflare/password-verifier.test.ts`        | 新規     | workerd実compare、分離、非永続化、固定error test                 |
+| `backend/src/services/auth.service.ts`                    | 修正     | direct `bcrypt.compare`をinjected verifierへ置換                 |
+| `backend/src/lib/app-dependencies.ts`                     | 修正     | verifierを必須dependencyとしてauth serviceへ渡す                 |
+| `backend/src/lib/worker-request-adapters.ts`              | 修正     | `PASSWORD_VERIFIER` bindingからDO adapterを生成                  |
+| `backend/src/worker-handler.ts`                           | 修正     | request adapterのverifierをapp dependenciesへ渡す                |
+| `backend/src/index.ts`                                    | 修正     | Node専用local bcrypt adapterを明示注入                           |
+| `backend/src/test/app-dependencies.ts`                    | 修正     | test dependencyへlocal/stub verifierを明示注入                   |
+| `backend/src/routes/auth/index.ts`                        | 修正     | verifier unavailableを共通503 + Retry-Afterへ変換                |
+| `backend/src/routes/auth/test-helpers.ts`                 | 修正     | auth service testへverifierを明示注入                            |
+| `backend/src/routes/auth/login.test.ts`                   | 修正     | verifier呼出し、fallback禁止、503、状態非変更test                |
+| `backend/src/lib/http-error-responses.ts`                 | 新規     | rate limit/login共通の503 response helper                        |
+| `backend/src/middleware/rateLimit/index.ts`               | 修正     | 既存503生成を共通helperへ移す                                    |
+| `backend/src/lib/worker-config.ts`                        | 修正     | `PASSWORD_VERIFIER` bindingを必須検証                            |
+| `backend/src/lib/worker-config.test.ts`                   | 修正     | binding欠損・不正・値非露出test                                  |
+| `backend/src/lib/worker-request-adapters.test.ts`         | 修正     | verifier factoryとrequest dependency test                        |
+| `backend/src/lib/worker-bundle-contract.ts`               | 修正     | Node local verifierのWorker bundle混入を拒否                     |
+| `backend/src/lib/worker-bundle-contract.test.ts`          | 修正     | local verifier禁止とDO verifier許可のcontract test               |
+| `backend/src/lib/worker-bundle-metadata.ts`               | 修正     | staging/production両entrypointのbundle metadataを検証            |
+| `backend/src/lib/worker-bundle-metadata.test.ts`          | 修正     | production entrypointのmetadata回帰test                          |
+| `backend/src/worker.test.ts`                              | 修正     | environment・dependency伝播・安全な503回帰                       |
+| `backend/src/worker.ts`                                   | 修正     | staging class exportとbinding型                                  |
+| `backend/src/worker-production.ts`                        | 修正     | production class exportとbinding型                               |
+| `backend/wrangler.jsonc`                                  | 修正     | staging bindingとv2 SQLite class migration                       |
+| `backend/wrangler.test.jsonc`                             | 修正     | local workerd bindingとv2 migration                              |
+| `backend/src/lib/production-worker-config.ts`             | 修正     | production bindingとv2 migration生成                             |
+| `backend/src/lib/production-worker-config.test.ts`        | 修正     | production class/binding/migration分離契約                       |
+| `backend/src/worker-config-files.test.ts`                 | 修正     | staging/test configと生成型契約                                  |
+| `backend/src/scripts/runProductionWranglerDryRun.cli.ts`  | 修正     | production一時configをentrypoint解決可能なrootへ安全に生成・削除 |
+| `backend/tsconfig.json`                                   | 修正     | Node buildからWorker専用DO caller adapterを除外                  |
+| `backend/tsconfig.workers.json`                           | 修正     | Worker buildへDO caller adapterを明示追加                        |
+| `backend/worker-configuration.d.ts`                       | 自動更新 | Wrangler生成binding型                                            |
+| `docs/04_api.md`                                          | 修正     | login 503原因範囲と非変更契約                                    |
+| `docs/11_deployment.md`                                   | 修正     | v2 DO binding、preflight、rollback、別承認境界                   |
+| `docs/plans/r7-password-verification-free-worker/plan.md` | 修正     | 本計画と実装記録                                                 |
+| `docs/plans/r7-rate-limit-environment-gates/plan.md`      | 修正     | E-08次工程、実装後の別承認gate、R7未完了境界                     |
+| `docs/05_progress.md`                                     | 修正     | 計画・実装・実環境証拠を分離して進捗同期                         |
 
 実装完了時は`git diff --name-status`と照合し、この表を実態へ合わせて更新する。
 
@@ -328,31 +331,31 @@ Content-Type: application/json
 
 ## テストケース一覧
 
-| ケース | 期待結果 |
-| --- | --- |
-| existing・usable account・正しいpassword | verifier 1回、既存200/Cookie/成功transaction |
-| existing account・誤password | verifier 1回、failCount更新、既存401 |
-| accountなし | verifier 0回、汎用401 |
-| inactive/unverified/lock中 | verifier 0回、既存403/401 |
-| lock期限切れ | reset後にverifier 1回、既存failCount契約 |
-| 73 byte既存password | 値を切り詰めずverifierへ渡し、既存互換を維持 |
-| verifier RPC exception | 503 + Retry-After 60、fixed body |
-| verifier non-boolean result | 503 + Retry-After 60 |
-| verifier unavailable | failCount/token/streak/監査を変更しない |
-| Node entrypoint | explicit local bcrypt adapterを使用 |
-| Worker binding欠損・不正 | runtime configで値非表示fail-fast、local fallbackなし |
-| DO real cost 12 match | `hashPassword`生成hashでtrue |
-| DO real cost 12 mismatch | false |
-| DO storage inspection | password/hash/result row、alarmなし |
-| account A/B | 異なるDO IDを選択 |
-| 同一account | 同じDO IDを選択 |
-| RPC/log serialization | password/hash/user ID/raw errorを含まない |
-| staging config | `PASSWORD_VERIFIER` binding + v2 `new_sqlite_classes` |
-| production config | staging resource IDなし、同じclass契約を生成 |
-| generated types | 新binding/classを含む |
-| Worker bundle | DO classを含み、診断moduleを含まない |
-| Worker bundle fallback | Node専用local verifierを含まない |
-| existing rate limit 503 | 共通helper移行後もbody/header/status不変 |
+| ケース                                   | 期待結果                                              |
+| ---------------------------------------- | ----------------------------------------------------- |
+| existing・usable account・正しいpassword | verifier 1回、既存200/Cookie/成功transaction          |
+| existing account・誤password             | verifier 1回、failCount更新、既存401                  |
+| accountなし                              | verifier 0回、汎用401                                 |
+| inactive/unverified/lock中               | verifier 0回、既存403/401                             |
+| lock期限切れ                             | reset後にverifier 1回、既存failCount契約              |
+| 73 byte既存password                      | 値を切り詰めずverifierへ渡し、既存互換を維持          |
+| verifier RPC exception                   | 503 + Retry-After 60、fixed body                      |
+| verifier non-boolean result              | 503 + Retry-After 60                                  |
+| verifier unavailable                     | failCount/token/streak/監査を変更しない               |
+| Node entrypoint                          | explicit local bcrypt adapterを使用                   |
+| Worker binding欠損・不正                 | runtime configで値非表示fail-fast、local fallbackなし |
+| DO real cost 12 match                    | `hashPassword`生成hashでtrue                          |
+| DO real cost 12 mismatch                 | false                                                 |
+| DO storage inspection                    | password/hash/result row、alarmなし                   |
+| account A/B                              | 異なるDO IDを選択                                     |
+| 同一account                              | 同じDO IDを選択                                       |
+| RPC/log serialization                    | password/hash/user ID/raw errorを含まない             |
+| staging config                           | `PASSWORD_VERIFIER` binding + v2 `new_sqlite_classes` |
+| production config                        | staging resource IDなし、同じclass契約を生成          |
+| generated types                          | 新binding/classを含む                                 |
+| Worker bundle                            | DO classを含み、診断moduleを含まない                  |
+| Worker bundle fallback                   | Node専用local verifierを含まない                      |
+| existing rate limit 503                  | 共通helper移行後もbody/header/status不変              |
 
 ## タスクリスト（3回レビュー）
 
@@ -386,25 +389,25 @@ Content-Type: application/json
 
 ### v4: 確定
 
-| タスクID | 内容 | ファイル | 優先度 | 外部操作 |
-| --- | --- | --- | --- | --- |
-| R7PV-01 | Red: verifier port・DI・fallback禁止契約 | password/login tests | 高 | なし |
-| R7PV-02 | Red: DO RPC・strict result・非永続化契約 | cloudflare test | 高 | なし |
-| R7PV-03 | Red: binding・v2 migration・生成型契約 | config tests | 高 | なし |
-| R7PV-04 | Green: portと隔離したNode local adapter | `lib/password-verifier.ts`・`bcrypt-password-verifier.ts` | 高 | なし |
-| R7PV-05 | Green: password verifier DOとcaller adapter | cloudflare/lib | 高 | なし |
-| R7PV-06 | Green: auth service・app dependency injection | auth/app dependencies | 高 | なし |
-| R7PV-07 | Green: fixed 503 helperと監査境界 | auth route/rate limit | 高 | なし |
-| R7PV-08 | Green: Worker adapter・runtime config | Worker libs | 高 | なし |
-| R7PV-09 | Green: staging/test/production configとv2 migration | Wrangler/config generator | 高 | なし |
-| R7PV-10 | Refactor: 値非露出・重複排除・fallback監査 | backend | 高 | なし |
-| R7PV-11 | 対象unit/workerd/関連回帰test | backend | 高 | なし |
-| R7PV-12 | Workers生成型・bundle・production dry-run | backend | 高 | なし |
-| R7PV-13 | backend最終品質gate | backend | 高 | なし |
-| R7PV-14 | API・deployment・R7計画・進捗同期 | docs | 中 | なし |
-| R7PV-15 | code/docs分割commit・push・PR | Git/GitHub | 中 | PRのみ |
-| R7PV-16 | review/merge後のFree plan・quota・resource preflight | Cloudflare read-only | 高 | 別承認 |
-| R7PV-17 | staging deploy・valid login・11回目429・rollback証拠 | staging | 高 | 別承認 |
+| タスクID | 内容                                                 | ファイル                                                  | 優先度 | 外部操作 |
+| -------- | ---------------------------------------------------- | --------------------------------------------------------- | ------ | -------- |
+| R7PV-01  | Red: verifier port・DI・fallback禁止契約             | password/login tests                                      | 高     | なし     |
+| R7PV-02  | Red: DO RPC・strict result・非永続化契約             | cloudflare test                                           | 高     | なし     |
+| R7PV-03  | Red: binding・v2 migration・生成型契約               | config tests                                              | 高     | なし     |
+| R7PV-04  | Green: portと隔離したNode local adapter              | `lib/password-verifier.ts`・`bcrypt-password-verifier.ts` | 高     | なし     |
+| R7PV-05  | Green: password verifier DOとcaller adapter          | cloudflare/lib                                            | 高     | なし     |
+| R7PV-06  | Green: auth service・app dependency injection        | auth/app dependencies                                     | 高     | なし     |
+| R7PV-07  | Green: fixed 503 helperと監査境界                    | auth route/rate limit                                     | 高     | なし     |
+| R7PV-08  | Green: Worker adapter・runtime config                | Worker libs                                               | 高     | なし     |
+| R7PV-09  | Green: staging/test/production configとv2 migration  | Wrangler/config generator                                 | 高     | なし     |
+| R7PV-10  | Refactor: 値非露出・重複排除・fallback監査           | backend                                                   | 高     | なし     |
+| R7PV-11  | 対象unit/workerd/関連回帰test                        | backend                                                   | 高     | なし     |
+| R7PV-12  | Workers生成型・bundle・production dry-run            | backend                                                   | 高     | なし     |
+| R7PV-13  | backend最終品質gate                                  | backend                                                   | 高     | なし     |
+| R7PV-14  | API・deployment・R7計画・進捗同期                    | docs                                                      | 中     | なし     |
+| R7PV-15  | code/docs分割commit・push・PR                        | Git/GitHub                                                | 中     | PRのみ   |
+| R7PV-16  | review/merge後のFree plan・quota・resource preflight | Cloudflare read-only                                      | 高     | 別承認   |
+| R7PV-17  | staging deploy・valid login・11回目429・rollback証拠 | staging                                                   | 高     | 別承認   |
 
 - [x] R7PV-01: verifier port・DI・fallback禁止のRed testを追加する
 - [x] R7PV-02: DO RPC・strict result・非永続化のRed testを追加する
@@ -560,15 +563,15 @@ R7-02、R7-10〜R7-20、WAF、監視、production分離、production preflight/s
 
 ### 最終品質gate
 
-| Gate | 結果 |
-| --- | --- |
-| `npm run test -- --run` | 1124 passed / 10 skipped |
-| `npm run test:workers` | 32 passed |
-| `npm run build` | 成功 |
-| `npm run workers:build` | 成功 |
-| `npm run workers:production:dry-run` | ローカルダミー値で成功 |
-| `npm run lint` | 成功 |
-| `npm run format:check` | 成功 |
+| Gate                                 | 結果                     |
+| ------------------------------------ | ------------------------ |
+| `npm run test -- --run`              | 1124 passed / 10 skipped |
+| `npm run test:workers`               | 32 passed                |
+| `npm run build`                      | 成功                     |
+| `npm run workers:build`              | 成功                     |
+| `npm run workers:production:dry-run` | ローカルダミー値で成功   |
+| `npm run lint`                       | 成功                     |
+| `npm run format:check`               | 成功                     |
 
 ### 未実施・未完了
 

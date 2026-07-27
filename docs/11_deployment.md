@@ -962,6 +962,34 @@ workflowはprovider履歴を先にGETで確認し、最後にSupabase接続先�
 
 ---
 
+## M2 release候補staging単一campaign runbook
+
+M2の正本は[`docs/plans/m2-staging-release-candidate-campaign/plan.md`](plans/m2-staging-release-candidate-campaign/plan.md)とする。`.github/workflows/staging-release-candidate-campaign.yml`は`workflow_dispatch`専用で、同じreview済みSHAに対するM1 Path Aのexact safe Artifactをgateにし、通常API Worker、frontend candidate、単一synthetic campaign、main/recovery cleanup、exact allowlist証拠を順序実行する。
+
+2026-07-28時点ではrepository実装、TDD、厳格review、local品質gateまでを対象とし、M1P-15〜16、GitHub Environment/Secret/Variable変更、workflow dispatch、provider API request、staging deploy、DB接続・migration適用・fixture操作、staging HTTP/Playwright requestは実施していない。repository PRのmergeだけでM2を完了扱いにしない。
+
+### 別承認前の停止gate
+
+1. repository PRをreviewして`develop`へmergeし、40文字lowercaseのrelease候補SHAを固定する。
+2. 別承認でM1P-15〜16を実行し、M1 ArtifactのSHA、Path A、run conclusion、review記録、変更凍結attestationを確認する。
+3. M1 Artifact欠落・期限切れ・schema不一致、SHA不一致、Path B、`present`、`unknown`、cancel、timeoutのいずれかならM2をdispatchしない。
+4. staging Environmentのrequired reviewer、`BATCH_ENVIRONMENT=staging`、M2 fixture flag、DB/provider credentialのstaging scope、通常`src/worker.ts`と`PASSWORD_VERIFIER` bindingを値非表示で確認する。
+5. migrationに差分がある場合はcampaign内で適用せず、別承認のstaging DB workflowで解消してからM1/M2のSHA gateをやり直す。
+
+### dispatchと順序
+
+Actionsの`M2 Staging Release Candidate Campaign`へreview済みSHA、M1 run ID、固定confirmation、承認者、change record、変更凍結attestationだけを入力する。workflowはM1 runのworkflow/event/success/same SHAとArtifactを検証し、DB target/migration/fixture absence、通常API deploy、API same SHA・health/CORS/security header、frontend deploy/alias・same SHA、active SHA再確認、単一campaign、active SHA再確認、cleanup、safe evidenceの順で実行する。
+
+campaignは固定したM2専用identityを1件だけ使い、register、verification token hash arm、verify/replay、login、refresh rotation/旧token拒否、auth 10回成功/11回目429/`Retry-After`/reset、game、keyboard、320px、本人退会、旧access/refresh/password拒否を確認する。cross-site stagingのrefreshはAPI protocol証拠だけであり、production same-site browser Cookieの証拠にはしない。
+
+### cleanup・証拠・停止
+
+main cleanupは常に実行し、campaign失敗またはmain cleanup不成立時だけ独立recovery cleanupを実行する。固定identityの完全一致を確認できない場合は削除せず`present`、DB/responseを分類できない場合は`unknown`にする。recoveryでfixtureを除去できても元campaignの失敗を`clear`へ戻さない。
+
+Artifactは`m2-staging-release-candidate-evidence`という固定名のexact JSON 1 fileだけを7日保持する。SHA、時刻、allowlist status、10/11という公開境界値以外のPII、credential、cookie、token、resource ID、raw response/error/logをSummary・Artifactへ残さない。required status、cleanup、residueのいずれかが`present`/`unknown`ならworkflowを失敗させ、M2を未完了のまま最初から再実行する。rollback baseline deploy/drill、WAF、長期soak、backup複数世代、production操作はこのrunbookに含めない。
+
+---
+
 ## 本番デプロイのチェックリスト
 
 ポートフォリオ版v0.1の公開範囲とrelease blockerは

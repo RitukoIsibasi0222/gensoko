@@ -7,6 +7,7 @@
 >
 > 2026-07-26以降のv0.1は[`portfolio-release-v0-1-minimal`](../portfolio-release-v0-1-minimal/plan.md)を正本とする。
 > v0.1ではM2の通常password verifier DO・valid login・auth 429と、M5/M6のproduction binding・smokeだけを実施する。
+> 2026-07-28にauth 10回成功・11回目429・`Retry-After`・fixed-window resetを検証するM2 repository runner/workflowを実装した。staging request、WAF、長期観測、R7-05、R7全体は未実施・未完了を維持する。
 > WAF、全境界case、24/48時間観測、baseline rollback drillは公開後へ移し、R7全体は未完了のまま継続する。
 
 ## 概要
@@ -17,14 +18,14 @@ Hono + SQLite-backed Durable Objectによるアプリレベルrate limitは実�
 
 ## 文書の責務
 
-| 文書                                                                           | 正本とする内容                                                                                             |
-| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| [`../api-rate-limit-production/plan.md`](../api-rate-limit-production/plan.md) | 設計、Hono実装、TDD履歴、Durable Object実装、当時の判断                                                    |
-| 本計画                                                                         | staging実HTTP、WAF、Cloudflare実resource、R7対象A11Y、監視、rollback、production preflight/smoke、完了証拠 |
-| [`../../05_progress.md`](../../05_progress.md)                                 | 全体進捗の要約                                                                                             |
-| [`../../11_deployment.md`](../../11_deployment.md)                             | 共通deployment runbookとR7計画への入口                                                                     |
-| [`../portfolio-release-v0-1-minimal/plan.md`](../portfolio-release-v0-1-minimal/plan.md) | M1〜M6のv0.1 release順序と最終release判定 |
-| [`../portfolio-release-v0-1/plan.md`](../portfolio-release-v0-1/plan.md) | R1〜R18の設計・実装・承認履歴 |
+| 文書                                                                                     | 正本とする内容                                                                                             |
+| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| [`../api-rate-limit-production/plan.md`](../api-rate-limit-production/plan.md)           | 設計、Hono実装、TDD履歴、Durable Object実装、当時の判断                                                    |
+| 本計画                                                                                   | staging実HTTP、WAF、Cloudflare実resource、R7対象A11Y、監視、rollback、production preflight/smoke、完了証拠 |
+| [`../../05_progress.md`](../../05_progress.md)                                           | 全体進捗の要約                                                                                             |
+| [`../../11_deployment.md`](../../11_deployment.md)                                       | 共通deployment runbookとR7計画への入口                                                                     |
+| [`../portfolio-release-v0-1-minimal/plan.md`](../portfolio-release-v0-1-minimal/plan.md) | M1〜M6のv0.1 release順序と最終release判定                                                                  |
+| [`../portfolio-release-v0-1/plan.md`](../portfolio-release-v0-1/plan.md)                 | R1〜R18の設計・実装・承認履歴                                                                              |
 
 ## 現状再監査
 
@@ -808,15 +809,15 @@ R7実行ごとに次を同期する。
 
 #### 初回失敗後の診断変更ファイル
 
-| ファイル | 変更種別 | 内容 |
-| --- | --- | --- |
-| `backend/src/jobs/stagingRateLimitEvidence.ts` | 修正 | auth requestの安全な失敗段階・番号・status・固定契約名を分類 |
-| `backend/src/jobs/stagingRateLimitEvidence.cli.ts` | 修正 | 既知の分類metadataだけを固定失敗eventへ追加 |
-| `backend/src/jobs/stagingRateLimitEvidence.test.ts` | 修正 | raw例外・body非保持とauth段階・契約分類のcontract test |
-| `backend/src/jobs/stagingRateLimitEvidence.cli.test.ts` | 修正 | CLIの安全なmetadata出力と機密非出力test |
-| `docs/plans/r7-rate-limit-environment-gates/plan.md` | 修正 | 初回run、cleanup、flag復旧、TDD、残余リスクを記録 |
-| `docs/05_progress.md` | 修正 | R7-04/R7-05未完了と診断実装待ちへ同期 |
-| `docs/plans/portfolio-release-v0-1/plan.md` | 修正 | 実際に変わったR7の状態だけを同期 |
+| ファイル                                                | 変更種別 | 内容                                                         |
+| ------------------------------------------------------- | -------- | ------------------------------------------------------------ |
+| `backend/src/jobs/stagingRateLimitEvidence.ts`          | 修正     | auth requestの安全な失敗段階・番号・status・固定契約名を分類 |
+| `backend/src/jobs/stagingRateLimitEvidence.cli.ts`      | 修正     | 既知の分類metadataだけを固定失敗eventへ追加                  |
+| `backend/src/jobs/stagingRateLimitEvidence.test.ts`     | 修正     | raw例外・body非保持とauth段階・契約分類のcontract test       |
+| `backend/src/jobs/stagingRateLimitEvidence.cli.test.ts` | 修正     | CLIの安全なmetadata出力と機密非出力test                      |
+| `docs/plans/r7-rate-limit-environment-gates/plan.md`    | 修正     | 初回run、cleanup、flag復旧、TDD、残余リスクを記録            |
+| `docs/05_progress.md`                                   | 修正     | R7-04/R7-05未完了と診断実装待ちへ同期                        |
+| `docs/plans/portfolio-release-v0-1/plan.md`             | 修正     | 実際に変わったR7の状態だけを同期                             |
 
 ### 実際の変更ファイル
 
@@ -1305,13 +1306,13 @@ PII・Secret確認:
   - Refactor: 必須operation定義を共通化し、5操作を直列測定へ変更。新規・関連15件を通過
 - 最終workerd測定:
 
-| operation | sample数 | min | median | max |
-| --- | ---: | ---: | ---: | ---: |
-| `BCRYPT_COMPARE_COST_12` | 3 | 208ms | 209ms | 209ms |
-| `RATE_LIMIT_KEY_DIGEST_X3` | 5 | 0ms | 0ms | 0ms |
-| `JWT_SIGN` | 5 | 0ms | 0ms | 0ms |
-| `REFRESH_TOKEN_CRYPTO` | 5 | 0ms | 0ms | 0ms |
-| `APP_DEPENDENCY_CONSTRUCTION` | 5 | 0ms | 0ms | 2ms |
+| operation                     | sample数 |   min | median |   max |
+| ----------------------------- | -------: | ----: | -----: | ----: |
+| `BCRYPT_COMPARE_COST_12`      |        3 | 208ms |  209ms | 209ms |
+| `RATE_LIMIT_KEY_DIGEST_X3`    |        5 |   0ms |    0ms |   0ms |
+| `JWT_SIGN`                    |        5 |   0ms |    0ms |   0ms |
+| `REFRESH_TOKEN_CRYPTO`        |        5 |   0ms |    0ms |   0ms |
+| `APP_DEPENDENCY_CONSTRUCTION` |        5 |   0ms |    0ms |   2ms |
 
 - 固定classification: `BCRYPT_DOMINANT`
 - 測定解釈:
