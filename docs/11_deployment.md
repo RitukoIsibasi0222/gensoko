@@ -916,6 +916,48 @@ Free planの場合はexactな高リスクpath 1本を候補にし、OPTIONS消�
 
 ---
 
+## M1 production初回状態read-only証拠 runbook
+
+M1の正本は[`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-production-read-only-evidence/plan.md)とする。`.github/workflows/production-initial-state-evidence.yml`は`workflow_dispatch`専用で、production DB・Vercel・Cloudflare・GitHubの状態を変更せずに確認し、安全なstatus markerとStep Summaryだけを残す。
+
+2026-07-27時点では実行基盤を`feature/m1-production-read-only-evidence`で実装し、厳格review・品質gateとdevelop向けPR [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155) 作成まで完了している。PRは未mergeである。production DB接続、provider API request、workflow dispatch、Environment/Secret/Variable変更は実施しておらず、M1P-15〜M1P-16は未完了である。
+
+### 別承認で準備する項目
+
+実装PRがreviewされて`develop`へmergeされた後、次を値非表示で確認し、Environment変更とworkflow dispatchをそれぞれ別承認する。read-only権限、対象scope、owner attestationのいずれかを確認できない場合は準備を止め、M1を未完了のままPath Bとして扱う。
+
+- GitHub `production` Environmentのrequired reviewer、deployment branch policy、`develop`のreview済みSHA
+- Variable `BATCH_ENVIRONMENT=production`
+- Secret `DATABASE_URL`、`PRODUCTION_SUPABASE_PROJECT_REF`
+- Secret `M1_VERCEL_ACCESS_TOKEN`、`M1_VERCEL_SCOPE_ID`、`M1_VERCEL_REPOSITORY`
+- Secret `M1_CLOUDFLARE_API_TOKEN`、`M1_CLOUDFLARE_ACCOUNT_ID`、`M1_CLOUDFLARE_WORKER_NAME`
+- GitHub tokenの`actions: read`、`contents: read`、`deployments: read`と、Vercel/Cloudflare credentialのread-only scope
+
+値、DB URL、project/account/resource ID、token、メール、User IDをIssue、PR、文書、Step Summaryへ記載しない。Secret/Variableの作成・変更は本runbookのread-only観測には含めず、承認されたM1P-15でのみ行う。
+
+### dispatchと確認
+
+1. Actionsの`Production Initial State Evidence`を`develop`から選ぶ。
+2. `reviewed_sha`に実行中の`develop` SHA、`confirmation`に`READ_ONLY_PRODUCTION_INITIAL_STATE`を入力する。
+3. `approver`と`change_record`には正規表現で許可された非秘密識別子だけを使う。
+4. 削除済みdeployment・外部backup copyがないことを確認できる場合だけ`history_attestation=NO_DELETED_DEPLOYMENT_OR_EXTERNAL_BACKUP_COPY`を入力する。
+5. M1開始からreview完了までproduction変更を凍結できる場合だけ`change_freeze_attestation=NO_CONCURRENT_PRODUCTION_CHANGE`を入力する。
+6. production Environment approval画面でworkflow名、ref、SHA、read-only scopeを再確認して承認する。
+7. workflow完了後、security/release reviewerがEnvironment approval、Step Summary、1日保持のsafe marker Artifact、run URLを確認する。
+
+workflowはprovider履歴を先にGETで確認し、最後にSupabase接続先を値非表示で検証してPrisma `count`だけをRepeatable Read transaction内で実行する。migration、backup、cleanup、deploy、smoke、raw SQLは実行しない。404、429、timeout、認可不足、pagination不完了、schema不一致、DB target/query失敗は履歴なしと推測せず`unknown`にする。
+
+### 判定・失効・停止
+
+- 全11 checkが`clear`の場合だけsafe markerは`path-a`候補となる。workflow成功だけではM1を完了にしない。
+- 1件でも`present`または`unknown`なら`path-b`で失敗させ、R6/R7/R9/R13〜R16の通常gateへ戻る。履歴やdataを削除してPath Aへ合わせない。
+- run URL、review済みSHA、実行日時、Environment approval、各status、attestationを値非表示で関連計画へ記録した後にM1P-16を完了する。
+- production state、provider scope、credential、証拠CLI、workflow SHAが変わった場合は既存証拠を失効させ、別承認で再実行する。
+- timeout、cancel、Artifact欠落、summary/marker不整合、秘密・PII・identifier露出の疑いがある場合は証拠を無効にし、直ちに再実行しない。credential rotation、Artifact/log処理、incident記録が必要なら別承認する。
+- nonzero終了後にcleanup、削除、deploy、backupを続けない。M1は観測だけで終了する。
+
+---
+
 ## 本番デプロイのチェックリスト
 
 ポートフォリオ版v0.1の公開範囲とrelease blockerは

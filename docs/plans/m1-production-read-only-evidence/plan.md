@@ -99,7 +99,7 @@ repository内の実装とproduction実行を分離する。まず専用CLI・pro
 | `backend/src/lib/supabase-database-target.ts`                     | 新規     | environment別Supabase接続先の共通値非表示validator              |
 | `backend/src/lib/supabase-database-target.test.ts`                | 新規     | staging/production、URL境界、Secret非出力test                   |
 | `backend/src/lib/staging-database-target.ts`                      | 修正     | 共通validatorを利用する既存互換wrapperへ整理                    |
-| `backend/src/lib/staging-database-target.test.ts`                 | 修正     | 共通化後も既存staging契約を維持するtest                         |
+| `backend/src/jobs/stagingSyntheticAdminE2eFixtures.test.ts`       | 修正     | Supabase project refの既存fixtureを実契約へ同期                 |
 | `backend/src/jobs/productionInitialStateEvidence.ts`              | 新規     | check status、Path判定、安全な証拠形式の純粋ロジック            |
 | `backend/src/jobs/productionInitialStateEvidence.test.ts`         | 新規     | `clear` / `present` / `unknown`と非出力契約のunit test          |
 | `backend/src/jobs/inspectProductionInitialState.ts`               | 新規     | Prisma集計とVercel/Cloudflare/GitHub read clientの調停          |
@@ -360,24 +360,24 @@ export function toSafeProductionInitialStateMarker(
 | M1P-11   | 秘密非出力・GET-only・pagination・未知responseを再テスト  | 対象test一式                                     | 高     | Refactor  |
 | M1P-12   | M1 runbookと各計画の実装状態を同期                        | `docs/`                                          | 高     | Docs      |
 | M1P-13   | backend最終品質gateとworkflow/Markdown formatを実行       | `backend/`・`.github/`・`docs/`                  | 高     | Quality   |
-| M1P-14   | 厳格review、PR、mergeを完了                               | GitHub                                           | 高     | Review    |
+| M1P-14   | 厳格review、develop向けPR作成を完了                       | GitHub                                           | 高     | Review    |
 | M1P-15   | Environment/Secret準備を別承認し、review済みSHAでdispatch | GitHub production Environment                    | 高     | Execute   |
 | M1P-16   | 証拠review、docs記録、Path A/B決定、M1状態更新            | `docs/`                                          | 高     | Evidence  |
 
-- [ ] M1P-01: workflow/source contract testを追加し、未実装理由でRedを確認する
-- [ ] M1P-02: Supabase接続先validatorを共通化する
-- [ ] M1P-03: status・Path判定・safe markerをTDD実装する
-- [ ] M1P-04: production DB初回状態のPrisma集計をTDD実装する
-- [ ] M1P-05: Vercel production履歴確認をTDD実装する
-- [ ] M1P-06: Cloudflare Worker deployment履歴確認をTDD実装する
-- [ ] M1P-07: GitHub deployment・backup履歴確認をTDD実装する
-- [ ] M1P-08: CLI config・attestation・safe outputをTDD実装する
-- [ ] M1P-09: M1専用npm scriptを追加する
-- [ ] M1P-10: 承認付きmanual-only workflowを実装する
-- [ ] M1P-11: 秘密非出力・GET-only・fail-closedを再レビューする
-- [ ] M1P-12: runbookと関連計画を同期する
-- [ ] M1P-13: 最終品質gateを通過する
-- [ ] M1P-14: 実装PRを厳格reviewして`develop`へmergeする
+- [x] M1P-01: workflow/source contract testを追加し、未実装理由でRedを確認する
+- [x] M1P-02: Supabase接続先validatorを共通化する
+- [x] M1P-03: status・Path判定・safe markerをTDD実装する
+- [x] M1P-04: production DB初回状態のPrisma集計をTDD実装する
+- [x] M1P-05: Vercel production履歴確認をTDD実装する
+- [x] M1P-06: Cloudflare Worker deployment履歴確認をTDD実装する
+- [x] M1P-07: GitHub deployment・backup履歴確認をTDD実装する
+- [x] M1P-08: CLI config・attestation・safe outputをTDD実装する
+- [x] M1P-09: M1専用npm scriptを追加する
+- [x] M1P-10: 承認付きmanual-only workflowを実装する
+- [x] M1P-11: 秘密非出力・GET-only・fail-closedを再レビューする
+- [x] M1P-12: runbookと関連計画を同期する
+- [x] M1P-13: 最終品質gateを通過する
+- [x] M1P-14: 実装PRを厳格reviewして`develop`向けに作成する（mergeは行わない）
 - [ ] M1P-15: 別承認後にproduction read-only workflowを実行する
 - [ ] M1P-16: 証拠を記録し、Path A/BとM1完了可否を確定する
 
@@ -398,7 +398,7 @@ M1P-10	manual-only production workflow実装	.github/workflows/production-initia
 M1P-11	秘密非出力・GET-only・fail-closed再review	backend/src/jobs/*.test.ts	高
 M1P-12	runbook・関連計画同期	docs/	高
 M1P-13	最終品質gate	backend・.github・docs	高
-M1P-14	実装PR review・merge	GitHub	高
+M1P-14	実装PR review・develop向け作成	GitHub	高
 M1P-15	別承認production dispatch	GitHub production Environment	高
 M1P-16	証拠記録・Path確定	docs/	高
 ```
@@ -545,14 +545,63 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 | workflow sourceにwrite endpoint/command追加                    | source contract test失敗                              |
 | M1成功後にproduction state・scope・SHA変更                     | 既存証拠を失効し再実行                                |
 
+## 実装完了
+
+- 完了日: 2026-07-27
+- 実装ブランチ: `feature/m1-production-read-only-evidence`
+- PR: [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155)（`develop`向け・未merge）
+
+### 計画からの変更点
+
+- ユーザーの明示条件に従い、M1P-14はPR作成までとし、mergeを本作業の範囲から除外した。merge済みであることはM1P-15の別承認実行前提として維持する。
+- safe marker再構成でouter/evidenceのexact key、reviewed SHA完全一致、statusからのdecision再計算を追加し、未検証inputはsummaryへ出さない形に強化した。
+- Vercel paginationのpage count不一致とpage上限を`unknown`へ倒す契約を追加した。
+- 共通Supabase validatorで顕在化した既存staging synthetic E2E testのproject ref fixtureを、小文字英数字の実契約へ同期した。
+- schema/migrationは変更していないため、`prisma migrate deploy`とPlaywrightは計画どおり実行していない。
+
+### 実際の変更ファイル
+
+| ファイル                                                          | 変更種別 | 内容                                               |
+| ----------------------------------------------------------------- | -------- | -------------------------------------------------- |
+| `backend/package.json`                                            | 修正     | M1専用CLI scriptを追加                             |
+| `backend/src/lib/supabase-database-target.ts`                     | 新規     | environment別Supabase接続先validator               |
+| `backend/src/lib/supabase-database-target.test.ts`                | 新規     | URL境界・環境分離・秘密非出力test                  |
+| `backend/src/lib/staging-database-target.ts`                      | 修正     | 共通validatorを利用するwrapperへ整理               |
+| `backend/src/jobs/stagingSyntheticAdminE2eFixtures.test.ts`       | 修正     | 既存project ref fixtureを実契約へ同期              |
+| `backend/src/jobs/productionInitialStateEvidence.ts`              | 新規     | status・Path・safe markerの純粋ロジック            |
+| `backend/src/jobs/productionInitialStateEvidence.test.ts`         | 新規     | status・Path・marker allowlist test                |
+| `backend/src/jobs/inspectProductionInitialState.ts`               | 新規     | Prisma集計とprovider/backup GET client             |
+| `backend/src/jobs/inspectProductionInitialState.test.ts`          | 新規     | DB・provider・pagination・fail-closed test         |
+| `backend/src/jobs/inspectProductionInitialState.cli.ts`           | 新規     | config・safe output・marker・終了code              |
+| `backend/src/jobs/inspectProductionInitialState.cli.test.ts`      | 新規     | CLI正常系・異常系・秘密非出力test                  |
+| `backend/src/jobs/productionInitialStateEvidenceWorkflow.test.ts` | 新規     | manual-only・GET-only・safe marker source contract |
+| `.github/workflows/production-initial-state-evidence.yml`         | 新規     | production承認付きmanual-only read-only workflow   |
+| `docs/05_progress.md`                                             | 修正     | 実装PRとproduction未実施状態を同期                 |
+| `docs/11_deployment.md`                                           | 修正     | M1準備・dispatch・判定・失効・停止runbook          |
+| `docs/plans/portfolio-release-v0-1-minimal/plan.md`               | 修正     | M1実装基盤と別承認境界を同期                       |
+| `docs/plans/r6-account-deletion-gates/plan.md`                    | 修正     | R13 run/Path未確定と再着手条件を同期               |
+| `docs/plans/m1-production-read-only-evidence/plan.md`             | 修正     | task、実変更、TDD、review、品質gate、PR記録を同期  |
+
+### TDD・厳格review・品質gate記録
+
+- Red: workflow未実装、marker exact allowlist欠落、reviewed SHA再照合欠落、Vercel page count不一致をそれぞれ意図した理由で失敗確認した。
+- Green/Refactor: 対象7 test fileと既存staging互換test 71件を通過し、共通GET/pagination/validator、safe marker再構成へ整理した。
+- 厳格review: 秘密非出力、GET-only、Prisma count-only、pagination完全性、404/429/timeout/schema不一致の`unknown`化、TOCTOU変更凍結を再確認した。
+- backend test: 1,214件成功、外部DB前提10件skip
+- Workers runtime test: 32件成功
+- build、Workers build/dry-run、lint、format、Prisma validate、workflow/Markdown Prettier、`git diff --check`: すべて成功
+- production DB接続、provider API request、workflow dispatch、Environment/Secret/Variable変更、backup、migration、cleanup、deploy、smoke: すべて未実施
+- M1P-15〜M1P-16、M1証拠review、Path A/B確定: 別承認のため未実施
+
 ## 完了条件
 
 ### 実行基盤
 
-- M1P-01〜M1P-14が完了し、実装PRが`develop`へmergeされている。
+- M1P-01〜M1P-14が完了し、実装PRが`develop`向けに作成されている。本作業ではmergeしない。
 - manual-only、production Environment approval、develop/review済みSHA固定、GET-only、Prisma read-only、safe evidence、fail-closedがtestで固定されている。
 - backend品質gate、workflow/Markdown Prettier、`git diff --check`が成功している。
 - production DB query、provider API request、workflow dispatch、Environment/Secret変更を実装PRでは実行していない。
+- 実装PRのmergeはM1P-15の実行前提として別途reviewし、本作業の権限では行わない。
 
 ### M1
 
