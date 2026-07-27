@@ -557,6 +557,7 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 - safe marker再構成でouter/evidenceのexact key、reviewed SHA完全一致、statusからのdecision再計算を追加し、未検証inputはsummaryへ出さない形に強化した。
 - Vercel paginationのpage count不一致とpage上限を`unknown`へ倒す契約を追加した。
 - 共通Supabase validatorで顕在化した既存staging synthetic E2E testのproject ref fixtureを、小文字英数字の実契約へ同期した。
+- PR review [#4785098125](https://github.com/RitukoIsibasi0222/gensoko/pull/155#pullrequestreview-4785098125)で検出されたfallback markerの秒精度timestampを、通常markerと同じミリ秒付きUTC形式へ修正し、source contractで固定した。
 - schema/migrationは変更していないため、`prisma migrate deploy`とPlaywrightは計画どおり実行していない。
 
 ### 実際の変更ファイル
@@ -587,6 +588,7 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 - Red: workflow未実装、marker exact allowlist欠落、reviewed SHA再照合欠落、Vercel page count不一致をそれぞれ意図した理由で失敗確認した。
 - Green/Refactor: 対象7 test fileと既存staging互換test 71件を通過し、共通GET/pagination/validator、safe marker再構成へ整理した。
 - 厳格review: 秘密非出力、GET-only、Prisma count-only、pagination完全性、404/429/timeout/schema不一致の`unknown`化、TOCTOU変更凍結を再確認した。
+- PR review対応: fallback `executedAt`の形式不一致をRed確認後に修正し、marker・CLI・workflow直接関連test 17件とGNU `date`出力形式を確認した。
 - backend test: 1,214件成功、外部DB前提10件skip
 - Workers runtime test: 32件成功
 - build、Workers build/dry-run、lint、format、Prisma validate、workflow/Markdown Prettier、`git diff --check`: すべて成功
