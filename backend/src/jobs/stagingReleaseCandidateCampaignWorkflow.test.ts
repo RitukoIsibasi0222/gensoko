@@ -27,6 +27,21 @@ describe("M2 staging release candidate workflow", () => {
     expect(source).toContain("validate-m1");
   });
 
+  it("M1 run自体のworkflow・event・success・same SHAをArtifact取得前に照合する", () => {
+    const source = workflow();
+    const runGate = source.indexOf("Validate exact M1 workflow run");
+    const download = source.indexOf("Download exact M1 safe evidence");
+
+    expect(runGate).toBeGreaterThan(-1);
+    expect(runGate).toBeLessThan(download);
+    expect(source).toContain("actions/runs/$M1_RUN_ID");
+    expect(source).toContain('.event == "workflow_dispatch"');
+    expect(source).toContain('.status == "completed"');
+    expect(source).toContain('.conclusion == "success"');
+    expect(source).toContain(".head_sha == $sha");
+    expect(source).toContain('.path == ".github/workflows/production-initial-state-evidence.yml"');
+  });
+
   it("staging Environment・共通concurrency・最小permissionだけを使う", () => {
     const source = workflow();
 
@@ -71,6 +86,29 @@ describe("M2 staging release candidate workflow", () => {
     expect(source).toMatch(/vercel@[^ ]+ deploy --prebuilt --target preview/);
     expect(source).not.toContain("worker-staging-rollback-baseline");
     expect(source).not.toMatch(/--env\s+production|--target\s+production/);
+  });
+
+  it("API deploy後のsame SHA・health/CORS/header gate後だけfrontend deployへ進む", () => {
+    const source = workflow();
+    const apiJob = source.slice(
+      source.indexOf("  deploy-api:"),
+      source.indexOf("  deploy-frontend:"),
+    );
+    const frontendJob = source.slice(
+      source.indexOf("  deploy-frontend:"),
+      source.indexOf("  campaign:"),
+    );
+
+    expect(apiJob).toContain("wrangler deployments status");
+    expect(apiJob).toContain("npm run staging:release-candidate-health");
+    expect(apiJob).toContain(
+      "M2_API_BASE_URL: https://gensoko-api-staging.rituko-labs.workers.dev/api/v1",
+    );
+    expect(apiJob).toContain(
+      "M2_FRONTEND_ORIGIN: https://gensoko-frontend-staging-develop.vercel.app",
+    );
+    expect(frontendJob).toContain("vercel@50.17.1 inspect");
+    expect(frontendJob).toContain("frontend.includes(expected)");
   });
 
   it("45分campaign・5分cleanup・独立recovery・秘密のstep scopeを固定する", () => {

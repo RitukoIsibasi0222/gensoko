@@ -95,6 +95,32 @@ jobs:
           fi
           echo "started_at=$(date --utc +%Y-%m-%dT%H:%M:%S.%3NZ)" >> "$GITHUB_OUTPUT"
 
+      - name: Validate exact M1 workflow run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          M1_RUN_ID: ${{ inputs.m1_run_id }}
+        run: |
+          set -euo pipefail
+          run_state="$RUNNER_TEMP/m1-run.json"
+          if ! gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$M1_RUN_ID" >"$run_state" 2>/dev/null; then
+            rm -f "$run_state"
+            echo "M1 workflow runを確認できません"
+            exit 1
+          fi
+          if ! jq -e --arg sha "$GITHUB_SHA" '
+            .event == "workflow_dispatch" and
+            .status == "completed" and
+            .conclusion == "success" and
+            .head_sha == $sha and
+            .head_branch == "develop" and
+            .path == ".github/workflows/production-initial-state-evidence.yml"
+          ' "$run_state" >/dev/null; then
+            rm -f "$run_state"
+            echo "M1 workflow runがPath A前提と一致しません"
+            exit 1
+          fi
+          rm -f "$run_state"
+
       - name: Download exact M1 safe evidence
         uses: actions/download-artifact@v4
         with:
@@ -197,6 +223,34 @@ jobs:
           fi
           rm -f "$deploy_log"
 
+      - name: Validate deployed API SHA and health contract
+        working-directory: backend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          M2_API_BASE_URL: https://gensoko-api-staging.rituko-labs.workers.dev/api/v1
+          M2_FRONTEND_ORIGIN: https://gensoko-frontend-staging-develop.vercel.app
+        run: |
+          set -euo pipefail
+          deployment_state="$RUNNER_TEMP/m2-worker-state.json"
+          if ! npx wrangler deployments status --config wrangler.jsonc --env staging --json >"$deployment_state" 2>/dev/null; then
+            rm -f "$deployment_state"
+            echo "staging API deployment状態を確認できません"
+            exit 1
+          fi
+          if ! EXPECTED_SHA="$GITHUB_SHA" DEPLOYMENT_STATE="$deployment_state" node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const expected = process.env.EXPECTED_SHA;
+            const worker = readFileSync(process.env.DEPLOYMENT_STATE, "utf8");
+            if (!worker.includes(expected)) process.exit(1);
+          '; then
+            rm -f "$deployment_state"
+            echo "staging API deployment SHAが一致しません"
+            exit 1
+          fi
+          rm -f "$deployment_state"
+          npm run staging:release-candidate-health
+
   deploy-frontend:
     name: Deploy and alias frontend candidate
     needs: deploy-api
@@ -253,6 +307,21 @@ jobs:
           if ! npx --yes vercel@50.17.1 alias set "$(tail -n 1 "$deployment_ref")" gensoko-frontend-staging-develop.vercel.app --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
             rm -f "$provider_log" "$deployment_ref"
             echo "staging frontend alias更新に失敗しました"
+            exit 1
+          fi
+          if ! npx --yes vercel@50.17.1 inspect https://gensoko-frontend-staging-develop.vercel.app --json --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+            rm -f "$provider_log" "$deployment_ref"
+            echo "staging frontend deployment状態を確認できません"
+            exit 1
+          fi
+          if ! EXPECTED_SHA="$GITHUB_SHA" FRONTEND_STATE="$provider_log" node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const expected = process.env.EXPECTED_SHA;
+            const frontend = readFileSync(process.env.FRONTEND_STATE, "utf8");
+            if (!frontend.includes(expected)) process.exit(1);
+          '; then
+            rm -f "$provider_log" "$deployment_ref"
+            echo "staging frontend deployment SHAが一致しません"
             exit 1
           fi
           rm -f "$provider_log" "$deployment_ref"
