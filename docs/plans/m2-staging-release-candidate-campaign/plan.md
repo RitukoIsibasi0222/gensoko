@@ -790,21 +790,21 @@ quality gateではstaging/production URLへrequestせず、Playwrightは`--list`
 | M2P-21   | main/recovery cleanupとsafe Artifactをreview              | staging / GitHub Actions                  | 高     | 別承認・外部 |
 | M2P-22   | M2完了記録とM3 handoffを同期                              | docs                                      | 高     | Evidence     |
 
-- [ ] M2P-01: M1/R7/既存workflowの状態と再利用契約を同期する
-- [ ] M2P-02: fixture validator・exact match・collisionのRed testを作成する
-- [ ] M2P-03: fixture preflight・token arm・cleanupを実装する
-- [ ] M2P-04: fixture CLIをTDD実装し秘密非出力を固定する
-- [ ] M2P-05: evidence schema・fail-closed集約のRed testを作成する
-- [ ] M2P-06: safe marker / Artifact builderを実装する
-- [ ] M2P-07: campaign HTTP契約とbounded waitのRed testを作成する
-- [ ] M2P-08: register〜旧credential拒否runnerを実装する
-- [ ] M2P-09: 既存rate limit runnerを共通化し回帰testを通す
-- [ ] M2P-10: campaign CLIをTDD実装しsafe outputを固定する
-- [ ] M2P-11: staging Playwright config/source contractのRed testを作成する
-- [ ] M2P-12: keyboard・320px・game・本人退会specを実装する
-- [ ] M2P-13: workflow source contractのRed testを作成する
-- [ ] M2P-14: M1 gate・deploy・campaign・cleanup workflowを実装する
-- [ ] M2P-15: runbook、R7PV-17、親計画、progressを同期する
+- [x] M2P-01: M1/R7/既存workflowの状態と再利用契約を同期する
+- [x] M2P-02: fixture validator・exact match・collisionのRed testを作成する
+- [x] M2P-03: fixture preflight・token arm・cleanupを実装する
+- [x] M2P-04: fixture CLIをTDD実装し秘密非出力を固定する
+- [x] M2P-05: evidence schema・fail-closed集約のRed testを作成する
+- [x] M2P-06: safe marker / Artifact builderを実装する
+- [x] M2P-07: campaign HTTP契約とbounded waitのRed testを作成する
+- [x] M2P-08: register〜旧credential拒否runnerを実装する
+- [x] M2P-09: 既存rate limit runnerを共通化し回帰testを通す
+- [x] M2P-10: campaign CLIをTDD実装しsafe outputを固定する
+- [x] M2P-11: staging Playwright config/source contractのRed testを作成する
+- [x] M2P-12: keyboard・320px・game・本人退会specを実装する
+- [x] M2P-13: workflow source contractのRed testを作成する
+- [x] M2P-14: M1 gate・deploy・campaign・cleanup workflowを実装する
+- [x] M2P-15: runbook、R7PV-17、親計画、progressを同期する
 - [ ] M2P-16: 厳格review、repository品質gate、実装PRを完了する
 - [ ] M2P-17: 別承認でM1P-15〜M1P-16を実行しsame SHA Path Aを確定する
 - [ ] M2P-18: 別承認でstaging Environment/resource/credential/schemaをpreflightする
@@ -843,19 +843,62 @@ M2P-22	M2完了記録とM3 handoffを同期	docs	高	Evidence
 
 ## 厳格review checklist
 
-- [ ] M1 Path AとM2 same SHAが機械的に一致し、PR #155 mergeだけでM1を完了にしていない。
-- [ ] Path B/unknown時は外部操作前に停止し、親計画の通常gateへ戻る。
-- [ ] staging/production Environment、credential、resource、DB、frontend/API originが分離されている。
-- [ ] `PasswordVerifierDurableObject`の通常bundleだけをM2でdeployし、rollback baselineを実行しない。
-- [ ] valid loginと10回200がmain Worker `exceededCpu`非再発の安全な合成証拠になっている。
-- [ ] registerによるrate limit消費、fixed window、11回目、Retry-After、resetの時系列が整合している。
-- [ ] cross-site staging refreshをproduction same-site証拠として扱っていない。
-- [ ] fixture preflight、token arm、cleanupが完全一致・Serializable・staging限定である。
-- [ ] main/recovery cleanupとresidueが成功判定へ含まれている。
-- [ ] timeout、cancel、pagination、429、schema不一致、Artifact欠落、TOCTOUが`unknown`へ倒れる。
-- [ ] Summary/Artifact/logにPII、Secret、resource ID、raw response/errorが残らない。
-- [ ] 既存CLI/workflow/Playwrightの再利用と新規追加の境界が具体的である。
-- [ ] unit、CLI、workflow source contract、frontend、Playwright source/config testがRed→Green→Refactor順である。
-- [ ] repository実装と別承認のdeploy/request/Environment変更が別taskである。
-- [ ] rollback drill、長期soak、WAF、backup複数世代をM2 blockerへ戻していない。
-- [ ] M3へ渡すSHA、run URL、safe evidence、未解決事項の扱いがfail-closedである。
+- [x] M1 Path AとM2 same SHAが機械的に一致し、PR #155 mergeだけでM1を完了にしていない。
+- [x] Path B/unknown時は外部操作前に停止し、親計画の通常gateへ戻る。
+- [x] staging/production Environment、credential、resource、DB、frontend/API originが分離されている。
+- [x] `PasswordVerifierDurableObject`の通常bundleだけをM2でdeployし、rollback baselineを実行しない。
+- [x] valid loginと10回200がmain Worker `exceededCpu`非再発の安全な合成証拠になっている。
+- [x] registerによるrate limit消費、fixed window、11回目、Retry-After、resetの時系列が整合している。
+- [x] cross-site staging refreshをproduction same-site証拠として扱っていない。
+- [x] fixture preflight、token arm、cleanupが完全一致・Serializable・staging限定である。
+- [x] main/recovery cleanupとresidueが成功判定へ含まれている。
+- [x] timeout、cancel、pagination、429、schema不一致、Artifact欠落、TOCTOUが`unknown`へ倒れる。
+- [x] Summary/Artifact/logにPII、Secret、resource ID、raw response/errorが残らない。
+- [x] 既存CLI/workflow/Playwrightの再利用と新規追加の境界が具体的である。
+- [x] unit、CLI、workflow source contract、frontend、Playwright source/config testがRed→Green→Refactor順である。
+- [x] repository実装と別承認のdeploy/request/Environment変更が別taskである。
+- [x] rollback drill、長期soak、WAF、backup複数世代をM2 blockerへ戻していない。
+- [x] M3へ渡すSHA、run URL、safe evidence、未解決事項の扱いがfail-closedである。
+
+## Repository実装完了
+
+- 完了日: 2026-07-28
+- 実装ブランチ: `feature/m2-staging-release-candidate-campaign`
+- PR: 作成後に追記
+- 境界: M2P-01〜M2P-16のみ。M2P-17〜M2P-22の外部実行は未実施
+
+### 計画からの変更点
+
+- response JSON・timeout・CORS/security header検証の重複を`stagingEvidenceHttp.ts`へ共通化した。
+- rate-limit policyの実在する正本は`backend/src/middleware/rateLimit/policies.ts`であることを確認し、既存runnerからそのまま参照した。
+- evidenceとfixtureに独立CLI/testを追加し、M1 Artifact exact検証もevidence CLIへ統合した。
+- frontend staging固定値とcross-site境界は`staging-release-candidate-config.ts`へ分離した。
+- repository workflow contract testはbackend job testとして配置した。
+
+### 実際の変更ファイル
+
+| ファイル                                                                  | 変更種別   | 内容                                                          |
+| ------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------- |
+| `.github/workflows/staging-release-candidate-campaign.yml`                | 新規       | manual-only M1 gate、deploy、campaign、cleanup、safe Artifact |
+| `backend/package.json`                                                    | 修正       | fixture・campaign・evidence CLI script                        |
+| `backend/src/jobs/stagingEvidenceHttp.ts`                                 | 新規       | staging HTTP response/timeout/header共通契約                  |
+| `backend/src/jobs/stagingReleaseCandidateEvidence.ts` / `.cli.ts` / tests | 新規       | exact evidence、M1 gate、safe CLI                             |
+| `backend/src/jobs/stagingReleaseCandidateFixtures.ts` / `.cli.ts` / tests | 新規       | fixed fixture preflight、arm、cleanup、safe CLI               |
+| `backend/src/jobs/stagingReleaseCandidateCampaign.ts` / `.cli.ts` / tests | 新規       | single campaign runner、CLI、workflow source contract         |
+| `backend/src/jobs/stagingRateLimitEvidence.ts` / `.m2.test.ts`            | 修正・新規 | M2 credential注入と既存runner回帰contract                     |
+| `frontend/package.json`                                                   | 修正       | M2 Playwright script                                          |
+| `frontend/e2e/staging-release-candidate-config.ts` / tests                | 新規       | staging origin・cross-site・秘密入力contract                  |
+| `frontend/e2e/staging-release-candidate.spec.ts`                          | 新規       | keyboard、320px、game、本人退会spec                           |
+| `frontend/playwright.staging-release-candidate.config.ts`                 | 新規       | 1 worker、retry/attachment無効config                          |
+| `docs/11_deployment.md`、`docs/05_progress.md`、関連計画書                | 修正       | repository完了と外部未実施境界を同期                          |
+
+### TDD記録
+
+fixture/evidence、各CLI、campaign、rate runner再利用、frontend config/source、workflow source contractごとに対象testを先に失敗させ、実装後にGreen、共通HTTP helper抽出後に回帰testを通した。最終品質gateとPR作成後にM2P-16、PR番号、品質結果を追記する。
+
+### Repository品質gate
+
+- backend: 外部DB不要 1,255 tests、Workers runtime 32 tests、Node build、Workers build、ESLint、Prettier、Prisma validate成功
+- frontend: 680 tests、ESLint、Svelte check 0 errors/0 warnings、Prettier、Vite build成功
+- Playwright: M2 staging configで1 specを`--list`し、外部requestなしで収集成功
+- repository: workflow/docs Prettier、`git diff --check`成功
