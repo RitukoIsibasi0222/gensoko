@@ -62,6 +62,7 @@ repository内の実装とproduction実行を分離する。まず専用CLI・pro
 - [Cloudflare Workers List Deployments](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/methods/list/) — production Worker deployment履歴の取得。`Workers Scripts Read` tokenを使用する。
 - [GitHub Actions Artifacts API](https://docs.github.com/en/rest/actions/artifacts) — 現存・expired Artifact metadataの取得。
 - [GitHub Actions Workflow Jobs API](https://docs.github.com/en/rest/actions/workflow-jobs) — Artifact削除後も含め、過去runでbackup作成stepが成功したかを確認する。
+- [GitHub Actions workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax) — job/step timeoutとcancel境界の確認。
 
 ### 重要な制約
 
@@ -76,6 +77,7 @@ repository内の実装とproduction実行を分離する。まず専用CLI・pro
 - CLIはprovider responseをそのまま例外causeやconsoleへ渡さず、安全な日本語の一般化messageへ変換する。
 - `set -x`、HTTP verbose/debug、trace、screenshot、provider response Artifact、shell引数へのSecret展開を禁止する。
 - 全pageを走査できない、API schemaが変わった、rate limit、timeout、401/403/404の意味を安全に確定できない、対象account/project/script/repositoryを照合できない場合は`unknown`とする。
+- Vercel・Cloudflare・GitHubとGitHub run/job反復はmonotonic clockによる10分の総時間予算を共有する。各GETの前後で残時間を検証し、予算切れ後は追加requestを送らず未完了checkを`unknown`とする。
 - 404を自動的に「配備なし」と扱わない。Cloudflareはaccount全体のscript一覧から期待名の不存在を確認できた場合だけ`clear`とし、認可不足と不存在を区別する。Vercelも承認済みscope全体を走査できた場合だけ`clear`とする。
 - GitHub Actions Artifact一覧だけで「過去backupなし」を判定しない。全workflow run/job stepも走査し、成功済みbackup stepが1件でもあれば、当時の空DB証拠が別にない限り`present`とする。
 - providerから削除されたdeployment履歴、expired後に削除されたrun、手元や外部storageへ保存されたbackup copyはAPIだけでは不存在を証明できない。承認者が確認文言で明示attestationできない場合は、実行前ならdispatchせず判定上`unknown`のPath Bを記録し、誤dispatch後ならsafe markerのstatusを`unknown`とする。
@@ -216,6 +218,7 @@ repository内の実装とproduction実行を分離する。まず専用CLI・pro
 - M1 CLIは安全なJSON markerをrunner tempへ書き、Step Summaryにはrun SHA、実行日時、check status、Path A/B候補、再確認条件だけを記録する。
 - markerはstatus keyだけをallowlist再構成してから短期Artifactへ保存する。raw provider response、count、identifier、Secretは保存しない。
 - `present`または`unknown`でも安全なsummary/markerを`always()`で残し、最後に非0終了してM1未完了を明示する。
+- jobの30分timeoutとは別にinspection stepを15分で停止し、総時間予算を超えた外部確認は10分以内に`unknown`へ倒してsafe marker・Summary・Artifact処理の時間を残す。
 - required attestationを確認できなければrunを作成しない。不一致値を含む誤dispatchはcheckout前に失敗させ、全項目`unknown`のsafe markerとPath Bだけを`always()`で残す。
 - workflowの成功だけでM1完了にしない。security/release reviewerがsummary、Environment approval、Artifact allowlist、run URLを確認し、docsへ記録して初めてM1完了とする。
 
@@ -512,6 +515,7 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 
 - workflow準備中にwrite permission、write endpoint、deploy command、migration、backup、cleanupを検出した場合はmergeしない。
 - production target不一致、branch/SHA不一致、Secret不足、provider scope不明、pagination不完了、API error、Zod parse failure、DB query failureはすべて`unknown`で停止する。
+- 外部確認の10分総時間予算またはinspection stepの15分timeoutへ到達した場合は証拠を`unknown`のPath Bへ倒し、page上限まで待ち続けない。
 - nonzeroを検出してもcleanup・削除・Artifact削除・deployment削除を続けて実行しない。M1は観測だけで終了する。
 - workflow timeout/cancel時は証拠を不完全としてPath Bへ倒し、同じrunを成功扱いにしない。再実行には改めてproduction Environment approvalを要求する。
 - SecretやPIIがlog/Artifactへ露出した可能性がある場合は、値を会話やPRへ転載せず、credential rotation、Artifact/log処理、incident記録を別承認で行う。
@@ -542,6 +546,7 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 | production変更凍結attestation不一致の誤dispatch                | checkout前に停止、全status `unknown`、Path B                      |
 | M1実行中にproduction変更を検出                                 | 証拠無効、Path B、変更内容を値非表示で別review                    |
 | pagination途中で429/timeout/schema不一致                       | 対象check `unknown`、部分結果を`clear`にしない                    |
+| provider間またはGitHub run/job反復で10分予算へ到達             | 追加GETを止め、未完了checkを`unknown`にする                       |
 | provider raw errorにSecret/ID fixtureを含む                    | stdout/stderr/markerへ出力されない                                |
 | workflowをschedule/push/PRで起動しようとする                   | triggerが存在せず起動不可                                         |
 | feature branchまたはreviewed SHA不一致                         | checkout/DB/API前に失敗                                           |
@@ -563,6 +568,7 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 - PR review [#4785098125](https://github.com/RitukoIsibasi0222/gensoko/pull/155#pullrequestreview-4785098125)で検出されたfallback markerの秒精度timestampを、通常markerと同じミリ秒付きUTC形式へ修正し、source contractで固定した。
 - PR review [#4785241679](https://github.com/RitukoIsibasi0222/gensoko/pull/155#pullrequestreview-4785241679)を受け、attestation不能時はplaceholderで誤dispatchせずPath Bを記録する境界、誤dispatch時だけ全項目`unknown`のfallbackを残す境界、証拠日時のミリ秒形式をworkflow・runbook・親計画・R6計画・source contractで同期した。
 - PR review [#4785483509](https://github.com/RitukoIsibasi0222/gensoko/pull/155#pullrequestreview-4785483509)で検出されたDB query/transaction失敗時の`databaseTarget=clear`を、DB evidenceが全項目確定した場合だけ`clear`とするfail-closed判定へ修正した。
+- PR review [#4785617213](https://github.com/RitukoIsibasi0222/gensoko/pull/155#pullrequestreview-4785617213)のsuppressed指摘を受け、外部確認全体へ10分の共有時間予算、inspection stepへ15分timeoutを追加し、job timeout前にfail-closed marker処理へ進める境界を固定した。
 - schema/migrationは変更していないため、`prisma migrate deploy`とPlaywrightは計画どおり実行していない。
 
 ### 実際の変更ファイル
@@ -596,7 +602,8 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 - PR review対応: fallback `executedAt`の形式不一致をRed確認後に修正し、marker・CLI・workflow直接関連test 17件とGNU `date`出力形式を確認した。
 - PR review対応（#4785241679）: attestation不能時のno-dispatch契約と証拠日時形式の不整合をsource contract 1件のRedで確認後に修正し、対象7件・直接関連18件をGreen確認した。親計画・R6計画を含む横断監査でno-run Path Bを同期した。
 - PR review対応（#4785483509）: DB transaction失敗時に`databaseTarget`だけ`clear`となる回帰test 1件をRed確認後、DB evidence完了判定を追加して対象32件・直接関連50件をGreen確認した。
-- backend test: 1,216件成功、外部DB前提10件skip
+- PR review対応（#4785617213）: provider間共有予算とworkflow step timeoutの回帰test 2件をRed確認し、GitHub run/job反復の応答完了時境界も追加testで固定した。対象41件をGreen/Refactor確認した。
+- backend test: 1,218件成功、外部DB前提10件skip
 - Workers runtime test: 32件成功
 - build、Workers build/dry-run、lint、format、Prisma validate、workflow/Markdown Prettier、`git diff --check`: すべて成功
 - production DB接続、provider API request、workflow dispatch、Environment/Secret/Variable変更、backup、migration、cleanup、deploy、smoke: すべて未実施

@@ -947,7 +947,7 @@ owner attestationを確認できない場合はworkflowをdispatchしない。re
 6. production Environment approval画面でworkflow名、ref、SHA、read-only scopeを再確認して承認する。
 7. workflow完了後、security/release reviewerがEnvironment approval、Step Summary、1日保持のsafe marker Artifact、run URLを確認する。
 
-workflowはprovider履歴を先にGETで確認し、最後にSupabase接続先を値非表示で検証してPrisma `count`だけをRepeatable Read transaction内で実行する。migration、backup、cleanup、deploy、smoke、raw SQLは実行しない。404、429、timeout、認可不足、pagination不完了、schema不一致、DB target/query失敗は履歴なしと推測せず`unknown`にする。
+workflowはprovider履歴を先にGETで確認し、最後にSupabase接続先を値非表示で検証してPrisma `count`だけをRepeatable Read transaction内で実行する。migration、backup、cleanup、deploy、smoke、raw SQLは実行しない。404、429、timeout、認可不足、pagination不完了、schema不一致、DB target/query失敗は履歴なしと推測せず`unknown`にする。Vercel・Cloudflare・GitHubとGitHub run/job反復はmonotonic clockによる10分の総時間予算を共有し、各GETの前後で残時間を検証する。予算切れ後は追加requestを送らず未完了checkを`unknown`とし、15分のinspection step timeoutより前にsafe marker処理へ進む。
 
 手順4または5を確認できない場合は手順6へ進まず、`Run workflow`を押さない。UI/API操作ミスで不一致のattestationを含むrunが作られた場合は、checkout・DB・provider APIより前のvalidationを失敗させ、`always()`のsafe markerを全項目`unknown`・`path-b`として保存した後にjobを失敗させる。このfallbackは誤dispatch時のfail-closed境界であり、確認不能時に意図的に実行する手順ではない。
 
