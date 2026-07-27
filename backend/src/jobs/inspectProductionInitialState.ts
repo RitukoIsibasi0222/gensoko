@@ -156,6 +156,10 @@ const UNKNOWN_DATABASE_EVIDENCE: ProductionDatabaseInitialStateEvidence = {
   auditLogs: "unknown",
 };
 
+function isDatabaseEvidenceComplete(evidence: ProductionDatabaseInitialStateEvidence): boolean {
+  return Object.values(evidence).every((status) => status !== "unknown");
+}
+
 function assertValidCount(count: number): void {
   if (!Number.isSafeInteger(count) || count < 0) {
     throw new Error("DB集計結果が不正です");
@@ -565,8 +569,8 @@ export async function inspectProductionInitialState(
       projectRef: config.productionSupabaseProjectRef,
       databaseUrl: config.databaseUrl,
     });
-    databaseTarget = "clear";
     databaseEvidence = await inspectProductionDatabaseInitialState(dependencies.prisma);
+    databaseTarget = isDatabaseEvidenceComplete(databaseEvidence) ? "clear" : "unknown";
   } catch {
     databaseTarget = "unknown";
   }

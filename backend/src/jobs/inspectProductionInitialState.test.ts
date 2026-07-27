@@ -628,6 +628,20 @@ describe("inspectProductionInitialState", () => {
     expect(transactionCall).not.toHaveBeenCalled();
   });
 
+  it("production DB transaction失敗ならdatabaseTargetを含むDB checkをunknownにする", async () => {
+    const { prisma, transactionCall } = createPrismaMock();
+    const fetch = createClearProviderFetch();
+    transactionCall.mockRejectedValueOnce(new Error("database-secret raw error"));
+
+    const evidence = await inspectProductionInitialState({ prisma, fetch }, PRODUCTION_CONFIG);
+
+    expect(evidence.databaseTarget).toBe("unknown");
+    expect(evidence.allUsers).toBe("unknown");
+    expect(evidence.legacyUsers).toBe("unknown");
+    expect(evidence.userRelatedRows).toBe("unknown");
+    expect(evidence.auditLogs).toBe("unknown");
+  });
+
   it("attestationまたはconfig不一致は外部確認前に全項目unknownへ倒す", async () => {
     const { prisma, transactionCall } = createPrismaMock();
     const fetch = createClearProviderFetch();
