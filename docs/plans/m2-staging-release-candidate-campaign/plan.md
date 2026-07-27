@@ -215,6 +215,7 @@ path parameterやresponseのIDはrunner memory内の次requestへだけ渡し、
 | `backend/src/jobs/stagingReleaseCandidateCampaign.test.ts`         | 新規     | HTTP契約、timeout、rate reset、cross-site境界のunit test                           |
 | `backend/src/jobs/stagingReleaseCandidateCampaign.cli.ts`          | 新規     | masked credentialをenvだけで受けるcampaign CLI                                     |
 | `backend/src/jobs/stagingReleaseCandidateCampaign.cli.test.ts`     | 新規     | safe marker、固定error、raw非出力、cancel相当test                                  |
+| `backend/src/jobs/stagingReleaseCandidateHealth.ts` / tests        | 新規     | API deploy後health・CORS・security header gateとsafe CLI                           |
 | `backend/src/jobs/stagingReleaseCandidateEvidence.ts`              | 新規     | `clear/present/unknown`集約とexact allowlist Artifact schema                       |
 | `backend/src/jobs/stagingReleaseCandidateEvidence.test.ts`         | 新規     | fail-closed再計算、schema/version、allowlist test                                  |
 | `backend/src/jobs/stagingReleaseCandidateCampaignWorkflow.test.ts` | 新規     | manual-only、SHA、Environment、順序、timeout、cleanup、Artifact source contract    |
@@ -874,17 +875,20 @@ M2P-22	M2完了記録とM3 handoffを同期	docs	高	Evidence
 - evidenceとfixtureに独立CLI/testを追加し、M1 Artifact exact検証もevidence CLIへ統合した。
 - frontend staging固定値とcross-site境界は`staging-release-candidate-config.ts`へ分離した。
 - repository workflow contract testはbackend job testとして配置した。
+- PR #157 review対応で複数`Set-Cookie`から削除cookieを除外し、active refresh cookieをexact 1件だけ受理するようにした。
+- 再監査でM1 run metadata、API deploy後health/CORS/header、API/frontend deploy後same SHA、safe 503契約のgate不足を検出し、fail-closed検証を追加した。
 
 ### 実際の変更ファイル
 
 | ファイル                                                                  | 変更種別   | 内容                                                          |
 | ------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------- |
 | `.github/workflows/staging-release-candidate-campaign.yml`                | 新規       | manual-only M1 gate、deploy、campaign、cleanup、safe Artifact |
-| `backend/package.json`                                                    | 修正       | fixture・campaign・evidence CLI script                        |
+| `backend/package.json`                                                    | 修正       | fixture・campaign・health・evidence CLI script                |
 | `backend/src/jobs/stagingEvidenceHttp.ts`                                 | 新規       | staging HTTP response/timeout/header共通契約                  |
 | `backend/src/jobs/stagingReleaseCandidateEvidence.ts` / `.cli.ts` / tests | 新規       | exact evidence、M1 gate、safe CLI                             |
 | `backend/src/jobs/stagingReleaseCandidateFixtures.ts` / `.cli.ts` / tests | 新規       | fixed fixture preflight、arm、cleanup、safe CLI               |
 | `backend/src/jobs/stagingReleaseCandidateCampaign.ts` / `.cli.ts` / tests | 新規       | single campaign runner、CLI、workflow source contract         |
+| `backend/src/jobs/stagingReleaseCandidateHealth.ts` / `.cli.ts` / tests   | 新規       | API health・CORS・security header gate、safe CLI              |
 | `backend/src/jobs/stagingRateLimitEvidence.ts` / `.m2.test.ts`            | 修正・新規 | M2 credential注入と既存runner回帰contract                     |
 | `frontend/package.json`                                                   | 修正       | M2 Playwright script                                          |
 | `frontend/package-lock.json`                                              | 修正       | PR CIで検出したmoderate/high advisoryの非breaking更新         |
@@ -899,7 +903,7 @@ fixture/evidence、各CLI、campaign、rate runner再利用、frontend config/so
 
 ### Repository品質gate
 
-- backend: 外部DB不要 1,255 tests、Workers runtime 32 tests、Node build、Workers build、ESLint、Prettier、Prisma validate成功
+- backend: 外部DB不要 1,267 tests、Workers runtime 32 tests、Node build、Workers build、ESLint、Prettier、Prisma validate成功
 - frontend: 680 tests、ESLint、Svelte check 0 errors/0 warnings、Prettier、Vite build、`npm audit --audit-level=moderate`成功
 - dependency audit: `brace-expansion`と`tar`を非breaking更新。強制breaking変更が必要な`cookie`由来low 3件は別管理
 - Playwright: M2 staging configで1 specを`--list`し、外部requestなしで収集成功

@@ -978,7 +978,7 @@ M2の正本は[`docs/plans/m2-staging-release-candidate-campaign/plan.md`](plans
 
 ### dispatchと順序
 
-Actionsの`M2 Staging Release Candidate Campaign`へreview済みSHA、M1 run ID、固定confirmation、承認者、change record、変更凍結attestationだけを入力する。workflowはM1 Artifact検証、DB target/migration/fixture absence、通常API deploy、frontend deploy/alias、active SHA再確認、単一campaign、active SHA再確認、cleanup、safe evidenceの順で実行する。
+Actionsの`M2 Staging Release Candidate Campaign`へreview済みSHA、M1 run ID、固定confirmation、承認者、change record、変更凍結attestationだけを入力する。workflowはM1 runのworkflow/event/success/same SHAとArtifactを検証し、DB target/migration/fixture absence、通常API deploy、API same SHA・health/CORS/security header、frontend deploy/alias・same SHA、active SHA再確認、単一campaign、active SHA再確認、cleanup、safe evidenceの順で実行する。
 
 campaignは固定したM2専用identityを1件だけ使い、register、verification token hash arm、verify/replay、login、refresh rotation/旧token拒否、auth 10回成功/11回目429/`Retry-After`/reset、game、keyboard、320px、本人退会、旧access/refresh/password拒否を確認する。cross-site stagingのrefreshはAPI protocol証拠だけであり、production same-site browser Cookieの証拠にはしない。
 
