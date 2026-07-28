@@ -367,12 +367,12 @@ productionはSupabase Free planで運用する。[Supabase pricing](https://supa
 
 `.github/workflows/production-database.yml`はproduction Environmentへ固定し、既存batchと同じ`gensoko-batch-jobs`concurrency groupでDB操作を直列化する。
 
-| operation                       | schedule                     | 内容                                                                                     |
-| ------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
-| `capacity-check`                | UTC毎日19:23（JST毎日04:23） | `pg_database_size(current_database())`でDB容量を取得し、500MBに対する使用率を確認        |
-| `backup`                        | UTC毎日19:41（JST毎日04:41） | roles・schema・dataをdumpし、AES-256で暗号化・復号検証してArtifactへ7日保存              |
-| `migrate-deploy`                | 手動のみ                     | 24時間以内に成功したbackup run IDと期限内Artifactを確認後、`prisma migrate deploy`を実行 |
-| `verify-v0-1-migration-indexes` | 手動のみ                     | 成功migration run IDと対象SHAを確認し、v0.1対象indexのvalid・readyだけを値非表示で確認   |
+| operation                       | schedule                     | 内容                                                                                                 |
+| ------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `capacity-check`                | UTC毎日19:23（JST毎日04:23） | `pg_database_size(current_database())`でDB容量を取得し、500MBに対する使用率を確認                    |
+| `backup`                        | UTC毎日19:41（JST毎日04:41） | roles・schema・dataをdumpし、AES-256で暗号化・復号検証してArtifactへ7日保存                          |
+| `migrate-deploy`                | 手動のみ                     | 24時間以内に成功したbackup run IDと期限内Artifactを確認後、`prisma migrate deploy`を実行             |
+| `verify-v0-1-migration-indexes` | 手動のみ                     | 成功migration run IDと対象SHAを確認し、v0.1対象indexの`indisvalid`・`indisready`だけを値非表示で確認 |
 
 上表の日次cronはcode・contract testまで完了した。capacity-check、暗号化・復号検証・7日保持・手動実行・Prisma migration時の24時間以内backup gateは維持している。M1Rが成立するv0.1では、pending Prisma migrationがある場合だけ実行前24時間以内の成功Artifact 1世代とchecksumをM4で確認する。migration不要時はbackupを公開前blockerにせず、日次scheduleと2世代目以降は公開後に確認する。旧R9とbackup計画全体は未完了のまま継続する。
 
@@ -1045,13 +1045,13 @@ Artifactは`m2-staging-release-candidate-evidence`という固定名のexact JSO
 ```
 [x] M1R: c3ca68c5173c1fb586162418e839baec8cc49bf3でDB 5項目clear・unknown 0件とowner判断を再確認
 [x] M3: 3370cefbc6934e5e3d68ddf9c22eaaf4c5a634aeで最終品質gateとproduction依存監査を完了
-[-] M4: backup run 30301334445確認後、対象SHA `7dbe5649a4057baa3b123aaadb6531422f96fd2f`のmigration run 30342343404は成功。対象indexの値非表示valid・ready確認を残す
+[x] M4: backup run 30301334445確認後、対象SHA `7dbe5649a4057baa3b123aaadb6531422f96fd2f`のmigration run 30342343404と、検証run 30406227957の`indisvalid`・`indisready`値非表示確認が成功
 [ ] M5: URL/Cookie/CORS/メール/Secret/bindingを値非表示でpreflightし、承認後にdeploy
 [ ] M6: production synthetic userで主要導線、通常DO、最小429、securityを確認し、退会・cleanup・記録を完了
 ```
 
 2026-07-28のM3では、初回production監査で検出したbackend High 3件・Moderate 4件を関連依存の更新で解消した。PR review対応でbackendのNode runtimeを`22.x`へ固定し、CIと同じNode 22.23.1 / npm 10.9.8でlockfileを再生成した。review済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`で`npm ci`、backend通常test 1268件・Workers test 32件、frontend test 680件、両build、lint、format、Prisma validate、Svelte checkが成功し、backend/frontendのproduction依存はCritical 0、High 0、Moderate 0、Low 0となった。Moderateの個別判断対象はない。全依存ではbackend dev-onlyの`esbuild@0.27.7`にLow 1件が残るが、`tsx`経由でproductionへ到達せず、Windows開発serverを公開しない。2026-08-31または上流修正版公開時の早い方で再確認する。
 
-M3修正は`backend/package.json`と`backend/package-lock.json`を変更したため、旧M1 evidence SHA `7a6979761428759c744ba3bf9c1ed16527c7b33d`からのdocs-only例外を使わなかった。旧Path Bとowner判断を再分類せず、PR #160のmerge commit `c3ca68c5173c1fb586162418e839baec8cc49bf3`でM1 read-only証拠とM1Rを再確認した。M1は未完了、M1RとM3は完了している。M4はmigration run 30342343404の成功後、対象indexの値非表示valid・ready確認待ちであり、M5/M6は未着手である。
+M3修正は`backend/package.json`と`backend/package-lock.json`を変更したため、旧M1 evidence SHA `7a6979761428759c744ba3bf9c1ed16527c7b33d`からのdocs-only例外を使わなかった。旧Path Bとowner判断を再分類せず、PR #160のmerge commit `c3ca68c5173c1fb586162418e839baec8cc49bf3`でM1 read-only証拠とM1Rを再確認した。M1は未完了、M1RとM3は完了している。M4はmigration run 30342343404と検証run 30406227957の成功により完了し、M5/M6は未着手である。M4 migrationによるproduction state変更とPR #162のworkflow変更があるため、M5前に旧M1 evidenceのdocs-only例外を使わず、M1Rの扱いを別承認で再reviewする。
 
 M2 same-SHA staging campaign、WAF、24/48時間soak、全rate-limit境界、rollback baseline drill、backup 2世代目以降、restore drill、高度なA11Yは公開後の強化項目とする。ただしDB 5項目またはownerの実利用者data不存在確認が不明な場合は延期せず、通常のR計画へ戻る。

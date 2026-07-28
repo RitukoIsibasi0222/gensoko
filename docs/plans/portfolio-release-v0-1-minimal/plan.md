@@ -152,17 +152,17 @@ APIのリクエスト、レスポンス、status、error messageは変更しな�
 
 ## 最小リリース工程
 
-| タスクID | 内容                            | 対象                              | 完了条件                                                                                         |
-| -------- | ------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------ |
-| M1R      | M1証拠とowner判断を記録         | production metadata/DB/docs       | DB 5項目`clear`、ownerが一般公開・一般登録・実利用者data保存実績なしを確認                       |
-| M3       | release候補SHAの品質gate        | backend/frontend                  | test・Workers test・build・lint・format・Prisma validate成功、production依存Critical/High 0      |
-| M4       | 必要な場合だけbackup・migration | production Actions                | 新鮮な暗号化backup確認後に別承認migrationを行い、対象indexがvalid・readyであることを値非表示確認 |
-| M5       | preflight後にproduction deploy  | Vercel/Cloudflare/Supabase/Resend | same-site URL、Cookie、CORS、送信元、Secret/binding分離、review済みSHA、別承認deploy成功         |
-| M6       | production smokeとrelease記録   | production/docs                   | synthetic Userで主要導線、DO、429、security、退会、cleanup、残課題引継ぎ                         |
+| タスクID | 内容                            | 対象                              | 完了条件                                                                                             |
+| -------- | ------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| M1R      | M1証拠とowner判断を記録         | production metadata/DB/docs       | DB 5項目`clear`、ownerが一般公開・一般登録・実利用者data保存実績なしを確認                           |
+| M3       | release候補SHAの品質gate        | backend/frontend                  | test・Workers test・build・lint・format・Prisma validate成功、production依存Critical/High 0          |
+| M4       | 必要な場合だけbackup・migration | production Actions                | 新鮮な暗号化backup確認後に別承認migrationを行い、対象indexの`indisvalid`・`indisready`を値非表示確認 |
+| M5       | preflight後にproduction deploy  | Vercel/Cloudflare/Supabase/Resend | same-site URL、Cookie、CORS、送信元、Secret/binding分離、review済みSHA、別承認deploy成功             |
+| M6       | production smokeとrelease記録   | production/docs                   | synthetic Userで主要導線、DO、429、security、退会、cleanup、残課題引継ぎ                             |
 
 - [x] M1R: release候補`c3ca68c5173c1fb586162418e839baec8cc49bf3`のrun [30335685074](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30335685074)でDB 5項目`clear`・`unknown` 0件を再確認し、ownerが一般公開・一般登録・実利用者data保存実績なしを再確認した
 - [x] M3: review済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`で最終品質gateとproduction依存監査を完了する
-- [-] M4: backup run [30301334445](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30301334445)を確認し、対象SHA `7dbe5649a4057baa3b123aaadb6531422f96fd2f`のmigration run [30342343404](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30342343404)で`prisma migrate deploy`に成功した。対象indexの値非表示確認を残す
+- [x] M4: backup run [30301334445](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30301334445)を確認し、対象SHA `7dbe5649a4057baa3b123aaadb6531422f96fd2f`のmigration run [30342343404](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30342343404)で`prisma migrate deploy`に成功した。検証run [30406227957](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30406227957)で対象run・SHAと5 indexの`indisvalid`・`indisready`を値非表示確認した
 - [ ] M5: 値非表示preflightでURL・Cookie・CORS・送信元・Secret/bindingを確認し、別承認でproductionへdeployする
 - [ ] M6: production smoke、DO valid login、最小429、synthetic cleanup、release record、公開後引継ぎを完了する
 
@@ -177,6 +177,10 @@ M3の初回監査では、docs-onlyの`fbb10efc9e122e96a46e098e26149bc4e878d036`
 2026-07-28に最新`develop`のrelease候補`c3ca68c5173c1fb586162418e839baec8cc49bf3`を固定し、M1 run [30335685074](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30335685074)を1回実行した。safe Artifactのschema version 1、outer/evidence exact key、対象SHA、UTC millisecond timestamp、11 status allowlist、decision再計算をreviewし、DB target、全User、legacy User、User関連row、AuditLog、Cloudflare、両attestationは`clear`、Vercel production deployment、GitHub production deployment、production backup historyは`present`、`unknown`は0件だった。decisionはPath Bで、M1自体は未完了のまま維持する。owner `RitukoIsibasi0222`は、現在も一般公開・一般登録・実利用者data保存の実績がないことを再確認したため、M1Rの再確認を完了する。M4/M5以降は本作業で開始しない。
 
 同日、pendingだった`20260716112500_add_account_deletion_indexes`と`20260722194000_add_refresh_token_expiry_index`に対し、24時間以内の暗号化backup run [30301334445](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30301334445)を前提としてmigration run [30342343404](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30342343404)を対象SHA `7dbe5649a4057baa3b123aaadb6531422f96fd2f`で実行した。production Environment確認、backup確認、`Apply Prisma migrations`はいずれも成功した。`CREATE INDEX CONCURRENTLY`を含むため、対象5 indexの存在と`indisvalid`・`indisready`を値非表示で確認するまでM4を完了扱いにしない。検証workflowのreview・merge・別承認前にproduction query、deploy、smokeは実行しない。
+
+2026-07-29 JST（run作成時刻: 2026-07-28T22:54:19Z）にPR [#162](https://github.com/RitukoIsibasi0222/gensoko/pull/162)のmerge commit `4d3d8fb7425137c01337a81d3ff7d7c5bba29df6`から検証run [30406227957](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30406227957)を別承認で実行した。`Validate confirmed migration`と`Verify v0.1 migration indexes`は成功し、migration run ID、対象SHA、v0.1対象5 indexの存在、`indisvalid`、`indisready`を値非表示で確認した。migration、backup、cleanup、deployのstepはすべてskipされ、M4を完了する。
+
+M4 migrationでproduction stateが変わり、PR #162で`.github/workflows/production-database.yml`も変わったため、M5前に旧M1 evidenceの`docs/**`限定例外を使わない。M4完了の記録とM1R再reviewは分離し、M1 evidence workflowの再dispatch要否を別承認で判断するまでM5へ進まない。
 
 2026-07-28時点でM2P-01〜M2P-16のrepository基盤はPR [#157](https://github.com/RitukoIsibasi0222/gensoko/pull/157)のmerge commit `7a6979761428759c744ba3bf9c1ed16527c7b33d`として`develop`へmerge済みである。同じSHAのM1証拠はPath BのためM2P-17〜M2P-22は未実施・未完了のまま、v0.1 blockerから公開後の回帰campaignへ移す。M2の完了を偽らず、通常password verifier DO、valid login、最小429、主要導線はM6のproduction smokeで確認する。
 
