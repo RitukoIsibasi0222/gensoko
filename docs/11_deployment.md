@@ -1023,11 +1023,15 @@ Artifactは`m2-staging-release-candidate-evidence`という固定名のexact JSO
 [`docs/plans/portfolio-release-v0-1-minimal/plan.md`](plans/portfolio-release-v0-1-minimal/plan.md)を正本とする。以下はM1R・M3・M5・M6と条件付きM4の進捗確認用であり、個別計画の全項目を公開前に完了させる一覧ではない。
 
 ```
-[x] M1R: M1 Path Bを維持し、DB 5項目clearとownerの実利用者data不存在確認を記録
-[ ] M3: 最終品質gateと依存監査を実行し、候補SHAを確定
+[-] M1R: 旧SHAの判断履歴は保持。M3 dependency/lockfile更新後の候補SHAで再確認待ち
+[x] M3: 3370cefbc6934e5e3d68ddf9c22eaaf4c5a634aeで最終品質gateとproduction依存監査を完了
 [ ] M4: pending Prisma migrationがある場合だけ新鮮な暗号化backup確認後にmigration。不要なら対象外を記録
 [ ] M5: URL/Cookie/CORS/メール/Secret/bindingを値非表示でpreflightし、承認後にdeploy
 [ ] M6: production synthetic userで主要導線、通常DO、最小429、securityを確認し、退会・cleanup・記録を完了
 ```
+
+2026-07-28のM3では、初回production監査で検出したbackend High 3件・Moderate 4件を関連依存の更新で解消した。PR review対応でbackendのNode runtimeを`22.x`へ固定し、CIと同じNode 22.23.1 / npm 10.9.8でlockfileを再生成した。review済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`で`npm ci`、backend通常test 1268件・Workers test 32件、frontend test 680件、両build、lint、format、Prisma validate、Svelte checkが成功し、backend/frontendのproduction依存はCritical 0、High 0、Moderate 0、Low 0となった。Moderateの個別判断対象はない。全依存ではbackend dev-onlyの`esbuild@0.27.7`にLow 1件が残るが、`tsx`経由でproductionへ到達せず、Windows開発serverを公開しない。2026-08-31または上流修正版公開時の早い方で再確認する。
+
+M3修正は`backend/package.json`と`backend/package-lock.json`を変更したため、M1 evidence SHA `7a6979761428759c744ba3bf9c1ed16527c7b33d`からのdocs-only例外を使えない。旧Path Bとowner判断を再分類せず、PR merge後の新しい`develop` SHAでM1 read-only証拠とM1Rを再確認するまでM5を開始しない。この再確認は今回のM3作業には含めず、workflow dispatch、Secret/Environment変更、production DB接続、backup、migration、deploy、smokeは実施していない。
 
 M2 same-SHA staging campaign、WAF、24/48時間soak、全rate-limit境界、rollback baseline drill、backup 2世代目以降、restore drill、高度なA11Yは公開後の強化項目とする。ただしDB 5項目またはownerの実利用者data不存在確認が不明な場合は延期せず、通常のR計画へ戻る。

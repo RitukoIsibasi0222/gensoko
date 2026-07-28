@@ -30,6 +30,15 @@ function getObject(value: unknown): JsonObject {
   return value as JsonObject;
 }
 
+describe("backend package設定", () => {
+  it("CIとPrismaが対応するNode 22系を要求する", () => {
+    const packageJson = readJson("package.json");
+    const engines = getObject(packageJson.engines);
+
+    expect(engines.node).toBe("22.x");
+  });
+});
+
 describe("Workers staging build設定", () => {
   it("comment・trailing comma・文字列内のcommaを含むJSONCを安全に解釈する", () => {
     expect(

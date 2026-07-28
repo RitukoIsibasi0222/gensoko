@@ -267,10 +267,10 @@
 
 ### 最小リリース工程（M1R・M3・M5・M6、条件付きM4）
 
-- [-] M1: production初回状態のschema v1証拠を取得・review済み — 計画書: [`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-production-read-only-evidence/plan.md) — release候補`7a6979761428759c744ba3bf9c1ed16527c7b33d`のrun [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)でDB target、全User、legacy User、User関連row、AuditLogなど8件`clear`、履歴3件`present`、`unknown` 0件をreviewした。schema v1のPath BとM1未完了は維持する
-- [x] M1R: owner `RitukoIsibasi0222`が一般公開・一般登録・実利用者data保存の実績なし、3件の`present`は開発・運用準備履歴であることを2026-07-28に確認した。Artifactを再分類せず、schema v2 / Path C engineを作らないv0.1限定経路を承認し、既存利用者向け通常移行gateを対象外とする。M1 evidence SHA後が`docs/**`だけの差分ならM1を再実行せず、M3/M5/M6のreview済み実行SHAを別に記録する
+- [-] M1: production初回状態のschema v1証拠を取得・review済み — 計画書: [`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-production-read-only-evidence/plan.md) — 旧候補`7a6979761428759c744ba3bf9c1ed16527c7b33d`のrun [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)でDB target、全User、legacy User、User関連row、AuditLogなど8件`clear`、履歴3件`present`、`unknown` 0件をreviewした。schema v1のPath Bは維持する。M3のdependency/lockfile更新により現在のrelease候補には再利用せず、再確認待ち
+- [-] M1R: owner `RitukoIsibasi0222`の一般公開・一般登録・実利用者data保存実績なしという2026-07-28判断は履歴として保持する。Artifactを再分類せず、schema v2 / Path C engineも作らない。ただしM3修正で`backend/package.json`とlockfileが変わりdocs-only例外を使えないため、PR merge後の新しい`develop` SHAでM1 read-only証拠とowner判断を再確認するまでM5へ進まない
 - [-] M2: repository実装完了、外部実行は未完了のまま公開後へ移管。同じrelease候補SHAのstaging campaignは実行せず、M2P-17〜M2P-22を完了扱いにしない。通常password verifier DO、valid login、最小429、主要導線はM6 production smokeで確認する
-- [ ] M3: release候補SHAのtest・Workers test・build・lint・format・Prisma validateを通し、production依存Critical/High 0件を確認する
+- [x] M3: review済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`でCI同等のNode 22.23.1 / npm 10.9.8による`npm ci`、backend通常1268件・Workers 32件、frontend 680件、build・lint・format・Prisma validate・Svelte checkを完了。production依存はbackend/frontendともCritical 0・High 0・Moderate 0・Low 0。backend全依存のdev-only Low 1件は`tsx`経由の`esbuild@0.27.7`でproduction到達不可、Windows開発server非公開を回避策とし、2026-08-31または上流修正版公開時の早い方で再確認する
 - [ ] M4: pending Prisma migrationがある場合だけ24時間以内の暗号化backup 1世代とchecksumを確認し、別承認でmigrationする。migration不要ならv0.1対象外と記録する
 - [ ] M5: same-site URL、Cookie、CORS、メール送信元、Secret/binding分離を値非表示でpreflightし、別承認でproductionへdeployする
 - [ ] M6: productionでsynthetic Userの登録・メール受信〜退会、game、refresh、通常DO、最小429、securityを確認し、User所有row cleanup・release記録・公開後引継ぎを完了する。AuditLogは365日保持方針に従う
@@ -284,7 +284,7 @@
 - [-] R5: 認証・refreshのproduction構成を確定する — 計画書: [`production-auth-refresh`](plans/production-auth-refresh/plan.md)
   - code・contract test・migration file・runbookを実装中。G1〜G8、R14 preflight、R15 deploy、R16 production smokeの証拠が未完了のため`[-]`を維持する。
 - [-] R6: 完全削除の残るv0.1 gateを完了する — 計画書: [`r6-account-deletion-gates`](plans/r6-account-deletion-gates/plan.md)
-  - production本人削除専用config guard、main/recovery Playwright、manual-only workflow、runbookをTDD実装済み。M1RによりT1B、T33、T35、legacy cleanup、既存利用者向けmigrationはv0.1対象外とした。R14〜R16のpreflight・deploy・production本人退会smokeが未完了のため`[-]`を維持する。
+  - production本人削除専用config guard、main/recovery Playwright、manual-only workflow、runbookをTDD実装済み。旧M1RではT1B、T33、T35、legacy cleanup、既存利用者向けmigrationをv0.1対象外としたが、現在のrelease候補はM1R再確認待ち。R14〜R16のpreflight・deploy・production本人退会smokeも未完了のため`[-]`を維持する。
 - [-] R7: app rate limitの実環境gateを完了する — 計画書: [`r7-rate-limit-environment-gates`](plans/r7-rate-limit-environment-gates/plan.md) — R7-01の基準SHA・repository contract test 100件・Workers build、R7-03のstaging Worker/DO/Secret presence、R7-04のG5/G6とfixture lifecycleは完了。server-side診断run 30059544533ではauth 1〜4回目の200後、5回目の503だけmain stateless Workerの`exceededCpu`を観測した。E-08の無料枠ローカルworkerd診断でvalid loginのcode-level支配要因をcost 12の`bcrypt.compare`へ固定分類したが、安全な無料枠修正と11回目429証拠は未完了。Cloudflare domain/zoneが0件でR7-02はblocked。監視、production分離、rollbackも未完了
   - 503安全分類の別TDD計画: [`r7-auth-503-safe-classification`](plans/r7-auth-503-safe-classification/plan.md) — PR #144はmerge commit `628ce06f90d150ae3dd3eb7e8e6c52ee42deace8`として`develop`へmerge済み。safe JSON 503、非JSON/契約不一致503、その他statusをraw body/header値なしの固定enumで区別し、関連65件、backend 1109件、Workers 15件、build・lint・format checkが成功した。第三runでは6回目503を`EDGE_OR_UNCLASSIFIED_503`へ分類したが、契約内の不一致箇所と内部原因は未特定
   - [x] 503契約不一致詳細分類: [`r7-auth-503-contract-detail`](plans/r7-auth-503-contract-detail/plan.md) / PR: [#145](https://github.com/RitukoIsibasi0222/gensoko/pull/145) — merge commit `dcae128899275c0ec58027c97c9d039427fc5e57`。raw値を出さず503公開契約の不一致箇所だけを固定分類した。server-side診断では5回目の503をmain stateless Workerの`exceededCpu`まで絞ったが、具体的なCPU消費処理は未特定。main/recovery cleanupとflag `false`復旧は成功し、campaign上限到達により追加runを停止した
@@ -294,8 +294,8 @@
 - [ ] R8: headers・CORS・safe error・logを最終確認する
 - [-] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する（code・contract test完了。review・merge後の日次schedule 2回と未失効2世代は観測待ち）
 - [ ] R10: 基本responsive・keyboard/A11Yを確認する
-- [ ] R11A: backend High/Moderate依存を安全に更新する
-- [ ] R11: release候補SHAの品質gateとnpm auditを実行する
+- [x] R11A: backend production依存を安全に更新し、Critical/High/Moderate/Low 0件を確認する
+- [x] R11: review済みSHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`でrelease候補の品質gateとnpm auditを実行する
 - [ ] R12: staging主要導線を最終確認する
 - [x] R13: M1 schema v1のPath BとDB 5項目`clear`をreviewし、M1Rのowner確認によりv0.1の既存利用者向け移行を対象外と判断する
 - [ ] R14: rollout/rollback preflightを完了する
@@ -321,8 +321,8 @@
 - [ ] production CORS、HttpOnly/Secure/SameSite Cookie、security headersの実HTTP確認
 - [ ] staging/production logでPII・token・Cookie・Authorization・DB URL・raw error非出力を最終確認
 - [-] 暗号化backupの日次化 — 日次cronのcontract testとworkflowの2行変更はRed→Greenで実装済み。初回Artifact・checksum・復号はrun 29322979476で確認済み。review・`develop`へのmerge後の日次schedule 2回と未失効Artifact 2世代の確認待ち
-- [ ] backend production依存のHigh 2 / Moderate 3を安全に更新し、TDD回帰後にproduction依存High/Moderate 0件を確認
-- [ ] release候補SHAのtest・Workers test・build・lint・format・Prisma validate・npm audit（frontendは全依存Low 3、production依存0を再確認）
+- [x] backend production依存を安全に更新し、回帰後にCritical/High/Moderate/Low 0件を確認
+- [x] review済みSHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`でtest・Workers test・build・lint・format・Prisma validate・production npm auditを完了（frontend production依存も0件）
 - [ ] dark/privacyを含むstaging主要導線の最終確認
 - [ ] production deploy後のsmoke test
 

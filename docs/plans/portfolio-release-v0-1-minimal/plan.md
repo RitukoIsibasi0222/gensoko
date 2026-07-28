@@ -58,19 +58,22 @@ Gensokoを、一般ユーザーが登録・メール認証・ログイン・学�
 
 ## 対象ファイル一覧
 
-| ファイル                                                        | 変更種別 | 内容                                     |
-| --------------------------------------------------------------- | -------- | ---------------------------------------- |
-| `docs/plans/portfolio-release-v0-1-minimal/plan.md`             | 修正     | owner判断を含むv0.1最小経路へ更新        |
-| `docs/plans/m1-production-read-only-evidence/plan.md`           | 修正     | schema v1 Path BとM1Rの境界を追記        |
-| `docs/plans/m2-staging-release-candidate-campaign/plan.md`      | 修正     | M2外部実行を公開後へ移動                 |
-| `docs/05_progress.md`                                           | 修正     | M1R・M3〜M6を進捗ダッシュボードへ反映    |
-| `docs/09_startup_commands.md`                                   | 修正     | backupのv0.1条件をmigration時だけへ限定  |
-| `docs/11_deployment.md`                                         | 修正     | 最小deploy・smoke・fix-forward手順を追加 |
-| `docs/plans/backup-resilience/plan.md`                          | 修正     | 2世代観測を公開後へ移動                  |
-| `docs/plans/r6-account-deletion-gates/plan.md`                  | 修正     | 空DB時のT35対象外条件を同期              |
-| `docs/plans/r7-rate-limit-environment-gates/plan.md`            | 修正     | v0.1 subsetとR7全体を分離                |
-| `docs/plans/r7-password-verification-free-worker/plan.md`       | 修正     | deploy/429とrollback drillを分離         |
-| `docs/plans/r7-password-verification-rollback-baseline/plan.md` | 修正     | 実環境drillを公開後へ移動                |
+| ファイル                                                        | 変更種別 | 内容                                                       |
+| --------------------------------------------------------------- | -------- | ---------------------------------------------------------- |
+| `backend/package.json`                                          | 修正     | production依存・Workers tooling・Node 22 runtime範囲を固定 |
+| `backend/package-lock.json`                                     | 修正     | CIのnpm 10.9.8で再生成し監査済み依存versionを固定          |
+| `backend/src/worker-config-files.test.ts`                       | 修正     | backendのNode 22 runtime契約を固定                         |
+| `docs/plans/portfolio-release-v0-1-minimal/plan.md`             | 修正     | owner判断を含むv0.1最小経路へ更新                          |
+| `docs/plans/m1-production-read-only-evidence/plan.md`           | 修正     | schema v1 Path BとM1Rの境界を追記                          |
+| `docs/plans/m2-staging-release-candidate-campaign/plan.md`      | 修正     | M2外部実行を公開後へ移動                                   |
+| `docs/05_progress.md`                                           | 修正     | M1R・M3〜M6を進捗ダッシュボードへ反映                      |
+| `docs/09_startup_commands.md`                                   | 修正     | backupのv0.1条件をmigration時だけへ限定                    |
+| `docs/11_deployment.md`                                         | 修正     | 最小deploy・smoke・fix-forward手順を追加                   |
+| `docs/plans/backup-resilience/plan.md`                          | 修正     | 2世代観測を公開後へ移動                                    |
+| `docs/plans/r6-account-deletion-gates/plan.md`                  | 修正     | 空DB時のT35対象外条件を同期                                |
+| `docs/plans/r7-rate-limit-environment-gates/plan.md`            | 修正     | v0.1 subsetとR7全体を分離                                  |
+| `docs/plans/r7-password-verification-free-worker/plan.md`       | 修正     | deploy/429とrollback drillを分離                           |
+| `docs/plans/r7-password-verification-rollback-baseline/plan.md` | 修正     | 実環境drillを公開後へ移動                                  |
 
 ## API仕様
 
@@ -157,8 +160,8 @@ APIのリクエスト、レスポンス、status、error messageは変更しな�
 | M5       | preflight後にproduction deploy  | Vercel/Cloudflare/Supabase/Resend | same-site URL、Cookie、CORS、送信元、Secret/binding分離、review済みSHA、別承認deploy成功    |
 | M6       | production smokeとrelease記録   | production/docs                   | synthetic Userで主要導線、DO、429、security、退会、cleanup、残課題引継ぎ                    |
 
-- [x] M1R: M1 schema v1のPath Bを維持し、DB 5項目`clear`とownerの実利用者data不存在確認からv0.1限定経路を承認する
-- [ ] M3: release候補SHAの最終品質gateと依存関係監査を実行する
+- [-] M1R: `7a6979761428759c744ba3bf9c1ed16527c7b33d`では承認済み。M3の依存・lockfile更新によりdocs-only例外を使えなくなったため、現在のrelease候補では再確認待ち
+- [x] M3: review済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`で最終品質gateとproduction依存監査を完了する
 - [ ] M4: pending Prisma migrationがある場合だけ新鮮な暗号化backupを確認してmigrationする。migration不要なら対象外と記録する
 - [ ] M5: 値非表示preflightでURL・Cookie・CORS・送信元・Secret/bindingを確認し、別承認でproductionへdeployする
 - [ ] M6: production smoke、DO valid login、最小429、synthetic cleanup、release record、公開後引継ぎを完了する
@@ -168,6 +171,8 @@ APIのリクエスト、レスポンス、status、error messageは変更しな�
 同日、owner `RitukoIsibasi0222`は、productionを一般利用者向けに運用しておらず、一般利用者の登録および実利用者dataの保存実績がなく、3件の`present`は開発・運用準備による履歴であることを確認した。これをM1Rとして記録し、provider・backup履歴だけを理由に既存利用者向け通常移行gateへ戻さず、v0.1限定の最小経路を再開する。schema v1 Artifactを再分類せず、schema v2またはPath C判定コードも実装しない。
 
 M1 evidence SHAは`7a6979761428759c744ba3bf9c1ed16527c7b33d`として維持する。この後のrelease文書同期commitはapplication codeを変更しないため、M3/M5/M6で使用するreview済み実行SHAとの差分が`docs/**`だけであることをpreflightで確認し、M1の再実行条件にしない。docs以外の差分またはproduction state変更があれば、この例外を使わずM1Rを再reviewする。
+
+M3の初回監査では、docs-onlyの`fbb10efc9e122e96a46e098e26149bc4e878d036`にbackend production依存High 3件、Moderate 4件があり、必須条件を満たさなかった。関連packageを更新した`c127b72bae8bc00956bf7a978b5a64242d466a4b`でproduction依存をCritical 0、High 0、Moderate 0にした後、PR reviewとCIでNode runtime範囲の未宣言およびnpm 10.9.8から見たlockfile不整合を検出した。`engines.node`を`22.x`へ固定し、CIと同じNode 22.23.1 / npm 10.9.8でlockfileを再生成した`3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`を最終review済み実行SHAとする。M3自体は完了したが、`backend/package.json`と`backend/package-lock.json`がM1 evidence SHAから変わったためdocs-only例外は使わない。旧M1Rの判断履歴は保持し、PR merge後の新しい`develop` SHAでM1 read-only証拠とowner判断を再確認するまでM5へ進まない。
 
 2026-07-28時点でM2P-01〜M2P-16のrepository基盤はPR [#157](https://github.com/RitukoIsibasi0222/gensoko/pull/157)のmerge commit `7a6979761428759c744ba3bf9c1ed16527c7b33d`として`develop`へmerge済みである。同じSHAのM1証拠はPath BのためM2P-17〜M2P-22は未実施・未完了のまま、v0.1 blockerから公開後の回帰campaignへ移す。M2の完了を偽らず、通常password verifier DO、valid login、最小429、主要導線はM6のproduction smokeで確認する。
 
@@ -264,6 +269,15 @@ pending Prisma migrationがある場合は`migrate-deploy`のdispatchと承認�
 - dependencies: production Critical/High 0。Moderateはpackage、到達可能性、回避策、更新期限を記録。
 - staging: M2は公開後の回帰または次の高リスク変更時に実行する。
 - production: M6で主要導線、通常DO、最小429、Cookie・CORS・security headers、cleanupを確認する。
+
+### 2026-07-28 M3実行記録
+
+- review済み実行SHA: `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`
+- backend: CIと同じNode 22.23.1 / npm 10.9.8で`npm ci`成功。通常test 123 files・1268件成功、専用DB 4 files・10件は想定どおりskip。Workers test 4 files・32件、TypeScript build、Workers typecheck/build/dry-run、ESLint、Prettier check、Prisma validate成功。
+- frontend: 64 files・680件成功。ESLint、Prettier check、Svelte check 0 errors / 0 warnings、production-mode Vercel buildと成果物contract成功。
+- production依存監査: backend/frontendともCritical 0、High 0、Moderate 0、Low 0。Moderateがないためpackage、到達可能性、回避策、更新期限の個別判断は不要。
+- 全依存監査の残余: backendのdev-only transitive `esbuild@0.27.7`にLow 1件。`tsx@4.21.0`経由でproduction treeには含まれず、Windows開発serverを公開しないことを回避策とする。WSL/Linuxのtest・buildだけで利用し、2026-08-31または`tsx`が`esbuild >=0.28.1`対応を公開した時点の早い方で再確認する。
+- SHA境界: `7a6979761428759c744ba3bf9c1ed16527c7b33d..fbb10efc9e122e96a46e098e26149bc4e878d036`は`docs/**`だけだったが、M3修正後はbackend dependency/lockfile差分がある。M1を再実行せずに再利用する条件を満たさないため、M5前に新しいrelease候補でM1Rを再確認する。
 
 ## テストケース一覧
 
