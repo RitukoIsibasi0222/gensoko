@@ -650,7 +650,7 @@ DB target、全User、legacy User、User関連row、AuditLogのいずれかが`p
 
 M1 evidence SHA後のcommitが`docs/**`だけを変更し、runtime code、workflow、schema/migration、lockfile、deployment config、production stateが変わっていないことを差分確認できる場合は、文書同期だけを理由にM1を再実行しない。M1 Artifactのreviewed SHAは変更せず、M3/M5/M6で使用するreview済み実行SHAを親release記録へ別に残す。docs以外の差分があれば既存の証拠失効条件を適用する。
 
-2026-07-28のM3では、初回quality gateのproduction依存High 3件・Moderate 4件を解消するため、review済み実行SHA `c127b72bae8bc00956bf7a978b5a64242d466a4b`で`backend/package.json`と`backend/package-lock.json`を更新した。これにより旧M1 evidence SHAとの差分は`docs/**`だけではなくなり、上記例外を使えない。旧ArtifactのPath B、status、owner判断を再分類せず、PR merge後の新しい`develop` SHAでM1 read-only証拠を再取得・reviewし、M1Rを再確認するまでM5へ進まない。今回のM3ではworkflowをdispatchせず、production stateも変更していない。
+2026-07-28のM3では、初回quality gateのproduction依存High 3件・Moderate 4件を解消し、PR review後にNode 22 runtime契約とnpm 10.9.8互換lockfileを追加した。最終review済み実行SHA `3370cef5075c08dd572422241390e34f03949d10`では`backend/package.json`、`backend/package-lock.json`、設定契約testを更新している。これにより旧M1 evidence SHAとの差分は`docs/**`だけではなくなり、上記例外を使えない。旧ArtifactのPath B、status、owner判断を再分類せず、PR merge後の新しい`develop` SHAでM1 read-only証拠を再取得・reviewし、M1Rを再確認するまでM5へ進まない。今回のM3ではworkflowをdispatchせず、production stateも変更していない。
 
 ## 完了条件
 

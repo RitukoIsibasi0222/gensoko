@@ -1024,13 +1024,13 @@ Artifactは`m2-staging-release-candidate-evidence`という固定名のexact JSO
 
 ```
 [-] M1R: 旧SHAの判断履歴は保持。M3 dependency/lockfile更新後の候補SHAで再確認待ち
-[x] M3: c127b72bae8bc00956bf7a978b5a64242d466a4bで最終品質gateとproduction依存監査を完了
+[x] M3: 3370cef5075c08dd572422241390e34f03949d10で最終品質gateとproduction依存監査を完了
 [ ] M4: pending Prisma migrationがある場合だけ新鮮な暗号化backup確認後にmigration。不要なら対象外を記録
 [ ] M5: URL/Cookie/CORS/メール/Secret/bindingを値非表示でpreflightし、承認後にdeploy
 [ ] M6: production synthetic userで主要導線、通常DO、最小429、securityを確認し、退会・cleanup・記録を完了
 ```
 
-2026-07-28のM3では、初回production監査で検出したbackend High 3件・Moderate 4件を関連依存の更新で解消した。review済み実行SHA `c127b72bae8bc00956bf7a978b5a64242d466a4b`でbackend通常test 1267件・Workers test 32件、frontend test 680件、両build、lint、format、Prisma validate、Svelte checkが成功し、backend/frontendのproduction依存はCritical 0、High 0、Moderate 0、Low 0となった。Moderateの個別判断対象はない。全依存ではbackend dev-onlyの`esbuild@0.27.7`にLow 1件が残るが、`tsx`経由でproductionへ到達せず、Windows開発serverを公開しない。2026-08-31または上流修正版公開時の早い方で再確認する。
+2026-07-28のM3では、初回production監査で検出したbackend High 3件・Moderate 4件を関連依存の更新で解消した。PR review対応でbackendのNode runtimeを`22.x`へ固定し、CIと同じNode 22.23.1 / npm 10.9.8でlockfileを再生成した。review済み実行SHA `3370cef5075c08dd572422241390e34f03949d10`で`npm ci`、backend通常test 1268件・Workers test 32件、frontend test 680件、両build、lint、format、Prisma validate、Svelte checkが成功し、backend/frontendのproduction依存はCritical 0、High 0、Moderate 0、Low 0となった。Moderateの個別判断対象はない。全依存ではbackend dev-onlyの`esbuild@0.27.7`にLow 1件が残るが、`tsx`経由でproductionへ到達せず、Windows開発serverを公開しない。2026-08-31または上流修正版公開時の早い方で再確認する。
 
 M3修正は`backend/package.json`と`backend/package-lock.json`を変更したため、M1 evidence SHA `7a6979761428759c744ba3bf9c1ed16527c7b33d`からのdocs-only例外を使えない。旧Path Bとowner判断を再分類せず、PR merge後の新しい`develop` SHAでM1 read-only証拠とM1Rを再確認するまでM5を開始しない。この再確認は今回のM3作業には含めず、workflow dispatch、Secret/Environment変更、production DB接続、backup、migration、deploy、smokeは実施していない。
 
