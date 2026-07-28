@@ -398,7 +398,7 @@ config loader は値を error message に含めず、URL、reserved identity、p
 
 同日、owner `RitukoIsibasi0222`は一般公開・一般登録・実利用者data保存の実績なしを確認した。DB target、全User、legacy User、User関連row、AuditLogが`clear`であるため、親release計画のM1Rに従いT33、T35、T1B、旧instance drain、dry-run、legacy cleanup、既存利用者向けmigrationをv0.1対象外とする。M2 staging campaignは公開後へ移し、M3品質gateへ進む。
 
-M3はNode 22 runtime契約とnpm 10.9.8互換lockfileを含むreview済み実行SHA `3370cef5075c08dd572422241390e34f03949d10`で完了した。ただし依存更新により`backend/package.json`とlockfileが旧M1 evidence SHAから変わったため、現在のrelease候補ではM1Rを再確認するまでT11以降とM5へ進まない。旧Path Bとowner判断は履歴として保持し、schema v2 / Path C engineや既存data削除で判定を変えない。
+M3はNode 22 runtime契約とnpm 10.9.8互換lockfileを含むreview済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`で完了した。ただし依存更新により`backend/package.json`とlockfileが旧M1 evidence SHAから変わったため、現在のrelease候補ではM1Rを再確認するまでT11以降とM5へ進まない。旧Path Bとowner判断は履歴として保持し、schema v2 / Path C engineや既存data削除で判定を変えない。
 
 - [ ] T11: R14 preflight へ R6 gate を統合する
 - [ ] T12: R15 で選択 path の migration/deploy を実行する

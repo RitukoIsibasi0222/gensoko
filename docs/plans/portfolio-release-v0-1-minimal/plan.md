@@ -161,7 +161,7 @@ APIのリクエスト、レスポンス、status、error messageは変更しな�
 | M6       | production smokeとrelease記録   | production/docs                   | synthetic Userで主要導線、DO、429、security、退会、cleanup、残課題引継ぎ                    |
 
 - [-] M1R: `7a6979761428759c744ba3bf9c1ed16527c7b33d`では承認済み。M3の依存・lockfile更新によりdocs-only例外を使えなくなったため、現在のrelease候補では再確認待ち
-- [x] M3: review済み実行SHA `3370cef5075c08dd572422241390e34f03949d10`で最終品質gateとproduction依存監査を完了する
+- [x] M3: review済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`で最終品質gateとproduction依存監査を完了する
 - [ ] M4: pending Prisma migrationがある場合だけ新鮮な暗号化backupを確認してmigrationする。migration不要なら対象外と記録する
 - [ ] M5: 値非表示preflightでURL・Cookie・CORS・送信元・Secret/bindingを確認し、別承認でproductionへdeployする
 - [ ] M6: production smoke、DO valid login、最小429、synthetic cleanup、release record、公開後引継ぎを完了する
@@ -172,7 +172,7 @@ APIのリクエスト、レスポンス、status、error messageは変更しな�
 
 M1 evidence SHAは`7a6979761428759c744ba3bf9c1ed16527c7b33d`として維持する。この後のrelease文書同期commitはapplication codeを変更しないため、M3/M5/M6で使用するreview済み実行SHAとの差分が`docs/**`だけであることをpreflightで確認し、M1の再実行条件にしない。docs以外の差分またはproduction state変更があれば、この例外を使わずM1Rを再reviewする。
 
-M3の初回監査では、docs-onlyの`fbb10efc9e122e96a46e098e26149bc4e878d036`にbackend production依存High 3件、Moderate 4件があり、必須条件を満たさなかった。関連packageを更新した`c127b72bae8bc00956bf7a978b5a64242d466a4b`でproduction依存をCritical 0、High 0、Moderate 0にした後、PR reviewとCIでNode runtime範囲の未宣言およびnpm 10.9.8から見たlockfile不整合を検出した。`engines.node`を`22.x`へ固定し、CIと同じNode 22.23.1 / npm 10.9.8でlockfileを再生成した`3370cef5075c08dd572422241390e34f03949d10`を最終review済み実行SHAとする。M3自体は完了したが、`backend/package.json`と`backend/package-lock.json`がM1 evidence SHAから変わったためdocs-only例外は使わない。旧M1Rの判断履歴は保持し、PR merge後の新しい`develop` SHAでM1 read-only証拠とowner判断を再確認するまでM5へ進まない。
+M3の初回監査では、docs-onlyの`fbb10efc9e122e96a46e098e26149bc4e878d036`にbackend production依存High 3件、Moderate 4件があり、必須条件を満たさなかった。関連packageを更新した`c127b72bae8bc00956bf7a978b5a64242d466a4b`でproduction依存をCritical 0、High 0、Moderate 0にした後、PR reviewとCIでNode runtime範囲の未宣言およびnpm 10.9.8から見たlockfile不整合を検出した。`engines.node`を`22.x`へ固定し、CIと同じNode 22.23.1 / npm 10.9.8でlockfileを再生成した`3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`を最終review済み実行SHAとする。M3自体は完了したが、`backend/package.json`と`backend/package-lock.json`がM1 evidence SHAから変わったためdocs-only例外は使わない。旧M1Rの判断履歴は保持し、PR merge後の新しい`develop` SHAでM1 read-only証拠とowner判断を再確認するまでM5へ進まない。
 
 2026-07-28時点でM2P-01〜M2P-16のrepository基盤はPR [#157](https://github.com/RitukoIsibasi0222/gensoko/pull/157)のmerge commit `7a6979761428759c744ba3bf9c1ed16527c7b33d`として`develop`へmerge済みである。同じSHAのM1証拠はPath BのためM2P-17〜M2P-22は未実施・未完了のまま、v0.1 blockerから公開後の回帰campaignへ移す。M2の完了を偽らず、通常password verifier DO、valid login、最小429、主要導線はM6のproduction smokeで確認する。
 
@@ -272,7 +272,7 @@ pending Prisma migrationがある場合は`migrate-deploy`のdispatchと承認�
 
 ### 2026-07-28 M3実行記録
 
-- review済み実行SHA: `3370cef5075c08dd572422241390e34f03949d10`
+- review済み実行SHA: `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`
 - backend: CIと同じNode 22.23.1 / npm 10.9.8で`npm ci`成功。通常test 123 files・1268件成功、専用DB 4 files・10件は想定どおりskip。Workers test 4 files・32件、TypeScript build、Workers typecheck/build/dry-run、ESLint、Prettier check、Prisma validate成功。
 - frontend: 64 files・680件成功。ESLint、Prettier check、Svelte check 0 errors / 0 warnings、production-mode Vercel buildと成果物contract成功。
 - production依存監査: backend/frontendともCritical 0、High 0、Moderate 0、Low 0。Moderateがないためpackage、到達可能性、回避策、更新期限の個別判断は不要。

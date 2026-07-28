@@ -270,7 +270,7 @@
 - [-] M1: production初回状態のschema v1証拠を取得・review済み — 計画書: [`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-production-read-only-evidence/plan.md) — 旧候補`7a6979761428759c744ba3bf9c1ed16527c7b33d`のrun [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)でDB target、全User、legacy User、User関連row、AuditLogなど8件`clear`、履歴3件`present`、`unknown` 0件をreviewした。schema v1のPath Bは維持する。M3のdependency/lockfile更新により現在のrelease候補には再利用せず、再確認待ち
 - [-] M1R: owner `RitukoIsibasi0222`の一般公開・一般登録・実利用者data保存実績なしという2026-07-28判断は履歴として保持する。Artifactを再分類せず、schema v2 / Path C engineも作らない。ただしM3修正で`backend/package.json`とlockfileが変わりdocs-only例外を使えないため、PR merge後の新しい`develop` SHAでM1 read-only証拠とowner判断を再確認するまでM5へ進まない
 - [-] M2: repository実装完了、外部実行は未完了のまま公開後へ移管。同じrelease候補SHAのstaging campaignは実行せず、M2P-17〜M2P-22を完了扱いにしない。通常password verifier DO、valid login、最小429、主要導線はM6 production smokeで確認する
-- [x] M3: review済み実行SHA `3370cef5075c08dd572422241390e34f03949d10`でCI同等のNode 22.23.1 / npm 10.9.8による`npm ci`、backend通常1268件・Workers 32件、frontend 680件、build・lint・format・Prisma validate・Svelte checkを完了。production依存はbackend/frontendともCritical 0・High 0・Moderate 0・Low 0。backend全依存のdev-only Low 1件は`tsx`経由の`esbuild@0.27.7`でproduction到達不可、Windows開発server非公開を回避策とし、2026-08-31または上流修正版公開時の早い方で再確認する
+- [x] M3: review済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`でCI同等のNode 22.23.1 / npm 10.9.8による`npm ci`、backend通常1268件・Workers 32件、frontend 680件、build・lint・format・Prisma validate・Svelte checkを完了。production依存はbackend/frontendともCritical 0・High 0・Moderate 0・Low 0。backend全依存のdev-only Low 1件は`tsx`経由の`esbuild@0.27.7`でproduction到達不可、Windows開発server非公開を回避策とし、2026-08-31または上流修正版公開時の早い方で再確認する
 - [ ] M4: pending Prisma migrationがある場合だけ24時間以内の暗号化backup 1世代とchecksumを確認し、別承認でmigrationする。migration不要ならv0.1対象外と記録する
 - [ ] M5: same-site URL、Cookie、CORS、メール送信元、Secret/binding分離を値非表示でpreflightし、別承認でproductionへdeployする
 - [ ] M6: productionでsynthetic Userの登録・メール受信〜退会、game、refresh、通常DO、最小429、securityを確認し、User所有row cleanup・release記録・公開後引継ぎを完了する。AuditLogは365日保持方針に従う
@@ -295,7 +295,7 @@
 - [-] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する（code・contract test完了。review・merge後の日次schedule 2回と未失効2世代は観測待ち）
 - [ ] R10: 基本responsive・keyboard/A11Yを確認する
 - [x] R11A: backend production依存を安全に更新し、Critical/High/Moderate/Low 0件を確認する
-- [x] R11: review済みSHA `3370cef5075c08dd572422241390e34f03949d10`でrelease候補の品質gateとnpm auditを実行する
+- [x] R11: review済みSHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`でrelease候補の品質gateとnpm auditを実行する
 - [ ] R12: staging主要導線を最終確認する
 - [x] R13: M1 schema v1のPath BとDB 5項目`clear`をreviewし、M1Rのowner確認によりv0.1の既存利用者向け移行を対象外と判断する
 - [ ] R14: rollout/rollback preflightを完了する
@@ -322,7 +322,7 @@
 - [ ] staging/production logでPII・token・Cookie・Authorization・DB URL・raw error非出力を最終確認
 - [-] 暗号化backupの日次化 — 日次cronのcontract testとworkflowの2行変更はRed→Greenで実装済み。初回Artifact・checksum・復号はrun 29322979476で確認済み。review・`develop`へのmerge後の日次schedule 2回と未失効Artifact 2世代の確認待ち
 - [x] backend production依存を安全に更新し、回帰後にCritical/High/Moderate/Low 0件を確認
-- [x] review済みSHA `3370cef5075c08dd572422241390e34f03949d10`でtest・Workers test・build・lint・format・Prisma validate・production npm auditを完了（frontend production依存も0件）
+- [x] review済みSHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`でtest・Workers test・build・lint・format・Prisma validate・production npm auditを完了（frontend production依存も0件）
 - [ ] dark/privacyを含むstaging主要導線の最終確認
 - [ ] production deploy後のsmoke test
 
