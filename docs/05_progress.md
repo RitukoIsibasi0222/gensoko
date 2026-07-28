@@ -248,7 +248,7 @@
 
 - [x] Supabase staging・production project作成、東京region・Session pooler接続設定
 - [x] 本番DBバックアップ・Prismaマイグレーション運用（Free plan容量確認・暗号化backup・migration gateをproductionで確認済み） — 計画書: [`docs/plans/audit-log-production-operations/plan.md`](plans/audit-log-production-operations/plan.md)
-- [-] 本番DBバックアップ耐障害性強化 — M1の空DB・初回配備条件が成立するv0.1は24時間以内の暗号化済み1世代と日次scheduleを必須とし、2世代目以降、最大3回retry・recovery・36時間鮮度監視・通常7世代・四半期隔離restoreは公開後に継続 — 計画書: [`docs/plans/backup-resilience/plan.md`](plans/backup-resilience/plan.md)
+- [-] 本番DBバックアップ耐障害性強化 — M1Rが成立するv0.1はpending Prisma migrationがある場合だけ24時間以内の暗号化済み1世代とchecksumを必須とし、migration不要時のbackup、日次schedule確認、2世代目以降、最大3回retry・recovery・36時間鮮度監視・通常7世代・四半期隔離restoreは公開後に継続 — 計画書: [`docs/plans/backup-resilience/plan.md`](plans/backup-resilience/plan.md)
 - [-] staging frontend/API配備基盤（Workers専用entrypoint・Prisma/mail runtime境界・Wrangler・Vercel Preview・T34実機確認） — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md) / PR: #117 — SD1〜SD13・SD15完了。Vercel `develop` Preview、Cloudflare staging Worker/DO/Hyperdrive/secret、Supabase migration、health/CORS/OPTIONS、元素118件、synthetic登録・認証・ゲーム・password reset・本人退会を確認済み。production resource・deploy・DB操作は未実施
   - [x] SD16実環境検証: PR #125で管理者linkのSPA遷移をTDD固定し、run 29802327100でAdmin login、`/admin` dashboard、強制退会、旧credential 401、main cleanupが成功した。flagは`false`へ復旧済み。production・migration・実メール・再配備・追加の直接DB queryは未実行
 - [-] Cloudflare Workers Wrangler + Prisma `@prisma/adapter-pg`/接続binding設定・デプロイ — stagingはHyperdrive方式で設定・配備・実機確認済み。production resource・binding・deployは未実施
@@ -265,14 +265,15 @@
 >
 > 一般登録・認証・ゲーム・本人退会は公開する。基本セキュリティは維持し、商用運用相当の長期観測・drill・高度な自動化だけを公開後へ移す。
 
-### 最小リリース工程（M1〜M6）
+### 最小リリース工程（M1R・M3・M5・M6、条件付きM4）
 
-- [-] M1: productionの全User・legacy・関連row 0件、旧配備・個人data入り旧backupなしを承認付きread-only証拠で確認する — 計画書: [`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-production-read-only-evidence/plan.md) — M1P-01〜M1P-14の実行基盤はPR [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155)で`develop`へmerge済み。2026-07-28にrelease候補`7a6979761428759c744ba3bf9c1ed16527c7b33d`を固定し、承認付きread-only run [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)を1回実行した。DB、Cloudflare、2件のattestationは`clear`だったが、Vercel production deployment、GitHub production deployment、production backup historyが`present`だったため、exact schema review後にPath Bへ確定した。M1P-15〜M1P-16は完了したがM1は未完了であり、最小release経路を停止して通常のR6/R7/R9/R13〜R16 gateへ戻る
-- [-] M2: repository実装完了・外部実行停止。同じrelease候補SHAで、stagingの登録〜退会、通常password verifier DO、auth 429、基本keyboard/320px、cleanupを1回確認するmanual-only基盤を実装した。計画書: [`docs/plans/m2-staging-release-candidate-campaign/plan.md`](plans/m2-staging-release-candidate-campaign/plan.md) — M1が同じSHAでPath Bに確定したため、M2P-17のPath A条件は不成立。staging preflight/deploy/request、workflow dispatch、DB/fixture操作、M3品質gateへ進まず、通常gate完了後のrelease再承認を待つ
+- [-] M1: production初回状態のschema v1証拠を取得・review済み — 計画書: [`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-production-read-only-evidence/plan.md) — release候補`7a6979761428759c744ba3bf9c1ed16527c7b33d`のrun [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)でDB target、全User、legacy User、User関連row、AuditLogなど8件`clear`、履歴3件`present`、`unknown` 0件をreviewした。schema v1のPath BとM1未完了は維持する
+- [x] M1R: owner `RitukoIsibasi0222`が一般公開・一般登録・実利用者data保存の実績なし、3件の`present`は開発・運用準備履歴であることを2026-07-28に確認した。Artifactを再分類せず、schema v2 / Path C engineを作らないv0.1限定経路を承認し、既存利用者向け通常移行gateを対象外とする。M1 evidence SHA後が`docs/**`だけの差分ならM1を再実行せず、M3/M5/M6のreview済み実行SHAを別に記録する
+- [-] M2: repository実装完了、外部実行は未完了のまま公開後へ移管。同じrelease候補SHAのstaging campaignは実行せず、M2P-17〜M2P-22を完了扱いにしない。通常password verifier DO、valid login、最小429、主要導線はM6 production smokeで確認する
 - [ ] M3: release候補SHAのtest・Workers test・build・lint・format・Prisma validateを通し、production依存Critical/High 0件を確認する
-- [ ] M4: 24時間以内の暗号化backup 1世代、checksum、平文非保存、日次schedule有効を確認する
+- [ ] M4: pending Prisma migrationがある場合だけ24時間以内の暗号化backup 1世代とchecksumを確認し、別承認でmigrationする。migration不要ならv0.1対象外と記録する
 - [ ] M5: same-site URL、Cookie、CORS、メール送信元、Secret/binding分離を値非表示でpreflightし、別承認でproductionへdeployする
-- [ ] M6: productionでsynthetic Userの登録・メール受信〜退会、game、refresh、securityを確認し、cleanup・release記録・公開後引継ぎを完了する
+- [ ] M6: productionでsynthetic Userの登録・メール受信〜退会、game、refresh、通常DO、最小429、securityを確認し、User所有row cleanup・release記録・公開後引継ぎを完了する。AuditLogは365日保持方針に従う
 
 ### 旧リリース実行タスク（R1〜R18・履歴）
 
@@ -283,7 +284,7 @@
 - [-] R5: 認証・refreshのproduction構成を確定する — 計画書: [`production-auth-refresh`](plans/production-auth-refresh/plan.md)
   - code・contract test・migration file・runbookを実装中。G1〜G8、R14 preflight、R15 deploy、R16 production smokeの証拠が未完了のため`[-]`を維持する。
 - [-] R6: 完全削除の残るv0.1 gateを完了する — 計画書: [`r6-account-deletion-gates`](plans/r6-account-deletion-gates/plan.md)
-  - production本人削除専用config guard、main/recovery Playwright、manual-only workflow、runbookをTDD実装済み。厳格レビューで、削除前refresh tokenの明示再送、個別Cookie契約、recovery 401のfail-closed化、production domain外email拒否、keyboard操作、E2E型検査まで補強した。関連63件、frontend全体675件、ESLint、Prettier、Svelte/TypeScript check、E2E TypeScript check、実行なしのPlaywright 2件収集は成功。T1B、T35、R13〜R16の承認付き実環境証拠が未完了のため`[-]`を維持する。
+  - production本人削除専用config guard、main/recovery Playwright、manual-only workflow、runbookをTDD実装済み。M1RによりT1B、T33、T35、legacy cleanup、既存利用者向けmigrationはv0.1対象外とした。R14〜R16のpreflight・deploy・production本人退会smokeが未完了のため`[-]`を維持する。
 - [-] R7: app rate limitの実環境gateを完了する — 計画書: [`r7-rate-limit-environment-gates`](plans/r7-rate-limit-environment-gates/plan.md) — R7-01の基準SHA・repository contract test 100件・Workers build、R7-03のstaging Worker/DO/Secret presence、R7-04のG5/G6とfixture lifecycleは完了。server-side診断run 30059544533ではauth 1〜4回目の200後、5回目の503だけmain stateless Workerの`exceededCpu`を観測した。E-08の無料枠ローカルworkerd診断でvalid loginのcode-level支配要因をcost 12の`bcrypt.compare`へ固定分類したが、安全な無料枠修正と11回目429証拠は未完了。Cloudflare domain/zoneが0件でR7-02はblocked。監視、production分離、rollbackも未完了
   - 503安全分類の別TDD計画: [`r7-auth-503-safe-classification`](plans/r7-auth-503-safe-classification/plan.md) — PR #144はmerge commit `628ce06f90d150ae3dd3eb7e8e6c52ee42deace8`として`develop`へmerge済み。safe JSON 503、非JSON/契約不一致503、その他statusをraw body/header値なしの固定enumで区別し、関連65件、backend 1109件、Workers 15件、build・lint・format checkが成功した。第三runでは6回目503を`EDGE_OR_UNCLASSIFIED_503`へ分類したが、契約内の不一致箇所と内部原因は未特定
   - [x] 503契約不一致詳細分類: [`r7-auth-503-contract-detail`](plans/r7-auth-503-contract-detail/plan.md) / PR: [#145](https://github.com/RitukoIsibasi0222/gensoko/pull/145) — merge commit `dcae128899275c0ec58027c97c9d039427fc5e57`。raw値を出さず503公開契約の不一致箇所だけを固定分類した。server-side診断では5回目の503をmain stateless Workerの`exceededCpu`まで絞ったが、具体的なCPU消費処理は未特定。main/recovery cleanupとflag `false`復旧は成功し、campaign上限到達により追加runを停止した
@@ -296,7 +297,7 @@
 - [ ] R11A: backend High/Moderate依存を安全に更新する
 - [ ] R11: release候補SHAの品質gateとnpm auditを実行する
 - [ ] R12: staging主要導線を最終確認する
-- [ ] R13: 本番DB簡略化の適用可否を証拠で判断する
+- [x] R13: M1 schema v1のPath BとDB 5項目`clear`をreviewし、M1Rのowner確認によりv0.1の既存利用者向け移行を対象外と判断する
 - [ ] R14: rollout/rollback preflightを完了する
 - [ ] R15: production deployを別承認で実施する
 - [ ] R16: production smokeを実施する
@@ -305,7 +306,7 @@
 
 ### 旧公開前リリースゲート（履歴）
 
-> 以下は旧R1〜R18全体の完了条件であり、現在のv0.1公開条件はM1〜M6とする。
+> 以下は旧R1〜R18全体の完了条件であり、現在のv0.1公開条件はM1R・M3・M5・M6と条件付きM4とする。
 
 - [x] staging synthetic Admin E2Eの`/admin`到達・強制退会・旧credential拒否・cleanup — run 29802327100
 - [x] bcryptjsハッシュ、UTF-8 72バイト境界、Zod入力検証、安全な日本語errorのコード契約
@@ -345,14 +346,14 @@
 
 ### 条件付きで v0.1 対象外
 
-- [ ] productionの全User・legacy・関連rowが0件であることを、承認付きread-only workflowでPII/IDなしに確認する
-- [ ] 上記証拠がある場合だけ、legacy production cleanup、既存利用者向け段階migration、旧backend長期soak、旧backup失効待ち、既存利用者向けexpand/contractを「v0.1対象外」と記録する
-- [ ] 0件以外・接続先不一致・結果不明の場合は簡略化せず、完全削除計画の通常gateを維持する
+- [x] production DB target、全User・legacy・関連row・AuditLogが`clear`であることを、承認付きread-only workflowでPII/IDなしに確認した
+- [x] ownerが一般公開・一般登録・実利用者data保存の実績なしを確認したため、legacy production cleanup、既存利用者向け段階migration、旧backend長期soak、旧backup失効待ち、T33/T35を「v0.1対象外」と記録した
+- [ ] DB 5項目またはowner確認が不明になった場合は簡略化せず、完全削除計画の通常gateへ戻る
 
 ### 外部承認・実環境確認待ち
 
 - [x] privacyの運営主体、問い合わせ先、監査正式保持期間・目的、backup/replay説明、発効日をowner承認する（2026-07-22。全損時replayの完全保証がない残存リスクを含む）
 - [ ] production hostname、same-site Cookie、CORS origin、Cloudflare DO binding/secret、rollback先を値非表示で確認する
-- [ ] 24時間以内の暗号化backup 1世代、checksum、平文非保存、日次schedule有効を確認する
-- [ ] T33/T35とproduction完全削除gateのうち、DB空証拠で対象外にできない項目を承認付きで実行する
+- [ ] pending Prisma migrationがある場合だけ24時間以内の暗号化backup 1世代、checksum、平文非保存を確認する
+- [x] T33/T35と既存利用者向け完全削除gateは、DB 5項目`clear`とM1Rによりv0.1対象外と判断する
 - [ ] review済みrelease候補SHAをproductionへ配備し、smokeとfix-forward時の公開停止手順を記録する

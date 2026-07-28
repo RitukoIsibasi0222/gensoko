@@ -9,6 +9,7 @@
 repository内の実装とproduction実行を分離する。まず専用CLI・provider履歴照合・GitHub Actions workflow・test・runbookをTDDで実装して`develop`へmergeし、その後に別承認を得てreview済みSHAからworkflowを1回実行する。全項目が`clear`の場合だけPath A（空DB簡略化）を選び、`present`または`unknown`が1項目でもあればM1を完了せずPath B（通常移行）へ戻る。
 
 本計画はM1の実行基盤と証拠判定を扱う。M2以降のstaging deploy、production backup作成、migration、cleanup、production deploy、smokeは実行しない。
+M1 schema v1のPath A/B判定は変更しない。Path B確定後にownerが一般公開・一般登録・実利用者data保存の実績なしを確認してv0.1限定経路を選ぶ判断は、親release計画のM1Rで扱い、本CLI・workflow・Artifactへ追加しない。
 
 ## 前提条件・依存関係
 
@@ -83,7 +84,7 @@ repository内の実装とproduction実行を分離する。まず専用CLI・pro
 - providerから削除されたdeployment履歴、expired後に削除されたrun、手元や外部storageへ保存されたbackup copyはAPIだけでは不存在を証明できない。承認者が確認文言で明示attestationできない場合は、実行前ならdispatchせず判定上`unknown`のPath Bを記録し、誤dispatch後ならsafe markerのstatusを`unknown`とする。
 - DB・Vercel・Cloudflare・GitHubを単一transactionにできないため、M1開始からreview完了までproduction deploy、DB write、backup、cleanup、provider設定変更を凍結する。凍結をattestationできない場合はdispatchせず判定上`unknown`のPath Bを記録し、実行中の変更を検出した場合は証拠を`unknown`として無効化する。
 - M1証拠はworkflow実行時点のsnapshotであり、以後のproduction変更を承認しない。production state、provider scope、対象識別子、証拠CLI、workflow SHAが変わった場合はM1を再実行する。
-- M1成功後もM4の新鮮な暗号化backup、M5の値非表示preflight、M6のproduction smokeを省略しない。
+- M1成功後もM5の値非表示preflightとM6のproduction smokeを省略しない。M4の新鮮な暗号化backupはpending Prisma migrationがある場合だけ必須とする。
 
 ## 対象ファイル一覧
 
@@ -519,7 +520,7 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 - nonzeroを検出してもcleanup・削除・Artifact削除・deployment削除を続けて実行しない。M1は観測だけで終了する。
 - workflow timeout/cancel時は証拠を不完全としてPath Bへ倒し、同じrunを成功扱いにしない。再実行には改めてproduction Environment approvalを要求する。
 - SecretやPIIがlog/Artifactへ露出した可能性がある場合は、値を会話やPRへ転載せず、credential rotation、Artifact/log処理、incident記録を別承認で行う。
-- Path B選択後は、R6/R7/R9/R13〜R16の通常gateを再開し、簡略化のためにdataや履歴を削除しない。
+- Path B選択後は親release計画でM1Rを判断し、不成立ならR6/R7/R9/R13〜R16の通常gateを再開する。簡略化のためにdataや履歴を削除しない。
 
 ## テストケース一覧
 
@@ -631,8 +632,23 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 - `productionChangeFreezeAttestation`: `clear`
 - decision: Path B
 - evidence invalidation: production state、provider scope、credential、証拠CLI/workflow SHA、release候補SHAが変わった場合は再利用しない
-- follow-up: M1は未完了。M2 staging campaignとM3品質gateへ進まず、R6/R7/R9/R13〜R16の通常gateへ復帰する
+- follow-up: M1は未完了。schema v1のPath Bは維持し、親release計画のM1Rで履歴の意味とowner確認を別途判断する
 - read-only境界: productionへのwrite、deploy、migration、DB更新、fixture、cleanup、backup、smokeは実施していない
+
+### v0.1 release判断との分離
+
+2026-07-28にowner `RitukoIsibasi0222`は、productionを一般利用者向けに運用しておらず、一般利用者の登録および実利用者dataの保存実績がなく、Vercel production deployment、GitHub production Environment deployment、production backup historyの`present`は開発・運用準備による履歴であることを確認した。
+
+この確認はM1 schema v1 ArtifactをPath Aへ読み替えるものではない。M1とPath Bは履歴どおり未完了のまま維持し、親release計画だけがM1Rとして既存利用者向けcleanup・migration・soakをv0.1対象外にする。次は実装しない。
+
+- schema v2またはPath C判定engine
+- 古いbackupの復号・内容調査
+- Vercel・GitHubの過去履歴の完全な機械分類
+- 履歴やbackupの削除によるPath Aへの変更
+
+DB target、全User、legacy User、User関連row、AuditLogのいずれかが`present` / `unknown`になる、またはownerが実利用者data不存在を確認できなくなった場合はM1Rを失効し、通常gateへ戻る。
+
+M1 evidence SHA後のcommitが`docs/**`だけを変更し、runtime code、workflow、schema/migration、lockfile、deployment config、production stateが変わっていないことを差分確認できる場合は、文書同期だけを理由にM1を再実行しない。M1 Artifactのreviewed SHAは変更せず、M3/M5/M6で使用するreview済み実行SHAを親release記録へ別に残す。docs以外の差分があれば既存の証拠失効条件を適用する。
 
 ## 完了条件
 

@@ -8,6 +8,8 @@ M1でPath Aが承認された後、同一のreview済みrelease候補SHAをstagi
 
 repository実装と外部実行を分離する。最初に純粋ロジック、CLI、Playwright、workflow source contract、runbookをTDDで実装して`develop`へmergeする。その後、M1P-15〜M1P-16を別承認で実施し、同じrelease候補SHAについてPath Aが確定した場合だけ、さらに別のstaging承認でdeploy・request・fixture操作を行う。
 
+2026-07-28のM1 schema v1はPath Bであり、このM2外部実行条件は成立していない。親release計画のM1RはM1 Artifactを再分類せず、M2P-17〜M2P-22も完了扱いにしない。ポートフォリオ版v0.1ではM2を公開後の回帰campaignへ移し、通常password verifier DO、valid login、最小429、主要導線はM6のproduction smokeで確認する。
+
 M2の成功は、required evidenceとmain cleanupがすべて`clear`で、必要になったrecovery cleanupも`clear`であり、安全なArtifactとrun reviewが完了した場合だけとする。`present`または`unknown`が1項目でもあればM2を完了せず、M3へ進まない。
 
 ## 非目標
@@ -29,14 +31,14 @@ M2の成功は、required evidenceとmain cleanupがすべて`clear`で、必要
 - M1P-01〜M1P-16は完了している。2026-07-28にrelease候補`7a6979761428759c744ba3bf9c1ed16527c7b33d`のrun [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)をreviewし、Path Bへ確定した。
 - M1証拠のSHAとM2 release候補SHAは一致したが、Vercel production deployment、GitHub production deployment、production backup historyが`present`であり、Path A条件は成立しなかった。
 - M1がPath Aとして確定し、M1のsafe Artifact、run conclusion、review記録、変更凍結attestationがすべて有効な場合だけM2外部実行へ進む。
-- M1がPath B、`present`、`unknown`、未実施、証拠期限切れ、Artifact欠落、cancel、timeout、schema不一致のいずれかならM2を停止し、親計画の通常gateへ戻る。R6/R7/R9/R13〜R16の省略を解除し、dataや履歴をM2のために削除しない。
+- M1がPath B、`present`、`unknown`、未実施、証拠期限切れ、Artifact欠落、cancel、timeout、schema不一致のいずれかならM2を停止する。親計画でM1Rが成立してもM2を成功扱いにせず、公開後の回帰campaignとして未完了を維持する。dataや履歴をM2のために削除しない。
 
 ### staging既存基盤
 
 - Vercelの`develop` Preview、Cloudflare staging Worker、`RateLimitCounter`、Hyperdrive、Supabase staging DB、Resend staging送信設定の既存実績を再利用する。ただし過去の成功runは別SHAのためM2合格証拠には再利用しない。
 - `backend/wrangler.jsonc`には通常staging entrypoint、`RATE_LIMIT_COUNTER`、`PASSWORD_VERIFIER`、`v1`・`v2` migrationが定義済みである。
 - `PasswordVerifierDurableObject`のrepository実装とrollback baseline bundleは実装済みである。M2では通常bundleだけをdeployし、rollback baseline bundleをdeployしない。
-- staging DB migrationはM2開始時点でrelease候補SHAのmigration checksumと一致していなければならない。pending migrationがある場合、campaign内で暗黙適用せず、`.github/workflows/staging-database.yml`を別承認で実行してからM2を最初からやり直す。
+- staging DB migrationはM2開始時点でrelease候補SHAのmigration checksumと一致していなければならない。pending Prisma migrationがある場合、campaign内で暗黙適用せず、`.github/workflows/staging-database.yml`を別承認で実行してからM2を最初からやり直す。
 
 ### 実行上の不変条件
 
@@ -171,7 +173,7 @@ path parameterやresponseのIDはrunner memory内の次requestへだけ渡し、
 | 項目                       | 現状                                               | M2での扱い                                                                  |
 | -------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------- |
 | PR #155                    | `develop`へmerge済み                               | repository基盤のみ完了。M1完了証拠ではない                                  |
-| M1P-15〜M1P-16             | 同じSHAで実行・review済み、Path B                  | Path A不成立のためM2外部実行を禁止                                          |
+| M1P-15〜M1P-16             | 同じSHAで実行・review済み、Path B                  | Path A不成立のためM2外部実行を停止し、v0.1では公開後へ移管                  |
 | Password verifier DO       | repository実装、binding/migration contract完了     | 同じrelease候補SHAの通常bundleをstagingへdeployして再確認                   |
 | R7PV-17                    | 未完了                                             | normal deploy・valid login・11回目429をM2へ統合。rollback drillは移管しない |
 | R7PVRB-13〜15              | 未実施                                             | 公開後task。M2 blockerにしない                                              |
@@ -196,7 +198,7 @@ path parameterやresponseのIDはrunner memory内の次requestへだけ渡し、
 ## R7PV-17との責務整理
 
 1. R7PV-01〜R7PV-16はnormal DO repository実装、fail-closed 503、rollback bundle、config/source contractまでを担当し、完了済みとする。
-2. R7PV-17に残っていた通常DOのstaging deploy、valid login、main Worker `exceededCpu`非再発、auth 11回目429、cleanupはM2 campaignが一度だけ担当する。
+2. R7PV-17に残っていた通常DOのstaging deploy、valid login、main Worker `exceededCpu`非再発、auth 11回目429、cleanupは、M2を実行する場合にこのcampaignが担当する。v0.1公開前はM6のproduction smokeで最小範囲を確認する。
 3. R7PV-17に混在していたpost-v2 rollback証拠は`R7PVRB-13`〜`R7PVRB-15`へ一本化し、公開後へ維持する。
 4. M2 evidenceが`clear`になった時点でR7PV-17のM2担当部分を完了として同期する。M2失敗時はR7PV-17も未完了のままにする。
 5. M2はWAF、production namespace、production deploy、長期quota観測、rollback drillを完了扱いにしない。
@@ -432,7 +434,7 @@ repository implementation merged
 
 ### Deploy責務
 
-- pending migrationがないことを確認し、通常API Workerをcandidate SHAから100% stagingへdeployする。
+- pending Prisma migrationがないことを確認し、通常API Workerをcandidate SHAから100% stagingへdeployする。
 - `PASSWORD_VERIFIER` binding、`v2` SQLite-backed class、通常entrypoint、staging runtime configを値非表示で再確認する。
 - API health、CORS origin、safe headersが正常になった後だけfrontendをcandidate SHAでtargeted deployし、staging branch aliasを切り替える。
 - frontend metadata、branch alias、API metadataがsame SHAでない場合はrequestを送らず停止する。
@@ -814,7 +816,7 @@ quality gateではstaging/production URLへrequestせず、Playwrightは`--list`
 - [ ] M2P-21: main/recovery cleanupとsafe Artifactをreviewする
 - [ ] M2P-22: M2完了記録とM3 handoffを同期する
 
-2026-07-28の同一SHA M1 runはPath Bであり、M2P-17の「Path Aを確定」という完了条件を満たさない。M2P-17〜M2P-22のcheckboxは未完了を表す`[ ]`のまま保持するが、これは次に実行すべきtaskを示すものではない。M2P-18〜M2P-22を含むM2外部作業は中断し、通常gate完了後に親release計画を再承認するまで実施しない。
+2026-07-28の同一SHA M1 runはPath Bであり、M2P-17の「Path Aを確定」という完了条件を満たさない。M2P-17〜M2P-22のcheckboxは未完了を表す`[ ]`のまま保持するが、これはv0.1公開前に次に実行すべきtaskを示すものではない。M2外部作業は公開後の回帰または次のauth/infra高リスク変更まで延期し、M6 production smokeの成功をM2完了へ読み替えない。
 
 ### タブ区切り出力
 
