@@ -6,7 +6,7 @@
 > M1でproduction DB target、全User・legacy・関連row・AuditLogが`clear`で、M1Rでownerが一般公開・一般登録・実利用者data保存の実績なしを確認した場合、
 > T35と既存利用者向けmigration/soakは「v0.1対象外」とし、M6のproduction本人退会smokeだけを公開条件にする。
 > DB証拠または実利用者data不存在のowner確認が不明な場合は本計画の通常gateをすべて維持する。
-> 2026-07-28のM3 dependency/lockfile更新後は旧M1 evidenceのdocs-only例外を使えないため、新しいrelease候補でM1Rを再確認するまでこの対象外判断をM5へ引き継がない。
+> 2026-07-28のM3 dependency/lockfile更新後は旧M1 evidenceを再利用せず、最新release候補でM1Rを再確認した。対象外判断は維持し、T11以降とM5は別作業とする。
 
 ## 概要
 
@@ -398,7 +398,7 @@ config loader は値を error message に含めず、URL、reserved identity、p
 
 同日、owner `RitukoIsibasi0222`は一般公開・一般登録・実利用者data保存の実績なしを確認した。DB target、全User、legacy User、User関連row、AuditLogが`clear`であるため、親release計画のM1Rに従いT33、T35、T1B、旧instance drain、dry-run、legacy cleanup、既存利用者向けmigrationをv0.1対象外とする。M2 staging campaignは公開後へ移し、M3品質gateへ進む。
 
-M3はNode 22 runtime契約とnpm 10.9.8互換lockfileを含むreview済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`で完了した。ただし依存更新により`backend/package.json`とlockfileが旧M1 evidence SHAから変わったため、現在のrelease候補ではM1Rを再確認するまでT11以降とM5へ進まない。旧Path Bとowner判断は履歴として保持し、schema v2 / Path C engineや既存data削除で判定を変えない。
+M3はNode 22 runtime契約とnpm 10.9.8互換lockfileを含むreview済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`で完了した。依存更新により旧M1 evidence SHAを再利用せず、PR #160のmerge commit `c3ca68c5173c1fb586162418e839baec8cc49bf3`でM1 read-only run [30335685074](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30335685074)を再実行した。DB 5項目`clear`、`unknown` 0件とownerの一般公開・一般登録・実利用者data保存実績なしを再確認し、M1Rを完了した。旧Path Bと3件の`present`は履歴として保持し、schema v2 / Path C engineや既存data削除で判定を変えない。T11以降とM5は別作業とする。
 
 - [ ] T11: R14 preflight へ R6 gate を統合する
 - [ ] T12: R15 で選択 path の migration/deploy を実行する
@@ -488,6 +488,20 @@ execute/fixture/smoke flags restored: yes/no
 - 未実施: staging T35、backup/dry-run/migration/deploy、production account deletion smoke
 - M1R判断: ownerが一般公開・一般登録・実利用者data保存の実績なしを確認済み
 - v0.1対象外: T33、T35、T1B、旧instance drain、dry-run、legacy cleanup、既存利用者向けmigration
+- 再開条件: DB 5項目またはowner確認が不明になる、または実利用者dataを引き継ぐ時は通常gateへ戻る
+
+### 2026-07-28 最新release候補のR13/M1R再確認
+
+- review済みSHA: `c3ca68c5173c1fb586162418e839baec8cc49bf3`
+- R13 read-only run: [30335685074](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30335685074)
+- DB・Cloudflare・履歴/copy attestation・変更凍結attestation: `clear`
+- Vercel production deployment・GitHub production deployment・production backup history: `present`
+- `unknown`: 0件
+- Artifact: schema version 1、exact allowlist、SHA・timestamp・decision再計算一致
+- decision: Path B。M1は未完了のまま維持する
+- M1R判断: ownerが現在も一般公開・一般登録・実利用者data保存実績なしを再確認した
+- v0.1対象外: T33、T35、T1B、旧instance drain、dry-run、legacy cleanup、既存利用者向けmigration
+- 未実施: backup、migration、deploy、production account deletion smoke
 - 再開条件: DB 5項目またはowner確認が不明になる、または実利用者dataを引き継ぐ時は通常gateへ戻る
 
 ## 停止・rollback・recovery 条件

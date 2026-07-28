@@ -635,6 +635,34 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 - follow-up: M1は未完了。schema v1のPath Bは維持し、親release計画のM1Rで履歴の意味とowner確認を別途判断する
 - read-only境界: productionへのwrite、deploy、migration、DB更新、fixture、cleanup、backup、smokeは実施していない
 
+### 最新release候補での再確認
+
+- run: [Production Initial State Evidence #30335685074](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30335685074)
+- reviewed SHA: `c3ca68c5173c1fb586162418e839baec8cc49bf3`
+- executed at: `2026-07-28T06:56:06.083Z`
+- preflight: PR #160のmerge commitと最新`develop`が一致し、旧M1 SHAからの差分はPR #158・#159の文書とPR #160のpackage・lockfile・Node契約test・文書だけであることを確認した。schema/migration、M1 workflow、frontend、deployment configに差分はない
+- Environment approval: `production`承認済み
+- concurrency: 先行するscheduled Batch Jobs #775が同じ`gensoko-batch-jobs`で承認待ちだった。step 0件を確認し、ownerの明示許可でrunをcancelした。production DB処理は開始されていない
+- run conclusion: `failure`（inspection、safe marker、Step Summary、Artifact uploadは成功し、Path Bをfail-closedで確定する最終stepだけが失敗）
+- Artifact review: review時点で未失効、2026-07-29T06:56:06Z失効、schema version 1、outer/evidence exact key、reviewed SHA完全一致、UTC millisecond timestamp、11 status allowlist、statusからのdecision再計算がすべて一致
+- `databaseTarget`: `clear`
+- `allUsers`: `clear`
+- `legacyUsers`: `clear`
+- `userRelatedRows`: `clear`
+- `auditLogs`: `clear`
+- `vercelProductionDeployments`: `present`
+- `cloudflareProductionDeployments`: `clear`
+- `githubProductionDeployments`: `present`
+- `productionBackupHistory`: `present`
+- `deletedHistoryAndExternalCopyAttestation`: `clear`
+- `productionChangeFreezeAttestation`: `clear`
+- `unknown`: 0件
+- decision: Path B
+- Annotations: 赤2件はPath BのCLI/最終判定による想定内のexit code 1。黄色1件はGitHub Actions内部runtimeのNode.js 20廃止警告で、今回のsafe Artifactは無効化しない。workflow/action version更新時に再確認する
+- owner再確認: owner `RitukoIsibasi0222`は、現在もproductionを一般公開しておらず、一般利用者による登録実績がなく、実利用者dataを保存した実績もないことを明示確認した
+- follow-up: M1は未完了、schema v1のPath Bと3件の`present`は維持する。親release計画のM1R再確認だけを完了し、M4/M5以降は開始しない
+- read-only境界: M1以外のworkflow dispatch、production DB write、backup、migration、deploy、smokeは実施していない
+
 ### v0.1 release判断との分離
 
 2026-07-28にowner `RitukoIsibasi0222`は、productionを一般利用者向けに運用しておらず、一般利用者の登録および実利用者dataの保存実績がなく、Vercel production deployment、GitHub production Environment deployment、production backup historyの`present`は開発・運用準備による履歴であることを確認した。
@@ -648,9 +676,9 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 
 DB target、全User、legacy User、User関連row、AuditLogのいずれかが`present` / `unknown`になる、またはownerが実利用者data不存在を確認できなくなった場合はM1Rを失効し、通常gateへ戻る。
 
-M1 evidence SHA後のcommitが`docs/**`だけを変更し、runtime code、workflow、schema/migration、lockfile、deployment config、production stateが変わっていないことを差分確認できる場合は、文書同期だけを理由にM1を再実行しない。M1 Artifactのreviewed SHAは変更せず、M3/M5/M6で使用するreview済み実行SHAを親release記録へ別に残す。docs以外の差分があれば既存の証拠失効条件を適用する。
+最新M1 evidence SHA `c3ca68c5173c1fb586162418e839baec8cc49bf3`後のcommitが`docs/**`だけを変更し、runtime code、workflow、schema/migration、lockfile、deployment config、production stateが変わっていないことを差分確認できる場合は、文書同期だけを理由にM1を再実行しない。旧M1 Artifactのreviewed SHAとPath Bは履歴として変更せず、M5/M6で使用するreview済み実行SHAを親release記録へ別に残す。docs以外の差分があれば既存の証拠失効条件を適用する。
 
-2026-07-28のM3では、初回quality gateのproduction依存High 3件・Moderate 4件を解消し、PR review後にNode 22 runtime契約とnpm 10.9.8互換lockfileを追加した。最終review済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`では`backend/package.json`、`backend/package-lock.json`、設定契約testを更新している。これにより旧M1 evidence SHAとの差分は`docs/**`だけではなくなり、上記例外を使えない。旧ArtifactのPath B、status、owner判断を再分類せず、PR merge後の新しい`develop` SHAでM1 read-only証拠を再取得・reviewし、M1Rを再確認するまでM5へ進まない。今回のM3ではworkflowをdispatchせず、production stateも変更していない。
+2026-07-28のM3では、初回quality gateのproduction依存High 3件・Moderate 4件を解消し、PR review後にNode 22 runtime契約とnpm 10.9.8互換lockfileを追加した。最終review済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`では`backend/package.json`、`backend/package-lock.json`、設定契約testを更新している。これにより旧M1 evidence SHAとの差分は`docs/**`だけではなくなったため、旧ArtifactのPath B、status、owner判断を再分類せず、PR #160のmerge commit `c3ca68c5173c1fb586162418e839baec8cc49bf3`でM1 read-only証拠を再取得・reviewした。DB 5項目`clear`、`unknown` 0件とowner判断を再確認し、M1Rを完了した。M1はPath Bのため未完了のまま維持し、M4/M5以降は別作業とする。
 
 ## 完了条件
 
