@@ -367,12 +367,12 @@ productionはSupabase Free planで運用する。[Supabase pricing](https://supa
 
 `.github/workflows/production-database.yml`はproduction Environmentへ固定し、既存batchと同じ`gensoko-batch-jobs`concurrency groupでDB操作を直列化する。
 
-| operation                       | schedule                     | 内容                                                                                     |
-| ------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
-| `capacity-check`                | UTC毎日19:23（JST毎日04:23） | `pg_database_size(current_database())`でDB容量を取得し、500MBに対する使用率を確認        |
-| `backup`                        | UTC毎日19:41（JST毎日04:41） | roles・schema・dataをdumpし、AES-256で暗号化・復号検証してArtifactへ7日保存              |
-| `migrate-deploy`                | 手動のみ                     | 24時間以内に成功したbackup run IDと期限内Artifactを確認後、`prisma migrate deploy`を実行 |
-| `verify-v0-1-migration-indexes` | 手動のみ                     | 成功migration run IDと対象SHAを確認し、v0.1対象indexのvalid・readyだけを値非表示で確認   |
+| operation                       | schedule                     | 内容                                                                                                 |
+| ------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `capacity-check`                | UTC毎日19:23（JST毎日04:23） | `pg_database_size(current_database())`でDB容量を取得し、500MBに対する使用率を確認                    |
+| `backup`                        | UTC毎日19:41（JST毎日04:41） | roles・schema・dataをdumpし、AES-256で暗号化・復号検証してArtifactへ7日保存                          |
+| `migrate-deploy`                | 手動のみ                     | 24時間以内に成功したbackup run IDと期限内Artifactを確認後、`prisma migrate deploy`を実行             |
+| `verify-v0-1-migration-indexes` | 手動のみ                     | 成功migration run IDと対象SHAを確認し、v0.1対象indexの`indisvalid`・`indisready`だけを値非表示で確認 |
 
 上表の日次cronはcode・contract testまで完了した。capacity-check、暗号化・復号検証・7日保持・手動実行・Prisma migration時の24時間以内backup gateは維持している。M1Rが成立するv0.1では、pending Prisma migrationがある場合だけ実行前24時間以内の成功Artifact 1世代とchecksumをM4で確認する。migration不要時はbackupを公開前blockerにせず、日次scheduleと2世代目以降は公開後に確認する。旧R9とbackup計画全体は未完了のまま継続する。
 
@@ -1045,7 +1045,7 @@ Artifactは`m2-staging-release-candidate-evidence`という固定名のexact JSO
 ```
 [x] M1R: c3ca68c5173c1fb586162418e839baec8cc49bf3でDB 5項目clear・unknown 0件とowner判断を再確認
 [x] M3: 3370cefbc6934e5e3d68ddf9c22eaaf4c5a634aeで最終品質gateとproduction依存監査を完了
-[x] M4: backup run 30301334445確認後、対象SHA `7dbe5649a4057baa3b123aaadb6531422f96fd2f`のmigration run 30342343404と、検証run 30406227957の値非表示valid・ready確認が成功
+[x] M4: backup run 30301334445確認後、対象SHA `7dbe5649a4057baa3b123aaadb6531422f96fd2f`のmigration run 30342343404と、検証run 30406227957の`indisvalid`・`indisready`値非表示確認が成功
 [ ] M5: URL/Cookie/CORS/メール/Secret/bindingを値非表示でpreflightし、承認後にdeploy
 [ ] M6: production synthetic userで主要導線、通常DO、最小429、securityを確認し、退会・cleanup・記録を完了
 ```
