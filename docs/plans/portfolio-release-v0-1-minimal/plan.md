@@ -160,7 +160,7 @@ APIのリクエスト、レスポンス、status、error messageは変更しな�
 | M5       | preflight後にproduction deploy  | Vercel/Cloudflare/Supabase/Resend | same-site URL、Cookie、CORS、送信元、Secret/binding分離、review済みSHA、別承認deploy成功    |
 | M6       | production smokeとrelease記録   | production/docs                   | synthetic Userで主要導線、DO、429、security、退会、cleanup、残課題引継ぎ                    |
 
-- [-] M1R: `7a6979761428759c744ba3bf9c1ed16527c7b33d`では承認済み。M3の依存・lockfile更新によりdocs-only例外を使えなくなったため、現在のrelease候補では再確認待ち
+- [x] M1R: release候補`c3ca68c5173c1fb586162418e839baec8cc49bf3`のrun [30335685074](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30335685074)でDB 5項目`clear`・`unknown` 0件を再確認し、ownerが一般公開・一般登録・実利用者data保存実績なしを再確認した
 - [x] M3: review済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`で最終品質gateとproduction依存監査を完了する
 - [ ] M4: pending Prisma migrationがある場合だけ新鮮な暗号化backupを確認してmigrationする。migration不要なら対象外と記録する
 - [ ] M5: 値非表示preflightでURL・Cookie・CORS・送信元・Secret/bindingを確認し、別承認でproductionへdeployする
@@ -170,9 +170,11 @@ APIのリクエスト、レスポンス、status、error messageは変更しな�
 
 同日、owner `RitukoIsibasi0222`は、productionを一般利用者向けに運用しておらず、一般利用者の登録および実利用者dataの保存実績がなく、3件の`present`は開発・運用準備による履歴であることを確認した。これをM1Rとして記録し、provider・backup履歴だけを理由に既存利用者向け通常移行gateへ戻さず、v0.1限定の最小経路を再開する。schema v1 Artifactを再分類せず、schema v2またはPath C判定コードも実装しない。
 
-M1 evidence SHAは`7a6979761428759c744ba3bf9c1ed16527c7b33d`として維持する。この後のrelease文書同期commitはapplication codeを変更しないため、M3/M5/M6で使用するreview済み実行SHAとの差分が`docs/**`だけであることをpreflightで確認し、M1の再実行条件にしない。docs以外の差分またはproduction state変更があれば、この例外を使わずM1Rを再reviewする。
+旧M1 evidence SHA `7a6979761428759c744ba3bf9c1ed16527c7b33d`は履歴として維持する。現在のM1 evidence SHAは`c3ca68c5173c1fb586162418e839baec8cc49bf3`とする。この後のrelease文書同期commitはapplication codeを変更しないため、M5/M6で使用するreview済み実行SHAとの差分が`docs/**`だけであることをpreflightで確認し、M1の再実行条件にしない。docs以外の差分またはproduction state変更があれば、この例外を使わずM1Rを再reviewする。
 
-M3の初回監査では、docs-onlyの`fbb10efc9e122e96a46e098e26149bc4e878d036`にbackend production依存High 3件、Moderate 4件があり、必須条件を満たさなかった。関連packageを更新した`c127b72bae8bc00956bf7a978b5a64242d466a4b`でproduction依存をCritical 0、High 0、Moderate 0にした後、PR reviewとCIでNode runtime範囲の未宣言およびnpm 10.9.8から見たlockfile不整合を検出した。`engines.node`を`22.x`へ固定し、CIと同じNode 22.23.1 / npm 10.9.8でlockfileを再生成した`3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`を最終review済み実行SHAとする。M3自体は完了したが、`backend/package.json`と`backend/package-lock.json`がM1 evidence SHAから変わったためdocs-only例外は使わない。旧M1Rの判断履歴は保持し、PR merge後の新しい`develop` SHAでM1 read-only証拠とowner判断を再確認するまでM5へ進まない。
+M3の初回監査では、docs-onlyの`fbb10efc9e122e96a46e098e26149bc4e878d036`にbackend production依存High 3件、Moderate 4件があり、必須条件を満たさなかった。関連packageを更新した`c127b72bae8bc00956bf7a978b5a64242d466a4b`でproduction依存をCritical 0、High 0、Moderate 0にした後、PR reviewとCIでNode runtime範囲の未宣言およびnpm 10.9.8から見たlockfile不整合を検出した。`engines.node`を`22.x`へ固定し、CIと同じNode 22.23.1 / npm 10.9.8でlockfileを再生成した`3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`を最終review済み実行SHAとする。M3自体は完了したが、`backend/package.json`と`backend/package-lock.json`が旧M1 evidence SHAから変わったためdocs-only例外は使わず、PR #160のmerge後に新しい`develop` SHAでM1 read-only証拠とowner判断を再確認した。
+
+2026-07-28に最新`develop`のrelease候補`c3ca68c5173c1fb586162418e839baec8cc49bf3`を固定し、M1 run [30335685074](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30335685074)を1回実行した。safe Artifactのschema version 1、outer/evidence exact key、対象SHA、UTC millisecond timestamp、11 status allowlist、decision再計算をreviewし、DB target、全User、legacy User、User関連row、AuditLog、Cloudflare、両attestationは`clear`、Vercel production deployment、GitHub production deployment、production backup historyは`present`、`unknown`は0件だった。decisionはPath Bで、M1自体は未完了のまま維持する。owner `RitukoIsibasi0222`は、現在も一般公開・一般登録・実利用者data保存の実績がないことを再確認したため、M1Rの再確認を完了する。M4/M5以降は本作業で開始しない。
 
 2026-07-28時点でM2P-01〜M2P-16のrepository基盤はPR [#157](https://github.com/RitukoIsibasi0222/gensoko/pull/157)のmerge commit `7a6979761428759c744ba3bf9c1ed16527c7b33d`として`develop`へmerge済みである。同じSHAのM1証拠はPath BのためM2P-17〜M2P-22は未実施・未完了のまま、v0.1 blockerから公開後の回帰campaignへ移す。M2の完了を偽らず、通常password verifier DO、valid login、最小429、主要導線はM6のproduction smokeで確認する。
 

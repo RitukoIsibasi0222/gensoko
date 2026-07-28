@@ -985,6 +985,25 @@ M1 evidence SHA `7a6979761428759c744ba3bf9c1ed16527c7b33d`後のcommitが`docs/*
 
 この証拠は上記application SHAと実行時点のproduction状態だけに有効である。前段の`docs/**`限定例外を除き、runtime/configを含むrelease候補差分、production state、provider scope、credential、証拠実装のいずれかが変わる場合は再利用しない。
 
+### 2026-07-28 最新release候補のM1/M1R再確認
+
+- run: [Production Initial State Evidence #30335685074](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30335685074)
+- reviewed SHA: `c3ca68c5173c1fb586162418e839baec8cc49bf3`
+- executed at: `2026-07-28T06:56:06.083Z`
+- Environment approval: `production`承認済み
+- concurrency: scheduled Batch Jobs #775が同じ直列実行枠で承認待ちだったため、step 0件を確認しownerの明示許可でcancelした。production DB処理は開始されていない
+- run conclusion: `failure`（inspection、safe marker、Step Summary、Artifact uploadは成功し、Path Bをfail-closedで確定する最終stepだけが失敗）
+- exact evidence: review時点でArtifact未失効、2026-07-29T06:56:06Z失効、schema version 1、outer/evidence key完全一致、reviewed SHA完全一致、UTC millisecond timestamp、11 status allowlist、decision再計算一致
+- `clear`: production DB target、全User、legacy User、User関連row、AuditLog、Cloudflare production deployment、削除済みdeployment・外部backup copy attestation、production変更凍結attestation
+- `present`: Vercel production deployment、GitHub production deployment、production backup history
+- `unknown`: 0件
+- decision: schema v1はPath B。M1自体は未完了のまま維持する
+- Annotations: 赤2件はPath Bの想定内exit code 1。黄色1件はActions内部runtimeのNode.js 20廃止警告で、今回の証拠を無効化せず、workflow/action version更新時に再確認する
+- owner再確認: owner `RitukoIsibasi0222`は、現在も一般公開・一般登録・実利用者data保存実績なしと確認した
+- read-only境界: M1以外のworkflow dispatch、production DB write、backup、migration、deploy、smokeは実施していない
+
+旧M1 ArtifactのPath Bと3件の`present`は再分類しない。最新release候補でも同じstatusとowner判断を確認できたためM1Rを完了する。M4/M5以降へ進む前に本地点で停止し、別作業・別承認とする。
+
 ---
 
 ## M2 release候補staging単一campaign runbook
@@ -1023,7 +1042,7 @@ Artifactは`m2-staging-release-candidate-evidence`という固定名のexact JSO
 [`docs/plans/portfolio-release-v0-1-minimal/plan.md`](plans/portfolio-release-v0-1-minimal/plan.md)を正本とする。以下はM1R・M3・M5・M6と条件付きM4の進捗確認用であり、個別計画の全項目を公開前に完了させる一覧ではない。
 
 ```
-[-] M1R: 旧SHAの判断履歴は保持。M3 dependency/lockfile更新後の候補SHAで再確認待ち
+[x] M1R: c3ca68c5173c1fb586162418e839baec8cc49bf3でDB 5項目clear・unknown 0件とowner判断を再確認
 [x] M3: 3370cefbc6934e5e3d68ddf9c22eaaf4c5a634aeで最終品質gateとproduction依存監査を完了
 [ ] M4: pending Prisma migrationがある場合だけ新鮮な暗号化backup確認後にmigration。不要なら対象外を記録
 [ ] M5: URL/Cookie/CORS/メール/Secret/bindingを値非表示でpreflightし、承認後にdeploy
@@ -1032,6 +1051,6 @@ Artifactは`m2-staging-release-candidate-evidence`という固定名のexact JSO
 
 2026-07-28のM3では、初回production監査で検出したbackend High 3件・Moderate 4件を関連依存の更新で解消した。PR review対応でbackendのNode runtimeを`22.x`へ固定し、CIと同じNode 22.23.1 / npm 10.9.8でlockfileを再生成した。review済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`で`npm ci`、backend通常test 1268件・Workers test 32件、frontend test 680件、両build、lint、format、Prisma validate、Svelte checkが成功し、backend/frontendのproduction依存はCritical 0、High 0、Moderate 0、Low 0となった。Moderateの個別判断対象はない。全依存ではbackend dev-onlyの`esbuild@0.27.7`にLow 1件が残るが、`tsx`経由でproductionへ到達せず、Windows開発serverを公開しない。2026-08-31または上流修正版公開時の早い方で再確認する。
 
-M3修正は`backend/package.json`と`backend/package-lock.json`を変更したため、M1 evidence SHA `7a6979761428759c744ba3bf9c1ed16527c7b33d`からのdocs-only例外を使えない。旧Path Bとowner判断を再分類せず、PR merge後の新しい`develop` SHAでM1 read-only証拠とM1Rを再確認するまでM5を開始しない。この再確認は今回のM3作業には含めず、workflow dispatch、Secret/Environment変更、production DB接続、backup、migration、deploy、smokeは実施していない。
+M3修正は`backend/package.json`と`backend/package-lock.json`を変更したため、旧M1 evidence SHA `7a6979761428759c744ba3bf9c1ed16527c7b33d`からのdocs-only例外を使わなかった。旧Path Bとowner判断を再分類せず、PR #160のmerge commit `c3ca68c5173c1fb586162418e839baec8cc49bf3`でM1 read-only証拠とM1Rを再確認した。M1は未完了、M1RとM3は完了、M4/M5/M6は未着手である。
 
 M2 same-SHA staging campaign、WAF、24/48時間soak、全rate-limit境界、rollback baseline drill、backup 2世代目以降、restore drill、高度なA11Yは公開後の強化項目とする。ただしDB 5項目またはownerの実利用者data不存在確認が不明な場合は延期せず、通常のR計画へ戻る。
