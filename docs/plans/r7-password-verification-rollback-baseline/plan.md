@@ -28,7 +28,7 @@ staging/production request、workflow dispatch、fixture操作は別承認まで
 - PR #150は基準commitとして`develop`へmerge済み
 - R7PV-01〜R7PV-15: repository実装完了
 - R7PV-16: Free plan、共有DO quota、staging resource、review済みSHAをread-only確認済み
-- R7PV-17: 未実施。v0.1は通常DO版のdeploy・valid login・最小auth 429だけをM5/M6で確認し、M2 staging campaignとrollback証拠は公開後へ移す
+- R7PV-17: 未実施。v0.1は通常DO版のdeploy・valid login・最小429だけをM5/M6で確認し、M2 staging campaignとrollback証拠は公開後へ移す
 - staging/production resource値、version ID、hostname、Secretは本計画へ記録しない
 
 ## 前提条件・依存関係

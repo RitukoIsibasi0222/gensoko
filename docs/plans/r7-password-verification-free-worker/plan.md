@@ -2,7 +2,7 @@
 
 > 設計者ロール: シニアバックエンドエンジニア / Cloudflare Workersエンジニア / セキュリティエンジニア
 >
-> 2026-07-28以降のv0.1では、M2 staging campaignを公開後へ移し、M5/M6で通常DO版のproduction binding・valid login・最小auth 429・cleanupを確認する。
+> 2026-07-28以降のv0.1では、M2 staging campaignを公開後へ移し、M5/M6で通常DO版のproduction binding・valid login・最小429・cleanupを確認する。
 > R7PV-17のrollback証拠は公開後へ移し、本計画全体は未完了のまま継続する。
 > 2026-07-28にR7PV-17のうち通常DO版deploy・valid login・auth 11回目429・cleanupをM2 manual-only repository基盤へ統合した。外部実行とrollback証拠は未実施のためR7PV-17は未完了を維持する。
 

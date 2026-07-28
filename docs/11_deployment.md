@@ -131,7 +131,7 @@ G1〜G8、R14 preflight、R15 production migration/deploy、R16 smokeは未実�
 1. **M1R**: M1 schema v1のPath Bを維持したまま、DB target、全User、legacy User、User関連row、AuditLogの`clear`と、ownerによる一般公開・一般登録・実利用者data保存実績なしの確認を記録する。
 2. **M3**: backend/frontendの最終品質gateをrelease候補SHAで1回実行し、production依存のCritical/Highを0件にする。Moderateは到達可能性、回避策、更新期限を記録する。
 3. **M4（条件付き）**: pending Prisma migrationがある場合だけ、24時間以内の暗号化済み成功Artifact 1世代とchecksumを確認し、別承認でmigrationする。migration不要なら対象外と記録する。
-4. **M5**: same-site URL、Cookie、CORS、productionメール送信元、production専用Secret/binding、DB target、pending migration、review済みSHAを値非表示でpreflightし、別承認でAPI、frontendの順にdeployする。
+4. **M5**: same-site URL、Cookie、CORS、productionメール送信元、production専用Secret/binding、DB target、pending Prisma migration、review済みSHAを値非表示でpreflightし、別承認でAPI、frontendの順にdeployする。
 5. **M6**: synthetic User 1件で登録・メール受信〜退会、game、refresh、通常password verifier DO、最小429、securityを確認し、同じchange内でUser所有row cleanup・flag復旧・release記録を完了する。AuditLogは365日保持方針に従う。
 
 M1のDB 5項目またはownerの実利用者data不存在確認が不明な場合はこの最小手順を使わず、R6/R7/R9/R13〜R16の通常gateへ戻る。M2 same-SHA staging campaign、WAF、24/48時間soak、rollback baseline drill、backup 2世代目以降、restore drill、T35 legacy cleanup実演は公開後へ移す。schema v1 Artifactの再分類、schema v2 / Path C engine、古いbackup復号、過去履歴の完全分類は行わない。

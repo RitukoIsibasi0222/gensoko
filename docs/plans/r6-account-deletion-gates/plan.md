@@ -193,7 +193,7 @@ schema v1のPath B判定自体は変更しないが、v0.1で実行するgateは
 
 - User/legacy/関連row/AuditLogが`present` / `unknown`、DB target不明、またはownerが実利用者data不存在を確認できない場合は、T33、R9 backup、T1B、旧instance drain、dry-run Artifact、expand migration、legacy cleanupを省略しない。
 - DB 5項目が`clear`で、ownerが一般公開・一般登録・実利用者data保存の実績なしを確認し、provider・backup履歴だけが`present`の場合は、M1RによりT33、T35、T1B、旧instance drain、legacy cleanup、既存利用者向けmigrationをv0.1対象外にする。
-- pending Prisma migrationがある場合だけ、新鮮な暗号化backupを確認して別承認で適用する。migrationがなければbackup履歴や新規backupを公開前blockerにしない。
+- pending Prisma migrationがある場合だけ、新鮮な暗号化backupを確認して別承認でmigrationを適用する。migrationがなければbackup履歴や新規backupを公開前blockerにしない。
 - app deploy後に新規退会が物理削除されることと、旧認証拒否を R16 で確認する。
 - `deletedAt` 列は v0.1 中は保持する。T40〜T44 は公開後の soak/backup/restore 条件が揃うまで未完了で維持する。
 

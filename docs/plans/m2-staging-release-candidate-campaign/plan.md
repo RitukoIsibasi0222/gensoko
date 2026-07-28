@@ -38,7 +38,7 @@ M2の成功は、required evidenceとmain cleanupがすべて`clear`で、必要
 - Vercelの`develop` Preview、Cloudflare staging Worker、`RateLimitCounter`、Hyperdrive、Supabase staging DB、Resend staging送信設定の既存実績を再利用する。ただし過去の成功runは別SHAのためM2合格証拠には再利用しない。
 - `backend/wrangler.jsonc`には通常staging entrypoint、`RATE_LIMIT_COUNTER`、`PASSWORD_VERIFIER`、`v1`・`v2` migrationが定義済みである。
 - `PasswordVerifierDurableObject`のrepository実装とrollback baseline bundleは実装済みである。M2では通常bundleだけをdeployし、rollback baseline bundleをdeployしない。
-- staging DB migrationはM2開始時点でrelease候補SHAのmigration checksumと一致していなければならない。pending migrationがある場合、campaign内で暗黙適用せず、`.github/workflows/staging-database.yml`を別承認で実行してからM2を最初からやり直す。
+- staging DB migrationはM2開始時点でrelease候補SHAのmigration checksumと一致していなければならない。pending Prisma migrationがある場合、campaign内で暗黙適用せず、`.github/workflows/staging-database.yml`を別承認で実行してからM2を最初からやり直す。
 
 ### 実行上の不変条件
 
@@ -434,7 +434,7 @@ repository implementation merged
 
 ### Deploy責務
 
-- pending migrationがないことを確認し、通常API Workerをcandidate SHAから100% stagingへdeployする。
+- pending Prisma migrationがないことを確認し、通常API Workerをcandidate SHAから100% stagingへdeployする。
 - `PASSWORD_VERIFIER` binding、`v2` SQLite-backed class、通常entrypoint、staging runtime configを値非表示で再確認する。
 - API health、CORS origin、safe headersが正常になった後だけfrontendをcandidate SHAでtargeted deployし、staging branch aliasを切り替える。
 - frontend metadata、branch alias、API metadataがsame SHAでない場合はrequestを送らず停止する。
