@@ -814,7 +814,7 @@ quality gateではstaging/production URLへrequestせず、Playwrightは`--list`
 - [ ] M2P-21: main/recovery cleanupとsafe Artifactをreviewする
 - [ ] M2P-22: M2完了記録とM3 handoffを同期する
 
-2026-07-28の同一SHA M1 runはPath Bであり、M2P-17の「Path Aを確定」という完了条件を満たさない。M2P-18〜M2P-22を実行せず、通常gate完了後のrelease再承認まで本計画を停止する。
+2026-07-28の同一SHA M1 runはPath Bであり、M2P-17の「Path Aを確定」という完了条件を満たさない。M2P-17〜M2P-22のcheckboxは未完了を表す`[ ]`のまま保持するが、これは次に実行すべきtaskを示すものではない。M2P-18〜M2P-22を含むM2外部作業は中断し、通常gate完了後に親release計画を再承認するまで実施しない。
 
 ### タブ区切り出力
 
