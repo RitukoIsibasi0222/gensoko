@@ -389,9 +389,9 @@ config loader は値を error message に含めず、URL、reserved identity、p
 - [x] T7: 対象・関連 test と最終品質 gate を通す
 - [ ] T8: T35 staging cleanup を別承認で実行する
 - [ ] T9: production cleanup 体制を承認する
-- [ ] T10: R13 の証拠で Path A/B を選択する
+- [x] T10: R13 の証拠で Path A/B を選択する
 
-2026-07-27時点では、R13/M1のread-only実行基盤を`feature/m1-production-read-only-evidence`で実装・厳格review・品質gateまで完了し、PR [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155) はmerge commit `13e005ba8bf2670612d2ba6ce6547bd389fa3acc`として`develop`へmerge済みである。production workflowは未dispatchで、M1P-15〜M1P-16、R13 read-only run URL、Path A/Bは未確定のため、T10は未完了のまま維持する。PRのmergeだけでM1/R13を完了扱いにせず、Environment準備とproduction実行は別承認とする。read-only scopeまたはattestationを確認できなければdispatchせずPath Bを記録し、実行した場合も`unknown`または`present`が1件でもあればPath Bを選ぶ。
+2026-07-28にrelease候補`7a6979761428759c744ba3bf9c1ed16527c7b33d`のR13/M1 read-only run [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)を承認付きで1回実行した。safe Artifactのexact schema、対象SHA、11 status、decision再計算をreviewし、Vercel production deployment、GitHub production deployment、production backup historyが`present`だったためPath Bを選択した。T10は完了したが、R6/M1は未完了である。T33/T36〜T38、R9 backup、T1B、旧instance drain、dry-run、承認付きexpand migration/deployを省略せず、M2 staging campaignとM3品質gateへは進まない。
 
 - [ ] T11: R14 preflight へ R6 gate を統合する
 - [ ] T12: R15 で選択 path の migration/deploy を実行する
@@ -468,6 +468,18 @@ recovery: completed / failed
 execute/fixture/smoke flags restored: yes/no
 残余リスク・公開後タスク: <非秘密の要約>
 ```
+
+### 2026-07-28 R13/M1証拠記録
+
+- 確認日: 2026-07-28
+- review済みSHA: `7a6979761428759c744ba3bf9c1ed16527c7b33d`
+- 選択path: B（通常移行）
+- R13 read-only run: [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)
+- DB・Cloudflare・履歴/copy attestation・変更凍結attestation: `clear`
+- Vercel production deployment・GitHub production deployment・production backup history: `present`
+- Artifact: schema version 1、exact allowlist、SHA・timestamp・decision再計算一致
+- 未実施: staging T35、backup/dry-run/migration/deploy、production account deletion smoke
+- 再開条件: Path Bの通常gateを順序どおり完了し、release計画を再承認する
 
 ## 停止・rollback・recovery 条件
 

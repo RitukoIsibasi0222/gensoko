@@ -158,9 +158,9 @@ APIのリクエスト、レスポンス、status、error messageは変更しな�
 - [ ] M5: 値非表示preflightでURL・Cookie・CORS・送信元・Secret/bindingを確認し、別承認でproductionへdeployする
 - [ ] M6: production smoke、synthetic cleanup、release record、公開後引継ぎを完了する
 
-2026-07-27時点で、M1のmanual-only・GET-only実行基盤は`feature/m1-production-read-only-evidence`で実装・厳格review・品質gateを完了し、PR [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155) はmerge commit `13e005ba8bf2670612d2ba6ce6547bd389fa3acc`として`develop`へmerge済みである。production Environment/Secret/Variableは変更しておらず、workflow dispatch、production DB接続、provider API requestも実施していない。M1P-15〜M1P-16の別承認実行、証拠review、Path A/B確定は未実施であり、PRのmergeだけでM1を完了扱いにしない。read-only scopeまたはattestationを確認できない場合はdispatchせず、M1を未完了のままPath Bを記録する。M2の詳細は[`docs/plans/m2-staging-release-candidate-campaign/plan.md`](../m2-staging-release-candidate-campaign/plan.md)を正本とし、M1が同じrelease候補SHAでPath Aに確定するまでstaging deploy/requestへ進まない。
+2026-07-28にrelease候補`7a6979761428759c744ba3bf9c1ed16527c7b33d`を固定し、M1の承認付きmanual-only・GET-only run [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)を1回実行した。Environment approval、対象SHA、safe Artifactのexact schema、11 status、decision再計算をreviewした結果、DB、Cloudflare、削除済み履歴・外部copy attestation、production変更凍結attestationは`clear`だったが、Vercel production deployment、GitHub production deployment、production backup historyが`present`だった。したがってM1P-15〜M1P-16は完了、判定はPath B、M1自体は未完了とする。最小release経路はここで停止し、M2 staging campaignとM3品質gateは実行せず、R6/R7/R9/R13〜R16の通常gateへ戻る。履歴やdataをPath Aへ合わせる削除は行わない。
 
-2026-07-28時点でM2P-01〜M2P-15のrepository基盤を`feature/m2-staging-release-candidate-campaign`へ実装した。M2P-17〜M2P-22のM1証拠確定、staging preflight/deploy/request、workflow dispatch、cleanup review、M3 handoffは別承認のため未実施であり、M2自体は未完了のままとする。repository PRのmerge後に最終SHAを固定し、そのsame SHAでM1 Path Aを確定してからM2をdispatchする。
+2026-07-28時点でM2P-01〜M2P-16のrepository基盤はPR [#157](https://github.com/RitukoIsibasi0222/gensoko/pull/157)のmerge commit `7a6979761428759c744ba3bf9c1ed16527c7b33d`として`develop`へmerge済みである。同じSHAのM1証拠はPath Bとなったため、M2P-17のPath A完了条件は不成立である。M2P-18〜M2P-22のstaging preflight/deploy/request、workflow dispatch、cleanup review、M3 handoffは実施せず、M2自体を未完了のまま停止する。
 
 ### 旧Rタスクとの対応
 
