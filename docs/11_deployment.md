@@ -920,7 +920,7 @@ Free planの場合はexactな高リスクpath 1本を候補にし、OPTIONS消�
 
 M1の正本は[`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-production-read-only-evidence/plan.md)とする。`.github/workflows/production-initial-state-evidence.yml`は`workflow_dispatch`専用で、production DB・Vercel・Cloudflare・GitHubの状態を変更せずに確認し、安全なstatus markerとStep Summaryだけを残す。
 
-2026-07-27時点では実行基盤を`feature/m1-production-read-only-evidence`で実装し、厳格review・品質gateとdevelop向けPR [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155) 作成まで完了している。PRは未mergeである。production DB接続、provider API request、workflow dispatch、Environment/Secret/Variable変更は実施しておらず、M1P-15〜M1P-16は未完了である。
+実行基盤はPR [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155)のmerge commit `13e005ba8bf2670612d2ba6ce6547bd389fa3acc`として`develop`へmerge済みである。2026-07-28にM2 repository実装を含むrelease候補`7a6979761428759c744ba3bf9c1ed16527c7b33d`を固定し、M1P-15〜M1P-16を実行・reviewした。結果は後述の実行記録どおりPath Bであり、M1自体は未完了である。
 
 ### 別承認で準備する項目
 
@@ -959,6 +959,22 @@ workflowはprovider履歴を先にGETで確認し、最後にSupabase接続先�
 - production state、provider scope、credential、証拠CLI、workflow SHAが変わった場合は既存証拠を失効させ、別承認で再実行する。
 - timeout、cancel、Artifact欠落、summary/marker不整合、秘密・PII・identifier露出の疑いがある場合は証拠を無効にし、直ちに再実行しない。credential rotation、Artifact/log処理、incident記録が必要なら別承認する。
 - nonzero終了後にcleanup、削除、deploy、backupを続けない。M1は観測だけで終了する。
+
+### 2026-07-28 実行記録
+
+- run: [Production Initial State Evidence #30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)
+- reviewed SHA: `7a6979761428759c744ba3bf9c1ed16527c7b33d`
+- executed at: `2026-07-28T02:01:26.311Z`
+- preflight: `production` required reviewer、`develop` branch policy、`BATCH_ENVIRONMENT=production`、必要なSecret名の存在を値非表示で確認済み
+- Environment approval: `production`承認済み
+- run conclusion: `failure`（`present`を検出したfail-closed終端であり、Artifact生成・review対象stepは成功）
+- exact evidence: review時点でArtifact未失効、2026-07-29T02:01:26Z失効、schema version 1、outer/evidence key完全一致、reviewed SHA完全一致、UTC millisecond timestamp、11 status allowlist、statusからのdecision再計算がすべて一致
+- `clear`: production DB target、全User、legacy User、User関連row、AuditLog、Cloudflare production deployment、削除済みdeployment・外部backup copy attestation、production変更凍結attestation
+- `present`: Vercel production deployment、GitHub production deployment、production backup history
+- decision: Path B。M2 staging campaignとM3品質gateへ進まず、R6/R7/R9/R13〜R16の通常gateへ戻る
+- read-only境界: productionへのwrite、deploy、migration、DB更新、fixture、cleanup、backup、smokeは実施していない
+
+この証拠は上記SHAと実行時点のproduction状態だけに有効である。release候補SHA、production state、provider scope、credential、証拠実装のいずれかが変わる場合は再利用しない。
 
 ---
 

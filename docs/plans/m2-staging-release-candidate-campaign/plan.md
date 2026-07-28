@@ -26,8 +26,8 @@ M2の成功は、required evidenceとmain cleanupがすべて`clear`で、必要
 ### M1 gate
 
 - PR [#155](https://github.com/RitukoIsibasi0222/gensoko/pull/155) は2026-07-27にmerge commit `13e005ba8bf2670612d2ba6ce6547bd389fa3acc`として`develop`へmerge済みである。
-- M1P-01〜M1P-14のrepository実装は完了しているが、M1P-15のproduction read-only workflow実行とM1P-16の証拠review・Path A/B確定は未実施である。
-- M2のrepository実装を`develop`へmergeした後、その最終release候補SHAでM1P-15〜M1P-16を実行する。M1証拠のSHAとM2のreview済みSHAが一致しない場合はM2をdispatchしない。
+- M1P-01〜M1P-16は完了している。2026-07-28にrelease候補`7a6979761428759c744ba3bf9c1ed16527c7b33d`のrun [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)をreviewし、Path Bへ確定した。
+- M1証拠のSHAとM2 release候補SHAは一致したが、Vercel production deployment、GitHub production deployment、production backup historyが`present`であり、Path A条件は成立しなかった。
 - M1がPath Aとして確定し、M1のsafe Artifact、run conclusion、review記録、変更凍結attestationがすべて有効な場合だけM2外部実行へ進む。
 - M1がPath B、`present`、`unknown`、未実施、証拠期限切れ、Artifact欠落、cancel、timeout、schema不一致のいずれかならM2を停止し、親計画の通常gateへ戻る。R6/R7/R9/R13〜R16の省略を解除し、dataや履歴をM2のために削除しない。
 
@@ -171,7 +171,7 @@ path parameterやresponseのIDはrunner memory内の次requestへだけ渡し、
 | 項目                       | 現状                                               | M2での扱い                                                                  |
 | -------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------- |
 | PR #155                    | `develop`へmerge済み                               | repository基盤のみ完了。M1完了証拠ではない                                  |
-| M1P-15〜M1P-16             | 未実施                                             | Path A確定までM2外部実行を禁止                                              |
+| M1P-15〜M1P-16             | 同じSHAで実行・review済み、Path B                  | Path A不成立のためM2外部実行を禁止                                          |
 | Password verifier DO       | repository実装、binding/migration contract完了     | 同じrelease候補SHAの通常bundleをstagingへdeployして再確認                   |
 | R7PV-17                    | 未完了                                             | normal deploy・valid login・11回目429をM2へ統合。rollback drillは移管しない |
 | R7PVRB-13〜15              | 未実施                                             | 公開後task。M2 blockerにしない                                              |
@@ -813,6 +813,8 @@ quality gateではstaging/production URLへrequestせず、Playwrightは`--list`
 - [ ] M2P-20: 別承認でsingle synthetic campaignを1回実行する
 - [ ] M2P-21: main/recovery cleanupとsafe Artifactをreviewする
 - [ ] M2P-22: M2完了記録とM3 handoffを同期する
+
+2026-07-28の同一SHA M1 runはPath Bであり、M2P-17の「Path Aを確定」という完了条件を満たさない。M2P-17〜M2P-22のcheckboxは未完了を表す`[ ]`のまま保持するが、これは次に実行すべきtaskを示すものではない。M2P-18〜M2P-22を含むM2外部作業は中断し、通常gate完了後に親release計画を再承認するまで実施しない。
 
 ### タブ区切り出力
 

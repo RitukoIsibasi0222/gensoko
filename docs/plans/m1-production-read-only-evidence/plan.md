@@ -382,8 +382,8 @@ export function toSafeProductionInitialStateMarker(
 - [x] M1P-12: runbookと関連計画を同期する
 - [x] M1P-13: 最終品質gateを通過する
 - [x] M1P-14: 実装PRを厳格reviewして`develop`向けに作成する（mergeは行わない）
-- [ ] M1P-15: 別承認後にproduction read-only workflowを実行する
-- [ ] M1P-16: 証拠を記録し、Path A/BとM1完了可否を確定する
+- [x] M1P-15: 別承認後にproduction read-only workflowを実行する
+- [x] M1P-16: 証拠を記録し、Path A/BとM1完了可否を確定する
 
 ### タブ区切り
 
@@ -561,7 +561,7 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 
 ### 計画からの変更点
 
-- ユーザーの明示条件に従い、M1P-14の当初作業はPR作成までとした。その後PR #155は`develop`へmerge済みだが、M1P-15〜M1P-16は未実施であり、mergeだけでM1を完了扱いにしない。
+- ユーザーの明示条件に従い、M1P-14の当初作業はPR作成までとした。その後PR #155は`develop`へmergeされ、M1P-15〜M1P-16を別承認で実施した。Path Bのため、実行task完了とM1未完了を分離して記録した。
 - safe marker再構成でouter/evidenceのexact key、reviewed SHA完全一致、statusからのdecision再計算を追加し、未検証inputはsummaryへ出さない形に強化した。
 - Vercel paginationのpage count不一致とpage上限を`unknown`へ倒す契約を追加した。
 - 共通Supabase validatorで顕在化した既存staging synthetic E2E testのproject ref fixtureを、小文字英数字の実契約へ同期した。
@@ -606,8 +606,33 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 - backend test: 1,218件成功、外部DB前提10件skip
 - Workers runtime test: 32件成功
 - build、Workers build/dry-run、lint、format、Prisma validate、workflow/Markdown Prettier、`git diff --check`: すべて成功
-- production DB接続、provider API request、workflow dispatch、Environment/Secret/Variable変更、backup、migration、cleanup、deploy、smoke: すべて未実施
-- M1P-15〜M1P-16、M1証拠review、Path A/B確定: 別承認のため未実施
+- repository実装中のproduction DB接続、provider API request、workflow dispatch、Environment/Secret/Variable変更、backup、migration、cleanup、deploy、smoke: すべて未実施
+- M1P-15〜M1P-16: 2026-07-28に別承認で実行・reviewし、Path Bへ確定
+
+### Production実行・証拠review
+
+- run: [Production Initial State Evidence #30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)
+- reviewed SHA: `7a6979761428759c744ba3bf9c1ed16527c7b33d`
+- executed at: `2026-07-28T02:01:26.311Z`
+- preflight: `production` required reviewer、`develop` branch policy、`BATCH_ENVIRONMENT=production`、必要なSecret名の存在を値非表示で確認済み
+- Environment approval: `production`承認済み
+- run conclusion: `failure`（Path Bをfail-closedで確定する最終stepだけが失敗し、安全なArtifact生成は成功）
+- Artifact review: review時点で未失効、2026-07-29T02:01:26Z失効、schema version 1、outer/evidence exact key、reviewed SHA完全一致、UTC millisecond timestamp、11 status allowlist、statusからのdecision再計算がすべて一致
+- `databaseTarget`: `clear`
+- `allUsers`: `clear`
+- `legacyUsers`: `clear`
+- `userRelatedRows`: `clear`
+- `auditLogs`: `clear`
+- `vercelProductionDeployments`: `present`
+- `cloudflareProductionDeployments`: `clear`
+- `githubProductionDeployments`: `present`
+- `productionBackupHistory`: `present`
+- `deletedHistoryAndExternalCopyAttestation`: `clear`
+- `productionChangeFreezeAttestation`: `clear`
+- decision: Path B
+- evidence invalidation: production state、provider scope、credential、証拠CLI/workflow SHA、release候補SHAが変わった場合は再利用しない
+- follow-up: M1は未完了。M2 staging campaignとM3品質gateへ進まず、R6/R7/R9/R13〜R16の通常gateへ復帰する
+- read-only境界: productionへのwrite、deploy、migration、DB更新、fixture、cleanup、backup、smokeは実施していない
 
 ## 完了条件
 
@@ -617,7 +642,7 @@ count、email、username、User ID、project/account/resource ID、deployment UR
 - manual-only、production Environment approval、develop/review済みSHA固定、GET-only、Prisma read-only、safe evidence、fail-closedがtestで固定されている。
 - backend品質gate、workflow/Markdown Prettier、`git diff --check`が成功している。
 - production DB query、provider API request、workflow dispatch、Environment/Secret変更を実装PRでは実行していない。
-- 実装PRのmerge前提は満たしたが、M1P-15のEnvironment準備・dispatchとM1P-16の証拠reviewは引き続き別承認とする。
+- 実装PRのmerge前提に加え、M1P-15のEnvironment準備・dispatchとM1P-16の証拠reviewを別承認で完了した。
 
 ### M1
 
