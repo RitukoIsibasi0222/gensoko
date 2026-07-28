@@ -6,8 +6,8 @@
 > [`../api-rate-limit-production/plan.md`](../api-rate-limit-production/plan.md)を参照する。
 >
 > 2026-07-26以降のv0.1は[`portfolio-release-v0-1-minimal`](../portfolio-release-v0-1-minimal/plan.md)を正本とする。
-> v0.1ではM2の通常password verifier DO・valid login・auth 429と、M5/M6のproduction binding・smokeだけを実施する。
-> 2026-07-28にauth 10回成功・11回目429・`Retry-After`・fixed-window resetを検証するM2 repository runner/workflowを実装した。staging request、WAF、長期観測、R7-05、R7全体は未実施・未完了を維持する。
+> v0.1ではM5/M6のproduction binding・通常password verifier DO・valid login・最小auth 429・smokeだけを実施する。
+> 2026-07-28にauth 10回成功・11回目429・`Retry-After`・fixed-window resetを検証するM2 repository runner/workflowを実装した。M2 staging requestは公開後へ移し、WAF、長期観測、R7-05、R7全体は未実施・未完了を維持する。
 > WAF、全境界case、24/48時間観測、baseline rollback drillは公開後へ移し、R7全体は未完了のまま継続する。
 
 ## 概要
@@ -24,7 +24,7 @@ Hono + SQLite-backed Durable Objectによるアプリレベルrate limitは実�
 | 本計画                                                                                   | staging実HTTP、WAF、Cloudflare実resource、R7対象A11Y、監視、rollback、production preflight/smoke、完了証拠 |
 | [`../../05_progress.md`](../../05_progress.md)                                           | 全体進捗の要約                                                                                             |
 | [`../../11_deployment.md`](../../11_deployment.md)                                       | 共通deployment runbookとR7計画への入口                                                                     |
-| [`../portfolio-release-v0-1-minimal/plan.md`](../portfolio-release-v0-1-minimal/plan.md) | M1〜M6のv0.1 release順序と最終release判定                                                                  |
+| [`../portfolio-release-v0-1-minimal/plan.md`](../portfolio-release-v0-1-minimal/plan.md) | M1R・M3・M5・M6と条件付きM4のv0.1 release順序と最終release判定                                             |
 | [`../portfolio-release-v0-1/plan.md`](../portfolio-release-v0-1/plan.md)                 | R1〜R18の設計・実装・承認履歴                                                                              |
 
 ## 現状再監査
@@ -1333,7 +1333,7 @@ PII・Secret確認:
   - build、Workers typecheck、ESLint、Prettier check成功
 - 判定: code-level CPU支配要因は`bcrypt.compare` cost 12。R7-05のstaging実HTTP 11回目429と安全な修正は未完了
 - 次工程: [`r7-password-verification-free-worker`](../r7-password-verification-free-worker/plan.md)に従い、bcrypt cost 12を維持したままvalid loginのpassword verificationをSQLite-backed Durable Objectへ分離するrepository実装を進める。repository test/dry-runと、R7PV-16/17のCloudflare preflight・staging証拠を分離し、後者は別承認まで行わない
-- R7状態: R7-02、R7-05、R7-10〜R7-20、R7全体は未完了を維持する。v0.1はM1〜M6で別判定する
+- R7状態: R7-02、R7-05、R7-10〜R7-20、R7全体は未完了を維持する。v0.1はM1R・M3・M5・M6と条件付きM4で別判定する
 
 PII・Secret確認:
 
@@ -1363,7 +1363,7 @@ PII・Secret確認:
 - checked-in `wrangler.jsonc`を変更せず、strict検証した一時configだけが通常stagingと同じWorker名、binding、Hyperdrive、v1/v2 migrationをbaseline entrypointへ接続する。production config/entrypointにはbaseline pathやmodeを含めない
 - pre-v2 versionへrollbackせず、別承認で同一review済みcommitのbaseline先行deploy、通常版deploy、post-v2 version間rollback drill、通常版復旧の順に実施する
 - Cloudflare resource変更、deploy、version rollback、staging/production request、workflow dispatch、fixture・flag操作、namespace cleanup、Prisma schema/migration変更は実施していない
-- R7PVRB-13〜15、R7PV-17全体、R7-05、R7全体は未完了を維持する。v0.1はM2で通常DO版・valid login・auth 429だけを確認し、M1〜M6で別判定する
+- R7PVRB-13〜15、R7PV-17全体、R7-05、R7全体は未完了を維持する。v0.1はM5/M6で通常DO版・valid login・最小auth 429だけを確認し、M1R・M3・M5・M6と条件付きM4で別判定する
 
 ## R7完了記録
 

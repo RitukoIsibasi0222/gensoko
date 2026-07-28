@@ -2,7 +2,7 @@
 
 > 設計者ロール: シニアバックエンドエンジニア / Cloudflare Workersエンジニア / セキュリティエンジニア
 >
-> 2026-07-26以降のv0.1では、M2で通常DO版のstaging deploy・valid login・auth 429・cleanupを確認する。
+> 2026-07-28以降のv0.1では、M2 staging campaignを公開後へ移し、M5/M6で通常DO版のproduction binding・valid login・最小auth 429・cleanupを確認する。
 > R7PV-17のrollback証拠は公開後へ移し、本計画全体は未完了のまま継続する。
 > 2026-07-28にR7PV-17のうち通常DO版deploy・valid login・auth 11回目429・cleanupをM2 manual-only repository基盤へ統合した。外部実行とrollback証拠は未実施のためR7PV-17は未完了を維持する。
 
@@ -28,7 +28,7 @@ workflow dispatchは別承認まで実施しない。
 - merge commit: `419231173b4d4c8ac1ce1b55ebb4bc49f46b2a3a`
 - E-07: auth request 1〜4は200、5件目だけmain stateless Workerの`exceededCpu`
 - E-08: cost 12 `bcrypt.compare` median 209ms、固定classification `BCRYPT_DOMINANT`
-- R7状態: R7-02、R7-05、R7-10〜R7-20、R7全体は未完了。v0.1はM1〜M6で別判定する
+- R7状態: R7-02、R7-05、R7-10〜R7-20、R7全体は未完了。v0.1はM1R・M3・M5・M6と条件付きM4で別判定する
 
 ## 前提条件・依存関係
 

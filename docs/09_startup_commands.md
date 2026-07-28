@@ -291,7 +291,7 @@ T19の期限境界確認はActionsの`Staging Audit Cleanup Fixtures`から`prep
 | `account-deletion-dry-run` | なし                                                     | legacy soft-deleted Userと所有rowの件数をpreviewし、削除しない   |
 | `account-deletion-execute` | backup/dry-run run ID、確認文字列、承認者、change record | 24時間以内の両runと期限内Artifact、execute flagを検証後に削除    |
 
-`backup`の自動scheduleはUTC毎日19:41（JST毎日04:41）の`41 19 * * *`である。`capacity-check`の`23 19 * * *`とmanual dispatchは維持する。ポートフォリオ版v0.1のM4は、M1で空DB・初回配備を確認したうえで、release前24時間以内の暗号化済み成功Artifact 1世代、checksum、平文非保存、日次schedule有効を確認する。2世代目以降の観測は公開後に行い、旧R9とbackup耐障害性計画全体は未完了のまま継続する。
+`backup`の自動scheduleはUTC毎日19:41（JST毎日04:41）の`41 19 * * *`である。`capacity-check`の`23 19 * * *`とmanual dispatchは維持する。ポートフォリオ版v0.1のM4は、pending Prisma migrationがある場合だけ、実行前24時間以内の暗号化済み成功Artifact 1世代、checksum、平文非保存を確認する。migrationがなくDB 5項目`clear`のままならbackup作成を公開前条件にしない。2世代目以降の観測は公開後に行い、旧R9とbackup耐障害性計画全体は未完了のまま継続する。
 
 backup ArtifactにはAES-256暗号化済みarchiveとSHA-256だけが含まれる。平文dump、`DATABASE_URL`、DB password、暗号化passphraseをActions log・Issue・PR・チャットへ貼らない。download・復号・復元手順は`docs/11_deployment.md`の「backupの手動実行と復元」に従う。
 

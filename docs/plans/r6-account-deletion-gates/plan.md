@@ -3,13 +3,13 @@
 > 設計者ロール: シニアフルスタックエンジニア / セキュリティエンジニア / リリースマネージャー
 >
 > 2026-07-26以降のv0.1は[`portfolio-release-v0-1-minimal`](../portfolio-release-v0-1-minimal/plan.md)を正本とする。
-> M1でproductionのUser・legacy・関連row 0件、旧配備・個人data入り旧backupなしを確認できる場合、
+> M1でproduction DB target、全User・legacy・関連row・AuditLogが`clear`で、M1Rでownerが一般公開・一般登録・実利用者data保存の実績なしを確認した場合、
 > T35と既存利用者向けmigration/soakは「v0.1対象外」とし、M6のproduction本人退会smokeだけを公開条件にする。
-> M1が成立しない場合は本計画の通常gateをすべて維持する。
+> DB証拠または実利用者data不存在のowner確認が不明な場合は本計画の通常gateをすべて維持する。
 
 ## 概要
 
-Release Task R6「完全削除の残る v0.1 gate を完了する」では、実装済みの本人・管理者によるアカウント物理削除を初回公開へ安全に載せ、削除後の旧 access token・refresh token・資格情報が拒否されることを確認する。同時に、staging legacy cleanup の未実行ゲートを完了し、production DB の証拠に基づいて expand migration・legacy cleanup が必要かを判断する。
+Release Task R6「完全削除の残る v0.1 gate を完了する」では、実装済みの本人・管理者によるアカウント物理削除を初回公開へ安全に載せ、削除後の旧 access token・refresh token・資格情報が拒否されることを確認する。staging legacy cleanupと既存利用者向けexpand migrationは、production DB証拠とM1Rのowner確認に基づいてv0.1対象外または必要を判断する。
 
 本計画は、既存の [`account-data-complete-deletion`](../account-data-complete-deletion/plan.md) を置き換えない。同計画を完全削除機能全体の設計・実装履歴の正本とし、本計画では v0.1 公開に必要な残作業、証拠、停止条件、R13〜R16 との受け渡しだけを扱う。`deletedAt` の contract migration は初回公開に必須とせず、非参照版の production soak、cleanup 後 backup、旧 Artifact 失効、isolated restore drill が揃うまで列と隔離 SQL を保持する。
 
@@ -32,7 +32,7 @@ Release Task R6「完全削除の残る v0.1 gate を完了する」では、実
 
 ## 目的と完了境界
 
-R6全体は次のすべてを満たした時点で完了とする。M1が成立するv0.1公開では、1・2・5を公開後へ移して未完了のまま保持できる。
+R6全体は次のすべてを満たした時点で完了とする。M1Rが成立するv0.1公開では、1・2・5を公開後へ移して未完了のまま保持できる。
 
 1. staging T35 で完全一致 synthetic legacy fixture の dry-run、execute、実行後 0 件、再実行 0 件、sentinel/Element 保持、flag `false` 復旧を確認する。
 2. production cleanup の実行者、承認者、実行時間帯、通知先を T1B に記録する。架空の担当者や連絡先は置かない。
@@ -189,10 +189,12 @@ R13 で active/suspended/legacy を含む User、対象所有 row、旧 producti
 ### Path B: 通常移行
 
 User/legacy/関連 row が 1 件以上、証拠不明、接続先不一致、旧 production 配備または旧 backup が存在する場合に選ぶ。
+schema v1のPath B判定自体は変更しないが、v0.1で実行するgateは次のように分ける。
 
-- T33 は production 相当の isolated managed DB 証拠、または `CREATE INDEX CONCURRENTLY` を含む再設計が完了するまで T36 を block する。
-- R9 backup、T1B、旧 instance drain、dry-run Artifact、承認記録を揃えて expand migration、物理削除 app deploy、legacy cleanup を順序どおり実施する。
-- cleanup 後に新規退会が物理削除されることと、旧認証拒否を R16 で確認する。
+- User/legacy/関連row/AuditLogが`present` / `unknown`、DB target不明、またはownerが実利用者data不存在を確認できない場合は、T33、R9 backup、T1B、旧instance drain、dry-run Artifact、expand migration、legacy cleanupを省略しない。
+- DB 5項目が`clear`で、ownerが一般公開・一般登録・実利用者data保存の実績なしを確認し、provider・backup履歴だけが`present`の場合は、M1RによりT33、T35、T1B、旧instance drain、legacy cleanup、既存利用者向けmigrationをv0.1対象外にする。
+- pending Prisma migrationがある場合だけ、新鮮な暗号化backupを確認して別承認で適用する。migrationがなければbackup履歴や新規backupを公開前blockerにしない。
+- app deploy後に新規退会が物理削除されることと、旧認証拒否を R16 で確認する。
 - `deletedAt` 列は v0.1 中は保持する。T40〜T44 は公開後の soak/backup/restore 条件が揃うまで未完了で維持する。
 
 ## production 本人削除 smoke 設計
@@ -391,7 +393,9 @@ config loader は値を error message に含めず、URL、reserved identity、p
 - [ ] T9: production cleanup 体制を承認する
 - [x] T10: R13 の証拠で Path A/B を選択する
 
-2026-07-28にrelease候補`7a6979761428759c744ba3bf9c1ed16527c7b33d`のR13/M1 read-only run [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)を承認付きで1回実行した。safe Artifactのexact schema、対象SHA、11 status、decision再計算をreviewし、Vercel production deployment、GitHub production deployment、production backup historyが`present`だったためPath Bを選択した。T10は完了したが、R6/M1は未完了である。T33/T36〜T38、R9 backup、T1B、旧instance drain、dry-run、承認付きexpand migration/deployを省略せず、M2 staging campaignとM3品質gateへは進まない。
+2026-07-28にrelease候補`7a6979761428759c744ba3bf9c1ed16527c7b33d`のR13/M1 read-only run [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)を承認付きで1回実行した。safe Artifactのexact schema、対象SHA、11 status、decision再計算をreviewし、Vercel production deployment、GitHub production deployment、production backup historyが`present`だったためschema v1ではPath Bを選択した。T10は完了し、M1は未完了のまま維持する。
+
+同日、owner `RitukoIsibasi0222`は一般公開・一般登録・実利用者data保存の実績なしを確認した。DB target、全User、legacy User、User関連row、AuditLogが`clear`であるため、親release計画のM1Rに従いT33、T35、T1B、旧instance drain、dry-run、legacy cleanup、既存利用者向けmigrationをv0.1対象外とする。M2 staging campaignは公開後へ移し、M3品質gateへ進む。
 
 - [ ] T11: R14 preflight へ R6 gate を統合する
 - [ ] T12: R15 で選択 path の migration/deploy を実行する
@@ -479,14 +483,16 @@ execute/fixture/smoke flags restored: yes/no
 - Vercel production deployment・GitHub production deployment・production backup history: `present`
 - Artifact: schema version 1、exact allowlist、SHA・timestamp・decision再計算一致
 - 未実施: staging T35、backup/dry-run/migration/deploy、production account deletion smoke
-- 再開条件: Path Bの通常gateを順序どおり完了し、release計画を再承認する
+- M1R判断: ownerが一般公開・一般登録・実利用者data保存の実績なしを確認済み
+- v0.1対象外: T33、T35、T1B、旧instance drain、dry-run、legacy cleanup、既存利用者向けmigration
+- 再開条件: DB 5項目またはowner確認が不明になる、または実利用者dataを引き継ぐ時は通常gateへ戻る
 
 ## 停止・rollback・recovery 条件
 
 - T35 で未知 legacy row、fixture 不整合、Element 欠落、sentinel 変化、cleanup failure があれば両 flag を `false` に戻して停止する。
-- R13 の接続先・集計・deployment/Artifact 証拠が不明なら Path A を選ばない。
-- Path B で managed DB 性能証拠または安全な migration 再設計がなければ T36/R15 を停止する。
-- production preflight で backup、dry-run、review 済み SHA、rollback 先、approval のいずれかが欠ければ変更操作を行わない。
+- R13 のDB接続先・集計が不明、またはownerが実利用者data不存在を確認できない場合はM1Rを選ばない。
+- 実利用者dataを引き継ぐPath Bでmanaged DB性能証拠または安全なmigration再設計がなければT36/R15を停止する。
+- production preflightでreview済みSHA、rollbackまたは公開停止手順、approvalのいずれかが欠ければ変更操作を行わない。backupはpending Prisma migrationがある場合だけ必須とする。
 - smoke の profile identity が一致しない場合は DELETE を送らない。
 - 本人削除後は通常 rollback で User/所有 row を復元しない。障害時は新規削除と deploy を停止し、app を互換な直前版へ戻す。
 - DB restore が必要な場合は production へ直接上書きせず、isolated project、再削除、traffic 切替前承認を既存 runbook どおり要求する。

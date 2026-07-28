@@ -8,7 +8,7 @@ Supabase Free planで運用するproduction DBの暗号化論理backupを、週�
 
 個人情報を含み得るbackupの保持上限は、アカウント完全削除計画との整合を優先して7日のまま維持する。長期保持によって削除済みデータの残存期間を延ばさず、頻度を日次化することで通常時は最大7世代を確保する。
 
-ポートフォリオ版v0.1の現在の正本は[`portfolio-release-v0-1-minimal`](../portfolio-release-v0-1-minimal/plan.md)である。M1でproductionのUser・legacy・関連row 0件と初回配備を確認できた場合、公開前は日次schedule、既存の暗号化・7日保持契約、24時間以内の成功Artifact 1世代を必須とする。2世代目以降、最大3回retry、2時間後recovery、36時間鮮度監視、通常7世代の定常確認、四半期restore drillは公開後へ分離する。M1が成立しない場合は、本計画の通常gateを維持する。
+ポートフォリオ版v0.1の現在の正本は[`portfolio-release-v0-1-minimal`](../portfolio-release-v0-1-minimal/plan.md)である。M1Rでproduction DB 5項目`clear`と実利用者data不存在を確認したv0.1では、pending Prisma migrationがある場合だけ、実行前24時間以内の暗号化済み成功Artifact 1世代とchecksumを必須とする。migrationがなければbackup作成を公開前blockerにしない。日次schedule、2世代目以降、最大3回retry、2時間後recovery、36時間鮮度監視、通常7世代の定常確認、四半期restore drillは公開後へ分離する。DB証拠またはowner確認が不明な場合は、本計画の通常gateを維持する。
 
 ## 背景と現状
 
@@ -583,16 +583,15 @@ R9-10	実変更・公開後task・rollback境界を最終照合	完了確認	Git
 
 ## 障害時の停止条件
 
-### M1成立時のv0.1公開前
+### M1R成立時にpending Prisma migrationがあるv0.1公開前
 
 - release前24時間以内の成功backupに対応する未失効の暗号化Artifact 1世代を確認できない。
 - checksum、復号、Artifact uploadのいずれかが失敗した。
-- 日次scheduleがdefault branchで有効であることを確認できない。
 - Artifactまたはlogに平文dump、PII、接続情報、passphraseが含まれる。
 
-上記のいずれかに該当する間はM5のproduction deployへ進まず、production migration、legacy cleanup、contract migration、その他の破壊的DB操作を停止する。
+上記のいずれかに該当する間はproduction migrationを行わない。pending Prisma migrationがなければ本節を対象外と記録し、backup不在だけを理由にM5のproduction deployを止めない。
 
-### M1不成立時、または初回公開後の通常gate
+### M1R不成立時、または初回公開後の通常gate
 
 - 最新成功backupが36時間を超えた。
 - 未失効の成功Artifactが2世代未満になった。
@@ -601,7 +600,7 @@ R9-10	実変更・公開後task・rollback境界を最終照合	完了確認	Git
 - restore drillが失敗した、または隔離dataの削除を確認できない。
 - productionとrestore-drillの接続先分離を検証できない。
 
-上記の通常gateのいずれかに該当する間は、production migration、legacy cleanup、contract migration、その他の破壊的DB操作を停止する。2世代要件は旧R9とbackup計画全体の耐障害性条件であり、M1成立時のv0.1公開前には適用しない。
+上記の通常gateのいずれかに該当する間は、production migration、legacy cleanup、contract migration、その他の破壊的DB操作を停止する。2世代要件は旧R9とbackup計画全体の耐障害性条件であり、M1R成立時のv0.1公開前には適用しない。
 
 ## ロールバック方針
 
@@ -609,19 +608,18 @@ R9-10	実変更・公開後task・rollback境界を最終照合	完了確認	Git
 - retryがDB負荷を増やす場合はattemptを1回へ戻し、失敗通知と手動再実行で運用する。
 - freshness checkの誤検知時もbackup自体は停止せず、時刻境界とGitHub API条件だけを修正する。
 - restore drill workflowはproduction Secretを参照しないため、問題時はworkflowを無効化してrunbookによる承認付き手動検証へ戻す。
-- 既存の24時間以内backup gateと7日保持は後退させない。
+- Prisma migration時の24時間以内backup gateと7日保持は後退させない。
 
 ## v0.1公開完了条件
 
 - [x] 初回production backupのArtifact・暗号化・復号検証が成功している（run 29322979476）。
 - [x] 日次cronの契約testがRedからGreenになり、JST毎日04:41に設定される。
 - [x] 暗号化archiveとchecksumだけを7日保持し、平文dump非保存の既存契約が回帰している。
-- [ ] M1の空DB・初回配備条件が成立している。
-- [ ] release前24時間以内の成功Artifact 1世代が未失効である。
-- [ ] 日次scheduleがdefault branchで有効である。
+- [x] M1RのDB 5項目`clear`とowner確認が成立している。
+- [ ] pending Prisma migrationがある場合だけ、実行前24時間以内の成功Artifact 1世代が未失効である。migration不要なら対象外と記録する。
 - [ ] `docs/11_deployment.md`、v0.1公開計画、`docs/05_progress.md`が実装と実環境証拠に一致している。
 
-2世代目以降、最大3回retry、recovery、36時間鮮度監視、通常7世代、restore drillは本計画全体の完了条件だが、M1が成立するv0.1公開完了条件には含めない。
+日次schedule、2世代目以降、最大3回retry、recovery、36時間鮮度監視、通常7世代、restore drillは本計画全体の完了条件だが、M1Rが成立するv0.1公開完了条件には含めない。
 
 ## 本計画全体の実装完了条件
 

@@ -126,16 +126,17 @@ G1〜G8、R14 preflight、R15 production migration/deploy、R16 smokeは未実�
 
 ## ポートフォリオ版 v0.1 最小公開手順
 
-現在の正本は[`portfolio-release-v0-1-minimal`](plans/portfolio-release-v0-1-minimal/plan.md)である。一般登録・認証・ゲーム・本人退会は維持し、次のM1〜M6だけを初回公開のblockerとする。
+現在の正本は[`portfolio-release-v0-1-minimal`](plans/portfolio-release-v0-1-minimal/plan.md)である。一般登録・認証・ゲーム・本人退会は維持し、M1R・M3・M5・M6と条件付きM4だけを初回公開のblockerとする。
 
-1. **M1**: 承認付きread-only workflowでproductionのUser・legacy・関連row 0件、旧配備・個人data入り旧backupなしを値非表示で確認する。
-2. **M2**: 同じrelease候補SHAの通常password verifier DO版をstagingへdeployし、登録〜退会、valid login、auth 429、基本keyboard/320px、cleanupを1 campaignで確認する。
-3. **M3**: backend/frontendの最終品質gateを1回実行し、production依存のCritical/Highを0件にする。Moderateは到達可能性、回避策、更新期限を記録する。
-4. **M4**: release前24時間以内の暗号化済み成功Artifact 1世代、checksum、平文非保存、日次schedule有効を確認する。
-5. **M5**: same-site URL、Cookie、CORS、productionメール送信元、production専用Secret/binding、review済みSHAを値非表示でpreflightし、別承認で必要なmigration、API、frontendの順にdeployする。
-6. **M6**: synthetic User 1件で登録・メール受信〜退会、game、refresh、securityを確認し、同じchange内でcleanup・flag復旧・release記録を完了する。
+1. **M1R**: M1 schema v1のPath Bを維持したまま、DB target、全User、legacy User、User関連row、AuditLogの`clear`と、ownerによる一般公開・一般登録・実利用者data保存実績なしの確認を記録する。
+2. **M3**: backend/frontendの最終品質gateをrelease候補SHAで1回実行し、production依存のCritical/Highを0件にする。Moderateは到達可能性、回避策、更新期限を記録する。
+3. **M4（条件付き）**: pending Prisma migrationがある場合だけ、24時間以内の暗号化済み成功Artifact 1世代とchecksumを確認し、別承認でmigrationする。migration不要なら対象外と記録する。
+4. **M5**: same-site URL、Cookie、CORS、productionメール送信元、production専用Secret/binding、DB target、pending migration、review済みSHAを値非表示でpreflightし、別承認でAPI、frontendの順にdeployする。
+5. **M6**: synthetic User 1件で登録・メール受信〜退会、game、refresh、通常password verifier DO、最小429、securityを確認し、同じchange内でUser所有row cleanup・flag復旧・release記録を完了する。AuditLogは365日保持方針に従う。
 
-M1が0件・初回配備を証明できない場合はこの最小手順を使わず、R6/R7/R9/R13〜R16の通常gateへ戻る。WAF、24/48時間soak、rollback baseline drill、backup 2世代目以降、restore drill、T35 legacy cleanup実演はM1が成立する場合だけ公開後へ移す。
+M1のDB 5項目またはownerの実利用者data不存在確認が不明な場合はこの最小手順を使わず、R6/R7/R9/R13〜R16の通常gateへ戻る。M2 same-SHA staging campaign、WAF、24/48時間soak、rollback baseline drill、backup 2世代目以降、restore drill、T35 legacy cleanup実演は公開後へ移す。schema v1 Artifactの再分類、schema v2 / Path C engine、古いbackup復号、過去履歴の完全分類は行わない。
+
+pending Prisma migrationがない通常経路の追加workflow dispatchは、既存`Production Account Deletion Smoke`の`main` 1回だけとする。登録、メール認証、login、reloadによるrefresh、game、最小429は同じsynthetic Userで手動確認し、`Production Auth Smoke`を重複実行しない。承認はM5のAPI・frontend deployをまとめたrelease承認と、M6本人退会workflowのproduction Environment承認の2回とする。migrationが必要なら`migrate-deploy`を1回追加し、有効な24時間以内のbackup Artifactもなければbackup作成を1回追加する。失敗時の`recovery-only`は必要時だけ別承認で実行する。
 
 初回productionでv2より前の互換versionがない間は、障害時にCloudflareのproduction公開routeを停止してAPI trafficを遮断し、pre-v2 rollbackを行わずfix-forwardする。未実装のapplication flagやmaintenance UIを前提にしない。v2適用後の互換versionが複数揃った後は通常のversion rollbackを利用できる。
 
@@ -326,9 +327,9 @@ R7 Free Worker password verification分離では、main Workerのloginからcost
 
 v2適用後のrollback先にはpre-v2 versionを使わない。rollback互換baselineは`worker-staging-rollback-baseline.ts`だけが既存cost 12 local adapterを明示DIし、通常stagingと同じWorker名、binding、Hyperdrive、v1/v2 migration、2 class exportを持つ。`wrangler.jsonc`は通常entrypointのまま変更せず、`npm run workers:rollback-baseline:dry-run`がstrict検証済みの一時configを権限`0600`で生成し、成功・失敗とも削除する。通常staging、production、baselineは別bundle profileで検証し、production config/entrypointへbaseline pathやmodeを含めない。
 
-repository実装ではlocal test、workerd、型生成、通常/baseline/production dry-runだけを行った。M2では別承認後に通常版だけをstagingへdeployし、v2 migration、binding、valid login、auth 429、cleanupを確認する。R7PVRB-13〜15のbaseline deploy・rollback drillは実施せず、公開後の運用訓練として未完了のまま保持する。
+repository実装ではlocal test、workerd、型生成、通常/baseline/production dry-runだけを行った。M2のstaging外部実行は公開後へ移し、v0.1公開前はM5でv2 migrationとbindingを値非表示でpreflightし、M6 production smokeでvalid login、auth 429、cleanupを確認する。R7PVRB-13〜15のbaseline deploy・rollback drillは実施せず、公開後の運用訓練として未完了のまま保持する。
 
-password verifierのbinding/RPC/result障害はmain Workerでlocal bcryptへfallbackせず、固定日本語503と`Retry-After: 60`でfail-closedにする。M2/M5はcleanな同一review済みcommitの通常版をdeployする。v2 migration後に障害が起き、互換versionへrollbackできない場合はrequestを増やさず公開停止・fix-forwardとする。新namespaceと適用済みv2 migrationは直後に削除せず、cleanupは公開後の別承認へ分離する。
+password verifierのbinding/RPC/result障害はmain Workerでlocal bcryptへfallbackせず、固定日本語503と`Retry-After: 60`でfail-closedにする。M5はcleanなreview済みcommitの通常版をdeployし、M6で実HTTPを確認する。v2 migration後に障害が起き、互換versionへrollbackできない場合はrequestを増やさず公開停止・fix-forwardとする。新namespaceと適用済みv2 migrationは直後に削除せず、cleanupは公開後の別承認へ分離する。
 
 Cloudflare account、staging Hyperdrive origin、Worker `gensoko-api-staging`、SQLite-backed DO、7件のWorker secret、公開Workers URLは作成・配備済みである。health 200、CORS、OPTIONS 204、Hyperdrive経由の元素118件を確認済みで、production resourceは作成していない。secret値は読み戻し・文書化しない。
 
@@ -372,7 +373,7 @@ productionはSupabase Free planで運用する。[Supabase pricing](https://supa
 | `backup`         | UTC毎日19:41（JST毎日04:41） | roles・schema・dataをdumpし、AES-256で暗号化・復号検証してArtifactへ7日保存              |
 | `migrate-deploy` | 手動のみ                     | 24時間以内に成功したbackup run IDと期限内Artifactを確認後、`prisma migrate deploy`を実行 |
 
-上表の日次cronはcode・contract testまで完了した。capacity-check、暗号化・復号検証・7日保持・手動実行・24時間以内backup gateは維持している。M1の空DB・初回配備条件が成立するv0.1では、release前24時間以内の成功Artifact 1世代と日次schedule有効をM4で確認する。2世代目以降は公開後に観測し、旧R9とbackup計画全体は未完了のまま継続する。
+上表の日次cronはcode・contract testまで完了した。capacity-check、暗号化・復号検証・7日保持・手動実行・Prisma migration時の24時間以内backup gateは維持している。M1Rが成立するv0.1では、pending Prisma migrationがある場合だけ実行前24時間以内の成功Artifact 1世代とchecksumをM4で確認する。migration不要時はbackupを公開前blockerにせず、日次scheduleと2世代目以降は公開後に確認する。旧R9とbackup計画全体は未完了のまま継続する。
 
 最大3回retry、2時間後recovery、36時間鮮度監視、通常7世代の定常確認、四半期restore drillは初回公開後の強化とする。これらを日次化の完了条件へ混在させず、未実装項目は同計画で継続管理する。
 
@@ -856,7 +857,7 @@ T19では次の順序を変更しない。
 
 > 2026-07-23時点: Honoのpolicy・HMAC key・middleware・route配線、SQLite-backed Durable Object、Workers runtime test、staging namespace/bindingは実装・配備済みである。production entrypoint/config/dry-run契約もrepositoryに存在する。一方、rate limit専用のstaging実HTTP 429/503、WAF、DO cleanup/利用量、production実resource、監視、rollbackは未完了であり、本番適用済みとは扱わない。
 >
-> 本節はR7全体を完了するための公開後強化runbookである。ポートフォリオ版v0.1ではM2のauth 429とM5/M6のproduction binding・smokeだけをblockerとし、WAF、全境界case、24/48時間観測は延期する。
+> 本節はR7全体を完了するための公開後強化runbookである。ポートフォリオ版v0.1ではM5/M6のproduction binding、valid login、最小429、smokeだけをblockerとし、M2 staging campaign、WAF、全境界case、24/48時間観測は延期する。
 
 R7の実行順序、decision gate、テストケース、証拠、停止条件、監視期間、rollback、production依存は
 [`docs/plans/r7-rate-limit-environment-gates/plan.md`](plans/r7-rate-limit-environment-gates/plan.md)を正本とする。本節はdeployment全体からR7 runbookへ入るための要約だけを保持する。
@@ -954,7 +955,7 @@ workflowはprovider履歴を先にGETで確認し、最後にSupabase接続先�
 ### 判定・失効・停止
 
 - 全11 checkが`clear`の場合だけsafe markerは`path-a`候補となる。workflow成功だけではM1を完了にしない。
-- 1件でも`present`または`unknown`なら`path-b`で失敗させ、R6/R7/R9/R13〜R16の通常gateへ戻る。履歴やdataを削除してPath Aへ合わせない。
+- 1件でも`present`または`unknown`なら`path-b`で失敗させる。schema v1のPath Bは変更せず、親release計画でM1Rが成立しない場合はR6/R7/R9/R13〜R16の通常gateへ戻る。履歴やdataを削除してPath Aへ合わせない。
 - run URL、review済みSHA、実行日時、Environment approval、各status、attestationを値非表示で関連計画へ記録した後にM1P-16を完了する。
 - production state、provider scope、credential、証拠CLI、workflow SHAが変わった場合は既存証拠を失効させ、別承認で再実行する。
 - timeout、cancel、Artifact欠落、summary/marker不整合、秘密・PII・identifier露出の疑いがある場合は証拠を無効にし、直ちに再実行しない。credential rotation、Artifact/log処理、incident記録が必要なら別承認する。
@@ -971,16 +972,26 @@ workflowはprovider履歴を先にGETで確認し、最後にSupabase接続先�
 - exact evidence: review時点でArtifact未失効、2026-07-29T02:01:26Z失効、schema version 1、outer/evidence key完全一致、reviewed SHA完全一致、UTC millisecond timestamp、11 status allowlist、statusからのdecision再計算がすべて一致
 - `clear`: production DB target、全User、legacy User、User関連row、AuditLog、Cloudflare production deployment、削除済みdeployment・外部backup copy attestation、production変更凍結attestation
 - `present`: Vercel production deployment、GitHub production deployment、production backup history
-- decision: Path B。M2 staging campaignとM3品質gateへ進まず、R6/R7/R9/R13〜R16の通常gateへ戻る
+- decision: schema v1はPath B。M1自体は未完了のまま維持する
 - read-only境界: productionへのwrite、deploy、migration、DB更新、fixture、cleanup、backup、smokeは実施していない
 
-この証拠は上記SHAと実行時点のproduction状態だけに有効である。release候補SHA、production state、provider scope、credential、証拠実装のいずれかが変わる場合は再利用しない。
+### 2026-07-28 M1R owner判断
+
+owner `RitukoIsibasi0222`は、productionを一般利用者向けに運用しておらず、一般利用者の登録および実利用者dataの保存実績がなく、3件の`present`は開発・運用準備による履歴であることを確認した。
+
+DB target、全User、legacy User、User関連row、AuditLogが`clear`で`unknown`がないため、親release計画のM1Rとしてv0.1限定経路を再開する。M1 ArtifactをPath Aへ読み替えず、schema v2 / Path C engine、古いbackup復号、過去履歴の完全分類は行わない。DB 5項目またはowner確認が不明になった場合はM1Rを失効し、通常gateへ戻る。
+
+M1 evidence SHA `7a6979761428759c744ba3bf9c1ed16527c7b33d`後のcommitが`docs/**`だけを変更した場合は、M3/M5/M6のreview済み実行SHAとの差分をpreflightで確認し、文書同期だけを理由にM1を再実行しない。backend、frontend、`.github/workflows`、schema/migration、lockfile、deployment configまたはproduction stateに差分があれば、この例外を使わず証拠失効条件へ戻る。
+
+この証拠は上記application SHAと実行時点のproduction状態だけに有効である。前段の`docs/**`限定例外を除き、runtime/configを含むrelease候補差分、production state、provider scope、credential、証拠実装のいずれかが変わる場合は再利用しない。
 
 ---
 
 ## M2 release候補staging単一campaign runbook
 
 M2の正本は[`docs/plans/m2-staging-release-candidate-campaign/plan.md`](plans/m2-staging-release-candidate-campaign/plan.md)とする。`.github/workflows/staging-release-candidate-campaign.yml`は`workflow_dispatch`専用で、同じreview済みSHAに対するM1 Path Aのexact safe Artifactをgateにし、通常API Worker、frontend candidate、単一synthetic campaign、main/recovery cleanup、exact allowlist証拠を順序実行する。
+
+M1 schema v1がPath BであるためM2外部実行条件は成立していない。M1RはM2 Artifact条件を変更せず、M2P-17〜M2P-22を未完了のまま公開後へ移す。v0.1公開前はM6 production smokeで通常DO、valid login、最小429、主要導線を確認する。
 
 2026-07-28時点ではrepository実装、TDD、厳格review、local品質gateまでを対象とし、M1P-15〜16、GitHub Environment/Secret/Variable変更、workflow dispatch、provider API request、staging deploy、DB接続・migration適用・fixture操作、staging HTTP/Playwright requestは実施していない。repository PRのmergeだけでM2を完了扱いにしない。
 
@@ -1009,15 +1020,14 @@ Artifactは`m2-staging-release-candidate-evidence`という固定名のexact JSO
 ## 本番デプロイのチェックリスト
 
 ポートフォリオ版v0.1の公開範囲とrelease blockerは
-[`docs/plans/portfolio-release-v0-1-minimal/plan.md`](plans/portfolio-release-v0-1-minimal/plan.md)を正本とする。以下はM1〜M6の進捗確認用であり、個別計画の全項目を公開前に完了させる一覧ではない。
+[`docs/plans/portfolio-release-v0-1-minimal/plan.md`](plans/portfolio-release-v0-1-minimal/plan.md)を正本とする。以下はM1R・M3・M5・M6と条件付きM4の進捗確認用であり、個別計画の全項目を公開前に完了させる一覧ではない。
 
 ```
-[ ] M1: productionが空の初回公開であることをread-only・値非表示で証明
-[ ] M2: 同一候補SHAでstagingの登録〜退会、auth 429、基本UI、cleanupを1 campaignで確認
+[x] M1R: M1 Path Bを維持し、DB 5項目clearとownerの実利用者data不存在確認を記録
 [ ] M3: 最終品質gateと依存監査を実行し、候補SHAを確定
-[ ] M4: 24時間以内の暗号化backup 1世代、checksum、平文非保存、日次schedule有効を確認
+[ ] M4: pending Prisma migrationがある場合だけ新鮮な暗号化backup確認後にmigration。不要なら対象外を記録
 [ ] M5: URL/Cookie/CORS/メール/Secret/bindingを値非表示でpreflightし、承認後にdeploy
-[ ] M6: production synthetic userでメール受信を含む主要導線を確認し、退会・cleanup・記録を完了
+[ ] M6: production synthetic userで主要導線、通常DO、最小429、securityを確認し、退会・cleanup・記録を完了
 ```
 
-WAF、24/48時間soak、全rate-limit境界、rollback baseline drill、backup 2世代目以降、restore drill、高度なA11Yは公開後の強化項目とする。ただしM1で空の初回公開を証明できない場合は延期せず、通常のR計画へ戻る。
+M2 same-SHA staging campaign、WAF、24/48時間soak、全rate-limit境界、rollback baseline drill、backup 2世代目以降、restore drill、高度なA11Yは公開後の強化項目とする。ただしDB 5項目またはownerの実利用者data不存在確認が不明な場合は延期せず、通常のR計画へ戻る。
