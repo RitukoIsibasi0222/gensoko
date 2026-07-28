@@ -6,6 +6,7 @@
 > M1でproduction DB target、全User・legacy・関連row・AuditLogが`clear`で、M1Rでownerが一般公開・一般登録・実利用者data保存の実績なしを確認した場合、
 > T35と既存利用者向けmigration/soakは「v0.1対象外」とし、M6のproduction本人退会smokeだけを公開条件にする。
 > DB証拠または実利用者data不存在のowner確認が不明な場合は本計画の通常gateをすべて維持する。
+> 2026-07-28のM3 dependency/lockfile更新後は旧M1 evidenceのdocs-only例外を使えないため、新しいrelease候補でM1Rを再確認するまでこの対象外判断をM5へ引き継がない。
 
 ## 概要
 
@@ -396,6 +397,8 @@ config loader は値を error message に含めず、URL、reserved identity、p
 2026-07-28にrelease候補`7a6979761428759c744ba3bf9c1ed16527c7b33d`のR13/M1 read-only run [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)を承認付きで1回実行した。safe Artifactのexact schema、対象SHA、11 status、decision再計算をreviewし、Vercel production deployment、GitHub production deployment、production backup historyが`present`だったためschema v1ではPath Bを選択した。T10は完了し、M1は未完了のまま維持する。
 
 同日、owner `RitukoIsibasi0222`は一般公開・一般登録・実利用者data保存の実績なしを確認した。DB target、全User、legacy User、User関連row、AuditLogが`clear`であるため、親release計画のM1Rに従いT33、T35、T1B、旧instance drain、dry-run、legacy cleanup、既存利用者向けmigrationをv0.1対象外とする。M2 staging campaignは公開後へ移し、M3品質gateへ進む。
+
+M3はreview済み実行SHA `c127b72bae8bc00956bf7a978b5a64242d466a4b`で完了した。ただし依存更新により`backend/package.json`とlockfileが旧M1 evidence SHAから変わったため、現在のrelease候補ではM1Rを再確認するまでT11以降とM5へ進まない。旧Path Bとowner判断は履歴として保持し、schema v2 / Path C engineや既存data削除で判定を変えない。
 
 - [ ] T11: R14 preflight へ R6 gate を統合する
 - [ ] T12: R15 で選択 path の migration/deploy を実行する
