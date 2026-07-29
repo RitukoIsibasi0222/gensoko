@@ -267,8 +267,8 @@
 
 ### 最小リリース工程（M1R・M3・M5・M6、条件付きM4）
 
-- [-] M1: production初回状態のschema v1証拠を取得・review済み — 計画書: [`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-production-read-only-evidence/plan.md) — 旧候補`7a6979761428759c744ba3bf9c1ed16527c7b33d`のrun [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)は履歴として維持する。最新候補`c3ca68c5173c1fb586162418e839baec8cc49bf3`のrun [30335685074](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30335685074)でもDB target、全User、legacy User、User関連row、AuditLogなど8件`clear`、履歴3件`present`、`unknown` 0件をreviewした。schema v1のPath BとM1未完了を維持する
-- [x] M1R: 最新M1 runのDB 5項目`clear`・`unknown` 0件を確認し、owner `RitukoIsibasi0222`が現在も一般公開・一般登録・実利用者data保存実績なしと再確認した。Artifactを再分類せず、schema v2 / Path C engineも作らない。M4/M5以降は別作業とする
+- [-] M1: production初回状態のschema v1証拠を取得・review済み — 計画書: [`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-production-read-only-evidence/plan.md) — 旧run [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)と中間run [30335685074](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30335685074)は履歴として維持する。M4後の最新候補`64ff4d2eccb5c6cd008d472f1940feaa5a2de4c3`のrun [30416382440](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30416382440)でDB 5項目・Cloudflare・両attestationは`clear`、GitHub deployment・backup履歴は`present`、Vercel deploymentは`unknown`だった。schema v1のPath BとM1未完了を維持する
+- [x] M1R: M4後の最新M1 runでDB 5項目`clear`を確認し、owner `RitukoIsibasi0222`が現在も一般公開・一般登録・実利用者data保存実績なしと再確認した。Vercel履歴の`unknown`を推測・再分類せずPath Bへ保持し、schema v2 / Path C engineや追加診断をv0.1条件にしない。M5は別承認まで開始しない
 - [-] M2: repository実装完了、外部実行は未完了のまま公開後へ移管。同じrelease候補SHAのstaging campaignは実行せず、M2P-17〜M2P-22を完了扱いにしない。通常password verifier DO、valid login、最小429、主要導線はM6 production smokeで確認する
 - [x] M3: review済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`でCI同等のNode 22.23.1 / npm 10.9.8による`npm ci`、backend通常1268件・Workers 32件、frontend 680件、build・lint・format・Prisma validate・Svelte checkを完了。production依存はbackend/frontendともCritical 0・High 0・Moderate 0・Low 0。backend全依存のdev-only Low 1件は`tsx`経由の`esbuild@0.27.7`でproduction到達不可、Windows開発server非公開を回避策とし、2026-08-31または上流修正版公開時の早い方で再確認する
 - [x] M4: backup run [30301334445](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30301334445)を確認し、対象SHA `7dbe5649a4057baa3b123aaadb6531422f96fd2f`のmigration run [30342343404](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30342343404)で`prisma migrate deploy`に成功した。検証run [30406227957](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30406227957)で対象run・SHAとv0.1対象5 indexの`indisvalid`・`indisready`を値非表示確認し、M4を完了した
@@ -297,7 +297,7 @@
 - [x] R11A: backend production依存を安全に更新し、Critical/High/Moderate/Low 0件を確認する
 - [x] R11: review済みSHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`でrelease候補の品質gateとnpm auditを実行する
 - [ ] R12: staging主要導線を最終確認する
-- [x] R13: 最新release候補のM1 run [30335685074](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30335685074)でschema v1のPath B、DB 5項目`clear`、`unknown` 0件を再reviewし、M1Rのowner再確認によりv0.1の既存利用者向け移行を対象外と判断する
+- [x] R13: M4後の最新release候補のM1 run [30416382440](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30416382440)でschema v1のPath BとDB 5項目`clear`を再reviewし、Vercel履歴の`unknown`を保持したまま、M1Rのowner再確認によりv0.1の既存利用者向け移行を対象外と判断する
 - [ ] R14: rollout/rollback preflightを完了する
 - [ ] R15: production deployを別承認で実施する
 - [ ] R16: production smokeを実施する
