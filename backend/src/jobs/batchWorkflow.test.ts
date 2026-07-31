@@ -146,6 +146,12 @@ describe("batch GitHub Actions workflow", () => {
     }
   });
 
+  it("states that batch configuration belongs to Environments rather than repository-level Actions settings", () => {
+    expect(deploymentGuide).toContain(
+      "repository-level（Settings > Secrets and variables > Actions）へ登録せず、表に示す各Environmentへ登録する。",
+    );
+  });
+
   it("separates scheduled concurrency while preserving the manual database operation group", () => {
     expect(workflow).toContain(
       "group: ${{ github.event_name == 'schedule' && 'gensoko-scheduled-batch' || 'gensoko-batch-jobs' }}",
