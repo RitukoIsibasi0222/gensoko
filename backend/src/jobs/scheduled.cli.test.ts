@@ -113,7 +113,7 @@ describe("scheduled.cli", () => {
     });
   });
 
-  it("sets a non-zero exit code and disconnects when the cron is unsupported", async () => {
+  it("sets a non-zero exit code without duplicating the runner log when the cron is unsupported", async () => {
     const cron = "5 * * * *";
     process.env.BATCH_CRON = cron;
     vi.mocked(runScheduledBatch).mockRejectedValue(new Error("未対応の定期バッチCronです"));
@@ -129,9 +129,6 @@ describe("scheduled.cli", () => {
       expect(prisma.$disconnect).toHaveBeenCalledTimes(1);
     });
     expect(process.exitCode).toBe(1);
-    expect(consoleErrorSpy).toHaveBeenCalledWith({
-      event: "batch.cron.cli.failed",
-      message: "未対応の定期バッチCronです",
-    });
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 });
