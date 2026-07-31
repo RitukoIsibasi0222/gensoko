@@ -719,7 +719,7 @@ GitHub の Settings > Environments でmanual用`staging` / `production`とschedu
 | production-batch | Variable | `AUDIT_LOG_CLEANUP_ENABLED`          | release gate完了までは`false`                                                       |
 | production-batch | Variable | `REFRESH_TOKEN_CLEANUP_ENABLED`      | 自動化が別途承認されるまでは`false`                                                 |
 
-repository Variable `PRODUCTION_SCHEDULED_BATCH_ENABLED`はscheduled job全体のkill switchである。初期値は未設定または`false`とし、後述するsource integrity gate、`production-batch`、release gateが完了した後だけ文字列`true`へ変更する。
+repository Variable `PRODUCTION_SCHEDULED_BATCH_ENABLED`はscheduled job全体のkill switchである。初期値は未設定または`false`とし、`production-batch`の設定を値非表示で確認し、ownerが有効化を別途明示承認した後だけ文字列`true`へ変更する。
 
 workflow jobは、手動実行では選択した`staging` / `production`、scheduleでは`production-batch`を参照する。`production-batch`はworkflow_dispatchの選択肢へ追加しない。`BATCH_ENVIRONMENT`が期待値と一致しない場合、または`DATABASE_URL`が未登録の場合は、DB処理や依存関係installの前に失敗する。
 
@@ -750,30 +750,41 @@ GitHub Actions の Batch Jobs workflow は workflow_dispatch に対応してい�
 
 Actionsのscheduleは遅延・スキップされる可能性があるため、毎時00分付近を避けて7分・17分・37分に分散している。scheduled runは`gensoko-scheduled-batch`、workflow_dispatchは既存の`gensoko-batch-jobs` concurrency groupを使う。両方とも`cancel-in-progress: false`を維持するが、同じgroupではrunning最大1件・pending最大1件で、新しいrunが既存pendingを置き換える。失敗時は安全ログを確認し、原因解消後にworkflow_dispatchで対象jobを1回だけ再実行する。
 
-### scheduled production source integrity gate
+### 2026-07-31 運用再開時点
 
-`production-batch`はruntime承認を持たないため、kill switchを有効化する前にsource変更側へ次の保護を設定する。
+- PR #166は`develop`へmerge済みで、merge commitは`ffb66269be48897da3904308a690a9cc9913ff94`である。
+- 旧run #804（ID `30419479066`）と#868（ID `30613767092`）は、jobの`steps`が空でDB処理未開始であることを確認してcancel済みである。再確認時のwaiting / queued / in-progress / pendingは0件である。
+- `production-batch` Environmentは未作成、repository Variableは0件で、`PRODUCTION_SCHEDULED_BATCH_ENABLED`は未設定である。
+- `staging`と`production`には`REFRESH_TOKEN_CLEANUP_ENABLED`が未登録である。manual refresh token cleanupを使う前に、それぞれ`false`を明示登録する。
+- `production`のrequired reviewerと`develop`限定branch policy、`staging`の`develop`限定branch policyは維持されている。
+- 外部設定、Secret変更、kill switch有効化、workflow実行、production DB queryはこの文書同期では行っていない。
+
+### scheduled productionの軽量source contract
+
+`production-batch`はruntime承認を持たないため、次の低コストなsource contractを維持する。
 
 1. `.github/workflows/repository-integrity.yml`が`develop`向け全PRでpath filterなしに起動することを確認する。
-2. check名`Repository Integrity / repository-integrity`がdocs-only PRでも作成され、成功することを確認する。
-3. `develop`のrulesetへ、PR必須、非作成者1名以上の承認、古い承認の無効化、最新pushの承認、上記check必須、通常運用者のbypassなしを設定する。
-4. 既存`Backend PR Quality` / `Frontend PR Quality`はpath filter付きのため、全PR共通のrequired checkへ直接指定しない。
-5. `production` Environmentのrequired reviewerと`develop`限定branch policyを維持する。
+2. check名`Repository Integrity / repository-integrity`を固定し、Secret・Environmentを参照せずbatchの安全境界contractだけを検証する。
+3. 既存`Backend PR Quality` / `Frontend PR Quality`はpath filter付きのため、全PR共通のrequired checkへ直接指定しない。
+4. `production` Environmentのrequired reviewerと`develop`限定branch policyを維持する。
+5. `production-batch`は`develop`だけを許可し、workflow_dispatchの選択肢へ追加しない。
 
-非作成者レビューまたはrequired checkを適用できない場合、`production-batch`を有効化せず、`PRODUCTION_SCHEDULED_BATCH_ENABLED=false`のまま既存`production`のmanual承認運用を継続する。
+Gensokoはcollaboratorがowner 1名の個人ポートフォリオである。非作成者レビュー、厳格なruleset、`Repository Integrity`のrequired check化、docs-only検証PRは運用完了条件にしない。将来複数人運営へ移行する場合は、その時点の権限・費用・運用負担に応じて追加保護を別途検討する。
 
 ### scheduled production初回有効化
 
 repository実装を`develop`へmergeしただけでは定期実行を有効化しない。外部設定はrepository変更と分離し、ownerの明示承認後に次の順序で行う。
 
-1. review済みSHA、`Repository Integrity`必須化、`production` reviewer維持を確認する。
+1. review済みSHA、軽量`Repository Integrity`、`production` reviewer維持を確認する。
 2. `production-batch`をrequired reviewerなし・`develop`限定で作成する。
 3. `DATABASE_URL` Secretと必要なVariable名を値非表示で確認・登録する。Secret値はCLI、log、Artifact、summary、Issue、PR、文書へ出さない。
 4. `PRODUCTION_SCHEDULED_BATCH_ENABLED`を未設定または`false`のまま、次のscheduleがEnvironmentへ入らずskipすることを確認する。
-5. 旧waiting / pending runごとにjobのstepsが0件であることを確認し、run IDと状態をownerへ提示する。承認されたrunだけをcancelする。
-6. release gate完了後、別承認を得てkill switchを`true`へ変更する。
-7. 最初の日次GameQuestionSet cleanup、日次audit cleanup、週次resetについて、run URL、対象SHA、job、件数、所要時間、終了codeを記録する。
-8. Secret、PII、内部ID、raw DB errorがlogにないことを確認し、最初の成功runから最低14日間baselineを収集する。
+5. 外部設定が意図どおりであることを確認してもkill switchは`false`のまま停止し、有効化の別承認を得る。
+6. 別承認後にkill switchを`true`へ変更する。
+7. 最初に自然発生する日次GameQuestionSet cleanup、日次audit cleanup、週次resetについて、対象SHA、job名、status / conclusion、DB処理前validation、cleanup結果またはskip・失敗理由を簡潔に記録する。
+8. Secret、PII、内部ID、raw DB errorがlogにないことを確認する。問題があればkill switchを`false`へ戻す。
+
+14日間のbaseline、オンコール、SLA、外部監視、複雑な通知は個人ポートフォリオの運用完了条件にしない。公開後にDB容量、所要時間、失敗の問題が見つかった場合だけ、必要な期間の追加観測を行う。
 
 ### scheduled production停止・rollback
 

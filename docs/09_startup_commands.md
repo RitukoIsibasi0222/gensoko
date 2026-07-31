@@ -275,7 +275,7 @@ GitHub Actions schedule と同じ入口を Docker 内で確認する場合は、
       -e AUDIT_LOG_CLEANUP_ENABLED=false \
       hono npm run batch:scheduled
 
-GitHub Actionsではworkflow_dispatchで最初に`target_environment`を選び、次に`weekly-reset`、`game-question-set-cleanup`、`audit-log-cleanup-dry-run`、`audit-log-cleanup-execute`を選択する。手動実行の既定は`staging`で、`staging` / `production`だけを選択できる。scheduleはmanual選択肢に含めない`production-batch` Environmentを参照し、repository Variable `PRODUCTION_SCHEDULED_BATCH_ENABLED`が文字列`true`の場合だけ起動する。source integrity gateと`production-batch`設定が完了するまでは未設定または`false`を維持する。
+GitHub Actionsではworkflow_dispatchで最初に`target_environment`を選び、次に`weekly-reset`、`game-question-set-cleanup`、`audit-log-cleanup-dry-run`、`audit-log-cleanup-execute`を選択する。手動実行の既定は`staging`で、`staging` / `production`だけを選択できる。scheduleはmanual選択肢に含めない`production-batch` Environmentを参照し、repository Variable `PRODUCTION_SCHEDULED_BATCH_ENABLED`が文字列`true`の場合だけ起動する。`production-batch`のEnvironment・Secret名・Variable名・develop限定policyを値非表示で確認し、ownerが有効化を別途明示承認するまでは未設定または`false`を維持する。
 
 ローカルの`batch:scheduled`はGitHub repository Variableを評価しない。staging / productionの`DATABASE_URL`をローカルshellへ渡さず、実環境の手動retryは承認境界を維持した`Batch Jobs`のworkflow_dispatchから行う。監査ログの本実行は、選択したEnvironmentの`AUDIT_LOG_CLEANUP_ENABLED=true`が設定された場合だけ削除する。T19の確認では必ず`staging`を選び、`production`はrelease gate完了前に選択しない。
 
