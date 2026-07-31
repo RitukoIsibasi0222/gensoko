@@ -247,7 +247,7 @@
 ## フェーズ12: デプロイ
 
 - [x] Supabase staging・production project作成、東京region・Session pooler接続設定
-- [-] 定期バッチ運用再設計（GameQuestionSet cleanup日次化・scheduled専用production境界・kill switch・滞留run解消） — PR #166 merge済み。BO1〜BO12・BO14完了（旧run #804/#868はstep 0件確認後にcancel、active run 0件）。非作成者レビュー・required check・14日baselineは個人ポートフォリオの完了条件から除外した。`production-batch`最小設定、kill switchの別承認による有効化、初回scheduled run確認は未実施 — 計画書: [`batch-operations-redesign`](plans/batch-operations-redesign/plan.md)
+- [-] 定期バッチ運用再設計（GameQuestionSet cleanup日次化・scheduled専用production境界・kill switch・滞留run解消） — PR #166 merge済み。BO1〜BO14完了（旧run #804/#868はstep 0件確認後にcancel、active run 0件）。非作成者レビュー・required check・14日baselineは個人ポートフォリオの完了条件から除外した。`production-batch`最小設定は完了し、kill switchは無効を維持している。別承認による有効化と初回scheduled run確認は未実施 — 計画書: [`batch-operations-redesign`](plans/batch-operations-redesign/plan.md)
 - [x] 本番DBバックアップ・Prismaマイグレーション運用（Free plan容量確認・暗号化backup・migration gateをproductionで確認済み） — 計画書: [`docs/plans/audit-log-production-operations/plan.md`](plans/audit-log-production-operations/plan.md)
 - [-] 本番DBバックアップ耐障害性強化 — M1Rが成立するv0.1はpending Prisma migrationがある場合だけ24時間以内の暗号化済み1世代とchecksumを必須とし、migration不要時のbackup、日次schedule確認、2世代目以降、最大3回retry・recovery・36時間鮮度監視・通常7世代・四半期隔離restoreは公開後に継続 — 計画書: [`docs/plans/backup-resilience/plan.md`](plans/backup-resilience/plan.md)
 - [-] staging frontend/API配備基盤（Workers専用entrypoint・Prisma/mail runtime境界・Wrangler・Vercel Preview・T34実機確認） — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md) / PR: #117 — SD1〜SD13・SD15完了。Vercel `develop` Preview、Cloudflare staging Worker/DO/Hyperdrive/secret、Supabase migration、health/CORS/OPTIONS、元素118件、synthetic登録・認証・ゲーム・password reset・本人退会を確認済み。production resource・deploy・DB操作は未実施

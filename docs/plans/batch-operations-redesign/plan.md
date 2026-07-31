@@ -447,7 +447,7 @@ DB schema / migrationを変更しないため、`prisma migrate deploy`とPlaywr
 - [x] BO10: 最終品質ゲート
 - [x] BO11: repository実装をcommit・push・PR
 - [x] BO12: 過剰なsource integrity gateを運用完了条件から除外し、軽量CIを維持
-- [ ] BO13: `production-batch`を外部設定
+- [x] BO13: `production-batch`を外部設定
 - [x] BO14: merge後に旧waiting/pending runを整理
 - [ ] BO15: kill switchを有効化
 - [ ] BO16: 初回scheduled runを確認
@@ -566,7 +566,7 @@ production公開・関連release gate完了後に別承認を得る。
 
 - [x] `production` required reviewerと`develop`限定branch policyが維持されている。
 - [x] `Repository Integrity / repository-integrity`をSecret・Environment非参照の軽量CIとして維持し、required check化は運用完了条件から除外した。
-- [ ] `production-batch`がdevelop限定・manual選択不可で設定されている。
+- [x] `production-batch`がdevelop限定・manual選択不可で設定されている。
 - [x] 旧waiting / pending runがstep 0件確認後に整理され、active runが0件である。
 - [ ] kill switch有効化後、最初に自然発生する各jobの成功・skip・失敗理由と秘密非出力を確認する。
 
@@ -577,7 +577,7 @@ production公開・関連release gate完了後に別承認を得る。
 - 実装日: 2026-07-31
 - 実装ブランチ: `feature/batch-operations-redesign`
 - PR: #166
-- 状態: BO1〜BO12・BO14完了。外部設定BO13・BO15、初回run確認BO16、最終同期BO18は未実施。BO17は任意
+- 状態: BO1〜BO14完了。外部設定BO13まで完了し、有効化BO15、初回run確認BO16、最終同期BO18は未実施。BO17は任意
 
 ### 計画からの変更点
 
@@ -651,7 +651,9 @@ production公開・関連release gate完了後に別承認を得る。
 
 PR #166のrepository実装ではGitHub Environment、Secret、Variable、ruleset、Actions run、production DBを変更していない。その後、旧run #804・#868はstep 0件・DB処理未開始を確認してcancelされ、BO14を完了した。
 
-2026-07-31の再確認では、`production-batch`は未作成、repository Variableは0件、`PRODUCTION_SCHEDULED_BATCH_ENABLED`は未設定、`staging` / `production`の`REFRESH_TOKEN_CLEANUP_ENABLED`は未登録だった。`production`のrequired reviewerと`develop`限定policy、`staging`の`develop`限定policyは維持されている。外部設定BO13と有効化BO15は別の明示承認を必要とし、Secret値の取得・表示・推測、workflow実行、production DB queryは行わない。
+2026-07-31の初回再確認では、`production-batch`は未作成、repository Variableは0件、`PRODUCTION_SCHEDULED_BATCH_ENABLED`は未設定、`staging` / `production`の`REFRESH_TOKEN_CLEANUP_ENABLED`は未登録だった。
+
+その後、ownerの明示承認によりBO13を実施した。`production-batch`をrequired reviewerなし・`develop`限定で作成し、`DATABASE_URL` Secret名と必要な4 Variable名を値非表示で確認した。repository kill switchは無効を維持し、`staging` / `production`の`REFRESH_TOKEN_CLEANUP_ENABLED`も安全側設定との一致を確認した。`production`のrequired reviewerと`develop`限定policyは維持され、設定後のactive Batch Jobsは0件だった。Secret値の取得・表示、workflow実行、production DB query、有効化BO15、初回run確認BO16は実施していない。
 
 ## 実装完了時の記録
 
