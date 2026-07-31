@@ -596,13 +596,13 @@ production公開・関連release gate完了後に別承認を得る。
 | ---------------------------------------------- | -------- | ----------------------------------------------------- |
 | `.github/workflows/batch.yml`                  | 修正     | 日次cron、event別Environment/concurrency、kill switch |
 | `.github/workflows/repository-integrity.yml`   | 新規     | 全PRでbatchのproduction境界contractを検証するcheck    |
-| `backend/src/jobs/batchWorkflow.test.ts`       | 修正     | workflowとintegrity workflowのsource contractを更新   |
+| `backend/src/jobs/batchWorkflow.test.ts`       | 修正     | workflow・integrity workflow・runbookのcontractを更新 |
 | `backend/src/jobs/scheduled.ts`                | 修正     | 日次cron定数と未知cron fail-closed                    |
 | `backend/src/jobs/scheduled.test.ts`           | 修正     | 日次dispatch・旧cron拒否・未知cron失敗                |
 | `backend/src/jobs/scheduled.cli.ts`            | 修正     | wrapper失敗時の非0終了と二重ログ防止                  |
 | `backend/src/jobs/scheduled.cli.test.ts`       | 修正     | 未知cron時の非0終了・二重ログ防止契約                 |
 | `docs/09_startup_commands.md`                  | 修正     | 日次cron、manual実行、kill switch境界                 |
-| `docs/11_deployment.md`                        | 修正     | Environment分離、初回有効化、停止、rollback           |
+| `docs/11_deployment.md`                        | 修正     | Environment分離、必要Variable、初回有効化、rollback   |
 | `docs/05_progress.md`                          | 修正     | repository実装中へ更新                                |
 | `docs/plans/batch-cron-triggers/plan.md`       | 修正     | 履歴を維持して後継計画リンクを追加                    |
 | `docs/plans/batch-operations-redesign/plan.md` | 修正     | repository実装とTDD記録                               |
@@ -617,17 +617,27 @@ production公開・関連release gate完了後に別承認を得る。
 
 ### PRレビュー対応記録
 
+#### review 4826325659
+
 | フェーズ | コマンド                                                                                                         | 結果                                                  |
 | -------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
 | Red      | `npm run test -- --run src/jobs/scheduled.cli.test.ts`                                                           | 二重ログ禁止の1 testが意図した理由で失敗、4 tests成功 |
 | Green    | `npm run test -- --run src/jobs/scheduled.cli.test.ts`                                                           | 1 file / 5 tests成功                                  |
 | Refactor | `npm run test -- --run src/jobs/batchWorkflow.test.ts src/jobs/scheduled.test.ts src/jobs/scheduled.cli.test.ts` | Repository Integrity対象の3 files / 29 tests成功      |
 
+#### review 4826419430
+
+| フェーズ | コマンド                                                                                                         | 結果                                                           |
+| -------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Red      | `npm run test -- --run src/jobs/batchWorkflow.test.ts`                                                           | 必要な3 Environment中1件だけの記載を検出し、1 test失敗・12成功 |
+| Green    | `npm run test -- --run src/jobs/batchWorkflow.test.ts`                                                           | 1 file / 13 tests成功                                          |
+| Refactor | `npm run test -- --run src/jobs/batchWorkflow.test.ts src/jobs/scheduled.test.ts src/jobs/scheduled.cli.test.ts` | Repository Integrity対象の3 files / 30 tests成功               |
+
 ### 最終品質ゲート
 
 | 確認                                           | 結果                                                                                  |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `npm run test -- --run`                        | 123 files / 1274 tests成功、専用DB 4 files / 10 testsは環境変数未設定のためskip       |
+| `npm run test -- --run`                        | 123 files / 1275 tests成功、専用DB 4 files / 10 testsは環境変数未設定のためskip       |
 | `npm run test:workers`                         | 初回は既存の実時間計測1件が一時失敗。該当12 tests単体成功後、全4 files / 32 tests成功 |
 | `npm run build`                                | 成功                                                                                  |
 | `npm run lint`                                 | 成功                                                                                  |

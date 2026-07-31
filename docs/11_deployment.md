@@ -696,7 +696,7 @@ GameQuestionSetの有効期限30分は`submitGameSession()`が`expiresAt <= now`
 
 ### 必要なSecret・Variables
 
-GitHub の Settings > Environments でmanual用`staging` / `production`とscheduled専用`production-batch`を分離し、以下を登録する。repository共通の`DATABASE_URL`、`BATCH_ENVIRONMENT`、`AUDIT_LOG_RETENTION_DAYS`、`AUDIT_LOG_CLEANUP_ENABLED`は登録しない。
+GitHub の Settings > Environments でmanual用`staging` / `production`とscheduled専用`production-batch`を分離し、以下を登録する。repository共通の`DATABASE_URL`、`BATCH_ENVIRONMENT`、`AUDIT_LOG_RETENTION_DAYS`、`AUDIT_LOG_CLEANUP_ENABLED`、`REFRESH_TOKEN_CLEANUP_ENABLED`は登録しない。
 
 | Environment      | 種別     | 名前                                 | 値・扱い                                                                            |
 | ---------------- | -------- | ------------------------------------ | ----------------------------------------------------------------------------------- |
@@ -704,6 +704,7 @@ GitHub の Settings > Environments でmanual用`staging` / `production`とschedu
 | staging          | Variable | `BATCH_ENVIRONMENT`                  | `staging`                                                                           |
 | staging          | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 検証用`365`                                                                         |
 | staging          | Variable | `AUDIT_LOG_CLEANUP_ENABLED`          | 初期値`false`。実削除確認中だけ明示的に`true`へ変更する                             |
+| staging          | Variable | `REFRESH_TOKEN_CLEANUP_ENABLED`      | 初期値`false`。refresh token実削除の承認中だけ明示的に`true`へ変更する              |
 | staging          | Variable | `AUDIT_LOG_STAGING_FIXTURES_ENABLED` | 初期値`false`。T19のfixture操作中だけ`true`へ変更する                               |
 | staging          | Secret   | `STAGING_SUPABASE_PROJECT_REF`       | staging Supabase project ref。接続先取り違え防止用。Actionsのenv一覧へ表示させない  |
 | production       | Secret   | `DATABASE_URL`                       | production専用DB接続文字列。stagingと共用しない                                     |
@@ -711,6 +712,7 @@ GitHub の Settings > Environments でmanual用`staging` / `production`とschedu
 | production       | Variable | `BATCH_ENVIRONMENT`                  | `production`                                                                        |
 | production       | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 2026-07-14承認済みの正式保持期間`365`                                               |
 | production       | Variable | `AUDIT_LOG_CLEANUP_ENABLED`          | 全release gate完了までは`false`                                                     |
+| production       | Variable | `REFRESH_TOKEN_CLEANUP_ENABLED`      | refresh token実削除が別途承認されるまでは`false`                                    |
 | production-batch | Secret   | `DATABASE_URL`                       | production専用Session pooler。値を取得・表示・記録しない                            |
 | production-batch | Variable | `BATCH_ENVIRONMENT`                  | `production`                                                                        |
 | production-batch | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 承認済みの正式保持期間`365`                                                         |
@@ -721,7 +723,7 @@ repository Variable `PRODUCTION_SCHEDULED_BATCH_ENABLED`はscheduled job全体�
 
 workflow jobは、手動実行では選択した`staging` / `production`、scheduleでは`production-batch`を参照する。`production-batch`はworkflow_dispatchの選択肢へ追加しない。`BATCH_ENVIRONMENT`が期待値と一致しない場合、または`DATABASE_URL`が未登録の場合は、DB処理や依存関係installの前に失敗する。
 
-保持期間・cleanup flagは秘密情報ではないためEnvironment Variablesで管理する。`AUDIT_LOG_RETENTION_DAYS`の未設定・空文字・不正値は削除前に失敗する。cleanup flagはruntime環境変数自体が省略された場合だけ`false`になるが、workflowでは未登録Variableが空文字として渡りvalidation失敗になるため、`AUDIT_LOG_CLEANUP_ENABLED=false`を明示登録する。
+保持期間・cleanup flagは秘密情報ではないためEnvironment Variablesで管理する。`AUDIT_LOG_RETENTION_DAYS`の未設定・空文字・不正値は削除前に失敗する。`AUDIT_LOG_CLEANUP_ENABLED`と`REFRESH_TOKEN_CLEANUP_ENABLED`はruntime環境変数自体が省略された場合だけ`false`になるが、workflowでは未登録Variableが空文字として渡りvalidation失敗になるため、3 Environmentすべてへ両方を`false`で明示登録する。
 
 ### staging DBの初期構築
 
