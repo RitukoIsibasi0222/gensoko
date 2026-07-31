@@ -633,11 +633,19 @@ production公開・関連release gate完了後に別承認を得る。
 | Green    | `npm run test -- --run src/jobs/batchWorkflow.test.ts`                                                           | 1 file / 13 tests成功                                          |
 | Refactor | `npm run test -- --run src/jobs/batchWorkflow.test.ts src/jobs/scheduled.test.ts src/jobs/scheduled.cli.test.ts` | Repository Integrity対象の3 files / 30 tests成功               |
 
+#### review 4826486339
+
+| フェーズ | コマンド                                                                                                         | 結果                                                       |
+| -------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Red      | `npm run test -- --run src/jobs/batchWorkflow.test.ts`                                                           | 設定先の境界文がないことを検出し、1 test失敗・13 tests成功 |
+| Green    | `npm run test -- --run src/jobs/batchWorkflow.test.ts`                                                           | 1 file / 14 tests成功                                      |
+| Refactor | `npm run test -- --run src/jobs/batchWorkflow.test.ts src/jobs/scheduled.test.ts src/jobs/scheduled.cli.test.ts` | Repository Integrity対象の3 files / 31 tests成功           |
+
 ### 最終品質ゲート
 
 | 確認                                           | 結果                                                                                  |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `npm run test -- --run`                        | 123 files / 1275 tests成功、専用DB 4 files / 10 testsは環境変数未設定のためskip       |
+| `npm run test -- --run`                        | 123 files / 1276 tests成功、専用DB 4 files / 10 testsは環境変数未設定のためskip       |
 | `npm run test:workers`                         | 初回は既存の実時間計測1件が一時失敗。該当12 tests単体成功後、全4 files / 32 tests成功 |
 | `npm run build`                                | 成功                                                                                  |
 | `npm run lint`                                 | 成功                                                                                  |

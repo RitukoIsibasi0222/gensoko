@@ -696,7 +696,7 @@ GameQuestionSetの有効期限30分は`submitGameSession()`が`expiresAt <= now`
 
 ### 必要なSecret・Variables
 
-GitHub の Settings > Environments でmanual用`staging` / `production`とscheduled専用`production-batch`を分離し、以下を登録する。repository共通の`DATABASE_URL`、`BATCH_ENVIRONMENT`、`AUDIT_LOG_RETENTION_DAYS`、`AUDIT_LOG_CLEANUP_ENABLED`、`REFRESH_TOKEN_CLEANUP_ENABLED`は登録しない。
+GitHub の Settings > Environments でmanual用`staging` / `production`とscheduled専用`production-batch`を分離する。以下のSecret・Variablesはrepository-level（Settings > Secrets and variables > Actions）へ登録せず、表に示す各Environmentへ登録する。
 
 | Environment      | 種別     | 名前                                 | 値・扱い                                                                            |
 | ---------------- | -------- | ------------------------------------ | ----------------------------------------------------------------------------------- |
