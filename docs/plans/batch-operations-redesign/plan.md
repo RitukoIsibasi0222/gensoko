@@ -577,7 +577,7 @@ production公開・関連release gate完了後に別承認を得る。
 - 実装日: 2026-07-31
 - 実装ブランチ: `feature/batch-operations-redesign`
 - PR: #166
-- 状態: BO1〜BO14完了。外部設定BO13まで完了し、有効化BO15、初回run確認BO16、最終同期BO18は未実施。BO17は任意
+- 状態: BO1〜BO14完了（BO13: 外部設定、BO14: 旧run整理）。有効化BO15、初回run確認BO16、最終同期BO18は未実施。BO17は任意
 
 ### 計画からの変更点
 
