@@ -1,5 +1,7 @@
 # 定期バッチ Cron Trigger 運用設計 実装計画
 
+> 後継計画: [`../batch-operations-redesign/plan.md`](../batch-operations-redesign/plan.md)。本書は2026-07-03時点の30分cleanup採用理由と実装履歴として保持し、現在の実装・運用判断は後継計画を正本とする。
+
 > 設計者ロール: シニアフルスタックエンジニア（バックエンド運用・DB負荷・Cloudflare Workers・既存 UI 回帰レビュー）
 
 ## 背景・目的

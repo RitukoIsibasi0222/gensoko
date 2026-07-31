@@ -434,16 +434,16 @@ DB schema / migrationを変更しないため、`prisma migrate deploy`とPlaywr
 | BO17     | 14日baselineを記録                     | 運用記録                                               | 中     | 頻度再評価                    |
 | BO18     | 計画書・進捗を完了更新                 | docs                                                   | 高     | 実態と一致                    |
 
-- [ ] BO1: workflow contractをRedへ変更
-- [ ] BO2: scheduled wrapper testをRedへ変更
-- [ ] BO3: CLI failure contractをRedへ変更
-- [ ] BO4: workflowをGreen実装
-- [ ] BO5: integrity workflowをGreen実装
-- [ ] BO6: scheduled wrapperをGreen実装
-- [ ] BO7: 対象test・Refactor・format
-- [ ] BO8: 運用docsを同期
-- [ ] BO9: 旧計画へ後継リンクを追加
-- [ ] BO10: 最終品質ゲート
+- [x] BO1: workflow contractをRedへ変更
+- [x] BO2: scheduled wrapper testをRedへ変更
+- [x] BO3: CLI failure contractをRedへ変更
+- [x] BO4: workflowをGreen実装
+- [x] BO5: integrity workflowをGreen実装
+- [x] BO6: scheduled wrapperをGreen実装
+- [x] BO7: 対象test・Refactor・format
+- [x] BO8: 運用docsを同期
+- [x] BO9: 旧計画へ後継リンクを追加
+- [x] BO10: 最終品質ゲート
 - [ ] BO11: repository実装をcommit・push・PR
 - [ ] BO12: `develop`のsource integrity gateを設定
 - [ ] BO13: `production-batch`を外部設定
@@ -560,13 +560,13 @@ production公開・関連release gate完了後に別承認を得る。
 
 ### repository完了
 
-- [ ] 30分cronがworkflowとscheduled wrapperから除去されている。
-- [ ] 日次GameQuestionSet cronがsource contractで固定されている。
-- [ ] schedule/manualのEnvironmentとconcurrencyが分離されている。
-- [ ] kill switch未設定時はscheduled jobがEnvironmentへ入らずskipする。
-- [ ] 未知cronがfail-closedである。
-- [ ] 対象test、全test、Workers test、build、lint、format checkが成功する。
-- [ ] docsと旧計画の後継リンクが同期している。
+- [x] 30分cronがworkflowとscheduled wrapperから除去されている。
+- [x] 日次GameQuestionSet cronがsource contractで固定されている。
+- [x] schedule/manualのEnvironmentとconcurrencyが分離されている。
+- [x] kill switch未設定時はscheduled jobがEnvironmentへ入らずskipする。
+- [x] 未知cronがfail-closedである。
+- [x] 対象test、全test、Workers test、build、lint、format checkが成功する。
+- [x] docsと旧計画の後継リンクが同期している。
 
 ### 運用完了
 
@@ -577,6 +577,58 @@ production公開・関連release gate完了後に別承認を得る。
 - [ ] 旧waiting / pending runがstep 0件確認とowner承認後に整理されている。
 - [ ] kill switch有効化後、日次2種と週次1種の初回runが成功する。
 - [ ] 14日baselineと頻度維持・変更判断が記録されている。
+
+## Repository実装記録
+
+- 実装日: 2026-07-31
+- 実装ブランチ: `feature/batch-operations-redesign`
+- PR: 作成前
+- 状態: BO1〜BO10完了。BO11 PR作成は進行中。外部設定BO12〜BO17は未実施
+
+### 計画からの変更点
+
+- BO3のCLIは既存の共通catchですでにwrapperの例外を非0終了へ変換していたため、未知cron固有の回帰testを追加し、その一般処理を再利用した。CLI本体の変更は不要だった。
+- 旧計画は履歴本文を改変せず、後継計画へのリンクだけを先頭へ追加した。
+
+### 実際の変更ファイル
+
+| ファイル                                       | 変更種別 | 内容                                                  |
+| ---------------------------------------------- | -------- | ----------------------------------------------------- |
+| `.github/workflows/batch.yml`                  | 修正     | 日次cron、event別Environment/concurrency、kill switch |
+| `.github/workflows/repository-integrity.yml`   | 新規     | 全PRでbatchのproduction境界contractを検証するcheck    |
+| `backend/src/jobs/batchWorkflow.test.ts`       | 修正     | workflowとintegrity workflowのsource contractを更新   |
+| `backend/src/jobs/scheduled.ts`                | 修正     | 日次cron定数と未知cron fail-closed                    |
+| `backend/src/jobs/scheduled.test.ts`           | 修正     | 日次dispatch・旧cron拒否・未知cron失敗                |
+| `backend/src/jobs/scheduled.cli.test.ts`       | 修正     | 未知cron時の非0終了契約                               |
+| `docs/09_startup_commands.md`                  | 修正     | 日次cron、manual実行、kill switch境界                 |
+| `docs/11_deployment.md`                        | 修正     | Environment分離、初回有効化、停止、rollback           |
+| `docs/05_progress.md`                          | 修正     | repository実装中へ更新                                |
+| `docs/plans/batch-cron-triggers/plan.md`       | 修正     | 履歴を維持して後継計画リンクを追加                    |
+| `docs/plans/batch-operations-redesign/plan.md` | 修正     | repository実装とTDD記録                               |
+
+### TDD記録
+
+| フェーズ | コマンド                                                                                                         | 結果                                                |
+| -------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Red      | `npm run test -- --run src/jobs/batchWorkflow.test.ts src/jobs/scheduled.test.ts src/jobs/scheduled.cli.test.ts` | 2 files失敗・1 file成功、11 tests失敗・18 tests成功 |
+| Green    | `npm run test -- --run src/jobs/batchWorkflow.test.ts src/jobs/scheduled.test.ts src/jobs/scheduled.cli.test.ts` | 3 files / 29 tests成功                              |
+| Refactor | format・docs同期後に同じ対象testを再実行                                                                         | 3 files / 29 tests成功                              |
+
+### 最終品質ゲート
+
+| 確認                                           | 結果                                                                                  |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `npm run test -- --run`                        | 123 files / 1274 tests成功、専用DB 4 files / 10 testsは環境変数未設定のためskip       |
+| `npm run test:workers`                         | 初回は既存の実時間計測1件が一時失敗。該当12 tests単体成功後、全4 files / 32 tests成功 |
+| `npm run build`                                | 成功                                                                                  |
+| `npm run lint`                                 | 成功                                                                                  |
+| `npm run format:check`                         | 成功                                                                                  |
+| 変更workflow・主要docsの`npx prettier --check` | 成功                                                                                  |
+| `git diff --check`                             | 成功                                                                                  |
+
+### 外部設定
+
+GitHub Environment、Secret、Variable、ruleset、Actions run、production DBは変更していない。BO12以降はrepository PRのreview・mergeと別の明示承認を必要とする。
 
 ## 実装完了時の記録
 
