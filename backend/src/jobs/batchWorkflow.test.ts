@@ -10,7 +10,11 @@ const WORKFLOW_PATH = fileURLToPath(
 const INTEGRITY_WORKFLOW_PATH = fileURLToPath(
   new URL("../../../.github/workflows/repository-integrity.yml", import.meta.url),
 );
+const DEPLOYMENT_GUIDE_PATH = fileURLToPath(
+  new URL("../../../docs/11_deployment.md", import.meta.url),
+);
 const workflow = readFileSync(WORKFLOW_PATH, "utf8");
+const deploymentGuide = readFileSync(DEPLOYMENT_GUIDE_PATH, "utf8");
 
 function getWorkflowStep(stepName: string): string {
   const marker = `      - name: ${stepName}`;
@@ -122,6 +126,23 @@ describe("batch GitHub Actions workflow", () => {
       "Execute audit log cleanup",
     ]) {
       expect(getWorkflowStep(stepName)).toContain("DATABASE_URL: ${{ secrets.DATABASE_URL }}");
+    }
+  });
+
+  it("documents the refresh token cleanup flag for every batch Environment", () => {
+    expect(workflow).toContain(
+      "REFRESH_TOKEN_CLEANUP_ENABLED: ${{ vars.REFRESH_TOKEN_CLEANUP_ENABLED }}",
+    );
+
+    const documentedEnvironmentRows = deploymentGuide
+      .split("\n")
+      .filter((line) => line.startsWith("| ") && line.includes("`REFRESH_TOKEN_CLEANUP_ENABLED`"));
+
+    expect(documentedEnvironmentRows).toHaveLength(3);
+    for (const environmentName of ["staging", "production", "production-batch"]) {
+      expect(documentedEnvironmentRows).toContainEqual(
+        expect.stringMatching(new RegExp(`^\\| ${environmentName}\\s+\\| Variable \\|`)),
+      );
     }
   });
 
