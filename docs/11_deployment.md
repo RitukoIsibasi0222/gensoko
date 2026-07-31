@@ -754,10 +754,11 @@ Actionsのscheduleは遅延・スキップされる可能性があるため、�
 
 - PR #166は`develop`へmerge済みで、merge commitは`ffb66269be48897da3904308a690a9cc9913ff94`である。
 - 旧run #804（ID `30419479066`）と#868（ID `30613767092`）は、jobの`steps`が空でDB処理未開始であることを確認してcancel済みである。再確認時のwaiting / queued / in-progress / pendingは0件である。
-- `production-batch` Environmentは未作成、repository Variableは0件で、`PRODUCTION_SCHEDULED_BATCH_ENABLED`は未設定である。
-- `staging`と`production`には`REFRESH_TOKEN_CLEANUP_ENABLED`が未登録である。manual refresh token cleanupを使う前に、それぞれ`false`を明示登録する。
+- `production-batch` Environmentはrequired reviewerなし・`develop`限定で作成済みである。`DATABASE_URL` Secret名と、必要な4 Environment Variable名と期待値の一致を値非表示で確認した。
+- repository Variable `PRODUCTION_SCHEDULED_BATCH_ENABLED`は安全側の無効設定で登録済みである。
+- `staging`と`production`の`REFRESH_TOKEN_CLEANUP_ENABLED`は安全側設定で登録済みである。
 - `production`のrequired reviewerと`develop`限定branch policy、`staging`の`develop`限定branch policyは維持されている。
-- 外部設定、Secret変更、kill switch有効化、workflow実行、production DB queryはこの文書同期では行っていない。
+- 外部設定後のactive Batch Jobsは0件である。kill switch有効化、workflow実行、production DB queryは行っていない。
 
 ### scheduled productionの軽量source contract
 
