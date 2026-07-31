@@ -24,18 +24,21 @@ on:
           - refresh-token-cleanup-execute
   schedule:
     - cron: "7 15 * * 0"
-    - cron: "17,47 * * * *"
+    - cron: "17 18 * * *"
     - cron: "37 18 * * *"
 
 jobs:
   scheduled-batch:
     name: Run scheduled batch
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      vars.PRODUCTION_SCHEDULED_BATCH_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
-      name: ${{ inputs.target_environment || 'production' }}
+      name: ${{ github.event_name == 'schedule' && 'production-batch' || inputs.target_environment }}
     concurrency:
-      group: gensoko-batch-jobs
+      group: ${{ github.event_name == 'schedule' && 'gensoko-scheduled-batch' || 'gensoko-batch-jobs' }}
       cancel-in-progress: false
     permissions:
       contents: read
@@ -48,7 +51,7 @@ jobs:
     steps:
       - name: Validate batch environment
         env:
-          EXPECTED_ENVIRONMENT: ${{ inputs.target_environment || 'production' }}
+          EXPECTED_ENVIRONMENT: ${{ github.event_name == 'schedule' && 'production' || inputs.target_environment }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           if [ "$BATCH_ENVIRONMENT" != "$EXPECTED_ENVIRONMENT" ]; then
@@ -92,7 +95,7 @@ jobs:
                 echo "BATCH_CRON=7 15 * * 0" >> "$GITHUB_ENV"
                 ;;
               game-question-set-cleanup)
-                echo "BATCH_CRON=17,47 * * * *" >> "$GITHUB_ENV"
+                echo "BATCH_CRON=17 18 * * *" >> "$GITHUB_ENV"
                 ;;
               *)
                 echo "未対応の定期バッチです"

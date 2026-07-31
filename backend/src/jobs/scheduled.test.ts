@@ -17,8 +17,7 @@ import { cleanupExpiredGameQuestionSets } from "./cleanupGameQuestionSets.js";
 import { resetWeeklyScores } from "./resetWeeklyScores.js";
 import {
   AUDIT_LOG_CLEANUP_CRON,
-  GAME_QUESTION_SET_CLEANUP_CRON,
-  GITHUB_GAME_QUESTION_SET_CLEANUP_CRON,
+  GITHUB_DAILY_GAME_QUESTION_SET_CLEANUP_CRON,
   GITHUB_WEEKLY_SCORE_RESET_CRON,
   LEGACY_GITHUB_WEEKLY_SCORE_RESET_CRON,
   WEEKLY_SCORE_RESET_CRON,
@@ -29,6 +28,7 @@ const SCHEDULED_TIME = Date.parse("2026-07-05T15:00:00.000Z");
 const SCHEDULED_DATE = new Date(SCHEDULED_TIME);
 const FAILURE_MESSAGE = "定期バッチの実行に失敗しました";
 const INVALID_SCHEDULED_TIME_MESSAGE = "定期バッチの実行時刻が不正です";
+const UNKNOWN_CRON_MESSAGE = "未対応の定期バッチCronです";
 
 function createLogger() {
   return { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -104,7 +104,7 @@ describe("runScheduledBatch", () => {
     });
   });
 
-  it("runs GameQuestionSet cleanup for the Cloudflare-style cleanup cron", async () => {
+  it("runs GameQuestionSet cleanup for the daily GitHub Actions cron", async () => {
     const logger = createLogger();
     vi.mocked(cleanupExpiredGameQuestionSets).mockResolvedValue({
       deletedCount: 2,
@@ -112,7 +112,7 @@ describe("runScheduledBatch", () => {
     });
 
     const result = await runScheduledBatch({
-      cron: GAME_QUESTION_SET_CLEANUP_CRON,
+      cron: GITHUB_DAILY_GAME_QUESTION_SET_CLEANUP_CRON,
       scheduledTime: SCHEDULED_TIME,
       logger,
     });
@@ -121,40 +121,33 @@ describe("runScheduledBatch", () => {
     expect(resetWeeklyScores).not.toHaveBeenCalled();
     expect(result).toEqual({
       job: "cleanupExpiredGameQuestionSets",
-      cron: GAME_QUESTION_SET_CLEANUP_CRON,
+      cron: GITHUB_DAILY_GAME_QUESTION_SET_CLEANUP_CRON,
       cutoff: SCHEDULED_DATE,
       deletedCount: 2,
     });
     expect(logger.info).toHaveBeenCalledWith({
       event: "batch.cron.completed",
-      cron: GAME_QUESTION_SET_CLEANUP_CRON,
+      cron: GITHUB_DAILY_GAME_QUESTION_SET_CLEANUP_CRON,
       job: "cleanupExpiredGameQuestionSets",
       cutoff: SCHEDULED_DATE.toISOString(),
       deletedCount: 2,
     });
   });
 
-  it("accepts the delayed GitHub Actions cleanup cron", async () => {
-    const logger = createLogger();
-    vi.mocked(cleanupExpiredGameQuestionSets).mockResolvedValue({
-      deletedCount: 0,
-      cutoff: SCHEDULED_DATE,
-    });
+  it.each(["*/30 * * * *", "17,47 * * * *"])(
+    "rejects the retired GameQuestionSet cleanup cron %s",
+    async (cron) => {
+      const logger = createLogger();
 
-    const result = await runScheduledBatch({
-      cron: GITHUB_GAME_QUESTION_SET_CLEANUP_CRON,
-      scheduledTime: SCHEDULED_TIME,
-      logger,
-    });
+      await expect(
+        runScheduledBatch({ cron, scheduledTime: SCHEDULED_TIME, logger }),
+      ).rejects.toThrow(UNKNOWN_CRON_MESSAGE);
 
-    expect(cleanupExpiredGameQuestionSets).toHaveBeenCalledWith({ now: SCHEDULED_DATE, logger });
-    expect(result).toEqual({
-      job: "cleanupExpiredGameQuestionSets",
-      cron: GITHUB_GAME_QUESTION_SET_CLEANUP_CRON,
-      cutoff: SCHEDULED_DATE,
-      deletedCount: 0,
-    });
-  });
+      expect(resetWeeklyScores).not.toHaveBeenCalled();
+      expect(cleanupExpiredGameQuestionSets).not.toHaveBeenCalled();
+      expect(cleanupExpiredAuditLogs).not.toHaveBeenCalled();
+    },
+  );
 
   it("runs audit log cleanup for the daily audit cron", async () => {
     const logger = createLogger();
@@ -273,20 +266,22 @@ describe("runScheduledBatch", () => {
     });
   });
 
-  it("skips unknown cron values without running database jobs", async () => {
+  it("rejects unknown cron values without running database jobs", async () => {
     const logger = createLogger();
     const cron = "5 * * * *";
 
-    const result = await runScheduledBatch({ cron, scheduledTime: SCHEDULED_TIME, logger });
+    await expect(
+      runScheduledBatch({ cron, scheduledTime: SCHEDULED_TIME, logger }),
+    ).rejects.toThrow(UNKNOWN_CRON_MESSAGE);
 
     expect(resetWeeklyScores).not.toHaveBeenCalled();
     expect(cleanupExpiredGameQuestionSets).not.toHaveBeenCalled();
     expect(cleanupExpiredAuditLogs).not.toHaveBeenCalled();
-    expect(result).toEqual({ job: "unknown", cron, executedAt: SCHEDULED_DATE, skipped: true });
-    expect(logger.warn).toHaveBeenCalledWith({
-      event: "batch.cron.skipped",
+    expect(logger.error).toHaveBeenCalledWith({
+      event: "batch.cron.failed",
       cron,
-      message: "未対応の定期バッチCronです",
+      job: "unknown",
+      message: UNKNOWN_CRON_MESSAGE,
       executedAt: SCHEDULED_DATE.toISOString(),
     });
   });

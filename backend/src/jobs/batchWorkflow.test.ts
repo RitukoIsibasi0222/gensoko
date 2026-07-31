@@ -1,10 +1,14 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+const WORKFLOWS_DIRECTORY = fileURLToPath(new URL("../../../.github/workflows/", import.meta.url));
 const WORKFLOW_PATH = fileURLToPath(
   new URL("../../../.github/workflows/batch.yml", import.meta.url),
+);
+const INTEGRITY_WORKFLOW_PATH = fileURLToPath(
+  new URL("../../../.github/workflows/repository-integrity.yml", import.meta.url),
 );
 const workflow = readFileSync(WORKFLOW_PATH, "utf8");
 
@@ -18,13 +22,40 @@ function getWorkflowStep(stepName: string): string {
   return workflow.slice(start, nextStep === -1 ? undefined : nextStep);
 }
 
+function getWorkflowDispatchInput(inputName: string, nextInputName: string): string {
+  const start = workflow.indexOf(`      ${inputName}:`);
+  const end = workflow.indexOf(`      ${nextInputName}:`, start);
+
+  expect(start, `${inputName} input should exist`).toBeGreaterThanOrEqual(0);
+  expect(end, `${nextInputName} input should follow ${inputName}`).toBeGreaterThan(start);
+
+  return workflow.slice(start, end);
+}
+
 describe("batch GitHub Actions workflow", () => {
-  it("uses staging by default for manual runs and production for schedules", () => {
-    expect(workflow).toContain("target_environment:");
-    expect(workflow).toContain("default: staging");
-    expect(workflow).toContain("- staging");
-    expect(workflow).toContain("- production");
-    expect(workflow).toContain("name: ${{ inputs.target_environment || 'production' }}");
+  it("uses staging or production for manual runs and production-batch only for schedules", () => {
+    const targetEnvironmentInput = getWorkflowDispatchInput("target_environment", "batch_job");
+
+    expect(targetEnvironmentInput).toContain("default: staging");
+    expect(targetEnvironmentInput).toContain("- staging");
+    expect(targetEnvironmentInput).toContain("- production");
+    expect(targetEnvironmentInput).not.toContain("production-batch");
+    expect(workflow).toContain(
+      "name: ${{ github.event_name == 'schedule' && 'production-batch' || inputs.target_environment }}",
+    );
+  });
+
+  it("keeps scheduled runs disabled unless the repository kill switch is true", () => {
+    const jobStart = workflow.indexOf("  scheduled-batch:");
+    const conditionStart = workflow.indexOf("    if: >-", jobStart);
+    const environmentStart = workflow.indexOf("    environment:", jobStart);
+
+    expect(jobStart).toBeGreaterThanOrEqual(0);
+    expect(conditionStart).toBeGreaterThan(jobStart);
+    expect(conditionStart).toBeLessThan(environmentStart);
+    expect(workflow.slice(conditionStart, environmentStart)).toContain(
+      "github.event_name == 'workflow_dispatch' ||\n      vars.PRODUCTION_SCHEDULED_BATCH_ENABLED == 'true'",
+    );
   });
 
   it("fails before database work when the selected environment is not configured", () => {
@@ -32,7 +63,7 @@ describe("batch GitHub Actions workflow", () => {
 
     const validationStep = getWorkflowStep("Validate batch environment");
     expect(validationStep).toContain(
-      "EXPECTED_ENVIRONMENT: ${{ inputs.target_environment || 'production' }}",
+      "EXPECTED_ENVIRONMENT: ${{ github.event_name == 'schedule' && 'production' || inputs.target_environment }}",
     );
     expect(validationStep).toContain("DATABASE_URL: ${{ secrets.DATABASE_URL }}");
     expect(validationStep).toContain(
@@ -40,6 +71,16 @@ describe("batch GitHub Actions workflow", () => {
     );
     expect(validationStep).toContain('if [ -z "$DATABASE_URL" ]; then');
     expect(validationStep).not.toContain('echo "$DATABASE_URL"');
+  });
+
+  it("schedules GameQuestionSet cleanup once daily and removes the 30-minute crons", () => {
+    expect(workflow.match(/- cron: "17 18 \* \* \*"/g)).toHaveLength(1);
+    expect(workflow).not.toContain('- cron: "17,47 * * * *"');
+    expect(workflow).not.toContain("BATCH_CRON=17,47 * * * *");
+    expect(workflow).not.toContain("*/30 * * * *");
+
+    const resolveStep = getWorkflowStep("Resolve scheduled cron");
+    expect(resolveStep).toContain('echo "BATCH_CRON=17 18 * * *" >> "$GITHUB_ENV"');
   });
 
   it("schedules audit log cleanup daily at UTC 18:37", () => {
@@ -84,10 +125,46 @@ describe("batch GitHub Actions workflow", () => {
     }
   });
 
-  it("serializes scheduled and manual batch executions with one stable concurrency group", () => {
-    expect(workflow).toContain("group: gensoko-batch-jobs");
+  it("separates scheduled concurrency while preserving the manual database operation group", () => {
+    expect(workflow).toContain(
+      "group: ${{ github.event_name == 'schedule' && 'gensoko-scheduled-batch' || 'gensoko-batch-jobs' }}",
+    );
     expect(workflow).toContain("cancel-in-progress: false");
-    expect(workflow).not.toContain("group: batch-${{");
+  });
+
+  it("allows production-batch references only in the batch workflow", () => {
+    const workflowFiles = readdirSync(WORKFLOWS_DIRECTORY).filter(
+      (fileName) => fileName.endsWith(".yml") || fileName.endsWith(".yaml"),
+    );
+
+    for (const fileName of workflowFiles) {
+      const source = readFileSync(`${WORKFLOWS_DIRECTORY}/${fileName}`, "utf8");
+
+      if (fileName === "batch.yml") {
+        expect(source).toContain("production-batch");
+      } else {
+        expect(source, `${fileName} must not use production-batch`).not.toContain(
+          "production-batch",
+        );
+      }
+    }
+  });
+
+  it("defines an always-on minimum-permission repository integrity check", () => {
+    const integrityWorkflow = readFileSync(INTEGRITY_WORKFLOW_PATH, "utf8");
+
+    expect(integrityWorkflow).toContain("name: Repository Integrity");
+    expect(integrityWorkflow).toContain("pull_request:");
+    expect(integrityWorkflow).toContain("branches: [develop]");
+    expect(integrityWorkflow).not.toContain("paths:");
+    expect(integrityWorkflow).toContain("permissions:\n  contents: read");
+    expect(integrityWorkflow).toContain("  repository-integrity:");
+    expect(integrityWorkflow).not.toContain("environment:");
+    expect(integrityWorkflow).not.toContain("secrets.");
+    expect(integrityWorkflow).not.toContain("production-batch");
+    expect(integrityWorkflow).toContain("src/jobs/batchWorkflow.test.ts");
+    expect(integrityWorkflow).toContain("src/jobs/scheduled.test.ts");
+    expect(integrityWorkflow).toContain("src/jobs/scheduled.cli.test.ts");
   });
 
   it("allows the 8-minute service limit to finish before workflow timeout", () => {
