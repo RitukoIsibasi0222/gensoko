@@ -1,6 +1,6 @@
 # 定期バッチ運用再設計 実装計画
 
-> 設計者ロール: シニアバックエンドエンジニア / SRE / セキュリティレビュー担当
+> 設計者ロール: シニアバックエンドエンジニア / セキュリティレビュー担当（個人ポートフォリオ運用）
 
 ## 概要
 
@@ -20,8 +20,9 @@
 7. scheduled run は `gensoko-scheduled-batch`、manual run は既存の `gensoko-batch-jobs` concurrency group を使う。
 8. repository Variable `PRODUCTION_SCHEDULED_BATCH_ENABLED` が文字列 `true` の場合だけ scheduled job を開始する。未設定・空文字・`false` は fail-safe にskipする。
 9. 未知のcronは成功扱いでskipせず、固定日本語エラーで失敗させる。
-10. 現在の待機・保留runのcancelはコード変更に含めない。merge後にstep 0件を確認し、ownerの明示承認を得て外部操作として実施する。
-11. `production-batch`有効化前に`develop`へ非作成者1名の承認を伴うPR必須・常時実行の`Repository Integrity / repository-integrity`必須checkを適用する。適用できない場合はkill switchを`false`のまま維持し、manual運用を継続する。
+10. 待機・保留runのcancelはコード変更から分離する。merge後に旧run #804・#868のstep 0件とDB処理未開始を確認して整理済みである。
+11. 個人ポートフォリオの単独運営では、非作成者レビューや厳格なrulesetを運用完了条件にしない。既存の`Repository Integrity / repository-integrity`は軽量CIとして維持するが、required check化は必須にしない。
+12. 商用運用ではないため、費用・運用負担に対して過剰な統制、長期baseline、オンコール相当の監視は採用しない。Secret非出力、Environment分離、kill switch、DB処理前validation、未知cronのfail-closed、初回run確認は維持する。
 
 ## 前提条件・依存関係
 
@@ -92,20 +93,20 @@
 
 ### このまま実装・運用を継続してはいけない理由
 
-| 観点             | 現状の問題                                                                                         | 影響                                                                            | 改善                                                                                       |
-| ---------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| 要件整合         | 無人実行するscheduleが手動承認必須の`production`を参照する                                         | 承認されない限りjobが開始しない                                                 | scheduled専用`production-batch`へ分離する                                                  |
-| 頻度             | 30分の論理TTLを30分の物理削除頻度へ直結している                                                    | 48回/日のrunner起動とDB接続になる                                               | 日次化し、実測値でのみ短縮する                                                             |
-| concurrency理解  | `cancel-in-progress: false`を待ち行列保持と誤認しやすい                                            | pending runが新runでcancelされる                                                | schedule/manual groupを分離し、意図をtestとdocsへ固定する                                  |
-| timeout          | `timeout-minutes: 20`で承認待ちを止められる前提に見える                                            | 20分を超えてwaitingが残る                                                       | timeoutはrunner開始後の上限と明記し、kill switchで起動前に止める                           |
-| 責務分離         | scheduledとmanualが同じenvironment式・job・concurrencyを共有する                                   | 自動保守と承認付き操作が互いを阻害する                                          | eventごとのenvironment/concurrencyを明示する                                               |
-| security         | required reviewerを外すだけでは全production操作の防御が低下する                                    | migration、証拠取得、破壊的操作まで無承認化し得る                               | 既存`production`は変更せず、scheduled専用境界だけ追加する                                  |
-| source integrity | `develop`にPR必須・required status checksがなく、Environmentは特定workflowだけへ利用を制限できない | allowed branchへworkflowを追加・変更できる権限がproduction Secret利用へ直結する | 非作成者レビューと常時実行の専用integrity checkをkill switch有効化前に必須化する           |
-| status check設計 | 既存quality workflowはpath filter付き                                                              | そのまま必須化すると対象外PRがpendingのままmerge不能になり得る                  | path filterなしの`Repository Integrity`を新設し、batchの権限境界contractだけを常時検証する |
-| rollout          | scheduleをmergeすると外部設定未完了でも自動起動する                                                | Secret欠落runや誤接続が発生する                                                 | repository kill switchを既定falseにする                                                    |
-| fail-closed      | 未知cronが成功skipになる                                                                           | cronのtypoやdocs不整合が正常に見える                                            | 未知cronを固定エラーで失敗させる                                                           |
-| 観測             | cleanup頻度を短縮・延長する数値基準がない                                                          | 感覚で48回/日に戻り得る                                                         | 件数・所要時間・失敗回数を最低14日観測する                                                 |
-| docs整合         | 旧計画の30分根拠が現在の運用事故を反映していない                                                   | 実装者が旧判断を再利用する                                                      | 新計画を正本とし旧計画へ後継リンクを追加する                                               |
+| 観点             | 現状の問題                                                       | 影響                                                           | 改善                                                                                      |
+| ---------------- | ---------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| 要件整合         | 無人実行するscheduleが手動承認必須の`production`を参照する       | 承認されない限りjobが開始しない                                | scheduled専用`production-batch`へ分離する                                                 |
+| 頻度             | 30分の論理TTLを30分の物理削除頻度へ直結している                  | 48回/日のrunner起動とDB接続になる                              | 日次化し、実測値でのみ短縮する                                                            |
+| concurrency理解  | `cancel-in-progress: false`を待ち行列保持と誤認しやすい          | pending runが新runでcancelされる                               | schedule/manual groupを分離し、意図をtestとdocsへ固定する                                 |
+| timeout          | `timeout-minutes: 20`で承認待ちを止められる前提に見える          | 20分を超えてwaitingが残る                                      | timeoutはrunner開始後の上限と明記し、kill switchで起動前に止める                          |
+| 責務分離         | scheduledとmanualが同じenvironment式・job・concurrencyを共有する | 自動保守と承認付き操作が互いを阻害する                         | eventごとのenvironment/concurrencyを明示する                                              |
+| security         | required reviewerを外すだけでは全production操作の防御が低下する  | migration、証拠取得、破壊的操作まで無承認化し得る              | 既存`production`は変更せず、scheduled専用境界だけ追加する                                 |
+| source integrity | `develop`にPR必須・required status checksがない                  | ownerの誤変更をGitHub rulesetだけでは防げない                  | source contract test、develop限定Environment、kill switchを維持し、軽量CIで早期検出する   |
+| status check設計 | 既存quality workflowはpath filter付き                            | そのまま必須化すると対象外PRがpendingのままmerge不能になり得る | path filterなしの`Repository Integrity`は残すが、単独運営ではrequired checkを必須にしない |
+| rollout          | scheduleをmergeすると外部設定未完了でも自動起動する              | Secret欠落runや誤接続が発生する                                | repository kill switchを既定falseにする                                                   |
+| fail-closed      | 未知cronが成功skipになる                                         | cronのtypoやdocs不整合が正常に見える                           | 未知cronを固定エラーで失敗させる                                                          |
+| 観測             | cleanup頻度を短縮・延長する数値基準がない                        | 感覚で48回/日に戻り得る                                        | 初回runの結果を記録し、公開後に問題やprovider警告がある場合だけ追加観測する               |
+| docs整合         | 旧計画の30分根拠が現在の運用事故を反映していない                 | 実装者が旧判断を再利用する                                     | 新計画を正本とし旧計画へ後継リンクを追加する                                              |
 
 ### 採用しない案
 
@@ -160,19 +161,19 @@ Cloudflare移行はproduction Worker安定稼働後の別タスクとする。
 
 ## 対象ファイル一覧
 
-| ファイル                                       | 変更種別 | 内容                                                   |
-| ---------------------------------------------- | -------- | ------------------------------------------------------ |
-| `.github/workflows/batch.yml`                  | 修正     | 日次cron、event別Environment/concurrency、kill switch  |
-| `.github/workflows/repository-integrity.yml`   | 新規     | 全PRでbatchのproduction境界contractを検証する必須check |
-| `backend/src/jobs/batchWorkflow.test.ts`       | 修正     | workflow source contractを新設計へ更新                 |
-| `backend/src/jobs/scheduled.ts`                | 修正     | 日次cron定数と未知cron fail-closed                     |
-| `backend/src/jobs/scheduled.test.ts`           | 修正     | 日次dispatch・旧cron拒否・未知cron失敗                 |
-| `backend/src/jobs/scheduled.cli.test.ts`       | 修正     | 未知cron時の非0終了契約                                |
-| `docs/09_startup_commands.md`                  | 修正     | 日次cron、manual実行、kill switch確認                  |
-| `docs/11_deployment.md`                        | 修正     | Environment分離、初回有効化、監視、停止、rollback      |
-| `docs/05_progress.md`                          | 修正     | 実装中・完了状態                                       |
-| `docs/plans/batch-cron-triggers/plan.md`       | 修正     | 履歴を保持したまま後継計画へのリンクを追加             |
-| `docs/plans/batch-operations-redesign/plan.md` | 修正     | タスク・実装完了記録                                   |
+| ファイル                                       | 変更種別 | 内容                                                  |
+| ---------------------------------------------- | -------- | ----------------------------------------------------- |
+| `.github/workflows/batch.yml`                  | 修正     | 日次cron、event別Environment/concurrency、kill switch |
+| `.github/workflows/repository-integrity.yml`   | 新規     | 全PRでbatchのproduction境界contractを検証する軽量CI   |
+| `backend/src/jobs/batchWorkflow.test.ts`       | 修正     | workflow source contractを新設計へ更新                |
+| `backend/src/jobs/scheduled.ts`                | 修正     | 日次cron定数と未知cron fail-closed                    |
+| `backend/src/jobs/scheduled.test.ts`           | 修正     | 日次dispatch・旧cron拒否・未知cron失敗                |
+| `backend/src/jobs/scheduled.cli.test.ts`       | 修正     | 未知cron時の非0終了契約                               |
+| `docs/09_startup_commands.md`                  | 修正     | 日次cron、manual実行、kill switch確認                 |
+| `docs/11_deployment.md`                        | 修正     | Environment分離、初回有効化、監視、停止、rollback     |
+| `docs/05_progress.md`                          | 修正     | 実装中・完了状態                                      |
+| `docs/plans/batch-cron-triggers/plan.md`       | 修正     | 履歴を保持したまま後継計画へのリンクを追加            |
+| `docs/plans/batch-operations-redesign/plan.md` | 修正     | タスク・実装完了記録                                  |
 
 ## API仕様
 
@@ -196,15 +197,15 @@ Cloudflare移行はproduction Worker安定稼働後の別タスクとする。
 
 ### 頻度再評価
 
-日次化後、最初の成功runから最低14日間、次を記録する。
+日次化後は、最初に自然発生するrunで次を簡潔に記録する。
 
 - `deletedCount`
 - cleanup所要時間
-- 0件runの割合
-- 失敗・timeout回数
-- DB容量または`game_question_sets`増加に関するprovider警告
+- status / conclusion
+- 失敗・skipの場合はその理由
+- Secret、PII、内部ID、raw DB errorがlogへ出ていないこと
 
-次のいずれかが観測された場合だけ、6時間ごとへの短縮を新しいレビュー対象にする。
+14日間のbaselineは運用完了条件にしない。公開後、DB容量・所要時間・失敗に問題が見つかった場合だけ、必要な期間の追加観測を行う。次のいずれかが観測された場合は、6時間ごとへの短縮を新しいレビュー対象にする。
 
 - cleanupが2回連続で失敗またはtimeoutする。
 - cleanup所要時間が継続的に増加する。
@@ -241,18 +242,18 @@ repository Variable:
 
 - `production-batch`をworkflow_dispatchの選択肢へ追加しない。
 - scheduled以外のjobから`production-batch`を参照しない。
-- GitHub Environmentだけでは特定workflowへの利用制限を強制できないため、source contractとbranch rulesetを両方必須にする。
+- GitHub Environmentだけでは特定workflowへの利用制限を強制できないため、source contract、develop限定policy、manual選択禁止、kill switchを組み合わせる。
 - repository共通Secretへ`DATABASE_URL`を移さない。
 - `production`のrequired reviewer、branch policy、Secretを削除・緩和しない。
-- `develop`に「非作成者1名以上の承認」「古い承認の無効化」「最新pushの承認」「`Repository Integrity / repository-integrity`必須check」「通常運用者のbypassなし」を適用するまで、kill switchを`true`にしない。
+- 単独運営の個人ポートフォリオでは、非作成者レビュー、厳格なruleset、`Repository Integrity / repository-integrity`のrequired check化を運用完了条件にしない。
+- `.github/workflows/repository-integrity.yml`はSecretやEnvironmentを参照しない軽量CIとして維持する。
 - path filter付きの`Backend PR Quality` / `Frontend PR Quality`を無条件のrequired checkへ直接指定しない。対象外PRをmerge不能にしないため、既存workflowは変更対象に応じて実行するquality gateとして維持する。
-- 単独管理などの理由でsource integrity gateを適用できない場合、`production-batch`を有効化せずmanual production approvalを維持する。
 - kill switchを`true`にする前に、review済みSHA、Environment名、branch policy、Secret名、Variable名を値非表示で確認する。
 - Secret値をCLI、log、Artifact、summary、Issue、PR、文書へ出さない。
 
-## source integrity gate設計
+## 軽量source contract設計
 
-`production-batch`はruntime承認を省略するため、source変更側に人手レビューと常時checkを移す。新しい`.github/workflows/repository-integrity.yml`は`develop`向けの全pull requestでpath filterなしに起動し、check名を`Repository Integrity / repository-integrity`へ固定する。
+`.github/workflows/repository-integrity.yml`は`develop`向けの全pull requestでpath filterなしに起動し、check名を`Repository Integrity / repository-integrity`へ固定する。これはownerの誤変更を早期検出する軽量CIであり、非作成者レビューやrequired checkを前提としない。
 
 このcheckはproduction Secretを一切参照せず、`contents: read`だけを持ち、次のbatch security contractを毎回検証する。
 
@@ -271,7 +272,7 @@ if: >-
   vars.PRODUCTION_SCHEDULED_BATCH_ENABLED == 'true'
 ```
 
-repository rulesetではこのcheckを必須化する。既存Backend/Frontend workflowはpath filterがあるため、全PR共通のrequired checkには使わない。非作成者レビューを用意できない単独運用では自動Environmentを有効化せず、既存`production`承認を使う。
+既存Backend/Frontend workflowはpath filterがあるため、全PR共通のrequired checkには使わない。将来collaboratorを追加して複数人運営へ移行する場合は、PR必須化やrequired check化を別途検討する。現在の有効化判断は、`develop`限定Environment、source contract、kill switch、DB処理前validation、初回run確認の組み合わせで行う。
 
 ## concurrency設計
 
@@ -413,26 +414,26 @@ DB schema / migrationを変更しないため、`prisma migrate deploy`とPlaywr
 
 ## タスクリスト（進捗管理）
 
-| タスクID | 内容                                   | ファイル                                               | 優先度 | 備考                          |
-| -------- | -------------------------------------- | ------------------------------------------------------ | ------ | ----------------------------- |
-| BO1      | workflow contractをRedへ変更           | `backend/src/jobs/batchWorkflow.test.ts`               | 高     | 頻度・境界・kill switch       |
-| BO2      | scheduled wrapper testをRedへ変更      | `backend/src/jobs/scheduled.test.ts`                   | 高     | 日次・旧cron拒否・fail-closed |
-| BO3      | CLI failure contractをRedへ変更        | `backend/src/jobs/scheduled.cli.test.ts`               | 高     | 非0終了                       |
-| BO4      | workflowをGreen実装                    | `.github/workflows/batch.yml`                          | 高     | schedule/manual分離           |
-| BO5      | integrity workflowをGreen実装          | `.github/workflows/repository-integrity.yml`           | 高     | path filterなし・最小権限     |
-| BO6      | scheduled wrapperをGreen実装           | `backend/src/jobs/scheduled.ts`                        | 高     | 日次cron                      |
-| BO7      | 対象test・Refactor・format             | `backend/src/jobs/*.test.ts`                           | 高     | TDD記録                       |
-| BO8      | 運用docsを同期                         | `docs/09_startup_commands.md`, `docs/11_deployment.md` | 高     | rollout/rollback              |
-| BO9      | 旧計画へ後継リンクを追加               | `docs/plans/batch-cron-triggers/plan.md`               | 中     | 履歴本文は改変しない          |
-| BO10     | 最終品質ゲート                         | `backend/`                                             | 高     | 外部DB不使用                  |
-| BO11     | repository実装をcommit・push・PR       | Git                                                    | 高     | base `develop`                |
-| BO12     | `develop`のsource integrity gateを設定 | GitHub ruleset                                         | 高     | 非作成者承認・専用check       |
-| BO13     | `production-batch`を外部設定           | GitHub Environment                                     | 高     | 別承認・値非表示              |
-| BO14     | merge後に旧waiting/pending runを整理   | GitHub Actions                                         | 高     | step 0件・owner承認           |
-| BO15     | kill switchを有効化                    | GitHub repository Variable                             | 高     | release gate後                |
-| BO16     | 初回3種のscheduled runを確認           | GitHub Actions                                         | 高     | daily 2件・weekly 1件         |
-| BO17     | 14日baselineを記録                     | 運用記録                                               | 中     | 頻度再評価                    |
-| BO18     | 計画書・進捗を完了更新                 | docs                                                   | 高     | 実態と一致                    |
+| タスクID | 内容                                          | ファイル                                               | 優先度 | 備考                          |
+| -------- | --------------------------------------------- | ------------------------------------------------------ | ------ | ----------------------------- |
+| BO1      | workflow contractをRedへ変更                  | `backend/src/jobs/batchWorkflow.test.ts`               | 高     | 頻度・境界・kill switch       |
+| BO2      | scheduled wrapper testをRedへ変更             | `backend/src/jobs/scheduled.test.ts`                   | 高     | 日次・旧cron拒否・fail-closed |
+| BO3      | CLI failure contractをRedへ変更               | `backend/src/jobs/scheduled.cli.test.ts`               | 高     | 非0終了                       |
+| BO4      | workflowをGreen実装                           | `.github/workflows/batch.yml`                          | 高     | schedule/manual分離           |
+| BO5      | integrity workflowをGreen実装                 | `.github/workflows/repository-integrity.yml`           | 高     | path filterなし・最小権限     |
+| BO6      | scheduled wrapperをGreen実装                  | `backend/src/jobs/scheduled.ts`                        | 高     | 日次cron                      |
+| BO7      | 対象test・Refactor・format                    | `backend/src/jobs/*.test.ts`                           | 高     | TDD記録                       |
+| BO8      | 運用docsを同期                                | `docs/09_startup_commands.md`, `docs/11_deployment.md` | 高     | rollout/rollback              |
+| BO9      | 旧計画へ後継リンクを追加                      | `docs/plans/batch-cron-triggers/plan.md`               | 中     | 履歴本文は改変しない          |
+| BO10     | 最終品質ゲート                                | `backend/`                                             | 高     | 外部DB不使用                  |
+| BO11     | repository実装をcommit・push・PR              | Git                                                    | 高     | base `develop`                |
+| BO12     | 過剰なsource integrity gateを完了条件から除外 | 本計画                                                 | 高     | 軽量CIは維持                  |
+| BO13     | `production-batch`を外部設定                  | GitHub Environment                                     | 高     | 別承認・値非表示              |
+| BO14     | merge後に旧waiting/pending runを整理          | GitHub Actions                                         | 高     | step 0件・owner承認           |
+| BO15     | kill switchを有効化                           | GitHub repository Variable                             | 高     | release gate後                |
+| BO16     | 初回scheduled runを確認                       | GitHub Actions                                         | 高     | 成功・skip・失敗理由          |
+| BO17     | 公開後に必要な場合だけ追加観測                | 運用記録                                               | 任意   | 運用完了条件外                |
+| BO18     | 計画書・進捗を完了更新                        | docs                                                   | 高     | 実態と一致                    |
 
 - [x] BO1: workflow contractをRedへ変更
 - [x] BO2: scheduled wrapper testをRedへ変更
@@ -445,12 +446,12 @@ DB schema / migrationを変更しないため、`prisma migrate deploy`とPlaywr
 - [x] BO9: 旧計画へ後継リンクを追加
 - [x] BO10: 最終品質ゲート
 - [x] BO11: repository実装をcommit・push・PR
-- [ ] BO12: `develop`のsource integrity gateを設定
+- [x] BO12: 過剰なsource integrity gateを運用完了条件から除外し、軽量CIを維持
 - [ ] BO13: `production-batch`を外部設定
-- [ ] BO14: merge後に旧waiting/pending runを整理
+- [x] BO14: merge後に旧waiting/pending runを整理
 - [ ] BO15: kill switchを有効化
-- [ ] BO16: 初回3種のscheduled runを確認
-- [ ] BO17: 14日baselineを記録
+- [ ] BO16: 初回scheduled runを確認
+- [ ] BO17: 公開後に必要な場合だけ追加観測（任意・運用完了条件外）
 - [ ] BO18: 計画書・進捗を完了更新
 
 ### 実装指示用タブ区切り
@@ -468,12 +469,12 @@ BO8	運用docsを同期	docs/09_startup_commands.md, docs/11_deployment.md	高
 BO9	旧計画へ後継リンクを追加	docs/plans/batch-cron-triggers/plan.md	中
 BO10	最終品質ゲート	backend/	高
 BO11	repository実装をcommit・push・PR	Git	高
-BO12	developのsource integrity gateを設定	GitHub ruleset	高
+BO12	過剰なsource integrity gateを完了条件から除外	本計画	高
 BO13	production-batchを外部設定	GitHub Environment	高
 BO14	旧waiting/pending runを整理	GitHub Actions	高
 BO15	kill switchを有効化	GitHub repository Variable	高
 BO16	初回scheduled runを確認	GitHub Actions	高
-BO17	14日baselineを記録	運用記録	中
+BO17	公開後に必要な場合だけ追加観測	運用記録	任意
 BO18	計画書・進捗を完了更新	docs	高
 ```
 
@@ -493,22 +494,15 @@ BO18	計画書・進捗を完了更新	docs	高
 別承認を得て、値を表示せず次を確認・設定する。
 
 1. `production` required reviewerと`develop` branch policyが維持されている。
-2. `develop`のrulesetへ非作成者1名以上の承認、古い承認の無効化、最新pushの承認、`Repository Integrity / repository-integrity`必須check、通常運用者のbypassなしを追加する。
-3. docs-onlyの検証PRでも`Repository Integrity`が作成・成功し、既存path filter付きquality workflowを必須化していないことを確認する。
-4. `production-batch`を作成し、required reviewerなし、`develop`のみ許可する。
-5. 必要なSecret名・Variable名を登録する。
-6. `PRODUCTION_SCHEDULED_BATCH_ENABLED`は未設定または`false`のままにする。
-7. review済みPR差分に`production-batch`のmanual選択肢がないことを再確認する。
-
-source integrity gateを適用できない場合はPhase 3以降へ進まず、kill switchを`false`のまま維持する。
+2. `Repository Integrity / repository-integrity`がSecret・Environmentを参照しない軽量CIとして残っていることを確認する。required check化とdocs-only検証PRは求めない。
+3. `production-batch`を作成し、required reviewerなし、`develop`のみ許可する。
+4. 必要なSecret名・Variable名を登録する。
+5. `PRODUCTION_SCHEDULED_BATCH_ENABLED`は未設定または`false`のままにする。
+6. review済みPR差分に`production-batch`のmanual選択肢がないことを再確認する。
 
 ### Phase 3: merge・旧run整理
 
-1. PRを`develop`へmergeする。
-2. 新しいscheduled runがkill switchによりskipされることを確認する。
-3. 旧waiting/pending runごとにjobのstepsが0件であることを確認する。
-4. ownerへ対象run ID、状態、DB step未開始を提示し、cancelの明示承認を得る。
-5. 承認されたrunだけをcancelし、waiting / pendingが0件になったことを確認する。
+完了済み。PR #166は`develop`へmergeされ、旧run #804（ID `30419479066`）と#868（ID `30613767092`）は、jobの`steps`が空でDB処理未開始であることを確認したうえでcancelされた。2026-07-31の再確認時点で、Batch Jobsのwaiting / queued / in-progress / pendingは0件である。
 
 ### Phase 4: 有効化
 
@@ -516,9 +510,9 @@ production公開・関連release gate完了後に別承認を得る。
 
 1. Environmentの識別子、Secret名、Variable名、branch policyを値非表示で再確認する。
 2. `PRODUCTION_SCHEDULED_BATCH_ENABLED=true`へ変更する。
-3. 最初の日次GameQuestionSet cleanup、日次audit cleanup、週次resetを確認する。
-4. run URL、対象SHA、job、件数、所要時間、終了codeを記録する。
-5. Secret、PII、内部ID、raw DB errorがlogにないことを確認する。
+3. 最初に自然発生する各scheduled jobについて、対象SHA、job、status / conclusion、DB処理前validation、cleanup結果またはskip・失敗理由を確認する。
+4. Secret、PII、内部ID、raw DB errorがlogにないことを確認する。
+5. 問題があればkill switchを`false`へ戻す。
 
 ## ロールバック・停止
 
@@ -546,10 +540,10 @@ production公開・関連release gate完了後に別承認を得る。
 
 | リスク                                    | 対策                                                                                   |
 | ----------------------------------------- | -------------------------------------------------------------------------------------- |
-| 日次化で期限切れrowが最大約24時間30分残る | API期限判定を維持。14日baselineとprovider容量を観測                                    |
+| 日次化で期限切れrowが最大約24時間30分残る | API期限判定を維持。初回runを確認し、provider警告や性能問題がある場合だけ追加観測       |
 | 1回のdelete件数が増える                   | `deletedCount`と所要時間を観測し、増加時だけ6時間化・batch limitを別レビュー           |
 | 自動EnvironmentのSecret露出面が増える     | develop限定、scheduled専用、manual選択禁止、contents read、Secret非出力                |
-| Environmentを別workflowから参照できる     | developのPR必須・required checks、source contract、kill switchで多層防御               |
+| Environmentを別workflowから参照できる     | develop限定policy、source contract、manual選択禁止、kill switchで低コストに多層防御    |
 | kill switch誤有効化                       | 初期false、外部preflight、review済みSHA、別承認                                        |
 | manual DB操作とscheduledが重なる          | kill switch停止手順、maintenance前確認、online-safeなPrisma操作のみ                    |
 | schedule遅延                              | jobはscheduled時刻ではなく実行時点の期限行を冪等処理。日次保守で厳密時刻を要件にしない |
@@ -570,20 +564,20 @@ production公開・関連release gate完了後に別承認を得る。
 
 ### 運用完了
 
-- [ ] `production` required reviewerが維持されている。
-- [ ] `develop`に非作成者レビュー必須と`Repository Integrity / repository-integrity`必須checkが設定され、通常運用者のbypassがない。
-- [ ] docs-only PRでも必須checkが作成され、path filterによる永久pendingが発生しない。
+- [x] `production` required reviewerと`develop`限定branch policyが維持されている。
+- [x] `Repository Integrity / repository-integrity`をSecret・Environment非参照の軽量CIとして維持し、required check化は運用完了条件から除外した。
 - [ ] `production-batch`がdevelop限定・manual選択不可で設定されている。
-- [ ] 旧waiting / pending runがstep 0件確認とowner承認後に整理されている。
-- [ ] kill switch有効化後、日次2種と週次1種の初回runが成功する。
-- [ ] 14日baselineと頻度維持・変更判断が記録されている。
+- [x] 旧waiting / pending runがstep 0件確認後に整理され、active runが0件である。
+- [ ] kill switch有効化後、最初に自然発生する各jobの成功・skip・失敗理由と秘密非出力を確認する。
+
+公開後の長期baselineは任意であり、運用完了条件に含めない。
 
 ## Repository実装記録
 
 - 実装日: 2026-07-31
 - 実装ブランチ: `feature/batch-operations-redesign`
 - PR: #166
-- 状態: BO1〜BO11のrepository実装完了。外部設定BO12〜BO17は未実施
+- 状態: BO1〜BO12・BO14完了。外部設定BO13・BO15、初回run確認BO16、最終同期BO18は未実施。BO17は任意
 
 ### 計画からの変更点
 
@@ -653,9 +647,11 @@ production公開・関連release gate完了後に別承認を得る。
 | 変更workflow・主要docsの`npx prettier --check` | 成功                                                                                  |
 | `git diff --check`                             | 成功                                                                                  |
 
-### 外部設定
+### 外部設定・運用再開記録
 
-GitHub Environment、Secret、Variable、ruleset、Actions run、production DBは変更していない。BO12以降はrepository PRのreview・mergeと別の明示承認を必要とする。
+PR #166のrepository実装ではGitHub Environment、Secret、Variable、ruleset、Actions run、production DBを変更していない。その後、旧run #804・#868はstep 0件・DB処理未開始を確認してcancelされ、BO14を完了した。
+
+2026-07-31の再確認では、`production-batch`は未作成、repository Variableは0件、`PRODUCTION_SCHEDULED_BATCH_ENABLED`は未設定、`staging` / `production`の`REFRESH_TOKEN_CLEANUP_ENABLED`は未登録だった。`production`のrequired reviewerと`develop`限定policy、`staging`の`develop`限定policyは維持されている。外部設定BO13と有効化BO15は別の明示承認を必要とし、Secret値の取得・表示・推測、workflow実行、production DB queryは行わない。
 
 ## 実装完了時の記録
 
@@ -698,12 +694,11 @@ GitHub Environment、Secret、Variable、ruleset、Actions run、production DB�
 | 確認                           | 結果 |
 | ------------------------------ | ---- |
 | production reviewer維持        |      |
-| develop source integrity gate  |      |
+| Repository Integrity軽量CI維持 |      |
 | production-batch branch policy |      |
 | kill switch初期false           |      |
 | 旧run整理                      |      |
 | 日次GameQuestionSet cleanup    |      |
 | 日次audit cleanup              |      |
 | 週次reset                      |      |
-| 14日baseline                   |      |
 ```
