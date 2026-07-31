@@ -42,10 +42,14 @@ async function main(): Promise<void> {
     throw new Error(MISSING_CRON_MESSAGE);
   }
 
-  await runScheduledBatch({
-    cron,
-    scheduledTime: parseScheduledTime(process.env.SCHEDULED_TIME),
-  });
+  const scheduledTime = parseScheduledTime(process.env.SCHEDULED_TIME);
+
+  try {
+    await runScheduledBatch({ cron, scheduledTime });
+  } catch {
+    // runScheduledBatch records a sanitized failure event; the CLI only controls the exit status.
+    process.exitCode = 1;
+  }
 }
 
 void main()

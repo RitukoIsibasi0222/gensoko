@@ -5,12 +5,10 @@ import { resetWeeklyScores } from "./resetWeeklyScores.js";
 export const WEEKLY_SCORE_RESET_CRON = "0 15 * * SUN";
 export const GITHUB_WEEKLY_SCORE_RESET_CRON = "7 15 * * 0";
 export const LEGACY_GITHUB_WEEKLY_SCORE_RESET_CRON = "0 15 * * 0";
-export const GAME_QUESTION_SET_CLEANUP_CRON = "*/30 * * * *";
-export const GITHUB_GAME_QUESTION_SET_CLEANUP_CRON = "17,47 * * * *";
+export const GITHUB_DAILY_GAME_QUESTION_SET_CLEANUP_CRON = "17 18 * * *";
 export const AUDIT_LOG_CLEANUP_CRON = "37 18 * * *";
 
 const BATCH_COMPLETED_EVENT = "batch.cron.completed";
-const BATCH_SKIPPED_EVENT = "batch.cron.skipped";
 const BATCH_FAILED_EVENT = "batch.cron.failed";
 const BATCH_FAILED_MESSAGE = "定期バッチの実行に失敗しました";
 const INVALID_SCHEDULED_TIME_MESSAGE = "定期バッチの実行時刻が不正です";
@@ -19,8 +17,7 @@ const UNKNOWN_CRON_MESSAGE = "未対応の定期バッチCronです";
 export type ScheduledBatchJobName =
   | "resetWeeklyScores"
   | "cleanupExpiredGameQuestionSets"
-  | "cleanupExpiredAuditLogs"
-  | "unknown";
+  | "cleanupExpiredAuditLogs";
 
 export type ScheduledBatchResult =
   | {
@@ -42,12 +39,6 @@ export type ScheduledBatchResult =
       deletedCount: number;
       skipped: boolean;
       limitReached: boolean;
-    }
-  | {
-      job: "unknown";
-      cron: string;
-      executedAt: Date;
-      skipped: true;
     };
 
 export type ScheduledBatchLogger = Pick<Console, "info" | "warn" | "error">;
@@ -58,7 +49,7 @@ export type RunScheduledBatchOptions = {
   logger?: ScheduledBatchLogger;
 };
 
-function resolveScheduledBatchJobName(normalizedCron: string): ScheduledBatchJobName {
+function resolveScheduledBatchJobName(normalizedCron: string): ScheduledBatchJobName | null {
   if (
     normalizedCron === WEEKLY_SCORE_RESET_CRON ||
     normalizedCron === GITHUB_WEEKLY_SCORE_RESET_CRON ||
@@ -67,10 +58,7 @@ function resolveScheduledBatchJobName(normalizedCron: string): ScheduledBatchJob
     return "resetWeeklyScores";
   }
 
-  if (
-    normalizedCron === GAME_QUESTION_SET_CLEANUP_CRON ||
-    normalizedCron === GITHUB_GAME_QUESTION_SET_CLEANUP_CRON
-  ) {
+  if (normalizedCron === GITHUB_DAILY_GAME_QUESTION_SET_CLEANUP_CRON) {
     return "cleanupExpiredGameQuestionSets";
   }
 
@@ -78,7 +66,7 @@ function resolveScheduledBatchJobName(normalizedCron: string): ScheduledBatchJob
     return "cleanupExpiredAuditLogs";
   }
 
-  return "unknown";
+  return null;
 }
 
 function resolveScheduledDate(scheduledTime: number): Date {
@@ -113,17 +101,15 @@ export async function runScheduledBatch({
 
   const job = resolveScheduledBatchJobName(normalizedCron);
 
-  if (job === "unknown") {
-    const result = { job, cron: normalizedCron, executedAt, skipped: true } as const;
-
-    logger.warn({
-      event: BATCH_SKIPPED_EVENT,
+  if (job === null) {
+    logger.error({
+      event: BATCH_FAILED_EVENT,
       cron: normalizedCron,
+      job: "unknown",
       message: UNKNOWN_CRON_MESSAGE,
       executedAt: executedAt.toISOString(),
     });
-
-    return result;
+    throw new Error(UNKNOWN_CRON_MESSAGE);
   }
 
   try {

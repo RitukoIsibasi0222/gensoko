@@ -265,8 +265,8 @@ GitHub Actions schedule と同じ入口を Docker 内で確認する場合は、
     # 週間スコアリセット相当（UTC 日曜 15:07 = JST 月曜 00:07）
     docker compose exec -e BATCH_CRON='7 15 * * 0' hono npm run batch:scheduled
 
-    # 期限切れ GameQuestionSet cleanup 相当（毎時17分/47分（30分ごと））
-    docker compose exec -e BATCH_CRON='17,47 * * * *' hono npm run batch:scheduled
+    # 期限切れ GameQuestionSet cleanup 相当（UTC毎日18:17 = JST毎日03:17）
+    docker compose exec -e BATCH_CRON='17 18 * * *' hono npm run batch:scheduled
 
     # 監査ログcleanup相当（UTC毎日18:37 = JST毎日03:37）
     docker compose exec \
@@ -275,7 +275,9 @@ GitHub Actions schedule と同じ入口を Docker 内で確認する場合は、
       -e AUDIT_LOG_CLEANUP_ENABLED=false \
       hono npm run batch:scheduled
 
-GitHub Actionsではworkflow_dispatchで最初に`target_environment`を選び、次に`weekly-reset`、`game-question-set-cleanup`、`audit-log-cleanup-dry-run`、`audit-log-cleanup-execute`を選択する。手動実行の既定は`staging`、scheduleは`production`である。監査ログの本実行は、選択したEnvironmentの`AUDIT_LOG_CLEANUP_ENABLED=true`が設定された場合だけ削除する。T19の確認では必ず`staging`を選び、`production`はrelease gate完了前に選択しない。
+GitHub Actionsではworkflow_dispatchで最初に`target_environment`を選び、次に`weekly-reset`、`game-question-set-cleanup`、`audit-log-cleanup-dry-run`、`audit-log-cleanup-execute`を選択する。手動実行の既定は`staging`で、`staging` / `production`だけを選択できる。scheduleはmanual選択肢に含めない`production-batch` Environmentを参照し、repository Variable `PRODUCTION_SCHEDULED_BATCH_ENABLED`が文字列`true`の場合だけ起動する。source integrity gateと`production-batch`設定が完了するまでは未設定または`false`を維持する。
+
+ローカルの`batch:scheduled`はGitHub repository Variableを評価しない。staging / productionの`DATABASE_URL`をローカルshellへ渡さず、実環境の手動retryは承認境界を維持した`Batch Jobs`のworkflow_dispatchから行う。監査ログの本実行は、選択したEnvironmentの`AUDIT_LOG_CLEANUP_ENABLED=true`が設定された場合だけ削除する。T19の確認では必ず`staging`を選び、`production`はrelease gate完了前に選択しない。
 
 T19の期限境界確認はActionsの`Staging Audit Cleanup Fixtures`から`prepare`、`verify-cleaned`、`remove`を使用する。このworkflowは`staging`固定であり、`AUDIT_LOG_STAGING_FIXTURES_ENABLED=true`を検証中だけ設定する。実行順序と停止・後片付けは`docs/11_deployment.md`の「T19 staging fixtureによる境界・再実行・停止確認」に従い、ローカルshellやSupabase SQL Editorへ`DATABASE_URL`やfixture SQLを貼り付けない。
 

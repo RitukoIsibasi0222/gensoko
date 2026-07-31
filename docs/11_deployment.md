@@ -689,30 +689,41 @@ jobs:
 | job                     | GitHub Actions cron | 意味                            | 備考                                                     |
 | ----------------------- | ------------------- | ------------------------------- | -------------------------------------------------------- |
 | 週間スコアリセット      | 7 15 \* \* 0        | UTC 日曜 15:07 = JST 月曜 00:07 | wrapper は Cloudflare 形式の 0 15 \* \* SUN も受け付ける |
-| GameQuestionSet cleanup | 17,47 \* \* \* \*   | 毎時17分/47分（30分ごと）       | 問題セットの有効期限30分に合わせる                       |
+| GameQuestionSet cleanup | 17 18 \* \* \*      | UTC毎日18:17 = JST毎日03:17     | 論理TTLはAPIで同期検証し、物理削除だけを日次実行する     |
 | 監査ログcleanup         | 37 18 \* \* \*      | UTC毎日18:37 = JST毎日03:37     | cleanup無効時は状態確認後にskipする                      |
+
+GameQuestionSetの有効期限30分は`submitGameSession()`が`expiresAt <= now`で同期的に拒否する。cleanupが次の日次runまで遅れても期限切れ送信は受理されないため、物理削除頻度を論理TTLと同じ30分へ合わせない。設定上の起動回数は週344回から週15回へ減少する。
 
 ### 必要なSecret・Variables
 
-GitHub の Settings > Environments で`staging`と`production`を分離し、それぞれに以下を登録する。repository共通の`DATABASE_URL`、`BATCH_ENVIRONMENT`、`AUDIT_LOG_RETENTION_DAYS`、`AUDIT_LOG_CLEANUP_ENABLED`は登録しない。
+GitHub の Settings > Environments でmanual用`staging` / `production`とscheduled専用`production-batch`を分離する。以下のSecret・Variablesはrepository-level（Settings > Secrets and variables > Actions）へ登録せず、表に示す各Environmentへ登録する。
 
-| Environment | 種別     | 名前                                 | 値・扱い                                                                            |
-| ----------- | -------- | ------------------------------------ | ----------------------------------------------------------------------------------- |
-| staging     | Secret   | `DATABASE_URL`                       | staging専用DB接続文字列。workflow・リポジトリ・ログへ直接書かない                   |
-| staging     | Variable | `BATCH_ENVIRONMENT`                  | `staging`                                                                           |
-| staging     | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 検証用`365`                                                                         |
-| staging     | Variable | `AUDIT_LOG_CLEANUP_ENABLED`          | 初期値`false`。実削除確認中だけ明示的に`true`へ変更する                             |
-| staging     | Variable | `AUDIT_LOG_STAGING_FIXTURES_ENABLED` | 初期値`false`。T19のfixture操作中だけ`true`へ変更する                               |
-| staging     | Secret   | `STAGING_SUPABASE_PROJECT_REF`       | staging Supabase project ref。接続先取り違え防止用。Actionsのenv一覧へ表示させない  |
-| production  | Secret   | `DATABASE_URL`                       | production専用DB接続文字列。stagingと共用しない                                     |
-| production  | Secret   | `BACKUP_ENCRYPTION_PASSPHRASE`       | 20文字以上のbackup暗号化専用値。password managerにも保存し、DB passwordと共用しない |
-| production  | Variable | `BATCH_ENVIRONMENT`                  | `production`                                                                        |
-| production  | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 2026-07-14承認済みの正式保持期間`365`                                               |
-| production  | Variable | `AUDIT_LOG_CLEANUP_ENABLED`          | 全release gate完了までは`false`                                                     |
+| Environment      | 種別     | 名前                                 | 値・扱い                                                                            |
+| ---------------- | -------- | ------------------------------------ | ----------------------------------------------------------------------------------- |
+| staging          | Secret   | `DATABASE_URL`                       | staging専用DB接続文字列。workflow・リポジトリ・ログへ直接書かない                   |
+| staging          | Variable | `BATCH_ENVIRONMENT`                  | `staging`                                                                           |
+| staging          | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 検証用`365`                                                                         |
+| staging          | Variable | `AUDIT_LOG_CLEANUP_ENABLED`          | 初期値`false`。実削除確認中だけ明示的に`true`へ変更する                             |
+| staging          | Variable | `REFRESH_TOKEN_CLEANUP_ENABLED`      | 初期値`false`。refresh token実削除の承認中だけ明示的に`true`へ変更する              |
+| staging          | Variable | `AUDIT_LOG_STAGING_FIXTURES_ENABLED` | 初期値`false`。T19のfixture操作中だけ`true`へ変更する                               |
+| staging          | Secret   | `STAGING_SUPABASE_PROJECT_REF`       | staging Supabase project ref。接続先取り違え防止用。Actionsのenv一覧へ表示させない  |
+| production       | Secret   | `DATABASE_URL`                       | production専用DB接続文字列。stagingと共用しない                                     |
+| production       | Secret   | `BACKUP_ENCRYPTION_PASSPHRASE`       | 20文字以上のbackup暗号化専用値。password managerにも保存し、DB passwordと共用しない |
+| production       | Variable | `BATCH_ENVIRONMENT`                  | `production`                                                                        |
+| production       | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 2026-07-14承認済みの正式保持期間`365`                                               |
+| production       | Variable | `AUDIT_LOG_CLEANUP_ENABLED`          | 全release gate完了までは`false`                                                     |
+| production       | Variable | `REFRESH_TOKEN_CLEANUP_ENABLED`      | refresh token実削除が別途承認されるまでは`false`                                    |
+| production-batch | Secret   | `DATABASE_URL`                       | production専用Session pooler。値を取得・表示・記録しない                            |
+| production-batch | Variable | `BATCH_ENVIRONMENT`                  | `production`                                                                        |
+| production-batch | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 承認済みの正式保持期間`365`                                                         |
+| production-batch | Variable | `AUDIT_LOG_CLEANUP_ENABLED`          | release gate完了までは`false`                                                       |
+| production-batch | Variable | `REFRESH_TOKEN_CLEANUP_ENABLED`      | 自動化が別途承認されるまでは`false`                                                 |
 
-workflow jobは選択されたEnvironmentを参照する。手動実行は`staging`が既定で、scheduleは`production`を参照する。`BATCH_ENVIRONMENT`が選択環境と一致しない場合、または`DATABASE_URL`が未登録の場合は、DB処理や依存関係installの前に失敗する。
+repository Variable `PRODUCTION_SCHEDULED_BATCH_ENABLED`はscheduled job全体のkill switchである。初期値は未設定または`false`とし、後述するsource integrity gate、`production-batch`、release gateが完了した後だけ文字列`true`へ変更する。
 
-保持期間・cleanup flagは秘密情報ではないためEnvironment Variablesで管理する。`AUDIT_LOG_RETENTION_DAYS`の未設定・空文字・不正値は削除前に失敗する。cleanup flagはruntime環境変数自体が省略された場合だけ`false`になるが、workflowでは未登録Variableが空文字として渡りvalidation失敗になるため、`AUDIT_LOG_CLEANUP_ENABLED=false`を明示登録する。
+workflow jobは、手動実行では選択した`staging` / `production`、scheduleでは`production-batch`を参照する。`production-batch`はworkflow_dispatchの選択肢へ追加しない。`BATCH_ENVIRONMENT`が期待値と一致しない場合、または`DATABASE_URL`が未登録の場合は、DB処理や依存関係installの前に失敗する。
+
+保持期間・cleanup flagは秘密情報ではないためEnvironment Variablesで管理する。`AUDIT_LOG_RETENTION_DAYS`の未設定・空文字・不正値は削除前に失敗する。`AUDIT_LOG_CLEANUP_ENABLED`と`REFRESH_TOKEN_CLEANUP_ENABLED`はruntime環境変数自体が省略された場合だけ`false`になるが、workflowでは未登録Variableが空文字として渡りvalidation失敗になるため、3 Environmentすべてへ両方を`false`で明示登録する。
 
 ### staging DBの初期構築
 
@@ -727,7 +738,7 @@ Staging Database Setup workflowは手動実行専用で、GitHub Environmentを`
 
 ### 手動実行・retry
 
-GitHub Actions の Batch Jobs workflow は workflow_dispatch に対応している。最初に`target_environment`を選び、次に`batch_job`を選ぶ。T19では必ず`staging`を選択する。`production`はT20のrelease gate完了前に選択しない。
+GitHub Actions の Batch Jobs workflow は workflow_dispatch に対応している。最初に`target_environment`を選び、次に`batch_job`を選ぶ。manual選択肢は`staging` / `production`だけで、`production-batch`は選択できない。T19では必ず`staging`を選択する。`production`はT20のrelease gate完了前に選択しない。
 
 | 入力                 | 選択肢                      | 実行内容                                    |
 | -------------------- | --------------------------- | ------------------------------------------- |
@@ -737,7 +748,41 @@ GitHub Actions の Batch Jobs workflow は workflow_dispatch に対応してい�
 | `batch_job`          | `audit-log-cleanup-dry-run` | 期限超過件数とcutoffをpreviewし、削除しない |
 | `batch_job`          | `audit-log-cleanup-execute` | cleanup有効時だけ実削除する                 |
 
-Actionsのscheduleは遅延・スキップされる可能性があるため、毎時00分付近を避けて7分・17分・37分・47分に分散している。workflowのconcurrency groupは`gensoko-batch-jobs`で固定し、scheduleと手動実行を直列化する。失敗時は安全ログを確認し、原因解消後にworkflow_dispatchで再実行する。
+Actionsのscheduleは遅延・スキップされる可能性があるため、毎時00分付近を避けて7分・17分・37分に分散している。scheduled runは`gensoko-scheduled-batch`、workflow_dispatchは既存の`gensoko-batch-jobs` concurrency groupを使う。両方とも`cancel-in-progress: false`を維持するが、同じgroupではrunning最大1件・pending最大1件で、新しいrunが既存pendingを置き換える。失敗時は安全ログを確認し、原因解消後にworkflow_dispatchで対象jobを1回だけ再実行する。
+
+### scheduled production source integrity gate
+
+`production-batch`はruntime承認を持たないため、kill switchを有効化する前にsource変更側へ次の保護を設定する。
+
+1. `.github/workflows/repository-integrity.yml`が`develop`向け全PRでpath filterなしに起動することを確認する。
+2. check名`Repository Integrity / repository-integrity`がdocs-only PRでも作成され、成功することを確認する。
+3. `develop`のrulesetへ、PR必須、非作成者1名以上の承認、古い承認の無効化、最新pushの承認、上記check必須、通常運用者のbypassなしを設定する。
+4. 既存`Backend PR Quality` / `Frontend PR Quality`はpath filter付きのため、全PR共通のrequired checkへ直接指定しない。
+5. `production` Environmentのrequired reviewerと`develop`限定branch policyを維持する。
+
+非作成者レビューまたはrequired checkを適用できない場合、`production-batch`を有効化せず、`PRODUCTION_SCHEDULED_BATCH_ENABLED=false`のまま既存`production`のmanual承認運用を継続する。
+
+### scheduled production初回有効化
+
+repository実装を`develop`へmergeしただけでは定期実行を有効化しない。外部設定はrepository変更と分離し、ownerの明示承認後に次の順序で行う。
+
+1. review済みSHA、`Repository Integrity`必須化、`production` reviewer維持を確認する。
+2. `production-batch`をrequired reviewerなし・`develop`限定で作成する。
+3. `DATABASE_URL` Secretと必要なVariable名を値非表示で確認・登録する。Secret値はCLI、log、Artifact、summary、Issue、PR、文書へ出さない。
+4. `PRODUCTION_SCHEDULED_BATCH_ENABLED`を未設定または`false`のまま、次のscheduleがEnvironmentへ入らずskipすることを確認する。
+5. 旧waiting / pending runごとにjobのstepsが0件であることを確認し、run IDと状態をownerへ提示する。承認されたrunだけをcancelする。
+6. release gate完了後、別承認を得てkill switchを`true`へ変更する。
+7. 最初の日次GameQuestionSet cleanup、日次audit cleanup、週次resetについて、run URL、対象SHA、job、件数、所要時間、終了codeを記録する。
+8. Secret、PII、内部ID、raw DB errorがlogにないことを確認し、最初の成功runから最低14日間baselineを収集する。
+
+### scheduled production停止・rollback
+
+1. 即時停止時は最初に`PRODUCTION_SCHEDULED_BATCH_ENABLED=false`へ戻す。
+2. active scheduled runがある場合はjobとDB stepを確認し、実行中のDB stepを無条件にcancelしない。処理の冪等性と中断影響を確認する。
+3. 次回scheduleがEnvironmentへ入らずskipすることを確認する。
+4. code rollbackではkill switchを`false`にした後、問題commitをrevertするPRを作成する。
+5. 30分cronへは戻さない。必要なcleanupは既存workflow_dispatchから対象jobを1回だけ実行する。
+6. migrationなどbatchと同時実行できない作業の前も、kill switchを`false`にし、active scheduled runがないことを確認する。
 
 ### T19 staging fixtureによる境界・再実行・停止確認
 

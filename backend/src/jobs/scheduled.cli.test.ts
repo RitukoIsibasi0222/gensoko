@@ -112,4 +112,23 @@ describe("scheduled.cli", () => {
       message: "SCHEDULED_TIME は UNIX epoch milliseconds または ISO 8601 形式で指定してください",
     });
   });
+
+  it("sets a non-zero exit code without duplicating the runner log when the cron is unsupported", async () => {
+    const cron = "5 * * * *";
+    process.env.BATCH_CRON = cron;
+    vi.mocked(runScheduledBatch).mockRejectedValue(new Error("未対応の定期バッチCronです"));
+    vi.mocked(prisma.$disconnect).mockResolvedValue(undefined);
+
+    await import("./scheduled.cli.js");
+
+    await vi.waitFor(() => {
+      expect(runScheduledBatch).toHaveBeenCalledWith({
+        cron,
+        scheduledTime: expect.any(Number),
+      });
+      expect(prisma.$disconnect).toHaveBeenCalledTimes(1);
+    });
+    expect(process.exitCode).toBe(1);
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
 });
