@@ -587,7 +587,7 @@ production公開・関連release gate完了後に別承認を得る。
 
 ### 計画からの変更点
 
-- BO3のCLIは既存の共通catchですでにwrapperの例外を非0終了へ変換していたため、未知cron固有の回帰testを追加し、その一般処理を再利用した。CLI本体の変更は不要だった。
+- BO3のCLIは未知cronを非0終了へ変換する。PRレビュー後、wrapperが記録済みの失敗をCLIの共通catchで再ログしないよう、wrapper例外は終了コードだけへ変換し、共通catchはCLI入力エラーの記録に限定した。
 - 旧計画は履歴本文を改変せず、後継計画へのリンクだけを先頭へ追加した。
 
 ### 実際の変更ファイル
@@ -599,7 +599,8 @@ production公開・関連release gate完了後に別承認を得る。
 | `backend/src/jobs/batchWorkflow.test.ts`       | 修正     | workflowとintegrity workflowのsource contractを更新   |
 | `backend/src/jobs/scheduled.ts`                | 修正     | 日次cron定数と未知cron fail-closed                    |
 | `backend/src/jobs/scheduled.test.ts`           | 修正     | 日次dispatch・旧cron拒否・未知cron失敗                |
-| `backend/src/jobs/scheduled.cli.test.ts`       | 修正     | 未知cron時の非0終了契約                               |
+| `backend/src/jobs/scheduled.cli.ts`            | 修正     | wrapper失敗時の非0終了と二重ログ防止                  |
+| `backend/src/jobs/scheduled.cli.test.ts`       | 修正     | 未知cron時の非0終了・二重ログ防止契約                 |
 | `docs/09_startup_commands.md`                  | 修正     | 日次cron、manual実行、kill switch境界                 |
 | `docs/11_deployment.md`                        | 修正     | Environment分離、初回有効化、停止、rollback           |
 | `docs/05_progress.md`                          | 修正     | repository実装中へ更新                                |
@@ -613,6 +614,14 @@ production公開・関連release gate完了後に別承認を得る。
 | Red      | `npm run test -- --run src/jobs/batchWorkflow.test.ts src/jobs/scheduled.test.ts src/jobs/scheduled.cli.test.ts` | 2 files失敗・1 file成功、11 tests失敗・18 tests成功 |
 | Green    | `npm run test -- --run src/jobs/batchWorkflow.test.ts src/jobs/scheduled.test.ts src/jobs/scheduled.cli.test.ts` | 3 files / 29 tests成功                              |
 | Refactor | format・docs同期後に同じ対象testを再実行                                                                         | 3 files / 29 tests成功                              |
+
+### PRレビュー対応記録
+
+| フェーズ | コマンド                                                                                                         | 結果                                                  |
+| -------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Red      | `npm run test -- --run src/jobs/scheduled.cli.test.ts`                                                           | 二重ログ禁止の1 testが意図した理由で失敗、4 tests成功 |
+| Green    | `npm run test -- --run src/jobs/scheduled.cli.test.ts`                                                           | 1 file / 5 tests成功                                  |
+| Refactor | `npm run test -- --run src/jobs/batchWorkflow.test.ts src/jobs/scheduled.test.ts src/jobs/scheduled.cli.test.ts` | Repository Integrity対象の3 files / 29 tests成功      |
 
 ### 最終品質ゲート
 
