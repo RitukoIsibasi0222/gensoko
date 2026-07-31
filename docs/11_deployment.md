@@ -753,6 +753,7 @@ Actionsのscheduleは遅延・スキップされる可能性があるため、�
 ### 2026-07-31 運用再開時点
 
 - PR #166は`develop`へmerge済みで、merge commitは`ffb66269be48897da3904308a690a9cc9913ff94`である。
+- 外部設定記録のPR #168も`develop`へmerge済みで、merge commitは`4c1a3739b61698a8562fb91db425502c5fa8f872`、最終headは`d5f9d5c8f7b6d5e9495a345e403a84a2db3b1cd8`である。
 - 旧run #804（ID `30419479066`）と#868（ID `30613767092`）は、jobの`steps`が空でDB処理未開始であることを確認してcancel済みである。再確認時のwaiting / queued / in-progress / pendingは0件である。
 - `production-batch` Environmentはrequired reviewerなし・`develop`限定で作成済みである。`DATABASE_URL` Secret名と、必要な4 Environment Variable名と期待値の一致を値非表示で確認した。
 - repository Variable `PRODUCTION_SCHEDULED_BATCH_ENABLED`は安全側の無効設定で登録済みである。
@@ -772,18 +773,30 @@ Actionsのscheduleは遅延・スキップされる可能性があるため、�
 
 Gensokoはcollaboratorがowner 1名の個人ポートフォリオである。非作成者レビュー、厳格なruleset、`Repository Integrity`のrequired check化、docs-only検証PRは運用完了条件にしない。将来複数人運営へ移行する場合は、その時点の権限・費用・運用負担に応じて追加保護を別途検討する。
 
+### v0.1公開とBO15〜BO18の実行順序
+
+定期バッチの外部設定が完了していても、ポートフォリオ版v0.1の公開前にBO15を先行しない。次の順序を維持する。
+
+1. M5でsame-site URL、Cookie、CORS、メール送信元、production専用Secret・binding、DB target、pending migration、review済みSHA、rollback先を値非表示でpreflightし、別承認後にAPI、frontendの順でdeployする。
+2. M6で単一synthetic Userによる登録・メール受信から退会、game、refresh、通常password verifier DO、最小429、security、User所有row cleanup、flag復旧を確認する。
+3. M5/M6完了後、BO15の別承認を得て`PRODUCTION_SCHEDULED_BATCH_ENABLED=true`へ変更する。workflow_dispatchは実行しない。
+4. BO16では自然発生する日次GameQuestionSet cleanup、日次audit cleanup、週次resetを確認する。問題があればkill switchを`false`へ戻す。
+5. 初回run確認後にBO18として計画書・進捗・runbookを実態へ同期する。
+
+文書変更のmerge、M5 preflight、M5 deploy、M6 smoke、BO15有効化はそれぞれ別の境界である。この文書だけを根拠にdeploy、workflow dispatch、production DB query、Secret値参照、kill switch有効化を行わない。
+
 ### scheduled production初回有効化
 
-repository実装を`develop`へmergeしただけでは定期実行を有効化しない。外部設定はrepository変更と分離し、ownerの明示承認後に次の順序で行う。
+BO13の外部設定が完了していても、M5/M6完了とBO15の明示承認までは定期実行を有効化しない。次の順序で行う。
 
-1. review済みSHA、軽量`Repository Integrity`、`production` reviewer維持を確認する。
-2. `production-batch`をrequired reviewerなし・`develop`限定で作成する。
-3. `DATABASE_URL` Secretと必要なVariable名を値非表示で確認・登録する。Secret値はCLI、log、Artifact、summary、Issue、PR、文書へ出さない。
-4. `PRODUCTION_SCHEDULED_BATCH_ENABLED`を未設定または`false`のまま、次のscheduleがEnvironmentへ入らずskipすることを確認する。
-5. 外部設定が意図どおりであることを確認してもkill switchは`false`のまま停止し、有効化の別承認を得る。
-6. 別承認後にkill switchを`true`へ変更する。
+1. M5/M6の完了記録、review済みSHA、軽量`Repository Integrity`、`production` reviewer維持を確認する。
+2. `production-batch`がrequired reviewerなし・`develop`限定であり、workflow_dispatchから選択できないことを再確認する。
+3. `DATABASE_URL` Secret名と必要なVariable名・期待値を値非表示で再確認する。Secret値はCLI、log、Artifact、summary、Issue、PR、文書へ出さない。
+4. active Batch Jobsが0件であることを確認する。
+5. `PRODUCTION_SCHEDULED_BATCH_ENABLED=false`を維持したまま停止し、有効化の別承認を得る。
+6. 別承認後に`PRODUCTION_SCHEDULED_BATCH_ENABLED=true`へ変更する。
 7. 最初に自然発生する日次GameQuestionSet cleanup、日次audit cleanup、週次resetについて、対象SHA、job名、status / conclusion、DB処理前validation、cleanup結果またはskip・失敗理由を簡潔に記録する。
-8. Secret、PII、内部ID、raw DB errorがlogにないことを確認する。問題があればkill switchを`false`へ戻す。
+8. Secret、PII、内部ID、raw DB errorがlogにないことを確認する。問題があれば`PRODUCTION_SCHEDULED_BATCH_ENABLED=false`へ戻す。
 
 14日間のbaseline、オンコール、SLA、外部監視、複雑な通知は個人ポートフォリオの運用完了条件にしない。公開後にDB容量、所要時間、失敗の問題が見つかった場合だけ、必要な期間の追加観測を行う。
 
