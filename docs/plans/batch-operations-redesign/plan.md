@@ -444,7 +444,7 @@ DB schema / migrationを変更しないため、`prisma migrate deploy`とPlaywr
 - [x] BO8: 運用docsを同期
 - [x] BO9: 旧計画へ後継リンクを追加
 - [x] BO10: 最終品質ゲート
-- [ ] BO11: repository実装をcommit・push・PR
+- [x] BO11: repository実装をcommit・push・PR
 - [ ] BO12: `develop`のsource integrity gateを設定
 - [ ] BO13: `production-batch`を外部設定
 - [ ] BO14: merge後に旧waiting/pending runを整理
@@ -582,8 +582,8 @@ production公開・関連release gate完了後に別承認を得る。
 
 - 実装日: 2026-07-31
 - 実装ブランチ: `feature/batch-operations-redesign`
-- PR: 作成前
-- 状態: BO1〜BO10完了。BO11 PR作成は進行中。外部設定BO12〜BO17は未実施
+- PR: #166
+- 状態: BO1〜BO11のrepository実装完了。外部設定BO12〜BO17は未実施
 
 ### 計画からの変更点
 
