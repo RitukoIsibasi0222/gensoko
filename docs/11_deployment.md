@@ -794,9 +794,9 @@ BO13の外部設定が完了していても、M5/M6完了とBO15の明示承認�
 3. `DATABASE_URL` Secret名と必要なVariable名・期待値を値非表示で再確認する。Secret値はCLI、log、Artifact、summary、Issue、PR、文書へ出さない。
 4. active Batch Jobsが0件であることを確認する。
 5. `PRODUCTION_SCHEDULED_BATCH_ENABLED=false`を維持したまま停止し、有効化の別承認を得る。
-6. 別承認後にkill switchを`true`へ変更する。
+6. 別承認後に`PRODUCTION_SCHEDULED_BATCH_ENABLED=true`へ変更する。
 7. 最初に自然発生する日次GameQuestionSet cleanup、日次audit cleanup、週次resetについて、対象SHA、job名、status / conclusion、DB処理前validation、cleanup結果またはskip・失敗理由を簡潔に記録する。
-8. Secret、PII、内部ID、raw DB errorがlogにないことを確認する。問題があればkill switchを`false`へ戻す。
+8. Secret、PII、内部ID、raw DB errorがlogにないことを確認する。問題があれば`PRODUCTION_SCHEDULED_BATCH_ENABLED=false`へ戻す。
 
 14日間のbaseline、オンコール、SLA、外部監視、複雑な通知は個人ポートフォリオの運用完了条件にしない。公開後にDB容量、所要時間、失敗の問題が見つかった場合だけ、必要な期間の追加観測を行う。
 
