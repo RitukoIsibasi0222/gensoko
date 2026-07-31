@@ -506,7 +506,7 @@ BO18	計画書・進捗を完了更新	docs	高
 
 ### Phase 4: 有効化
 
-production公開・関連release gate完了後に別承認を得る。
+ポートフォリオ版v0.1のM5 production preflight・deployとM6 production smoke・cleanupが完了した後に、BO15の別承認を得る。2026-07-31時点の次工程はM5であり、M5/M6より先に定期バッチを有効化しない。
 
 1. Environmentの識別子、Secret名、Variable名、branch policyを値非表示で再確認する。
 2. `PRODUCTION_SCHEDULED_BATCH_ENABLED=true`へ変更する。
@@ -654,6 +654,10 @@ PR #166のrepository実装ではGitHub Environment、Secret、Variable、ruleset
 2026-07-31の初回再確認では、`production-batch`は未作成、repository Variableは0件、`PRODUCTION_SCHEDULED_BATCH_ENABLED`は未設定、`staging` / `production`の`REFRESH_TOKEN_CLEANUP_ENABLED`は未登録だった。
 
 その後、ownerの明示承認によりBO13を実施した。`production-batch`をrequired reviewerなし・`develop`限定で作成し、`DATABASE_URL` Secret名と必要な4 Variable名を値非表示で確認した。repository kill switchは無効を維持し、`staging` / `production`の`REFRESH_TOKEN_CLEANUP_ENABLED`も安全側設定との一致を確認した。`production`のrequired reviewerと`develop`限定policyは維持され、設定後のactive Batch Jobsは0件だった。Secret値の取得・表示、workflow実行、production DB query、有効化BO15、初回run確認BO16は実施していない。
+
+外部設定記録はPR #168として`develop`へmerge済みで、merge commitは`4c1a3739b61698a8562fb91db425502c5fa8f872`、最終headは`d5f9d5c8f7b6d5e9495a345e403a84a2db3b1cd8`である。merge後の再監査でも、kill switchの無効状態、3 Environmentのbranch policy、`production` required reviewer、`production-batch`のSecret名・Variable名、active Batch Jobs 0件を値非表示で確認した。
+
+BO13後の再開順序は、M5 production preflight・deploy、M6 production smoke・cleanup、別承認によるBO15、自然発生するscheduled runのBO16、最終文書同期のBO18とする。この文書整備はBO15以降の実行許可ではなく、BO15/BO16/BO18は未完了を維持する。
 
 ## 実装完了時の記録
 
