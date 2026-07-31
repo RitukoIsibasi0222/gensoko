@@ -80,7 +80,7 @@
 ### 公式仕様
 
 - [GitHub Actions concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
-  - 既定の`queue: single`では、同じgroupのpending runは新しいrunに置き換えられる。
+  - 同じconcurrency groupでは、実行中runは最大1件、pending runも最大1件となり、新しいrunが既存のpending runを置き換える。
   - `cancel-in-progress: false`はrunning runのcancelを防ぐ設定であり、pending runを無制限に保持する設定ではない。
 - [GitHub deployment environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/control-deployments)
   - required reviewer通過前はjobとEnvironment Secretを利用できない。
