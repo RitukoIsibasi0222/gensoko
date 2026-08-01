@@ -1,0 +1,41 @@
+name: Frontend PR Quality
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-pr-quality.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-pr-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      VERCEL_ENV: preview
+      VERCEL_GIT_COMMIT_REF: ${{ github.base_ref }}
+      VITE_API_BASE_URL: https://staging-api.example.invalid/api/v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=moderate
+      - run: npm run test:run
+      - run: npm run lint
+      - run: npm run check
+      - run: npm run format:check
+      - run: npm run build:preview

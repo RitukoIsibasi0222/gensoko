@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/cloudflare/**",
+    "src/worker.ts",
+    "src/worker-production.ts",
+    "src/worker-staging-rollback-baseline.ts",
+    "src/worker-staging-rollback-baseline.test.ts",
+    "src/lib/worker-request-adapters.ts",
+    "src/lib/worker-request-adapters.test.ts",
+    "src/lib/durable-object-password-verifier.ts",
+    "src/middleware/rateLimit/durable-object-store.ts"
+  ]
+}

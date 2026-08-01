@@ -1,0 +1,45 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-07-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "env": {
+    "staging": {
+      "name": "gensoko-api-staging",
+      "vars": {
+        "DEPLOYMENT_ENVIRONMENT": "staging",
+        "DATABASE_TARGET": "staging",
+        "NODE_ENV": "production",
+        "RATE_LIMIT_STORE": "durable-object",
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "RATE_LIMIT_COUNTER",
+            "class_name": "RateLimitCounter",
+          },
+          {
+            "name": "PASSWORD_VERIFIER",
+            "class_name": "PasswordVerifierDurableObject",
+          },
+        ],
+      },
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE",
+          "id": "514d12df5d3544b79c269aeb95ce7dc5",
+        },
+      ],
+      "migrations": [
+        {
+          "tag": "v1",
+          "new_sqlite_classes": ["RateLimitCounter"],
+        },
+        {
+          "tag": "v2",
+          "new_sqlite_classes": ["PasswordVerifierDurableObject"],
+        },
+      ],
+    },
+  },
+}

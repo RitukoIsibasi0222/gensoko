@@ -1,0 +1,140 @@
+name: Staging Account Deletion Performance
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: stagingで実行する性能確認
+        required: true
+        type: choice
+        default: preview
+        options:
+          - preview
+          - execute
+      session_count:
+        description: execute時のsynthetic GameSession件数
+        required: false
+        type: string
+      answer_count:
+        description: execute時のsynthetic GameAnswer件数
+        required: false
+        type: string
+      platform_request_timeout_ms:
+        description: execute時のplatform request timeout（ms）
+        required: false
+        type: string
+      confirmation:
+        description: execute時だけMEASURE_STAGING_ACCOUNT_DELETIONを入力
+        required: false
+        type: string
+
+jobs:
+  staging-account-deletion-performance:
+    name: Measure staging account deletion performance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    concurrency:
+      group: gensoko-batch-jobs
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
+      STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+      STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED: ${{ vars.STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED }}
+
+    steps:
+      - name: Validate staging operation
+        env:
+          REQUESTED_OPERATION: ${{ inputs.operation }}
+          REQUESTED_CONFIRMATION: ${{ inputs.confirmation }}
+          SESSION_COUNT: ${{ inputs.session_count }}
+          ANSWER_COUNT: ${{ inputs.answer_count }}
+          PLATFORM_REQUEST_TIMEOUT_MS: ${{ inputs.platform_request_timeout_ms }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_REF_NAME" != "develop" ]; then
+            echo "staging性能確認はdevelop branchから実行してください"
+            exit 1
+          fi
+          if [ "$BATCH_ENVIRONMENT" != "staging" ]; then
+            echo "staging DB設定が不正です"
+            exit 1
+          fi
+          if [ -z "$STAGING_SUPABASE_PROJECT_REF" ] || [ -z "$DATABASE_URL" ]; then
+            echo "staging性能確認設定が不足しています"
+            exit 1
+          fi
+
+          case "$REQUESTED_OPERATION" in
+            preview)
+              if [ -n "$REQUESTED_CONFIRMATION" ] || [ -n "$SESSION_COUNT" ] || [ -n "$ANSWER_COUNT" ] || [ -n "$PLATFORM_REQUEST_TIMEOUT_MS" ]; then
+                echo "previewではexecute用入力を指定しないでください"
+                exit 1
+              fi
+              ;;
+            execute)
+              if [ "$STAGING_ACCOUNT_DELETION_PERFORMANCE_ENABLED" != "true" ]; then
+                echo "staging性能測定executeは無効です"
+                exit 1
+              fi
+              if [ "$REQUESTED_CONFIRMATION" != "MEASURE_STAGING_ACCOUNT_DELETION" ]; then
+                echo "staging性能測定の確認文字列が一致しません"
+                exit 1
+              fi
+              if [ -z "$SESSION_COUNT" ] || [ -z "$ANSWER_COUNT" ] || [ -z "$PLATFORM_REQUEST_TIMEOUT_MS" ]; then
+                echo "staging性能測定の件数またはtimeoutが不足しています"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "未対応のstaging性能確認です"
+              exit 1
+              ;;
+          esac
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma generate
+
+      - name: Preview existing maximum counts
+        if: inputs.operation == 'preview'
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run staging:account-deletion-performance
+
+      - name: Measure synthetic account deletion
+        if: inputs.operation == 'execute'
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SESSION_COUNT: ${{ inputs.session_count }}
+          ANSWER_COUNT: ${{ inputs.answer_count }}
+          PLATFORM_REQUEST_TIMEOUT_MS: ${{ inputs.platform_request_timeout_ms }}
+        run: |
+          npm run staging:account-deletion-performance -- \
+            --execute \
+            --session-count="$SESSION_COUNT" \
+            --answer-count="$ANSWER_COUNT" \
+            --platform-request-timeout-ms="$PLATFORM_REQUEST_TIMEOUT_MS" \
+            --confirm=MEASURE_STAGING_ACCOUNT_DELETION

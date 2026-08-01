@@ -1,0 +1,1101 @@
+import { randomInt } from "node:crypto";
+import type { Element as PrismaElement, GameMode, Prisma } from "@prisma/client";
+import type { AppPrismaClient } from "../lib/prisma-client.js";
+import { getWeeklyScoreWeekStart, isSameWeeklyScoreWeek } from "../lib/weekly-score.js";
+import { createElementMasteryService } from "./element-mastery.service.js";
+
+const GAME_QUESTION_COUNT = 10;
+const GAME_CHOICE_COUNT = 4;
+const MIN_WEAK_ELEMENTS_FOR_GAME = 5;
+const QUESTION_SET_EXPIRES_MS = 30 * 60 * 1000;
+export const QUESTION_TIME_LIMIT_SEC = 15;
+export const GAME_SESSION_DURATION_LIMIT_SEC = 1800;
+const BASE_CORRECT_SCORE = 100;
+const WEAK_ELEMENT_MASTERED_CONSECUTIVE_HIT_COUNT = 2;
+const ELEMENT_ID_MIN = 1;
+const ELEMENT_ID_MAX = 118;
+const ALL_ELEMENT_IDS = Array.from(
+  { length: ELEMENT_ID_MAX - ELEMENT_ID_MIN + 1 },
+  (_, index) => ELEMENT_ID_MIN + index,
+);
+
+export type PublicGameChoice = {
+  choiceId: string;
+  text: string;
+};
+
+export type PublicGameQuestion = {
+  questionId: string;
+  prompt: string;
+  choices: PublicGameChoice[];
+};
+
+export type CreateGameQuestionSetResult = {
+  questionSetId: string;
+  expiresAt: Date;
+  questions: PublicGameQuestion[];
+};
+
+export type SubmitGameSessionAnswer = {
+  questionId: string;
+  chosenChoiceId: string | null;
+  answerTimeSec: number;
+};
+
+export type SubmitGameSessionParams = {
+  userId: string;
+  questionSetId: string;
+  mode: GameMode;
+  answers: SubmitGameSessionAnswer[];
+  durationSec: number;
+  now?: Date;
+};
+
+export type GameSessionResultItem = {
+  questionId: string;
+  elementId: number;
+  prompt: string;
+  chosenChoiceId: string | null;
+  isCorrect: boolean;
+  correctAnswer: string;
+  yourAnswer: string | null;
+  answerTimeSec: number;
+  score: number;
+};
+
+export type SubmitGameSessionResult = {
+  sessionId: string;
+  mode: GameMode;
+  correctCount: number;
+  totalCount: number;
+  totalScore: number;
+  maxStreak: number;
+  durationSec: number;
+  playedAt: Date;
+  results: GameSessionResultItem[];
+};
+
+export type GetGameSessionResultParams = {
+  userId: string;
+  sessionId: string;
+};
+
+type StoredGameChoice = PublicGameChoice & {
+  elementId: number;
+};
+
+type StoredGameQuestion = {
+  questionId: string;
+  prompt: string;
+  elementId: number;
+  correctChoiceId: string;
+  choices: StoredGameChoice[];
+};
+
+type CreateGameQuestionSetParams = {
+  userId: string;
+  mode: GameMode;
+  now?: Date;
+  choiceIndexGenerator?: () => number;
+  questionElementIndexGenerator?: (maxExclusive: number) => number;
+};
+
+type RestorableGameAnswer = {
+  id: string;
+  elementId: number;
+  questionIndex: number | null;
+  questionId: string | null;
+  prompt: string | null;
+  chosenChoiceId: string | null;
+  isCorrect: boolean;
+  correctAnswer: string | null;
+  yourAnswer: string | null;
+  answerTimeSec: number;
+  score: number | null;
+  element: PrismaElement;
+};
+
+type RestorableGameSession = {
+  id: string;
+  mode: GameMode;
+  totalScore: number;
+  correctCount: number;
+  totalCount: number;
+  maxStreak: number;
+  durationSec: number;
+  playedAt: Date;
+  answers: RestorableGameAnswer[];
+};
+
+export class InsufficientWeakElementsError extends Error {
+  constructor() {
+    super("苦手モードを始めるには、苦手元素が5件以上必要です");
+    this.name = "InsufficientWeakElementsError";
+  }
+}
+
+export class QuestionSetNotFoundError extends Error {
+  constructor() {
+    super("問題セットが見つかりません");
+    this.name = "QuestionSetNotFoundError";
+  }
+}
+
+export class QuestionSetExpiredError extends Error {
+  constructor() {
+    super("問題セットの有効期限が切れています。もう一度ゲームを開始してください");
+    this.name = "QuestionSetExpiredError";
+  }
+}
+
+export class QuestionSetModeMismatchError extends Error {
+  constructor() {
+    super("問題セットのゲームモードが一致しません");
+    this.name = "QuestionSetModeMismatchError";
+  }
+}
+
+export class QuestionSetAlreadySubmittedError extends Error {
+  constructor() {
+    super("問題セットはすでに送信済みです");
+    this.name = "QuestionSetAlreadySubmittedError";
+  }
+}
+
+export class GameSessionValidationError extends Error {
+  constructor() {
+    super("回答形式が正しくありません");
+    this.name = "GameSessionValidationError";
+  }
+}
+
+export class GameSessionNotFoundError extends Error {
+  constructor() {
+    super("ゲーム結果が見つかりません");
+    this.name = "GameSessionNotFoundError";
+  }
+}
+
+function isNameToSymbolMode(mode: GameMode): boolean {
+  return (
+    mode === "NAME_TO_SYMBOL_LV1" || mode === "NAME_TO_SYMBOL_LV2" || mode === "WEAK_NAME_TO_SYMBOL"
+  );
+}
+
+function isWeakGameMode(mode: GameMode): boolean {
+  return mode === "WEAK_SYMBOL_TO_NAME" || mode === "WEAK_NAME_TO_SYMBOL";
+}
+
+function getNormalModeWhere(mode: GameMode): Prisma.ElementWhereInput {
+  if (mode === "SYMBOL_TO_NAME_LV1" || mode === "NAME_TO_SYMBOL_LV1") {
+    return { id: { gte: ELEMENT_ID_MIN, lte: 20 } };
+  }
+
+  return { id: { gte: 21, lte: ELEMENT_ID_MAX } };
+}
+
+async function getCandidateElements(
+  prisma: AppPrismaClient,
+  userId: string,
+  mode: GameMode,
+): Promise<PrismaElement[]> {
+  if (!isWeakGameMode(mode)) {
+    return prisma.element.findMany({
+      where: getNormalModeWhere(mode),
+      orderBy: { id: "asc" },
+    });
+  }
+
+  const weakElements = await prisma.weakElement.findMany({
+    where: { userId },
+    orderBy: [{ updatedAt: "desc" }, { addedAt: "desc" }],
+    include: { element: true },
+  });
+
+  if (weakElements.length < MIN_WEAK_ELEMENTS_FOR_GAME) {
+    throw new InsufficientWeakElementsError();
+  }
+
+  return weakElements.map((weakElement) => weakElement.element);
+}
+
+function getRandomIndex(maxExclusive: number): number {
+  return randomInt(0, maxExclusive);
+}
+
+function buildQuestionElements(
+  elements: readonly PrismaElement[],
+  questionElementIndexGenerator: (maxExclusive: number) => number,
+): PrismaElement[] {
+  const remainingElements = [...elements];
+  const shuffledElements: PrismaElement[] = [];
+
+  while (remainingElements.length > 0 && shuffledElements.length < GAME_QUESTION_COUNT) {
+    const selectedIndex = questionElementIndexGenerator(remainingElements.length);
+    if (
+      !Number.isInteger(selectedIndex) ||
+      selectedIndex < 0 ||
+      selectedIndex >= remainingElements.length
+    ) {
+      throw new Error("問題選定のインデックスが範囲外です");
+    }
+
+    const [selectedElement] = remainingElements.splice(selectedIndex, 1);
+    shuffledElements.push(selectedElement);
+  }
+
+  return Array.from(
+    { length: GAME_QUESTION_COUNT },
+    (_, index) => shuffledElements[index % shuffledElements.length],
+  );
+}
+
+function getChoiceText(element: PrismaElement, answerWithSymbol: boolean): string {
+  return answerWithSymbol ? element.symbol : element.nameJa;
+}
+
+function getPrompt(element: PrismaElement, answerWithSymbol: boolean): string {
+  return answerWithSymbol ? element.nameJa : element.symbol;
+}
+
+function buildChoices({
+  candidates,
+  correctElement,
+  answerWithSymbol,
+  correctChoiceIndex,
+}: {
+  candidates: readonly PrismaElement[];
+  correctElement: PrismaElement;
+  answerWithSymbol: boolean;
+  correctChoiceIndex: number;
+}): StoredGameChoice[] {
+  const distractors = candidates
+    .filter((element) => element.id !== correctElement.id)
+    .slice(0, GAME_CHOICE_COUNT - 1);
+
+  if (distractors.length < GAME_CHOICE_COUNT - 1) {
+    throw new Error("選択肢を生成できません");
+  }
+
+  if (
+    !Number.isInteger(correctChoiceIndex) ||
+    correctChoiceIndex < 0 ||
+    correctChoiceIndex >= GAME_CHOICE_COUNT
+  ) {
+    throw new Error("選択肢を生成できません");
+  }
+
+  const choiceElements = [...distractors];
+  choiceElements.splice(correctChoiceIndex, 0, correctElement);
+
+  return choiceElements.map((element) => ({
+    choiceId: String(element.id),
+    elementId: element.id,
+    text: getChoiceText(element, answerWithSymbol),
+  }));
+}
+
+function toPublicQuestion(question: StoredGameQuestion): PublicGameQuestion {
+  return {
+    questionId: question.questionId,
+    prompt: question.prompt,
+    choices: question.choices.map((choice) => ({
+      choiceId: choice.choiceId,
+      text: choice.text,
+    })),
+  };
+}
+
+function toQuestionSetJson(questions: readonly StoredGameQuestion[]): Prisma.InputJsonValue {
+  return questions.map((question) => ({
+    questionId: question.questionId,
+    elementId: question.elementId,
+    prompt: question.prompt,
+    correctChoiceId: question.correctChoiceId,
+    choices: question.choices.map((choice) => ({
+      choiceId: choice.choiceId,
+      elementId: choice.elementId,
+      text: choice.text,
+    })),
+  }));
+}
+
+function isStoredGameChoice(value: unknown): value is StoredGameChoice {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+
+  const choice = value as Record<string, unknown>;
+  return (
+    typeof choice.choiceId === "string" &&
+    typeof choice.elementId === "number" &&
+    typeof choice.text === "string"
+  );
+}
+
+function isStoredGameQuestion(value: unknown): value is StoredGameQuestion {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+
+  const question = value as Record<string, unknown>;
+  return (
+    typeof question.questionId === "string" &&
+    typeof question.elementId === "number" &&
+    typeof question.prompt === "string" &&
+    typeof question.correctChoiceId === "string" &&
+    Array.isArray(question.choices) &&
+    question.choices.every(isStoredGameChoice)
+  );
+}
+
+function parseStoredQuestions(value: unknown): StoredGameQuestion[] {
+  if (!Array.isArray(value) || !value.every(isStoredGameQuestion)) {
+    throw new Error("問題セットの形式が正しくありません");
+  }
+
+  return value;
+}
+
+function calculateQuestionScore(isCorrect: boolean): number {
+  return isCorrect ? BASE_CORRECT_SCORE : 0;
+}
+
+function calculateMaxStreak(results: readonly GameSessionResultItem[]): number {
+  let currentStreak = 0;
+  let maxStreak = 0;
+
+  for (const result of results) {
+    if (result.isCorrect) {
+      currentStreak += 1;
+      maxStreak = Math.max(maxStreak, currentStreak);
+    } else {
+      currentStreak = 0;
+    }
+  }
+
+  return maxStreak;
+}
+
+function isIntegerInRange(value: number, min: number, max: number): boolean {
+  return Number.isInteger(value) && value >= min && value <= max;
+}
+
+function validateSubmitGameSessionParams({
+  questionSetId,
+  answers,
+  durationSec,
+}: {
+  questionSetId: string;
+  answers: readonly SubmitGameSessionAnswer[];
+  durationSec: number;
+}): void {
+  if (questionSetId.trim().length === 0 || answers.length === 0) {
+    throw new GameSessionValidationError();
+  }
+
+  if (!isIntegerInRange(durationSec, 0, GAME_SESSION_DURATION_LIMIT_SEC)) {
+    throw new GameSessionValidationError();
+  }
+
+  for (const answer of answers) {
+    if (
+      answer.questionId.trim().length === 0 ||
+      (answer.chosenChoiceId !== null && answer.chosenChoiceId.trim().length === 0)
+    ) {
+      throw new GameSessionValidationError();
+    }
+
+    if (!isIntegerInRange(answer.answerTimeSec, 0, QUESTION_TIME_LIMIT_SEC)) {
+      throw new GameSessionValidationError();
+    }
+  }
+}
+
+function buildSessionResults({
+  questions,
+  answers,
+}: {
+  questions: readonly StoredGameQuestion[];
+  answers: readonly SubmitGameSessionAnswer[];
+}): GameSessionResultItem[] {
+  validateAnswerSet({ questions, answers });
+  const answersByQuestionId = new Map(answers.map((answer) => [answer.questionId, answer]));
+
+  return questions.map((question) => {
+    const answer = answersByQuestionId.get(question.questionId);
+    if (!answer) {
+      throw new GameSessionValidationError();
+    }
+
+    const correctChoice = question.choices.find(
+      (choice) => choice.choiceId === question.correctChoiceId,
+    );
+    if (!correctChoice) {
+      throw new Error("問題セットの形式が正しくありません");
+    }
+
+    const chosenChoice =
+      answer.chosenChoiceId === null
+        ? null
+        : question.choices.find((choice) => choice.choiceId === answer.chosenChoiceId);
+    if (answer.chosenChoiceId !== null && !chosenChoice) {
+      throw new GameSessionValidationError();
+    }
+
+    const isCorrect =
+      answer.chosenChoiceId !== null && answer.chosenChoiceId === correctChoice.choiceId;
+
+    return {
+      questionId: question.questionId,
+      elementId: question.elementId,
+      prompt: question.prompt,
+      chosenChoiceId: answer.chosenChoiceId,
+      isCorrect,
+      correctAnswer: correctChoice.text,
+      yourAnswer: chosenChoice?.text ?? null,
+      answerTimeSec: answer.answerTimeSec,
+      score: calculateQuestionScore(isCorrect),
+    };
+  });
+}
+
+function validateAnswerSet({
+  questions,
+  answers,
+}: {
+  questions: readonly StoredGameQuestion[];
+  answers: readonly SubmitGameSessionAnswer[];
+}): void {
+  if (answers.length !== questions.length) {
+    throw new GameSessionValidationError();
+  }
+
+  const questionIds = new Set(questions.map((question) => question.questionId));
+  const answeredQuestionIds = new Set<string>();
+
+  for (const answer of answers) {
+    if (!questionIds.has(answer.questionId) || answeredQuestionIds.has(answer.questionId)) {
+      throw new GameSessionValidationError();
+    }
+
+    answeredQuestionIds.add(answer.questionId);
+  }
+}
+
+type SessionElementResultSummary = {
+  elementId: number;
+  isCorrect: boolean;
+  incorrectCount: number;
+};
+
+function summarizeResultsByElement(
+  results: readonly GameSessionResultItem[],
+): SessionElementResultSummary[] {
+  const summaries = new Map<number, SessionElementResultSummary>();
+
+  for (const result of results) {
+    const summary = summaries.get(result.elementId);
+    if (!summary) {
+      summaries.set(result.elementId, {
+        elementId: result.elementId,
+        isCorrect: result.isCorrect,
+        incorrectCount: result.isCorrect ? 0 : 1,
+      });
+      continue;
+    }
+
+    summary.isCorrect = summary.isCorrect && result.isCorrect;
+    if (!result.isCorrect) {
+      summary.incorrectCount += 1;
+    }
+  }
+
+  return [...summaries.values()];
+}
+
+async function updateWeakElementsForSession({
+  tx,
+  userId,
+  results,
+}: {
+  tx: Prisma.TransactionClient;
+  userId: string;
+  results: readonly GameSessionResultItem[];
+}): Promise<void> {
+  const summaries = summarizeResultsByElement(results);
+
+  for (const summary of summaries) {
+    if (!summary.isCorrect) {
+      await tx.weakElement.upsert({
+        where: { userId_elementId: { userId, elementId: summary.elementId } },
+        create: {
+          userId,
+          elementId: summary.elementId,
+          missCount: Math.max(summary.incorrectCount, 1),
+          consecutiveHit: 0,
+        },
+        update: {
+          missCount: { increment: Math.max(summary.incorrectCount, 1) },
+          consecutiveHit: 0,
+        },
+      });
+      continue;
+    }
+
+    const weakElement = await tx.weakElement.findUnique({
+      where: { userId_elementId: { userId, elementId: summary.elementId } },
+    });
+
+    if (!weakElement) {
+      continue;
+    }
+
+    if (weakElement.consecutiveHit + 1 >= WEAK_ELEMENT_MASTERED_CONSECUTIVE_HIT_COUNT) {
+      await tx.weakElement.delete({ where: { id: weakElement.id } });
+      continue;
+    }
+
+    await tx.weakElement.update({
+      where: { id: weakElement.id },
+      data: { consecutiveHit: { increment: 1 } },
+    });
+  }
+}
+
+type ExistingUserStatsForSession = {
+  weeklyScoreWeekStart: Date | null;
+};
+
+async function updateUserStatsForSession({
+  tx,
+  userId,
+  totalScore,
+  correctCount,
+  totalCount,
+  playedAt,
+  masteredCountDelta,
+  masteredCountOnCreate,
+  existingStats,
+}: {
+  tx: Prisma.TransactionClient;
+  userId: string;
+  totalScore: number;
+  correctCount: number;
+  totalCount: number;
+  playedAt: Date;
+  masteredCountDelta: number;
+  masteredCountOnCreate: number;
+  existingStats: ExistingUserStatsForSession | null;
+}): Promise<void> {
+  const weeklyScoreWeekStart = getWeeklyScoreWeekStart(playedAt);
+
+  if (!existingStats) {
+    const createResult = await tx.userStats.createMany({
+      data: {
+        userId,
+        totalGames: 1,
+        totalCorrect: correctCount,
+        totalAnswered: totalCount,
+        masteredCount: masteredCountOnCreate,
+        weeklyScore: totalScore,
+        weeklyScoreWeekStart,
+        allTimeScore: totalScore,
+        lastActiveDate: playedAt,
+      },
+      skipDuplicates: true,
+    });
+
+    if (createResult.count === 1) {
+      return;
+    }
+
+    const createdByConcurrentSession = await tx.userStats.findUnique({
+      where: { userId },
+      select: { weeklyScoreWeekStart: true },
+    });
+
+    if (!createdByConcurrentSession) {
+      throw new Error("ユーザー統計の作成状態を確認できません");
+    }
+
+    await updateExistingUserStatsForSession({
+      tx,
+      userId,
+      totalScore,
+      correctCount,
+      totalCount,
+      playedAt,
+      masteredCountDelta,
+      existingStats: createdByConcurrentSession,
+      weeklyScoreWeekStart,
+    });
+    return;
+  }
+
+  await updateExistingUserStatsForSession({
+    tx,
+    userId,
+    totalScore,
+    correctCount,
+    totalCount,
+    playedAt,
+    masteredCountDelta,
+    existingStats,
+    weeklyScoreWeekStart,
+  });
+}
+
+async function updateExistingUserStatsForSession({
+  tx,
+  userId,
+  totalScore,
+  correctCount,
+  totalCount,
+  playedAt,
+  masteredCountDelta,
+  existingStats,
+  weeklyScoreWeekStart,
+}: {
+  tx: Prisma.TransactionClient;
+  userId: string;
+  totalScore: number;
+  correctCount: number;
+  totalCount: number;
+  playedAt: Date;
+  masteredCountDelta: number;
+  existingStats: ExistingUserStatsForSession;
+  weeklyScoreWeekStart: Date;
+}): Promise<void> {
+  const commonUpdateData = {
+    totalGames: { increment: 1 },
+    totalCorrect: { increment: correctCount },
+    totalAnswered: { increment: totalCount },
+    weeklyScoreWeekStart,
+    allTimeScore: { increment: totalScore },
+    masteredCount: { increment: masteredCountDelta },
+    lastActiveDate: playedAt,
+  } satisfies Prisma.UserStatsUpdateManyMutationInput;
+
+  if (!isSameWeeklyScoreWeek(existingStats.weeklyScoreWeekStart, weeklyScoreWeekStart)) {
+    const staleWeekUpdateResult = await tx.userStats.updateMany({
+      where: {
+        userId,
+        OR: [
+          { weeklyScoreWeekStart: null },
+          { weeklyScoreWeekStart: { not: weeklyScoreWeekStart } },
+        ],
+      },
+      data: {
+        ...commonUpdateData,
+        weeklyScore: totalScore,
+      },
+    });
+
+    if (staleWeekUpdateResult.count === 1) {
+      return;
+    }
+  }
+
+  await tx.userStats.update({
+    where: { userId },
+    data: {
+      ...commonUpdateData,
+      weeklyScore: { increment: totalScore },
+    },
+  });
+}
+
+async function countMasteredElements({
+  tx,
+  userId,
+  elementIds,
+}: {
+  tx: Prisma.TransactionClient;
+  userId: string;
+  elementIds: readonly number[];
+}): Promise<number> {
+  const masteryStatusMap = await createElementMasteryService(tx).getElementMasteryStatusMap(
+    userId,
+    elementIds,
+  );
+
+  return [...masteryStatusMap.values()].filter((status) => status === "mastered").length;
+}
+
+function getResultElementIds(results: readonly GameSessionResultItem[]): number[] {
+  return [...new Set(results.map((result) => result.elementId))];
+}
+
+function compareRestorableGameAnswers(
+  firstAnswer: RestorableGameAnswer,
+  secondAnswer: RestorableGameAnswer,
+): number {
+  const firstIndex = firstAnswer.questionIndex ?? Number.MAX_SAFE_INTEGER;
+  const secondIndex = secondAnswer.questionIndex ?? Number.MAX_SAFE_INTEGER;
+
+  if (firstIndex !== secondIndex) {
+    return firstIndex - secondIndex;
+  }
+
+  return firstAnswer.id.localeCompare(secondAnswer.id);
+}
+
+function toRestoredSessionResultItem(
+  answer: RestorableGameAnswer,
+  mode: GameMode,
+): GameSessionResultItem {
+  const answerWithSymbol = isNameToSymbolMode(mode);
+
+  return {
+    questionId: answer.questionId ?? answer.id,
+    elementId: answer.elementId,
+    prompt: answer.prompt ?? getPrompt(answer.element, answerWithSymbol),
+    chosenChoiceId: answer.chosenChoiceId,
+    isCorrect: answer.isCorrect,
+    correctAnswer: answer.correctAnswer ?? getChoiceText(answer.element, answerWithSymbol),
+    yourAnswer: answer.yourAnswer,
+    answerTimeSec: answer.answerTimeSec,
+    score: answer.score ?? calculateQuestionScore(answer.isCorrect),
+  };
+}
+
+function buildStoredQuestions(
+  mode: GameMode,
+  candidates: readonly PrismaElement[],
+  choiceIndexGenerator: () => number,
+  questionElementIndexGenerator: (maxExclusive: number) => number,
+): StoredGameQuestion[] {
+  if (candidates.length < GAME_CHOICE_COUNT) {
+    throw new Error("問題を生成できません");
+  }
+
+  const answerWithSymbol = isNameToSymbolMode(mode);
+  const questionElements = buildQuestionElements(candidates, questionElementIndexGenerator);
+
+  return questionElements.map((element, index) => {
+    const choices = buildChoices({
+      candidates,
+      correctElement: element,
+      answerWithSymbol,
+      correctChoiceIndex: choiceIndexGenerator(),
+    });
+
+    return {
+      questionId: `q${index + 1}`,
+      elementId: element.id,
+      prompt: getPrompt(element, answerWithSymbol),
+      correctChoiceId: String(element.id),
+      choices,
+    };
+  });
+}
+
+async function createGameQuestionSet(
+  prisma: AppPrismaClient,
+  {
+    userId,
+    mode,
+    now = new Date(),
+    choiceIndexGenerator = () => randomInt(0, GAME_CHOICE_COUNT),
+    questionElementIndexGenerator = getRandomIndex,
+  }: CreateGameQuestionSetParams,
+): Promise<CreateGameQuestionSetResult> {
+  const candidates = await getCandidateElements(prisma, userId, mode);
+  const questions = buildStoredQuestions(
+    mode,
+    candidates,
+    choiceIndexGenerator,
+    questionElementIndexGenerator,
+  );
+  const questionsJson = toQuestionSetJson(questions);
+  const expiresAt = new Date(now.getTime() + QUESTION_SET_EXPIRES_MS);
+
+  const questionSet = await prisma.gameQuestionSet.create({
+    data: {
+      userId,
+      mode,
+      questions: questionsJson,
+      expiresAt,
+    },
+  });
+
+  return {
+    questionSetId: questionSet.id,
+    expiresAt: questionSet.expiresAt,
+    questions: questions.map(toPublicQuestion),
+  };
+}
+
+async function submitGameSession(
+  prisma: AppPrismaClient,
+  { userId, questionSetId, mode, answers, durationSec, now = new Date() }: SubmitGameSessionParams,
+): Promise<SubmitGameSessionResult> {
+  validateSubmitGameSessionParams({ questionSetId, answers, durationSec });
+
+  return prisma.$transaction(async (tx) => {
+    const questionSet = await tx.gameQuestionSet.findFirst({
+      where: { id: questionSetId, userId },
+    });
+
+    if (!questionSet) {
+      throw new QuestionSetNotFoundError();
+    }
+
+    if (questionSet.mode !== mode) {
+      throw new QuestionSetModeMismatchError();
+    }
+
+    if (questionSet.expiresAt <= now) {
+      throw new QuestionSetExpiredError();
+    }
+
+    const questions = parseStoredQuestions(questionSet.questions);
+    const results = buildSessionResults({ questions, answers });
+    const resultElementIds = getResultElementIds(results);
+    const masteredCountBefore = await countMasteredElements({
+      tx,
+      userId,
+      elementIds: resultElementIds,
+    });
+    const totalScore = results.reduce((sum, result) => sum + result.score, 0);
+    const correctCount = results.filter((result) => result.isCorrect).length;
+    const maxStreak = calculateMaxStreak(results);
+
+    const consumedQuestionSet = await tx.gameQuestionSet.deleteMany({
+      where: { id: questionSetId, userId },
+    });
+    if (consumedQuestionSet.count !== 1) {
+      throw new QuestionSetAlreadySubmittedError();
+    }
+
+    const session = await tx.gameSession.create({
+      data: {
+        userId,
+        mode,
+        totalScore,
+        correctCount,
+        totalCount: questions.length,
+        maxStreak,
+        durationSec,
+        playedAt: now,
+      },
+    });
+
+    await tx.gameAnswer.createMany({
+      data: results.map((result, questionIndex) => ({
+        sessionId: session.id,
+        elementId: result.elementId,
+        questionIndex,
+        questionId: result.questionId,
+        prompt: result.prompt,
+        chosenChoiceId: result.chosenChoiceId,
+        isCorrect: result.isCorrect,
+        correctAnswer: result.correctAnswer,
+        yourAnswer: result.yourAnswer,
+        answerTimeSec: result.answerTimeSec,
+        score: result.score,
+      })),
+    });
+
+    await updateWeakElementsForSession({ tx, userId, results });
+    const masteredCountAfter = await countMasteredElements({
+      tx,
+      userId,
+      elementIds: resultElementIds,
+    });
+    const hasUserStats = await tx.userStats.findUnique({
+      where: { userId },
+      select: { userId: true, weeklyScoreWeekStart: true },
+    });
+    const masteredCountOnCreate = hasUserStats
+      ? masteredCountAfter
+      : await countMasteredElements({ tx, userId, elementIds: ALL_ELEMENT_IDS });
+
+    await updateUserStatsForSession({
+      tx,
+      userId,
+      totalScore,
+      correctCount,
+      totalCount: questions.length,
+      playedAt: now,
+      masteredCountDelta: masteredCountAfter - masteredCountBefore,
+      masteredCountOnCreate,
+      existingStats: hasUserStats,
+    });
+
+    return {
+      sessionId: session.id,
+      mode,
+      correctCount,
+      totalCount: questions.length,
+      totalScore,
+      maxStreak,
+      durationSec,
+      playedAt: session.playedAt,
+      results,
+    };
+  });
+}
+
+async function getGameSessionResult(
+  prisma: AppPrismaClient,
+  { userId, sessionId }: GetGameSessionResultParams,
+): Promise<SubmitGameSessionResult> {
+  const session = (await prisma.gameSession.findFirst({
+    where: { id: sessionId, userId },
+    include: {
+      answers: {
+        include: { element: true },
+        orderBy: [{ questionIndex: "asc" }, { id: "asc" }],
+      },
+    },
+  })) as RestorableGameSession | null;
+
+  if (!session) {
+    throw new GameSessionNotFoundError();
+  }
+
+  const results = [...session.answers]
+    .sort(compareRestorableGameAnswers)
+    .map((answer) => toRestoredSessionResultItem(answer, session.mode));
+
+  return {
+    sessionId: session.id,
+    mode: session.mode,
+    correctCount: session.correctCount,
+    totalCount: session.totalCount,
+    totalScore: session.totalScore,
+    maxStreak: session.maxStreak,
+    durationSec: session.durationSec,
+    playedAt: session.playedAt,
+    results,
+  };
+}
+
+export type GameSessionHistoryItem = {
+  sessionId: string;
+  mode: GameMode;
+  correctCount: number;
+  totalCount: number;
+  totalScore: number;
+  maxStreak: number;
+  durationSec: number;
+  playedAt: Date;
+};
+
+export type GetGameSessionHistoryParams = {
+  userId: string;
+  limit: number;
+  cursor?: string;
+  mode?: GameMode;
+};
+
+export type GetGameSessionHistoryResult = {
+  sessions: GameSessionHistoryItem[];
+  nextCursor: string | null;
+};
+
+export class GameSessionHistoryCursorError extends Error {
+  constructor() {
+    super("カーソルが正しくありません");
+    this.name = "GameSessionHistoryCursorError";
+  }
+}
+
+const gameSessionHistorySelect = {
+  id: true,
+  mode: true,
+  correctCount: true,
+  totalCount: true,
+  totalScore: true,
+  maxStreak: true,
+  durationSec: true,
+  playedAt: true,
+} satisfies Prisma.GameSessionSelect;
+
+type GameSessionHistoryRow = Prisma.GameSessionGetPayload<{
+  select: typeof gameSessionHistorySelect;
+}>;
+
+function toGameSessionHistoryItem(row: GameSessionHistoryRow): GameSessionHistoryItem {
+  return {
+    sessionId: row.id,
+    mode: row.mode,
+    correctCount: row.correctCount,
+    totalCount: row.totalCount,
+    totalScore: row.totalScore,
+    maxStreak: row.maxStreak,
+    durationSec: row.durationSec,
+    playedAt: row.playedAt,
+  };
+}
+
+async function getGameSessionHistoryCursorWhere({
+  prisma,
+  userId,
+  cursor,
+  mode,
+}: {
+  prisma: AppPrismaClient;
+  userId: string;
+  cursor: string;
+  mode?: GameMode;
+}): Promise<Prisma.GameSessionWhereInput> {
+  const cursorSession = await prisma.gameSession.findFirst({
+    where: { id: cursor, userId, ...(mode ? { mode } : {}) },
+    select: { id: true, playedAt: true },
+  });
+
+  if (!cursorSession) {
+    throw new GameSessionHistoryCursorError();
+  }
+
+  return {
+    OR: [
+      { playedAt: { lt: cursorSession.playedAt } },
+      { playedAt: cursorSession.playedAt, id: { lt: cursorSession.id } },
+    ],
+  };
+}
+
+async function getGameSessionHistory(
+  prisma: AppPrismaClient,
+  { userId, limit, cursor, mode }: GetGameSessionHistoryParams,
+): Promise<GetGameSessionHistoryResult> {
+  const cursorWhere = cursor
+    ? await getGameSessionHistoryCursorWhere({ prisma, userId, cursor, mode })
+    : undefined;
+  const where: Prisma.GameSessionWhereInput = {
+    userId,
+    ...(mode ? { mode } : {}),
+    ...(cursorWhere ?? {}),
+  };
+
+  const rows = await prisma.gameSession.findMany({
+    where,
+    orderBy: [{ playedAt: "desc" }, { id: "desc" }],
+    take: limit + 1,
+    select: gameSessionHistorySelect,
+  });
+  const visibleRows = rows.slice(0, limit);
+
+  return {
+    sessions: visibleRows.map(toGameSessionHistoryItem),
+    nextCursor: rows.length > limit ? (visibleRows[visibleRows.length - 1]?.id ?? null) : null,
+  };
+}
+
+export function createGameService(prisma: AppPrismaClient) {
+  return {
+    createGameQuestionSet: (input: CreateGameQuestionSetParams) =>
+      createGameQuestionSet(prisma, input),
+    submitGameSession: (input: SubmitGameSessionParams) => submitGameSession(prisma, input),
+    getGameSessionResult: (input: GetGameSessionResultParams) =>
+      getGameSessionResult(prisma, input),
+    getGameSessionHistory: (input: GetGameSessionHistoryParams) =>
+      getGameSessionHistory(prisma, input),
+  };
+}
+
+export type GameService = ReturnType<typeof createGameService>;

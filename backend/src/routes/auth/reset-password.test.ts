@@ -1,0 +1,261 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { Hono } from "hono";
+import { createAuthTestRouter } from "./test-helpers.js";
+
+// Prisma のモック
+vi.mock("../../lib/prisma.js", () => ({
+  prisma: {
+    passwordResetToken: {
+      findUnique: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    user: {
+      update: vi.fn(),
+    },
+    refreshToken: {
+      deleteMany: vi.fn(),
+    },
+    auditLog: {
+      create: vi.fn(),
+    },
+    $transaction: vi.fn(),
+  },
+}));
+
+// bcryptjs モック（hash は遅い処理なのでテストを高速化）
+vi.mock("bcryptjs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("bcryptjs")>();
+  return {
+    default: {
+      ...actual.default,
+      hash: vi.fn().mockResolvedValue("$2b$12$mockedhashedpassword"),
+      compare: vi.fn(),
+    },
+  };
+});
+
+import { prisma } from "../../lib/prisma.js";
+const authRouter = createAuthTestRouter(prisma as never);
+import { PASSWORD_TOO_LONG_MESSAGE } from "../../lib/password.js";
+import {
+  STRONG_PASSWORD_72_BYTES,
+  STRONG_PASSWORD_73_BYTES,
+} from "../../test/password-byte-boundary-fixtures.js";
+
+const app = new Hono().route("/auth", authRouter);
+
+const VALID_TOKEN = "a".repeat(64);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+describe("POST /auth/reset-password", () => {
+  it("正常系: 有効なトークンで200を返し、パスワード更新と全RTの削除を行う", async () => {
+    vi.mocked(prisma.passwordResetToken.findUnique).mockResolvedValue({
+      id: "prt-1",
+      userId: "user-1",
+      tokenHash: "hashed",
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      createdAt: new Date(),
+    });
+
+    const txUserUpdate = vi.fn().mockResolvedValue({});
+    const txRefreshTokenDeleteMany = vi.fn().mockResolvedValue({ count: 1 });
+    const txPasswordResetTokenDeleteMany = vi.fn().mockResolvedValue({ count: 1 });
+    const txAuditLogCreate = vi.fn().mockResolvedValue({});
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+      return fn({
+        user: { update: txUserUpdate },
+        refreshToken: { deleteMany: txRefreshTokenDeleteMany },
+        passwordResetToken: { deleteMany: txPasswordResetTokenDeleteMany },
+        auditLog: { create: txAuditLogCreate },
+      } as never);
+    });
+
+    const res = await app.request("/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: VALID_TOKEN, password: STRONG_PASSWORD_72_BYTES }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ message: "パスワードをリセットしました" });
+    expect(txUserUpdate).toHaveBeenCalledOnce();
+    expect(txRefreshTokenDeleteMany).toHaveBeenCalledOnce();
+    expect(txPasswordResetTokenDeleteMany).toHaveBeenCalledOnce();
+    expect(txAuditLogCreate).toHaveBeenCalledWith({
+      data: {
+        action: "PASSWORD_RESET",
+        result: "SUCCESS",
+        actorId: null,
+        actorRole: null,
+        targetType: "USER",
+        targetId: "user-1",
+        failureReason: null,
+      },
+    });
+    expect(txAuditLogCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("監査: 保存失敗時は500を返してパスワードリセットを確定しない", async () => {
+    vi.mocked(prisma.passwordResetToken.findUnique).mockResolvedValue({
+      id: "prt-1",
+      userId: "user-1",
+      tokenHash: "hashed",
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      createdAt: new Date(),
+    });
+
+    const txUserUpdate = vi.fn().mockResolvedValue({});
+    const txRefreshTokenDeleteMany = vi.fn().mockResolvedValue({ count: 1 });
+    const txPasswordResetTokenDeleteMany = vi.fn().mockResolvedValue({ count: 1 });
+    const txAuditLogCreate = vi.fn().mockRejectedValue(new Error("audit insert failed"));
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+      return fn({
+        user: { update: txUserUpdate },
+        refreshToken: { deleteMany: txRefreshTokenDeleteMany },
+        passwordResetToken: { deleteMany: txPasswordResetTokenDeleteMany },
+        auditLog: { create: txAuditLogCreate },
+      } as never);
+    });
+
+    const res = await app.request("/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: VALID_TOKEN, password: "NewPass1!" }),
+    });
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "サーバーエラーが発生しました" });
+    expect(txUserUpdate).toHaveBeenCalledOnce();
+    expect(txRefreshTokenDeleteMany).toHaveBeenCalledOnce();
+    expect(txPasswordResetTokenDeleteMany).toHaveBeenCalledOnce();
+    expect(txAuditLogCreate).toHaveBeenCalledOnce();
+  });
+
+  it("無効なトークン: DBに存在しない場合は404を返す", async () => {
+    vi.mocked(prisma.passwordResetToken.findUnique).mockResolvedValue(null);
+
+    const res = await app.request("/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: VALID_TOKEN, password: "NewPass1!" }),
+    });
+
+    expect(res.status).toBe(404);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("期限切れトークン: 400を返しトークンを削除する", async () => {
+    vi.mocked(prisma.passwordResetToken.findUnique).mockResolvedValue({
+      id: "prt-1",
+      userId: "user-1",
+      tokenHash: "hashed",
+      expiresAt: new Date(Date.now() - 1000),
+      createdAt: new Date(),
+    });
+    vi.mocked(prisma.passwordResetToken.deleteMany).mockResolvedValue({ count: 1 });
+
+    const res = await app.request("/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: VALID_TOKEN, password: "NewPass1!" }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(prisma.passwordResetToken.deleteMany).toHaveBeenCalledOnce();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("バリデーション: tokenが64文字未満の場合は400を返す", async () => {
+    const res = await app.request("/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: "short", password: "NewPass1!" }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("バリデーション: 64文字でも非hex文字列の場合は400を返す", async () => {
+    // 'x' は hex 文字ではないため /^[0-9a-f]{64}$/ に不一致
+    const nonHexToken = "x".repeat(64);
+    const res = await app.request("/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: nonHexToken, password: "NewPass1!" }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("バリデーション: パスワードが強度不足の場合は400を返す", async () => {
+    const res = await app.request("/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: VALID_TOKEN, password: "weakpass" }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("バリデーション: 73バイトのパスワードは400を返しDBを参照しない", async () => {
+    vi.mocked(prisma.passwordResetToken.findUnique).mockResolvedValue(null);
+
+    const res = await app.request("/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: VALID_TOKEN, password: STRONG_PASSWORD_73_BYTES }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: "バリデーションエラー",
+      details: [
+        expect.objectContaining({
+          message: PASSWORD_TOO_LONG_MESSAGE,
+          path: ["password"],
+        }),
+      ],
+    });
+    expect(prisma.passwordResetToken.findUnique).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("二重使用: $transaction内でcount=0の場合は400を返す", async () => {
+    vi.mocked(prisma.passwordResetToken.findUnique).mockResolvedValue({
+      id: "prt-1",
+      userId: "user-1",
+      tokenHash: "hashed",
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      createdAt: new Date(),
+    });
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+      return fn({
+        user: { update: vi.fn() },
+        refreshToken: { deleteMany: vi.fn() },
+        // count=0 → 並行リクエストによりトークンが既に削除済み、または期限切れ
+        passwordResetToken: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      } as never);
+    });
+
+    const res = await app.request("/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: VALID_TOKEN, password: "NewPass1!" }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+});

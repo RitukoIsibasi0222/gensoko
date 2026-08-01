@@ -1,0 +1,611 @@
+name: Production Database Operations
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 実行する本番DB操作
+        required: true
+        type: choice
+        default: capacity-check
+        options:
+          - capacity-check
+          - backup
+          - migrate-deploy
+          - verify-v0-1-migration-indexes
+          - account-deletion-dry-run
+          - account-deletion-execute
+      confirmed_backup_run_id:
+        description: migrate-deploy・account deletion execute時に確認する24時間以内の成功backup run ID
+        required: false
+        type: string
+      confirmed_migration_run_id:
+        description: v0.1 migration index確認時に検証する成功migration run ID
+        required: false
+        type: string
+      expected_migration_sha:
+        description: v0.1 migration index確認時に検証する40文字のmigration対象SHA
+        required: false
+        type: string
+      account_deletion_dry_run_run_id:
+        description: account deletion execute前に確認する24時間以内の成功dry-run run ID
+        required: false
+        type: string
+      account_deletion_confirmation:
+        description: execute時だけDELETE_LEGACY_SOFT_DELETED_USERSを入力
+        required: false
+        type: string
+      account_deletion_approver:
+        description: executeを承認した担当者識別子
+        required: false
+        type: string
+      account_deletion_change_record:
+        description: executeに対応するchange record識別子
+        required: false
+        type: string
+  schedule:
+    - cron: "23 19 * * *"
+    - cron: "41 19 * * *"
+
+jobs:
+  validate-production-branch:
+    name: Validate production branch
+    if: github.event_name != 'schedule' || github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Validate production branch
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "production DB操作はmain branchから実行してください"
+            exit 1
+          fi
+
+  production-database:
+    name: Run production database operation
+    needs: validate-production-branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    concurrency:
+      group: gensoko-batch-jobs
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: read
+    env:
+      BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
+      ACCOUNT_DATA_DELETION_EXECUTE_ENABLED: ${{ vars.ACCOUNT_DATA_DELETION_EXECUTE_ENABLED }}
+      ACCOUNT_DATA_DELETION_BATCH_SIZE: ${{ vars.ACCOUNT_DATA_DELETION_BATCH_SIZE || '25' }}
+      DATABASE_QUOTA_BYTES: "500000000"
+      DATABASE_WARNING_PERCENT: "70"
+      DATABASE_CRITICAL_PERCENT: "85"
+
+    steps:
+      - name: Resolve requested operation
+        env:
+          REQUESTED_OPERATION: ${{ inputs.operation }}
+          SCHEDULE_EXPRESSION: ${{ github.event.schedule }}
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+            case "$SCHEDULE_EXPRESSION" in
+              "23 19 * * *")
+                operation="capacity-check"
+                ;;
+              "41 19 * * *")
+                operation="backup"
+                ;;
+              *)
+                echo "未対応の本番DB scheduleです"
+                exit 1
+                ;;
+            esac
+          else
+            operation="$REQUESTED_OPERATION"
+          fi
+
+          case "$operation" in
+            capacity-check|backup|migrate-deploy|verify-v0-1-migration-indexes|account-deletion-dry-run|account-deletion-execute)
+              ;;
+            *)
+              echo "未対応の本番DB操作です"
+              exit 1
+              ;;
+          esac
+
+          printf 'OPERATION=%s\n' "$operation" >> "$GITHUB_ENV"
+
+      - name: Validate production environment
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.BACKUP_ENCRYPTION_PASSPHRASE }}
+          ACCOUNT_DELETION_CONFIRMATION: ${{ inputs.account_deletion_confirmation }}
+          ACCOUNT_DELETION_APPROVER: ${{ inputs.account_deletion_approver }}
+          ACCOUNT_DELETION_CHANGE_RECORD: ${{ inputs.account_deletion_change_record }}
+          CONFIRMED_MIGRATION_RUN_ID: ${{ inputs.confirmed_migration_run_id }}
+          EXPECTED_MIGRATION_SHA: ${{ inputs.expected_migration_sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "$BATCH_ENVIRONMENT" != "production" ]; then
+            echo "production DB設定が不正です"
+            exit 1
+          fi
+          if [ -z "$DATABASE_URL" ]; then
+            echo "productionのDATABASE_URL Secretが設定されていません"
+            exit 1
+          fi
+          if [ "$OPERATION" = "backup" ] && [ "${#BACKUP_ENCRYPTION_PASSPHRASE}" -lt 20 ]; then
+            echo "BACKUP_ENCRYPTION_PASSPHRASE Secretは20文字以上で設定してください"
+            exit 1
+          fi
+          if [ "$OPERATION" = "account-deletion-dry-run" ] ||
+             [ "$OPERATION" = "account-deletion-execute" ]; then
+            if [ "$GITHUB_REF_NAME" != "main" ]; then
+              echo "production account data deletionはmain branchから実行してください"
+              exit 1
+            fi
+            case "$ACCOUNT_DATA_DELETION_EXECUTE_ENABLED" in
+              true|false)
+                ;;
+              *)
+                echo "ACCOUNT_DATA_DELETION_EXECUTE_ENABLEDの設定が不正です"
+                exit 1
+                ;;
+            esac
+          fi
+          if [ "$OPERATION" = "account-deletion-execute" ]; then
+            if [ "$ACCOUNT_DATA_DELETION_EXECUTE_ENABLED" != "true" ]; then
+              echo "production account deletion executeは無効です"
+              exit 1
+            fi
+            if [ "$ACCOUNT_DELETION_CONFIRMATION" != "DELETE_LEGACY_SOFT_DELETED_USERS" ]; then
+              echo "production account deletion executeの確認文字列が一致しません"
+              exit 1
+            fi
+            if ! [[ "$ACCOUNT_DELETION_APPROVER" =~ ^[A-Za-z0-9._@/-]{1,100}$ ]]; then
+              echo "account deletion approverの形式が不正です"
+              exit 1
+            fi
+            if ! [[ "$ACCOUNT_DELETION_CHANGE_RECORD" =~ ^[A-Za-z0-9._:/-]{1,200}$ ]]; then
+              echo "account deletion change recordの形式が不正です"
+              exit 1
+            fi
+          fi
+          if [ "$OPERATION" = "verify-v0-1-migration-indexes" ]; then
+            if [ "$GITHUB_REF_NAME" != "main" ]; then
+              echo "v0.1 migration index確認はmain branchから実行してください"
+              exit 1
+            fi
+            if ! [[ "$CONFIRMED_MIGRATION_RUN_ID" =~ ^[0-9]+$ ]]; then
+              echo "v0.1 migration index確認には成功したmigration run IDが必要です"
+              exit 1
+            fi
+            if ! [[ "$EXPECTED_MIGRATION_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "v0.1 migration index確認には40文字のmigration対象SHAが必要です"
+              exit 1
+            fi
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate confirmed migration
+        if: env.OPERATION == 'verify-v0-1-migration-indexes'
+        env:
+          MIGRATION_RUN_ID: ${{ inputs.confirmed_migration_run_id }}
+          EXPECTED_MIGRATION_SHA: ${{ inputs.expected_migration_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          run_metadata="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$MIGRATION_RUN_ID")"
+          run_name="$(jq --raw-output '.name' <<< "$run_metadata")"
+          run_path="$(jq --raw-output '.path' <<< "$run_metadata")"
+          run_conclusion="$(jq --raw-output '.conclusion' <<< "$run_metadata")"
+          run_head_branch="$(jq --raw-output '.head_branch' <<< "$run_metadata")"
+          run_head_sha="$(jq --raw-output '.head_sha' <<< "$run_metadata")"
+          run_event="$(jq --raw-output '.event' <<< "$run_metadata")"
+
+          if [ "$run_name" != "Production Database Operations" ] ||
+             [ "$run_path" != ".github/workflows/production-database.yml" ] ||
+             [ "$run_conclusion" != "success" ] ||
+             [ "$run_head_branch" != "main" ] ||
+             [ "$run_head_sha" != "$EXPECTED_MIGRATION_SHA" ] ||
+             [ "$run_event" != "workflow_dispatch" ]; then
+            echo "指定したrunをv0.1 migrationの成功証拠として確認できませんでした"
+            exit 1
+          fi
+
+          jobs_metadata="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$MIGRATION_RUN_ID/jobs?per_page=100")"
+          migration_step_count="$(
+            jq '[.jobs[].steps[]? | select(.name == "Apply Prisma migrations" and .conclusion == "success")] | length' \
+              <<< "$jobs_metadata"
+          )"
+
+          if [ "$migration_step_count" != "1" ]; then
+            echo "指定したrunでPrisma migration成功stepを確認できませんでした"
+            exit 1
+          fi
+
+          echo "対象SHAのproduction migration成功runを確認しました"
+
+      - name: Install PostgreSQL client
+        if: env.OPERATION == 'capacity-check' || env.OPERATION == 'verify-v0-1-migration-indexes'
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-client
+          fi
+
+      - name: Check production database capacity
+        if: env.OPERATION == 'capacity-check'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+
+          DATABASE_SIZE_BYTES="$(
+            psql "$DATABASE_URL" \
+              --no-psqlrc \
+              --tuples-only \
+              --no-align \
+              --set ON_ERROR_STOP=1 \
+              --command "SELECT pg_database_size(current_database());"
+          )"
+          DATABASE_SIZE_BYTES="${DATABASE_SIZE_BYTES//[[:space:]]/}"
+
+          if ! [[ "$DATABASE_SIZE_BYTES" =~ ^[0-9]+$ ]]; then
+            echo "本番DB容量を安全に取得できませんでした"
+            exit 1
+          fi
+
+          warning_bytes=$((DATABASE_QUOTA_BYTES * DATABASE_WARNING_PERCENT / 100))
+          critical_bytes=$((DATABASE_QUOTA_BYTES * DATABASE_CRITICAL_PERCENT / 100))
+          percent_hundredths=$((DATABASE_SIZE_BYTES * 10000 / DATABASE_QUOTA_BYTES))
+          percent_display="$((percent_hundredths / 100)).$(printf '%02d' "$((percent_hundredths % 100))")"
+
+          {
+            echo "### Production database capacity"
+            echo
+            echo "- 使用量: $DATABASE_SIZE_BYTES bytes"
+            echo "- Free quota: $DATABASE_QUOTA_BYTES bytes"
+            echo "- 使用率: $percent_display%"
+            echo "- 警告: $DATABASE_WARNING_PERCENT%"
+            echo "- 重大: $DATABASE_CRITICAL_PERCENT%"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$DATABASE_SIZE_BYTES" -ge "$critical_bytes" ]; then
+            echo "::error title=本番DB容量重大::Free quotaの85%以上です。cleanupは有効化せず、容量削減またはplan変更を確認してください"
+            exit 1
+          fi
+          if [ "$DATABASE_SIZE_BYTES" -ge "$warning_bytes" ]; then
+            echo "::error title=本番DB容量警告::Free quotaの70%以上です。増加原因とcleanup dry-runを確認してください"
+            exit 1
+          fi
+
+          echo "本番DB容量は警告閾値未満です"
+
+      - name: Verify v0.1 migration indexes
+        if: env.OPERATION == 'verify-v0-1-migration-indexes'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PGCONNECT_TIMEOUT: "10"
+        run: |
+          set -euo pipefail
+
+          error_log="$RUNNER_TEMP/v0-1-migration-index-verification-error.log"
+          cleanup_error_log() {
+            rm -f "$error_log"
+          }
+          trap cleanup_error_log EXIT
+
+          if ! validation_result="$(
+            psql "$DATABASE_URL" \
+              --no-psqlrc \
+              --no-password \
+              --tuples-only \
+              --no-align \
+              --set ON_ERROR_STOP=1 \
+              --command "
+                SELECT CASE
+                  WHEN COUNT(*) = 5
+                    AND bool_and(index_state.indisvalid AND index_state.indisready)
+                  THEN 'valid'
+                  ELSE 'invalid'
+                END
+                FROM pg_catalog.pg_index AS index_state
+                INNER JOIN pg_catalog.pg_class AS index_class
+                  ON index_class.oid = index_state.indexrelid
+                INNER JOIN pg_catalog.pg_namespace AS index_namespace
+                  ON index_namespace.oid = index_class.relnamespace
+                WHERE index_namespace.nspname = 'public'
+                  AND index_class.relname IN (
+                    'refresh_tokens_userId_idx',
+                    'email_verifications_userId_idx',
+                    'game_question_sets_userId_idx',
+                    'users_deletedAt_id_idx',
+                    'refresh_tokens_expiresAt_tokenHash_idx'
+                  );
+              " 2>"$error_log"
+          )"; then
+            echo "本番DBのv0.1 migration index状態を安全に確認できませんでした"
+            exit 1
+          fi
+
+          validation_result="${validation_result//[[:space:]]/}"
+          if [ "$validation_result" != "valid" ]; then
+            echo "v0.1 migration indexがすべて有効であることを確認できませんでした"
+            exit 1
+          fi
+
+          cleanup_error_log
+          trap - EXIT
+
+          {
+            echo "### v0.1 migration index verification"
+            echo
+            echo "- Migration run: verified"
+            echo "- Migration SHA: verified"
+            echo "- Expected indexes: valid and ready"
+            echo "- Database values and connection details: not displayed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "v0.1 migration indexがすべて有効であることを確認しました"
+
+      - name: Setup Supabase CLI
+        if: env.OPERATION == 'backup'
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.109.1
+
+      - name: Create and verify encrypted logical backup
+        if: env.OPERATION == 'backup'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.BACKUP_ENCRYPTION_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+
+          PLAINTEXT_DIR="$RUNNER_TEMP/production-db-plaintext"
+          WORK_DIR="$RUNNER_TEMP/production-db-work"
+          ARTIFACT_DIR="$RUNNER_TEMP/production-db-artifacts"
+          ARCHIVE_PATH="$WORK_DIR/production-db-backup-$GITHUB_RUN_ID.tar.gz"
+          ENCRYPTED_PATH="$ARTIFACT_DIR/production-db-backup-$GITHUB_RUN_ID.tar.gz.gpg"
+          VERIFY_ARCHIVE="$WORK_DIR/verified-backup.tar.gz"
+
+          cleanup_plaintext() {
+            rm -rf "$PLAINTEXT_DIR" "$WORK_DIR"
+          }
+          trap cleanup_plaintext EXIT
+
+          mkdir -p "$PLAINTEXT_DIR" "$WORK_DIR" "$ARTIFACT_DIR"
+
+          supabase db dump --db-url "$DATABASE_URL" --file "$PLAINTEXT_DIR/roles.sql" --role-only
+          supabase db dump --db-url "$DATABASE_URL" --file "$PLAINTEXT_DIR/schema.sql"
+          supabase db dump \
+            --db-url "$DATABASE_URL" \
+            --file "$PLAINTEXT_DIR/data.sql" \
+            --data-only \
+            --use-copy
+
+          test -s "$PLAINTEXT_DIR/roles.sql"
+          test -s "$PLAINTEXT_DIR/schema.sql"
+          test -s "$PLAINTEXT_DIR/data.sql"
+
+          tar -C "$PLAINTEXT_DIR" -czf "$ARCHIVE_PATH" roles.sql schema.sql data.sql
+
+          printf '%s' "$BACKUP_ENCRYPTION_PASSPHRASE" | gpg \
+            --batch \
+            --yes \
+            --pinentry-mode loopback \
+            --passphrase-fd 0 \
+            --symmetric \
+            --cipher-algo AES256 \
+            --output "$ENCRYPTED_PATH" \
+            "$ARCHIVE_PATH"
+
+          printf '%s' "$BACKUP_ENCRYPTION_PASSPHRASE" | gpg --decrypt \
+            --batch \
+            --yes \
+            --pinentry-mode loopback \
+            --passphrase-fd 0 \
+            --output "$VERIFY_ARCHIVE" \
+            "$ENCRYPTED_PATH"
+
+          backup_contents="$(tar -tzf "$VERIFY_ARCHIVE")"
+          for expected_file in roles.sql schema.sql data.sql; do
+            if ! grep --fixed-strings --line-regexp --quiet "$expected_file" <<< "$backup_contents"; then
+              echo "暗号化backupの検証に失敗しました"
+              exit 1
+            fi
+          done
+
+          (
+            cd "$ARTIFACT_DIR"
+            sha256sum "$(basename "$ENCRYPTED_PATH")" > "$(basename "$ENCRYPTED_PATH").sha256"
+          )
+
+          cleanup_plaintext
+          trap - EXIT
+
+          echo "暗号化backupを作成し、復号検証に成功しました"
+
+      - name: Upload encrypted backup
+        if: env.OPERATION == 'backup'
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-db-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/production-db-artifacts
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Validate confirmed backup
+        if: env.OPERATION == 'migrate-deploy' || env.OPERATION == 'account-deletion-execute'
+        env:
+          BACKUP_RUN_ID: ${{ inputs.confirmed_backup_run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if ! [[ "$BACKUP_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "このproduction DB操作には成功したbackup run IDが必要です"
+            exit 1
+          fi
+
+          run_metadata="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BACKUP_RUN_ID")"
+          run_name="$(jq --raw-output '.name' <<< "$run_metadata")"
+          run_conclusion="$(jq --raw-output '.conclusion' <<< "$run_metadata")"
+          run_head_branch="$(jq --raw-output '.head_branch' <<< "$run_metadata")"
+          run_created_at="$(jq --raw-output '.created_at' <<< "$run_metadata")"
+
+          if [ "$run_name" != "Production Database Operations" ] ||
+             [ "$run_conclusion" != "success" ] ||
+             [ "$run_head_branch" != "main" ]; then
+            echo "指定したbackup runを本番migrationの前提として確認できませんでした"
+            exit 1
+          fi
+
+          backup_age_seconds=$(($(date +%s) - $(date -d "$run_created_at" +%s)))
+          if [ "$backup_age_seconds" -lt 0 ] || [ "$backup_age_seconds" -gt 86400 ]; then
+            echo "backup runは24時間以内のものを指定してください"
+            exit 1
+          fi
+
+          expected_artifact="production-db-backup-${BACKUP_RUN_ID}"
+          artifact_count="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BACKUP_RUN_ID/artifacts" \
+              --jq "[.artifacts[] | select(.name == \"$expected_artifact\" and .expired == false)] | length"
+          )"
+
+          if [ "$artifact_count" != "1" ]; then
+            echo "成功済みで期限内の暗号化backup artifactを確認できませんでした"
+            exit 1
+          fi
+
+          echo "migration前の暗号化backupを確認しました"
+
+      - name: Validate confirmed account deletion dry-run
+        if: env.OPERATION == 'account-deletion-execute'
+        env:
+          DRY_RUN_RUN_ID: ${{ inputs.account_deletion_dry_run_run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if ! [[ "$DRY_RUN_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "account deletion executeには成功したdry-run run IDが必要です"
+            exit 1
+          fi
+
+          run_metadata="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$DRY_RUN_RUN_ID")"
+          run_name="$(jq --raw-output '.name' <<< "$run_metadata")"
+          run_conclusion="$(jq --raw-output '.conclusion' <<< "$run_metadata")"
+          run_head_branch="$(jq --raw-output '.head_branch' <<< "$run_metadata")"
+          run_event="$(jq --raw-output '.event' <<< "$run_metadata")"
+          run_created_at="$(jq --raw-output '.created_at' <<< "$run_metadata")"
+
+          if [ "$run_name" != "Production Database Operations" ] ||
+             [ "$run_conclusion" != "success" ] ||
+             [ "$run_head_branch" != "main" ] ||
+             [ "$run_event" != "workflow_dispatch" ]; then
+            echo "指定したdry-runをaccount deletion executeの前提として確認できませんでした"
+            exit 1
+          fi
+
+          dry_run_age_seconds=$(($(date +%s) - $(date -d "$run_created_at" +%s)))
+          if [ "$dry_run_age_seconds" -lt 0 ] || [ "$dry_run_age_seconds" -gt 86400 ]; then
+            echo "dry-runは24時間以内のものを指定してください"
+            exit 1
+          fi
+
+          expected_artifact="production-account-deletion-dry-run-${DRY_RUN_RUN_ID}"
+          artifact_count="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$DRY_RUN_RUN_ID/artifacts" \
+              --jq "[.artifacts[] | select(.name == \"$expected_artifact\" and .expired == false)] | length"
+          )"
+
+          if [ "$artifact_count" != "1" ]; then
+            echo "成功済みで期限内のaccount deletion dry-run Artifactを確認できませんでした"
+            exit 1
+          fi
+
+          echo "account deletion execute前のdry-runを確認しました"
+
+      - name: Setup Node.js
+        if: env.OPERATION == 'migrate-deploy' || env.OPERATION == 'account-deletion-dry-run' || env.OPERATION == 'account-deletion-execute'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        if: env.OPERATION == 'migrate-deploy' || env.OPERATION == 'account-deletion-dry-run' || env.OPERATION == 'account-deletion-execute'
+        working-directory: backend
+        run: npm ci
+
+      - name: Preview legacy soft-deleted users
+        if: env.OPERATION == 'account-deletion-dry-run'
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ACCOUNT_DATA_DELETION_EXECUTE_ENABLED: "false"
+        run: npm run delete:legacy-soft-deleted-users
+
+      - name: Create account deletion dry-run marker
+        if: env.OPERATION == 'account-deletion-dry-run'
+        run: |
+          set -euo pipefail
+          marker_dir="$RUNNER_TEMP/account-deletion-dry-run"
+          mkdir -p "$marker_dir"
+          printf 'status=success\nrun_id=%s\n' "$GITHUB_RUN_ID" > "$marker_dir/result.txt"
+
+      - name: Upload account deletion dry-run marker
+        if: env.OPERATION == 'account-deletion-dry-run'
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-account-deletion-dry-run-${{ github.run_id }}
+          path: ${{ runner.temp }}/account-deletion-dry-run
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Delete legacy soft-deleted users
+        if: env.OPERATION == 'account-deletion-execute'
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          npm run delete:legacy-soft-deleted-users -- \
+            --execute \
+            --confirm=DELETE_LEGACY_SOFT_DELETED_USERS
+
+      - name: Record account data deletion change
+        if: env.OPERATION == 'account-deletion-execute'
+        env:
+          ACCOUNT_DELETION_APPROVER: ${{ inputs.account_deletion_approver }}
+          ACCOUNT_DELETION_CHANGE_RECORD: ${{ inputs.account_deletion_change_record }}
+        run: |
+          {
+            echo "### Account data deletion change record"
+            echo
+            echo "- Approver: $ACCOUNT_DELETION_APPROVER"
+            echo "- Change record: $ACCOUNT_DELETION_CHANGE_RECORD"
+            echo "- Pre-execute dry-run: verified within 24 hours"
+            echo "- Post-execute dry-run: remaining users 0"
+            echo "- Follow-up: ACCOUNT_DATA_DELETION_EXECUTE_ENABLEDをfalseへ戻す"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply Prisma migrations
+        if: env.OPERATION == 'migrate-deploy'
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma migrate deploy

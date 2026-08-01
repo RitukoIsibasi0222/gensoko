@@ -1,0 +1,34 @@
+name: Repository Integrity
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-integrity-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-integrity:
+    name: repository-integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: >-
+          npm test -- --run
+          src/jobs/batchWorkflow.test.ts
+          src/jobs/scheduled.test.ts
+          src/jobs/scheduled.cli.test.ts

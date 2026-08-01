@@ -1,0 +1,41 @@
+name: Backend PR Quality
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-pr-quality.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-pr-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://gensoko:secret@localhost:5432/gensoko_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm test -- --run
+      - run: npm run test:workers
+      - run: npm run workers:build
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+      - run: npx prisma validate

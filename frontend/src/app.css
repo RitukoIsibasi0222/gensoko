@@ -1,0 +1,156 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans:
+    'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic UI', 'Yu Gothic',
+    'Meiryo', sans-serif;
+
+  --color-canvas: light-dark(#f7f8fa, #0b1210);
+  --color-surface: light-dark(#ffffff, #111a17);
+  --color-elevated: light-dark(#ffffff, #17211d);
+  --color-surface-muted: light-dark(#f3f4f6, #1d2823);
+  --color-surface-subtle: light-dark(#e5e7eb, #26342e);
+  --color-surface-disabled: light-dark(#e5e7eb, #2d3a35);
+  --color-disabled-solid: light-dark(#9ca3af, #60756b);
+  --color-text: light-dark(#111827, #f3f4f6);
+  --color-text-muted: light-dark(#4b5563, #cbd5d1);
+  --color-text-subtle: light-dark(#6b7280, #9ca3af);
+  --color-text-disabled: light-dark(#9ca3af, #77837d);
+  --color-text-inverse: #ffffff;
+  --color-border: light-dark(#d1d5db, #43574e);
+  --color-border-muted: light-dark(#e5e7eb, #26342e);
+  --color-border-strong: light-dark(#9ca3af, #60756b);
+  --color-focus: light-dark(#2563eb, #60a5fa);
+
+  --color-brand: light-dark(#013220, #6ee7b7);
+  --color-brand-hover: light-dark(#01501a, #a7f3d0);
+  --color-action: light-dark(#2563eb, #2563eb);
+  --color-action-hover: light-dark(#1d4ed8, #1d4ed8);
+  --color-action-soft: light-dark(#eff6ff, #172554);
+  --color-action-soft-hover: light-dark(#dbeafe, #1e3a8a);
+  --color-action-text: light-dark(#1d4ed8, #bfdbfe);
+
+  --color-success-surface: light-dark(#f0fdf4, #052e16);
+  --color-success-surface-strong: light-dark(#dcfce7, #14532d);
+  --color-success-border: light-dark(#bbf7d0, #22c55e);
+  --color-success-border-strong: light-dark(#4ade80, #4ade80);
+  --color-success-text: light-dark(#166534, #bbf7d0);
+  --color-success-text-strong: light-dark(#14532d, #dcfce7);
+  --color-success-solid: light-dark(#16a34a, #16a34a);
+  --color-success-icon: light-dark(#22c55e, #86efac);
+
+  --color-warning-surface: light-dark(#fffbeb, #451a03);
+  --color-warning-surface-strong: light-dark(#fef3c7, #78350f);
+  --color-warning-border: light-dark(#fde68a, #f59e0b);
+  --color-warning-border-strong: light-dark(#f59e0b, #fbbf24);
+  --color-warning-text: light-dark(#92400e, #fde68a);
+  --color-warning-text-strong: light-dark(#78350f, #fef3c7);
+  --color-warning-solid: light-dark(#d97706, #d97706);
+
+  --color-danger-surface: light-dark(#fef2f2, #3f0d0d);
+  --color-danger-surface-strong: light-dark(#fee2e2, #5f1515);
+  --color-danger-border: light-dark(#fecaca, #ef4444);
+  --color-danger-border-strong: light-dark(#f87171, #f87171);
+  --color-danger-text: light-dark(#991b1b, #fecaca);
+  --color-danger-text-strong: light-dark(#7f1d1d, #fee2e2);
+  --color-danger-solid: light-dark(#dc2626, #dc2626);
+  --color-danger-solid-hover: light-dark(#b91c1c, #b91c1c);
+  --color-danger-icon: light-dark(#ef4444, #fca5a5);
+
+  --color-info-surface: light-dark(#eff6ff, #172554);
+  --color-info-surface-strong: light-dark(#dbeafe, #1e3a8a);
+  --color-info-border: light-dark(#bfdbfe, #3b82f6);
+  --color-info-border-strong: light-dark(#60a5fa, #60a5fa);
+  --color-info-text: light-dark(#1e40af, #bfdbfe);
+  --color-info-text-strong: light-dark(#172554, #dbeafe);
+  --color-info-solid: light-dark(#2563eb, #2563eb);
+
+  --color-overlay: light-dark(rgb(0 0 0 / 50%), rgb(0 0 0 / 72%));
+  --color-chart-line: light-dark(#2563eb, #60a5fa);
+  --color-chart-grid: light-dark(#d1d5db, #43574e);
+  --color-chart-grid-muted: light-dark(#f3f4f6, #26342e);
+  --color-chart-label: light-dark(#4b5563, #cbd5d1);
+  --color-chart-point: light-dark(#ffffff, #111a17);
+
+  --color-category-fallback-surface: light-dark(#f8fafc, #1e293b);
+  --color-category-fallback-badge: light-dark(#e2e8f0, #334155);
+  --color-category-fallback-border: light-dark(#cbd5e1, #64748b);
+  --color-category-fallback-text: light-dark(#334155, #e2e8f0);
+  --color-category-nonmetal-surface: light-dark(#ecfdf5, #052e16);
+  --color-category-nonmetal-badge: light-dark(#d1fae5, #14532d);
+  --color-category-nonmetal-border: light-dark(#a7f3d0, #22c55e);
+  --color-category-nonmetal-text: light-dark(#065f46, #d1fae5);
+  --color-category-noble-gas-surface: light-dark(#f0f9ff, #082f49);
+  --color-category-noble-gas-badge: light-dark(#e0f2fe, #0c4a6e);
+  --color-category-noble-gas-border: light-dark(#bae6fd, #38bdf8);
+  --color-category-noble-gas-text: light-dark(#075985, #e0f2fe);
+  --color-category-alkali-metal-surface: light-dark(#fff1f2, #4c0519);
+  --color-category-alkali-metal-badge: light-dark(#ffe4e6, #881337);
+  --color-category-alkali-metal-border: light-dark(#fecdd3, #fb7185);
+  --color-category-alkali-metal-text: light-dark(#9f1239, #ffe4e6);
+  --color-category-alkaline-earth-surface: light-dark(#fff7ed, #431407);
+  --color-category-alkaline-earth-badge: light-dark(#ffedd5, #7c2d12);
+  --color-category-alkaline-earth-border: light-dark(#fed7aa, #fb923c);
+  --color-category-alkaline-earth-text: light-dark(#9a3412, #ffedd5);
+  --color-category-transition-metal-surface: light-dark(#fffbeb, #451a03);
+  --color-category-transition-metal-badge: light-dark(#fef3c7, #78350f);
+  --color-category-transition-metal-border: light-dark(#fde68a, #fbbf24);
+  --color-category-transition-metal-text: light-dark(#92400e, #fef3c7);
+  --color-category-post-transition-surface: light-dark(#f0fdfa, #042f2e);
+  --color-category-post-transition-badge: light-dark(#ccfbf1, #134e4a);
+  --color-category-post-transition-border: light-dark(#99f6e4, #2dd4bf);
+  --color-category-post-transition-text: light-dark(#115e59, #ccfbf1);
+  --color-category-metalloid-surface: light-dark(#f7fee7, #1a2e05);
+  --color-category-metalloid-badge: light-dark(#ecfccb, #365314);
+  --color-category-metalloid-border: light-dark(#d9f99d, #84cc16);
+  --color-category-metalloid-text: light-dark(#3f6212, #ecfccb);
+  --color-category-halogen-surface: light-dark(#fdf4ff, #4a044e);
+  --color-category-halogen-badge: light-dark(#fae8ff, #701a75);
+  --color-category-halogen-border: light-dark(#f5d0fe, #e879f9);
+  --color-category-halogen-text: light-dark(#86198f, #fae8ff);
+  --color-category-lanthanide-surface: light-dark(#f5f3ff, #2e1065);
+  --color-category-lanthanide-badge: light-dark(#ede9fe, #4c1d95);
+  --color-category-lanthanide-border: light-dark(#ddd6fe, #a78bfa);
+  --color-category-lanthanide-text: light-dark(#5b21b6, #ede9fe);
+  --color-category-actinide-surface: light-dark(#eef2ff, #1e1b4b);
+  --color-category-actinide-badge: light-dark(#e0e7ff, #312e81);
+  --color-category-actinide-border: light-dark(#c7d2fe, #818cf8);
+  --color-category-actinide-text: light-dark(#3730a3, #e0e7ff);
+}
+
+:root {
+  color-scheme: light dark;
+  background: var(--color-canvas);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-canvas);
+  color: var(--color-text);
+}
+
+input,
+select,
+textarea {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

@@ -1,0 +1,235 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// 元素マスター
+model Element {
+  id           Int     @id
+  symbol       String  @unique
+  nameJa       String
+  nameEn       String
+  category     String
+  period       Int
+  group        Int?
+  atomicWeight Float?
+  etymology    String?
+
+  weakElements WeakElement[]
+  gameAnswers  GameAnswer[]
+
+  @@map("elements")
+}
+
+// ユーザー
+model User {
+  id             String    @id @default(cuid())
+  username       String    @unique
+  email          String    @unique
+  passwordHash   String
+  role           Role      @default(USER)
+  emailVerified  Boolean   @default(false)
+  isActive       Boolean   @default(true)
+  deletedAt      DateTime?
+  loginFailCount Int       @default(0)
+  lockedUntil    DateTime?
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  refreshTokens      RefreshToken[]
+  weakElements       WeakElement[]
+  gameSessions       GameSession[]
+  gameQuestionSets   GameQuestionSet[]
+  stats              UserStats?
+  emailVerifications EmailVerification[]
+  passwordResetToken PasswordResetToken?
+
+  @@index([deletedAt, id])
+  @@map("users")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+// 監査ログの実行結果
+enum AuditResult {
+  SUCCESS
+  FAILURE
+}
+
+// セキュリティ上重要な操作の監査証跡
+// User relationを持たず、ユーザー削除後も監査ログを保持する
+model AuditLog {
+  id            String      @id @default(cuid())
+  action        String
+  result        AuditResult
+  actorId       String?
+  actorRole     Role?
+  targetType    String?
+  targetId      String?
+  failureReason String?
+  occurredAt    DateTime    @default(now())
+
+  @@index([occurredAt(sort: Desc), id(sort: Desc)])
+  @@index([action, occurredAt(sort: Desc)])
+  @@index([targetType, targetId, occurredAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+// リフレッシュトークン
+model RefreshToken {
+  tokenHash String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt, tokenHash])
+  @@map("refresh_tokens")
+}
+
+// メール認証トークン
+model EmailVerification {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("email_verifications")
+}
+
+// パスワードリセットトークン（有効期限: 1時間）
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+// 苦手リスト
+model WeakElement {
+  id             String   @id @default(cuid())
+  userId         String
+  elementId      Int
+  missCount      Int      @default(1)
+  consecutiveHit Int      @default(0)
+  addedAt        DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  element Element @relation(fields: [elementId], references: [id])
+
+  @@unique([userId, elementId])
+  @@map("weak_elements")
+}
+
+// ゲームセッション
+model GameSession {
+  id           String   @id @default(cuid())
+  userId       String
+  mode         GameMode
+  totalScore   Int
+  correctCount Int
+  totalCount   Int      @default(10)
+  maxStreak    Int      @default(0)
+  durationSec  Int
+  playedAt     DateTime @default(now())
+
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers GameAnswer[]
+
+  @@index([userId, playedAt, id])
+  @@map("game_sessions")
+}
+
+enum GameMode {
+  SYMBOL_TO_NAME_LV1
+  SYMBOL_TO_NAME_LV2
+  NAME_TO_SYMBOL_LV1
+  NAME_TO_SYMBOL_LV2
+  WEAK_SYMBOL_TO_NAME
+  WEAK_NAME_TO_SYMBOL
+}
+
+// 各問の回答記録
+model GameAnswer {
+  id             String  @id @default(cuid())
+  sessionId      String
+  elementId      Int
+  questionIndex  Int?
+  questionId     String?
+  prompt         String?
+  chosenChoiceId String?
+  isCorrect      Boolean
+  correctAnswer  String?
+  yourAnswer     String?
+  answerTimeSec  Int
+  score          Int?
+
+  session GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  element Element     @relation(fields: [elementId], references: [id])
+
+  @@index([sessionId, elementId])
+  @@index([sessionId, questionIndex])
+  @@map("game_answers")
+}
+
+// 問題セット一時保持（設計決定2）
+// GET /game/questions で生成、30分で失効
+// POST /game/sessions で正誤判定後に削除
+model GameQuestionSet {
+  id        String   @id @default(cuid())
+  userId    String
+  mode      GameMode
+  // 正解情報JSON: [{elementId: number, correctElementId: number}]
+  questions Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("game_question_sets")
+}
+
+// ユーザー統計
+model UserStats {
+  userId               String    @id
+  totalGames           Int       @default(0)
+  totalCorrect         Int       @default(0)
+  totalAnswered        Int       @default(0)
+  masteredCount        Int       @default(0)
+  currentStreak        Int       @default(0)
+  lastActiveDate       DateTime?
+  weeklyScore          Int       @default(0)
+  weeklyScoreWeekStart DateTime?
+  allTimeScore         Int       @default(0)
+  updatedAt            DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([weeklyScore(sort: Desc)])
+  @@index([weeklyScoreWeekStart, weeklyScore(sort: Desc)])
+  @@index([allTimeScore(sort: Desc)])
+  @@map("user_stats")
+}

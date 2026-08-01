@@ -14,8 +14,8 @@
 | [docs/04_api.md](docs/04_api.md) | APIエンドポイント設計 |
 | [docs/05_progress.md](docs/05_progress.md) | 実装進捗管理 |
 | [docs/06_libraries.md](docs/06_libraries.md) | 使用ライブラリ一覧と解説 |
-| [docs/07_conventions.md](docs/07_conventions.md) | コード規約・命名ルール |
-| [docs/08_dev_setup.md](docs/08_dev_setup.md) | 開発環境セットアップ手順 |
+| [docs/08_conventions.md](docs/08_conventions.md) | コード規約・命名ルール |
+| [docs/10_dev_setup.md](docs/10_dev_setup.md) | 開発環境セットアップ手順 |
 
 ---
 

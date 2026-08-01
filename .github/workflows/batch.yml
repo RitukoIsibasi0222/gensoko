@@ -1,0 +1,192 @@
+name: Batch Jobs
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: 実行対象の環境
+        required: true
+        type: choice
+        default: staging
+        options:
+          - staging
+          - production
+      batch_job:
+        description: 実行する定期バッチ
+        required: true
+        type: choice
+        options:
+          - weekly-reset
+          - game-question-set-cleanup
+          - audit-log-cleanup-dry-run
+          - audit-log-cleanup-execute
+          - refresh-token-cleanup-dry-run
+          - refresh-token-cleanup-execute
+  schedule:
+    - cron: "7 15 * * 0"
+    - cron: "17 18 * * *"
+    - cron: "37 18 * * *"
+
+jobs:
+  validate-batch-request:
+    name: Validate batch branch
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      vars.PRODUCTION_SCHEDULED_BATCH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Validate batch branch
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+        run: |
+          set -euo pipefail
+
+          case "$GITHUB_EVENT_NAME" in
+            schedule)
+              expected_branch="main"
+              ;;
+            workflow_dispatch)
+              case "$TARGET_ENVIRONMENT" in
+                staging)
+                  expected_branch="develop"
+                  ;;
+                production)
+                  expected_branch="main"
+                  ;;
+                *)
+                  echo "未対応のバッチ実行環境です"
+                  exit 1
+                  ;;
+              esac
+              ;;
+            *)
+              echo "未対応のバッチ実行契機です"
+              exit 1
+              ;;
+          esac
+
+          if [ "$GITHUB_REF_NAME" != "$expected_branch" ]; then
+            echo "選択したEnvironmentと実行branchが一致しません"
+            exit 1
+          fi
+
+  scheduled-batch:
+    name: Run scheduled batch
+    needs: validate-batch-request
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: ${{ github.event_name == 'schedule' && 'production-batch' || inputs.target_environment }}
+    concurrency:
+      group: ${{ github.event_name == 'schedule' && 'gensoko-scheduled-batch' || 'gensoko-batch-jobs' }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
+      AUDIT_LOG_RETENTION_DAYS: ${{ vars.AUDIT_LOG_RETENTION_DAYS }}
+      AUDIT_LOG_CLEANUP_ENABLED: ${{ vars.AUDIT_LOG_CLEANUP_ENABLED }}
+      REFRESH_TOKEN_CLEANUP_ENABLED: ${{ vars.REFRESH_TOKEN_CLEANUP_ENABLED }}
+
+    steps:
+      - name: Validate batch environment
+        env:
+          EXPECTED_ENVIRONMENT: ${{ github.event_name == 'schedule' && 'production' || inputs.target_environment }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ "$BATCH_ENVIRONMENT" != "$EXPECTED_ENVIRONMENT" ]; then
+            echo "バッチ実行環境の設定が不正です"
+            exit 1
+          fi
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_URL Secretが設定されていません"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma generate
+
+      - name: Resolve scheduled cron
+        if: >-
+          github.event_name == 'schedule' ||
+          inputs.batch_job == 'weekly-reset' ||
+          inputs.batch_job == 'game-question-set-cleanup'
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            case "${{ inputs.batch_job }}" in
+              weekly-reset)
+                echo "BATCH_CRON=7 15 * * 0" >> "$GITHUB_ENV"
+                ;;
+              game-question-set-cleanup)
+                echo "BATCH_CRON=17 18 * * *" >> "$GITHUB_ENV"
+                ;;
+              *)
+                echo "未対応の定期バッチです"
+                exit 1
+                ;;
+            esac
+          else
+            echo "BATCH_CRON=${{ github.event.schedule }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run scheduled batch
+        if: >-
+          github.event_name == 'schedule' ||
+          inputs.batch_job == 'weekly-reset' ||
+          inputs.batch_job == 'game-question-set-cleanup'
+        working-directory: backend
+        timeout-minutes: 10
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run batch:scheduled
+
+      - name: Preview audit log cleanup
+        if: inputs.batch_job == 'audit-log-cleanup-dry-run'
+        working-directory: backend
+        timeout-minutes: 10
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run cleanup:audit-logs -- --dry-run
+
+      - name: Execute audit log cleanup
+        if: inputs.batch_job == 'audit-log-cleanup-execute'
+        working-directory: backend
+        timeout-minutes: 10
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run cleanup:audit-logs -- --execute
+
+      - name: Preview refresh token cleanup
+        if: inputs.batch_job == 'refresh-token-cleanup-dry-run'
+        working-directory: backend
+        timeout-minutes: 10
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run cleanup:refresh-tokens -- --dry-run
+
+      - name: Execute refresh token cleanup
+        if: inputs.batch_job == 'refresh-token-cleanup-execute'
+        working-directory: backend
+        timeout-minutes: 10
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run cleanup:refresh-tokens -- --execute

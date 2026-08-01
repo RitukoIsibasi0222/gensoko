@@ -1,0 +1,55 @@
+services:
+  hono:
+    image: node:22-alpine
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+      - hono_node_modules:/app/node_modules
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql://gensoko:secret@postgres:5432/gensoko
+      - NODE_ENV=development
+      - MAIL_HOST=mailpit
+      - MAIL_PORT=1025
+      - FRONTEND_URL=http://localhost:5174
+      - RATE_LIMIT_STORE=memory
+    command: sh -c "npm run dev"
+    depends_on:
+      - postgres
+
+  sveltekit:
+    image: node:22-alpine
+    working_dir: /app
+    ports:
+      - "5174:5174"
+    volumes:
+      - ./frontend:/app
+      - sveltekit_node_modules:/app/node_modules
+    environment:
+      - VITE_API_BASE_URL=http://localhost:3000/api/v1
+    command: sh -c "npm run dev -- --host"
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: gensoko
+      POSTGRES_USER: gensoko
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "8025:8025"   # メール確認画面（ブラウザで開く）
+      - "1025:1025"   # SMTPポート（Honoから送信）
+
+volumes:
+  postgres_data:
+  hono_node_modules:
+  sveltekit_node_modules:
