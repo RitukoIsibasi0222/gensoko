@@ -781,9 +781,10 @@ Gensokoはcollaboratorがowner 1名の個人ポートフォリオである。非
 2. release branchは作成せず、review済みdevelop固定SHAからmainへの直接PRを作成する。
 3. main向けPRでもBackend PR Quality、Frontend PR Quality、Repository Integrityを実行する。このPRはPreview/build確認だけでproduction deployを起動しない。
 4. review後、別の明示承認でmainへmergeし、生成されたmain SHAと昇格元develop SHAのtree一致を確認する。
-5. 確定main SHAでM3を再実行し、続けて同じSHAでM1R read-only evidenceを別承認により再取得する。
-6. `production` / `production-batch`をmain限定へ変更してからdefault branchをmainへ切り替える。production required reviewerとkill switch `false`を維持する。
-7. 通常release後のmain→develop同期は行わない。main固有hotfixがある場合だけmain→develop PRを作成する。
+5. 確定main SHAでM3を再実行する。
+6. 別承認で`production`だけをrequired reviewer維持のままmain限定へ変更し、さらに別承認で同じmain SHAのM1R read-only evidenceを再取得・reviewする。`production-batch`とdefault branchはM1R review完了まで変更しない。
+7. M1R review後の別承認で`production-batch`をmain限定へ変更してからdefault branchをmainへ切り替える。stagingはdevelop限定、kill switchは`false`を維持する。Vercel ProductionとCloudflare productionのmain SHA基準は値非表示で確認し、M5承認前にdeployしない。
+8. 通常release後のmain→develop同期は行わない。main固有hotfixがある場合だけmain→develop PRを作成する。
 
 ### v0.1公開とBO15〜BO18の実行順序
 
@@ -796,7 +797,7 @@ Gensokoはcollaboratorがowner 1名の個人ポートフォリオである。非
 5. BO16では自然発生する日次GameQuestionSet cleanup、日次audit cleanup、週次resetを確認する。問題があればkill switchを`false`へ戻す。
 6. 初回run確認後にBO18として計画書・進捗・runbookを実態へ同期する。
 
-repository変更のdevelop merge、develop→main PR作成、main merge、外部branch切替、M3、M1R、M5 preflight、M5 deploy、M6 smoke、BO15有効化はそれぞれ別の境界である。この文書だけを根拠にmerge、外部設定変更、deploy、workflow dispatch、production DB query、Secret値参照、kill switch有効化を行わない。
+repository変更のdevelop merge、develop→main PR作成、main merge、M3、production EnvironmentのM1R前切替、M1R、production-batch・default branch・provider基準の後段切替、M5 preflight、M5 deploy、M6 smoke、BO15有効化はそれぞれ別の境界である。この文書だけを根拠にmerge、外部設定変更、deploy、workflow dispatch、production DB query、Secret値参照、kill switch有効化を行わない。
 
 ### scheduled production初回有効化
 
@@ -1009,7 +1010,7 @@ M1の正本は[`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-p
 
 ### 別承認で準備する項目
 
-実装PRがreviewされて`develop`へmergeされた後、次を値非表示で確認し、Environment変更とworkflow dispatchをそれぞれ別承認する。read-only権限、対象scope、owner attestationのいずれかを確認できない場合は準備を止め、M1を未完了のままPath Bとして扱う。
+review済みdevelop固定SHAの直接release PRが`main`へmergeされ、確定main SHAのM3が成功した後、次を値非表示で確認する。production Environmentだけをmain限定へ変更する承認とworkflow dispatchの承認を分ける。read-only権限、対象scope、owner attestationのいずれかを確認できない場合は準備を止め、M1を未完了のままPath Bとして扱う。
 
 - GitHub `production` Environmentのrequired reviewer、deployment branch policy、`main`のreview済みSHA
 - Variable `BATCH_ENVIRONMENT=production`
@@ -1025,7 +1026,7 @@ owner attestationを確認できない場合はworkflowをdispatchしない。re
 ### dispatchと確認
 
 1. Actionsの`Production Initial State Evidence`をreview済みの`main`固定SHAから選ぶ。
-2. `reviewed_sha`に実行中の`develop` SHA、`confirmation`に`READ_ONLY_PRODUCTION_INITIAL_STATE`を入力する。
+2. `reviewed_sha`に実行中の`main` SHA、`confirmation`に`READ_ONLY_PRODUCTION_INITIAL_STATE`を入力する。
 3. `approver`と`change_record`には正規表現で許可された非秘密識別子だけを使う。
 4. 削除済みdeployment・外部backup copyがないことを確認済みの場合だけ`history_attestation=NO_DELETED_DEPLOYMENT_OR_EXTERNAL_BACKUP_COPY`を入力する。
 5. M1開始からreview完了までproduction変更を凍結できることを確認済みの場合だけ`change_freeze_attestation=NO_CONCURRENT_PRODUCTION_CHANGE`を入力する。

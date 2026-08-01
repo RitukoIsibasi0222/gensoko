@@ -52,6 +52,7 @@ Gensokoを、一般ユーザーが登録・メール認証・ログイン・学�
 
 - 本計画PRではproduction deploy、migration、DB query、workflow dispatch、Cloudflare resource変更を実行しない。
 - mainへmergeする前にproduction deploy・M1R dispatch・M5を実行しない。main merge後に生成された確定SHAでM3を再実行し、その後にM1R read-only evidenceを再取得する。
+- M1Rはmain限定workflowであるため、M3成功後の別承認でproduction Environmentだけをrequired reviewer維持のままmain限定へ変更してから実行する。production-batchとdefault branchのmain切替はM1R review完了後の別承認とし、stagingはdevelop限定、kill switchは`false`を維持する。
 - production DBが空であると推測しない。M1の承認付きread-only証拠でDB target、全User、legacy User、User関連row、AuditLogが`clear`でない場合は本計画を停止し、既存の通常移行gateへ戻る。
 - M1 schema v1のPath B判定は変更しない。Vercel・GitHub Environment・backup履歴の`present`は、ownerが一般公開・一般登録・実利用者data保存の実績なしを確認できる場合に限り、v0.1の既存利用者向け移行gateを起動する根拠から除外する。
 - M1証拠SHA後のcommitが`docs/**`だけを変更し、backend、frontend、`.github/workflows`、schema/migration、lockfile、deployment configとproduction stateを変更していないことを差分確認できる場合、文書同期だけを理由にM1を再実行しない。実行時のreview済みdocs SHAを別に記録する。
@@ -252,14 +253,18 @@ M6	production smokeとrelease記録	production・docs	高
 1. repository境界修正をdevelopへmergeし、review済みdevelop固定SHAからmainへの直接PRを作成する。
 2. review後の別承認でmainへmergeし、実際に生成されたmain SHAと昇格元develop SHAのtree一致を確認する。
 3. 確定main SHAでM3の品質gateを実行する。失敗時は対象testへ絞って修正し、新しいmain SHAをreviewする。
-4. 確定main SHAでM1 schema v1 read-only evidenceを再取得し、Path B、DB 5項目、owner判断をM1Rとして再固定する。DBまたは実利用者dataの前提が不明なら停止する。
-5. M5の値非表示preflightでpending Prisma migrationを確認する。必要な場合だけM4の新鮮な暗号化backup確認と別承認migrationを行う。
-6. 別承認で通常password verifier DOを含むAPI、frontendの順にproductionへdeployする。smoke完了までは公開を告知しない。
-7. M6でsynthetic User 1件の主要導線、DO valid login、最小429、Cookie・CORS・security headersを確認し、同じchange内で本人退会・flag復旧・記録を完了する。
+4. 別承認でproduction Environmentだけをrequired reviewer維持のままmain限定へ変更する。production-batch、default branch、Vercel、Cloudflareは変更せず、workflowを実行しない。
+5. さらに別承認で確定main SHAのM1 schema v1 read-only evidenceを再取得し、Path B、DB 5項目、owner判断をM1Rとして再固定する。DBまたは実利用者dataの前提が不明なら停止する。
+6. M1R review完了後の別承認でproduction-batchをmain限定へ変更し、default branchをmainへ切り替える。stagingはdevelop限定、kill switchは`false`を維持する。Vercel ProductionとCloudflare productionのmain SHA基準は同じ外部切替工程で値非表示確認し、deployは行わない。
+7. M5の値非表示preflightでpending Prisma migrationを確認する。必要な場合だけM4の新鮮な暗号化backup確認と別承認migrationを行う。
+8. 別承認で通常password verifier DOを含むAPI、frontendの順にproductionへdeployする。smoke完了までは公開を告知しない。
+9. M6でsynthetic User 1件の主要導線、DO valid login、最小429、Cookie・CORS・security headersを確認し、同じchange内で本人退会・flag復旧・記録を完了する。
 
 ## workflow実行・承認回数
 
-pending Prisma migrationがない通常経路では、M3はローカルの一括品質確認、M5は承認済みのprovider deployとして扱い、GitHub Actionsの追加dispatchはM6の既存`Production Account Deletion Smoke` 1回だけとする。登録、メール認証、login、reloadによるrefresh、game、最小429は同じsynthetic Userで手動確認し、別の`Production Auth Smoke`は重複実行しない。
+main昇格後は、M3成功後にM1R read-only workflowを同じmain SHAで1回だけ別承認により実行する。その後、pending Prisma migrationがない通常経路では、M5は承認済みのprovider deployとして扱い、production副作用を伴うGitHub Actionsの追加dispatchはM6の既存`Production Account Deletion Smoke` 1回だけとする。登録、メール認証、login、reloadによるrefresh、game、最小429は同じsynthetic Userで手動確認し、別の`Production Auth Smoke`は重複実行しない。
+
+release PR作成、main merge、production EnvironmentのM1R前切替、M1R dispatch、production-batch・default branch・provider基準の後段切替は、それぞれ別の明示承認とする。以下の2回は、その後に残るM5/M6のproduction変更承認だけを数える。
 
 必要な明示承認は2回とする。
 

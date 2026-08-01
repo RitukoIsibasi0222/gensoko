@@ -53,7 +53,7 @@ M1 schema v1のPath A/B判定は変更しない。Path B確定後にownerが一�
 **既存test pattern**
 
 - `backend/src/jobs/productionDatabaseWorkflow.test.ts` — workflowのproduction固定、権限、secret非出力、Artifact契約をsource contractで検証する。
-- `backend/src/jobs/accountDeletionWorkflow.test.ts` — manual operation、develop固定、承認記録、schedule非到達、fail-closedを検証する。
+- `backend/src/jobs/accountDeletionWorkflow.test.ts` — manual operation、main固定、承認記録、schedule非到達、fail-closedを検証する。
 
 ### 外部read-only API
 
@@ -202,7 +202,7 @@ M1 schema v1のPath A/B判定は変更しない。Path B確定後にownerが一�
 
 | input                       | 形式           | 用途                                                                                          |
 | --------------------------- | -------------- | --------------------------------------------------------------------------------------------- |
-| `reviewed_sha`              | 40桁commit SHA | `develop`の実行SHAとの完全一致                                                                |
+| `reviewed_sha`              | 40桁commit SHA | `main`の実行SHAとの完全一致                                                                   |
 | `confirmation`              | 固定文字列     | `READ_ONLY_PRODUCTION_INITIAL_STATE`以外を拒否                                                |
 | `approver`                  | 安全な識別子   | 承認記録。email等の個人値は使わない                                                           |
 | `change_record`             | 安全な識別子   | 計画・issue・PRとの対応                                                                       |
@@ -212,7 +212,7 @@ M1 schema v1のPath A/B判定は変更しない。Path B確定後にownerが一�
 ### job境界
 
 - triggerは`workflow_dispatch`だけとし、`push`、`pull_request`、`schedule`、`workflow_call`を持たない。
-- refは`develop`だけを許可し、`reviewed_sha == github.sha`をcheckout前に検証する。
+- refは`main`だけを許可し、`reviewed_sha == github.sha`をcheckout前に検証する。
 - jobは`environment: production`、`group: gensoko-batch-jobs`、`cancel-in-progress: false`を使う。
 - provider credential、DB URL、project/account identifierはjob-level envへ置かず、検査stepのprocess envだけへ渡す。
 - checkout後に`npm ci`、Prisma Client生成、M1 CLIを実行する。migration、seed、backup、cleanup commandは呼ばない。
@@ -464,15 +464,15 @@ DB schema/migrationは変更しないため、`prisma migrate deploy`とPlaywrig
 
 ### 実行前
 
-1. 実装PRが`develop`へmerge済みで、review済みSHAが固定されていることを確認する。
-2. production Environmentのrequired reviewer、対象repository、branch policy、concurrencyを値非表示で確認する。
+1. review済みdevelop固定SHAの直接release PRが`main`へmerge済みで、生成されたmain SHAと昇格元develop SHAのtree一致、および同じmain SHAのM3成功を確認する。
+2. 別承認でproduction Environmentだけをrequired reviewer維持のまま`main`限定へ変更し、対象repository、branch policy、concurrencyを値非表示で確認する。`production-batch`とdefault branchはM1R review完了まで変更しない。
 3. DB/project/provider scope、read-only credential、GitHub permissions、外部backup copy attestation、実行中のproduction変更凍結の対象と限界を提示し、別承認を得る。
 4. Secret/Variableの新規登録・変更が必要な場合は、workflow dispatchとは別の外部変更として承認を得る。
 5. credentialがread契約を満たさない、対象scopeが不明、owner attestation不能ならworkflowをdispatchせずPath Bを記録する。placeholderや不一致値でrunを意図的に作成しない。
 
 ### 実行
 
-1. 両attestationが成立している場合だけ`develop`のreview済みSHAを選び、固定確認文言・approver・change record・history attestation・change freeze attestationを入力する。
+1. 両attestationが成立している場合だけ`main`のreview済みSHAを選び、固定確認文言・approver・change record・history attestation・change freeze attestationを入力する。
 2. production Environment approval画面で対象SHA、workflow名、read-only scope、実行者を再確認して承認する。
 3. workflowはprovider履歴を確認し、最後に同一snapshot内のDB countを実行する。write commandは実行しない。
 4. `present` / `unknown`でもsummaryとsafe markerを残した後に失敗させる。
@@ -688,6 +688,8 @@ DB target、全User、legacy User、User関連row、AuditLogのいずれかが`p
 - manual-only、production Environment approval、main/review済みSHA固定、GET-only、Prisma read-only、safe evidence、fail-closedがtestで固定されている。
 
 2026-08-01のbranch境界変更により、旧develop SHAのrunとreviewは履歴として維持するが、M5へ進む根拠には再利用しない。main merge後の確定SHAでM3を成功させた後、M1R evidenceとattestationを同じmain SHAへ再固定する。
+
+main限定workflowとproduction Environmentのbranch policyを両立させるため、M1R dispatch前の別承認ではproduction Environmentだけをmain限定へ変更する。M1Rのreview完了後、さらに別承認でproduction-batchをmain限定へ変更してdefault branchをmainへ切り替える。stagingはdevelop限定、production required reviewer、`PRODUCTION_SCHEDULED_BATCH_ENABLED=false`を維持する。
 
 - backend品質gate、workflow/Markdown Prettier、`git diff --check`が成功している。
 - production DB query、provider API request、workflow dispatch、Environment/Secret変更を実装PRでは実行していない。

@@ -247,7 +247,7 @@
 ## フェーズ12: デプロイ
 
 - [x] Supabase staging・production project作成、東京region・Session pooler接続設定
-- [-] 定期バッチ運用再設計（GameQuestionSet cleanup日次化・scheduled専用production境界・kill switch・滞留run解消） — PR #166のrepository実装とPR #168の外部設定記録はmerge済み。BO1〜BO14完了（旧run #804/#868はstep 0件確認後にcancel、active run 0件）。非作成者レビュー・required check・14日baselineは個人ポートフォリオの完了条件から除外した。`production-batch`最小設定は完了し、kill switchは無効を維持している。次工程はmain境界のrepository変更、develop→main直接PR、確定main SHAのM3/M1R、M5、M6であり、その完了後に別承認でBO15を有効化する。BO15、自然発生run確認のBO16、最終同期のBO18は未実施 — 計画書: [`batch-operations-redesign`](plans/batch-operations-redesign/plan.md)
+- [-] 定期バッチ運用再設計（GameQuestionSet cleanup日次化・scheduled専用production境界・kill switch・滞留run解消） — PR #166のrepository実装とPR #168の外部設定記録はmerge済み。BO1〜BO14完了（旧run #804/#868はstep 0件確認後にcancel、active run 0件）。非作成者レビュー・required check・14日baselineは個人ポートフォリオの完了条件から除外した。`production-batch`最小設定は完了し、kill switchは無効を維持している。次工程はdevelop→main直接PR・merge、確定main SHAのM3、production Environmentだけのmain切替、同じSHAのM1R、production-batch・default branchの後段切替、M5、M6であり、その完了後に別承認でBO15を有効化する。stagingはdevelop限定、kill switchは`false`を維持する。BO15、自然発生run確認のBO16、最終同期のBO18は未実施 — 計画書: [`batch-operations-redesign`](plans/batch-operations-redesign/plan.md)
 - [x] 本番DBバックアップ・Prismaマイグレーション運用（Free plan容量確認・暗号化backup・migration gateをproductionで確認済み） — 計画書: [`docs/plans/audit-log-production-operations/plan.md`](plans/audit-log-production-operations/plan.md)
 - [-] 本番DBバックアップ耐障害性強化 — M1Rが成立するv0.1はpending Prisma migrationがある場合だけ24時間以内の暗号化済み1世代とchecksumを必須とし、migration不要時のbackup、日次schedule確認、2世代目以降、最大3回retry・recovery・36時間鮮度監視・通常7世代・四半期隔離restoreは公開後に継続 — 計画書: [`docs/plans/backup-resilience/plan.md`](plans/backup-resilience/plan.md)
 - [-] staging frontend/API配備基盤（Workers専用entrypoint・Prisma/mail runtime境界・Wrangler・Vercel Preview・T34実機確認） — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md) / PR: #117 — SD1〜SD13・SD15完了。Vercel `develop` Preview、Cloudflare staging Worker/DO/Hyperdrive/secret、Supabase migration、health/CORS/OPTIONS、元素118件、synthetic登録・認証・ゲーム・password reset・本人退会を確認済み。production resource・deploy・DB操作は未実施
@@ -267,11 +267,13 @@
 > 一般登録・認証・ゲーム・本人退会は公開する。基本セキュリティは維持し、商用運用相当の長期観測・drill・高度な自動化だけを公開後へ移す。
 >
 > branch境界は`develop=staging/開発統合`、`main=production/公開済み`とする。release branchは作らず、通常releaseは`develop`から`main`への直接PRで昇格する。旧develop SHAのM3/M1Rは履歴として保持し、main merge後の確定SHAで再固定する。
+>
+> 確定main SHAのM3後、別承認でproduction Environmentだけをmain限定へ変更してから同じSHAのM1Rを実行する。M1R review後の別承認でproduction-batchとdefault branchをmainへ切り替える。stagingはdevelop限定、production required reviewer、kill switch `false`を維持する。
 
 ### 最小リリース工程（M1R・M3・M5・M6、条件付きM4）
 
 - [-] M1: production初回状態のschema v1証拠を取得・review済み — 計画書: [`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-production-read-only-evidence/plan.md) — 旧run [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)と中間run [30335685074](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30335685074)は履歴として維持する。M4後の最新候補`64ff4d2eccb5c6cd008d472f1940feaa5a2de4c3`のrun [30416382440](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30416382440)でDB 5項目・Cloudflare・両attestationは`clear`、GitHub deployment・backup履歴は`present`、Vercel deploymentは`unknown`だった。schema v1のPath BとM1未完了を維持する
-- [-] M1R: 旧develop SHAの証拠とowner判断は履歴として維持する。main merge後の確定SHAでread-only evidenceとowner判断を再固定するまで未完了とし、M5は開始しない
+- [-] M1R: 旧develop SHAの証拠とowner判断は履歴として維持する。main merge後の確定SHAでM3を成功させ、production Environmentだけを別承認でmain限定へ変更した後、同じmain SHAのread-only evidenceとowner判断を再固定するまで未完了とし、M5は開始しない
 - [-] M2: repository実装完了、外部実行は未完了のまま公開後へ移管。同じrelease候補SHAのstaging campaignは実行せず、M2P-17〜M2P-22を完了扱いにしない。通常password verifier DO、valid login、最小429、主要導線はM6 production smokeで確認する
 - [-] M3: 旧develop SHAの品質gate成功は履歴として維持する。直接release PRをmainへmergeした後、その確定main SHAで同じ品質gateとproduction依存監査を再実行するまで未完了とする
 - [x] M4: backup run [30301334445](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30301334445)を確認し、対象SHA `7dbe5649a4057baa3b123aaadb6531422f96fd2f`のmigration run [30342343404](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30342343404)で`prisma migrate deploy`に成功した。検証run [30406227957](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30406227957)で対象run・SHAとv0.1対象5 indexの`indisvalid`・`indisready`を値非表示確認し、M4を完了した

@@ -480,7 +480,7 @@ BO18	計画書・進捗を完了更新	docs	高
 
 ## 実装順序と外部操作境界
 
-2026-08-01にbranch境界を`develop=staging`、`main=production`へ変更した。repository実装を先にdevelopへmergeし、直接release PRをmainへmergeした後、別承認で`production` / `production-batch`のbranch policyとdefault branchをmainへ切り替える。外部切替が完了するまでBO15を有効化せず、旧develop scheduleはpre-Environment branch validationでDB処理へ進ませない。
+2026-08-01にbranch境界を`develop=staging`、`main=production`へ変更した。repository実装を先にdevelopへmergeし、直接release PRをmainへmergeして確定main SHAのM3を完了する。M1R前は別承認で`production`だけをmain限定へ変更し、M1R review後の別承認で`production-batch`とdefault branchをmainへ切り替える。外部切替が完了するまでBO15を有効化せず、旧develop scheduleはpre-Environment branch validationでDB処理へ進ませない。
 
 ### Phase 1: repository実装
 
@@ -511,9 +511,11 @@ BO18	計画書・進捗を完了更新	docs	高
 1. repository境界修正をdevelopへmergeする。
 2. review済みdevelop固定SHAからmainへの直接PRを作成し、別承認でmergeする。
 3. production DB・batch・M1Rがmain以外をpre-Environment validationで拒否することを再確認する。
-4. 別承認で`production`と`production-batch`のbranch policyをmain限定へ変更する。production required reviewerは維持する。
-5. 続けてdefault branchをmainへ変更し、scheduleのsourceをmainへ切り替える。
-6. kill switchは`false`のまま維持し、workflow dispatchやDB処理を実行しない。
+4. 確定main SHAでM3を完了する。
+5. 別承認で`production`だけをrequired reviewer維持のままmain限定へ変更する。`production-batch`とdefault branchは変更せず、workflowを実行しない。
+6. さらに別承認で同じmain SHAのM1R read-only evidenceを実行・reviewする。
+7. M1R review後の別承認で`production-batch`をmain限定へ変更し、続けてdefault branchをmainへ変更してscheduleのsourceをmainへ切り替える。stagingはdevelop限定を維持する。
+8. kill switchは`false`のまま維持し、追加workflow dispatchやDB処理を実行しない。
 
 ### Phase 4: 有効化
 
@@ -583,6 +585,7 @@ main確定SHAのM3・M1Rを再固定し、ポートフォリオ版v0.1のM5 prod
 ### main境界切替
 
 - [ ] `production` required reviewerを維持したままmain限定branch policyへ変更する。
+- [ ] 確定main SHAのM3後、同じmain SHAでM1R read-only evidenceとowner判断を再固定する。
 - [ ] `production-batch`をmain限定へ変更し、manual選択不可を維持する。
 - [ ] repository default branchをmainへ変更し、schedule sourceをmainへ切り替える。
 - [ ] kill switchが`false`で、production workflow未実行であることを再確認する。
