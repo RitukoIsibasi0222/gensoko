@@ -79,7 +79,7 @@ describe("production account data deletion workflow", () => {
     expect(workflow).toContain("account_deletion_dry_run_run_id:");
   });
 
-  it("production・develop・execute flag・確認文字列・承認記録を必須にする", () => {
+  it("production・main・execute flag・確認文字列・承認記録を必須にする", () => {
     const workflow = readProductionWorkflow();
 
     expect(workflow).toContain("environment: production");
@@ -87,7 +87,7 @@ describe("production account data deletion workflow", () => {
     expect(workflow).toContain(
       "ACCOUNT_DATA_DELETION_EXECUTE_ENABLED: ${{ vars.ACCOUNT_DATA_DELETION_EXECUTE_ENABLED }}",
     );
-    expect(workflow).toContain('if [ "$GITHUB_REF_NAME" != "develop" ]; then');
+    expect(workflow).toContain('if [ "$GITHUB_REF_NAME" != "main" ]; then');
     expect(workflow).toContain('if [ "$OPERATION" = "account-deletion-execute" ]; then');
     expect(workflow).toContain('if [ "$ACCOUNT_DATA_DELETION_EXECUTE_ENABLED" != "true" ]; then');
     expect(workflow).toContain("DELETE_LEGACY_SOFT_DELETED_USERS");
@@ -95,7 +95,7 @@ describe("production account data deletion workflow", () => {
     expect(workflow).toContain("ACCOUNT_DELETION_CHANGE_RECORD");
   });
 
-  it("execute前にdevelop上の24時間以内の成功backup Artifactを検証する", () => {
+  it("execute前にmain上の24時間以内の成功backup Artifactを検証する", () => {
     const workflow = readProductionWorkflow();
 
     expect(workflow).toContain(
@@ -106,7 +106,7 @@ describe("production account data deletion workflow", () => {
     expect(workflow).toContain("production-account-deletion-dry-run-${DRY_RUN_RUN_ID}");
     expect(workflow).toContain("run_conclusion=\"$(jq --raw-output '.conclusion'");
     expect(workflow).toContain("run_head_branch=\"$(jq --raw-output '.head_branch'");
-    expect(workflow).toContain('"develop"');
+    expect(workflow).toContain('"main"');
     expect(workflow).toContain("86400");
     expect(workflow).toContain("expired == false");
     expect(workflow).toContain("actions/upload-artifact@v4");

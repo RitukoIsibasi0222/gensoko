@@ -48,8 +48,25 @@ on:
     - cron: "41 19 * * *"
 
 jobs:
+  validate-production-branch:
+    name: Validate production branch
+    if: github.event_name != 'schedule' || github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Validate production branch
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "production DB操作はmain branchから実行してください"
+            exit 1
+          fi
+
   production-database:
     name: Run production database operation
+    needs: validate-production-branch
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
@@ -129,8 +146,8 @@ jobs:
           fi
           if [ "$OPERATION" = "account-deletion-dry-run" ] ||
              [ "$OPERATION" = "account-deletion-execute" ]; then
-            if [ "$GITHUB_REF_NAME" != "develop" ]; then
-              echo "production account data deletionはdevelop branchから実行してください"
+            if [ "$GITHUB_REF_NAME" != "main" ]; then
+              echo "production account data deletionはmain branchから実行してください"
               exit 1
             fi
             case "$ACCOUNT_DATA_DELETION_EXECUTE_ENABLED" in
@@ -161,8 +178,8 @@ jobs:
             fi
           fi
           if [ "$OPERATION" = "verify-v0-1-migration-indexes" ]; then
-            if [ "$GITHUB_REF_NAME" != "develop" ]; then
-              echo "v0.1 migration index確認はdevelop branchから実行してください"
+            if [ "$GITHUB_REF_NAME" != "main" ]; then
+              echo "v0.1 migration index確認はmain branchから実行してください"
               exit 1
             fi
             if ! [[ "$CONFIRMED_MIGRATION_RUN_ID" =~ ^[0-9]+$ ]]; then
@@ -198,7 +215,7 @@ jobs:
           if [ "$run_name" != "Production Database Operations" ] ||
              [ "$run_path" != ".github/workflows/production-database.yml" ] ||
              [ "$run_conclusion" != "success" ] ||
-             [ "$run_head_branch" != "develop" ] ||
+             [ "$run_head_branch" != "main" ] ||
              [ "$run_head_sha" != "$EXPECTED_MIGRATION_SHA" ] ||
              [ "$run_event" != "workflow_dispatch" ]; then
             echo "指定したrunをv0.1 migrationの成功証拠として確認できませんでした"
@@ -451,7 +468,7 @@ jobs:
 
           if [ "$run_name" != "Production Database Operations" ] ||
              [ "$run_conclusion" != "success" ] ||
-             [ "$run_head_branch" != "develop" ]; then
+             [ "$run_head_branch" != "main" ]; then
             echo "指定したbackup runを本番migrationの前提として確認できませんでした"
             exit 1
           fi
@@ -497,7 +514,7 @@ jobs:
 
           if [ "$run_name" != "Production Database Operations" ] ||
              [ "$run_conclusion" != "success" ] ||
-             [ "$run_head_branch" != "develop" ] ||
+             [ "$run_head_branch" != "main" ] ||
              [ "$run_event" != "workflow_dispatch" ]; then
             echo "指定したdry-runをaccount deletion executeの前提として確認できませんでした"
             exit 1

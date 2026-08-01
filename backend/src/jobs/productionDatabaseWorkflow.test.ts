@@ -27,6 +27,23 @@ function countOccurrences(source: string, fragment: string): number {
 describe("production database GitHub Actions workflow", () => {
   const workflow = readFileSync(WORKFLOW_PATH, "utf8");
 
+  it("skips non-main schedules and rejects non-main manual runs before Environment and secrets", () => {
+    const validationJobStart = workflow.indexOf("  validate-production-branch:");
+    const productionJobStart = workflow.indexOf("  production-database:");
+    const validationJob = workflow.slice(validationJobStart, productionJobStart);
+
+    expect(validationJobStart).toBeGreaterThanOrEqual(0);
+    expect(productionJobStart).toBeGreaterThan(validationJobStart);
+    expect(validationJob).toContain(
+      "if: github.event_name != 'schedule' || github.ref_name == 'main'",
+    );
+    expect(validationJob).toContain('if [ "$GITHUB_REF_NAME" != "main" ]; then');
+    expect(validationJob).toContain("permissions: {}");
+    expect(validationJob).not.toContain("environment:");
+    expect(validationJob).not.toContain("secrets.");
+    expect(workflow.slice(productionJobStart)).toContain("needs: validate-production-branch");
+  });
+
   it("schedules encrypted backups daily at JST 04:41 without changing the capacity schedule", () => {
     expect(countOccurrences(workflow, scheduleDeclaration(DAILY_BACKUP_CRON))).toBe(1);
     expect(countOccurrences(workflow, scheduledOperationCase(DAILY_BACKUP_CRON, "backup"))).toBe(1);

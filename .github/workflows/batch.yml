@@ -28,11 +28,53 @@ on:
     - cron: "37 18 * * *"
 
 jobs:
-  scheduled-batch:
-    name: Run scheduled batch
+  validate-batch-request:
+    name: Validate batch branch
     if: >-
       github.event_name == 'workflow_dispatch' ||
       vars.PRODUCTION_SCHEDULED_BATCH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Validate batch branch
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+        run: |
+          set -euo pipefail
+
+          case "$GITHUB_EVENT_NAME" in
+            schedule)
+              expected_branch="main"
+              ;;
+            workflow_dispatch)
+              case "$TARGET_ENVIRONMENT" in
+                staging)
+                  expected_branch="develop"
+                  ;;
+                production)
+                  expected_branch="main"
+                  ;;
+                *)
+                  echo "未対応のバッチ実行環境です"
+                  exit 1
+                  ;;
+              esac
+              ;;
+            *)
+              echo "未対応のバッチ実行契機です"
+              exit 1
+              ;;
+          esac
+
+          if [ "$GITHUB_REF_NAME" != "$expected_branch" ]; then
+            echo "選択したEnvironmentと実行branchが一致しません"
+            exit 1
+          fi
+
+  scheduled-batch:
+    name: Run scheduled batch
+    needs: validate-batch-request
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:

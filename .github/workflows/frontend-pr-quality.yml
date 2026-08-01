@@ -2,7 +2,7 @@ name: Frontend PR Quality
 
 on:
   pull_request:
-    branches: [develop]
+    branches: [develop, main]
     paths:
       - "frontend/**"
       - ".github/workflows/frontend-pr-quality.yml"
@@ -23,7 +23,7 @@ jobs:
         working-directory: frontend
     env:
       VERCEL_ENV: preview
-      VERCEL_GIT_COMMIT_REF: develop
+      VERCEL_GIT_COMMIT_REF: ${{ github.base_ref }}
       VITE_API_BASE_URL: https://staging-api.example.invalid/api/v1
     steps:
       - uses: actions/checkout@v4

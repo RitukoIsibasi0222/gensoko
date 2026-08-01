@@ -11,11 +11,11 @@ const WORKFLOW_PATH = fileURLToPath(
 const PACKAGE_PATH = fileURLToPath(new URL('../package.json', import.meta.url));
 
 describe('frontend pull request quality workflow', () => {
-  it('develop向けPRのfrontend変更で必須品質checkをNode.js 22上で実行する', () => {
+  it('develop・main向けPRのfrontend変更で必須品質checkをNode.js 22上で実行する', () => {
     const workflow = readFileSync(WORKFLOW_PATH, 'utf8');
 
     expect(workflow).toContain('pull_request:');
-    expect(workflow).toContain('branches: [develop]');
+    expect(workflow).toContain('branches: [develop, main]');
     expect(workflow).toContain('"frontend/**"');
     expect(workflow).toContain('node-version: 22');
     expect(workflow).toContain('npm ci');
@@ -31,7 +31,7 @@ describe('frontend pull request quality workflow', () => {
     const workflow = readFileSync(WORKFLOW_PATH, 'utf8');
 
     expect(workflow).toContain('VERCEL_ENV: preview');
-    expect(workflow).toContain('VERCEL_GIT_COMMIT_REF: develop');
+    expect(workflow).toContain('VERCEL_GIT_COMMIT_REF: ${{ github.base_ref }}');
     expect(workflow).toContain('VITE_API_BASE_URL: https://staging-api.example.invalid/api/v1');
     expect(workflow).toContain('contents: read');
     expect(workflow).toContain('cancel-in-progress: true');

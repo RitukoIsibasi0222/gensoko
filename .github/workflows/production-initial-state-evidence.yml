@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       reviewed_sha:
-        description: develop上のreview済み40桁commit SHA
+        description: main上のreview済み40桁commit SHA
         required: true
         type: string
       confirmation:
@@ -29,8 +29,24 @@ on:
         type: string
 
 jobs:
+  validate-production-evidence-branch:
+    name: Validate production evidence branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Validate production evidence branch
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "production初回状態確認はmain branchから実行してください"
+            exit 1
+          fi
+
   production-initial-state-evidence:
     name: Inspect production initial state
+    needs: validate-production-evidence-branch
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
@@ -56,8 +72,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "$GITHUB_REF_NAME" != "develop" ]; then
-            echo "production初回状態確認はdevelop branchから実行してください"
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "production初回状態確認はmain branchから実行してください"
             exit 1
           fi
           if ! [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]; then

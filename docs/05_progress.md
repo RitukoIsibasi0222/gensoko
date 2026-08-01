@@ -247,7 +247,7 @@
 ## フェーズ12: デプロイ
 
 - [x] Supabase staging・production project作成、東京region・Session pooler接続設定
-- [-] 定期バッチ運用再設計（GameQuestionSet cleanup日次化・scheduled専用production境界・kill switch・滞留run解消） — PR #166のrepository実装とPR #168の外部設定記録はmerge済み。BO1〜BO14完了（旧run #804/#868はstep 0件確認後にcancel、active run 0件）。非作成者レビュー・required check・14日baselineは個人ポートフォリオの完了条件から除外した。`production-batch`最小設定は完了し、kill switchは無効を維持している。次工程はM5 production preflight・deploy、続いてM6 production smoke・cleanupであり、その完了後に別承認でBO15を有効化する。BO15、自然発生run確認のBO16、最終同期のBO18は未実施 — 計画書: [`batch-operations-redesign`](plans/batch-operations-redesign/plan.md)
+- [-] 定期バッチ運用再設計（GameQuestionSet cleanup日次化・scheduled専用production境界・kill switch・滞留run解消） — PR #166のrepository実装とPR #168の外部設定記録はmerge済み。BO1〜BO14完了（旧run #804/#868はstep 0件確認後にcancel、active run 0件）。非作成者レビュー・required check・14日baselineは個人ポートフォリオの完了条件から除外した。`production-batch`最小設定は完了し、kill switchは無効を維持している。次工程はmain境界のrepository変更、develop→main直接PR、確定main SHAのM3/M1R、M5、M6であり、その完了後に別承認でBO15を有効化する。BO15、自然発生run確認のBO16、最終同期のBO18は未実施 — 計画書: [`batch-operations-redesign`](plans/batch-operations-redesign/plan.md)
 - [x] 本番DBバックアップ・Prismaマイグレーション運用（Free plan容量確認・暗号化backup・migration gateをproductionで確認済み） — 計画書: [`docs/plans/audit-log-production-operations/plan.md`](plans/audit-log-production-operations/plan.md)
 - [-] 本番DBバックアップ耐障害性強化 — M1Rが成立するv0.1はpending Prisma migrationがある場合だけ24時間以内の暗号化済み1世代とchecksumを必須とし、migration不要時のbackup、日次schedule確認、2世代目以降、最大3回retry・recovery・36時間鮮度監視・通常7世代・四半期隔離restoreは公開後に継続 — 計画書: [`docs/plans/backup-resilience/plan.md`](plans/backup-resilience/plan.md)
 - [-] staging frontend/API配備基盤（Workers専用entrypoint・Prisma/mail runtime境界・Wrangler・Vercel Preview・T34実機確認） — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md) / PR: #117 — SD1〜SD13・SD15完了。Vercel `develop` Preview、Cloudflare staging Worker/DO/Hyperdrive/secret、Supabase migration、health/CORS/OPTIONS、元素118件、synthetic登録・認証・ゲーム・password reset・本人退会を確認済み。production resource・deploy・DB操作は未実施
@@ -265,13 +265,15 @@
 > 旧R1〜R18の履歴: [`docs/plans/portfolio-release-v0-1/plan.md`](plans/portfolio-release-v0-1/plan.md)
 >
 > 一般登録・認証・ゲーム・本人退会は公開する。基本セキュリティは維持し、商用運用相当の長期観測・drill・高度な自動化だけを公開後へ移す。
+>
+> branch境界は`develop=staging/開発統合`、`main=production/公開済み`とする。release branchは作らず、通常releaseは`develop`から`main`への直接PRで昇格する。旧develop SHAのM3/M1Rは履歴として保持し、main merge後の確定SHAで再固定する。
 
 ### 最小リリース工程（M1R・M3・M5・M6、条件付きM4）
 
 - [-] M1: production初回状態のschema v1証拠を取得・review済み — 計画書: [`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-production-read-only-evidence/plan.md) — 旧run [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)と中間run [30335685074](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30335685074)は履歴として維持する。M4後の最新候補`64ff4d2eccb5c6cd008d472f1940feaa5a2de4c3`のrun [30416382440](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30416382440)でDB 5項目・Cloudflare・両attestationは`clear`、GitHub deployment・backup履歴は`present`、Vercel deploymentは`unknown`だった。schema v1のPath BとM1未完了を維持する
-- [x] M1R: M4後の最新M1 runでDB 5項目`clear`を確認し、owner `RitukoIsibasi0222`が現在も一般公開・一般登録・実利用者data保存実績なしと再確認した。Vercel履歴の`unknown`を推測・再分類せずPath Bへ保持し、schema v2 / Path C engineや追加診断をv0.1条件にしない。M5は別承認まで開始しない
+- [-] M1R: 旧develop SHAの証拠とowner判断は履歴として維持する。main merge後の確定SHAでread-only evidenceとowner判断を再固定するまで未完了とし、M5は開始しない
 - [-] M2: repository実装完了、外部実行は未完了のまま公開後へ移管。同じrelease候補SHAのstaging campaignは実行せず、M2P-17〜M2P-22を完了扱いにしない。通常password verifier DO、valid login、最小429、主要導線はM6 production smokeで確認する
-- [x] M3: review済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`でCI同等のNode 22.23.1 / npm 10.9.8による`npm ci`、backend通常1268件・Workers 32件、frontend 680件、build・lint・format・Prisma validate・Svelte checkを完了。production依存はbackend/frontendともCritical 0・High 0・Moderate 0・Low 0。backend全依存のdev-only Low 1件は`tsx`経由の`esbuild@0.27.7`でproduction到達不可、Windows開発server非公開を回避策とし、2026-08-31または上流修正版公開時の早い方で再確認する
+- [-] M3: 旧develop SHAの品質gate成功は履歴として維持する。直接release PRをmainへmergeした後、その確定main SHAで同じ品質gateとproduction依存監査を再実行するまで未完了とする
 - [x] M4: backup run [30301334445](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30301334445)を確認し、対象SHA `7dbe5649a4057baa3b123aaadb6531422f96fd2f`のmigration run [30342343404](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30342343404)で`prisma migrate deploy`に成功した。検証run [30406227957](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30406227957)で対象run・SHAとv0.1対象5 indexの`indisvalid`・`indisready`を値非表示確認し、M4を完了した
 - [ ] M5: same-site URL、Cookie、CORS、メール送信元、Secret/binding分離を値非表示でpreflightし、別承認でproductionへdeployする
 - [ ] M6: productionでsynthetic Userの登録・メール受信〜退会、game、refresh、通常DO、最小429、securityを確認し、User所有row cleanup・release記録・公開後引継ぎを完了する。AuditLogは365日保持方針に従う
@@ -293,7 +295,7 @@
   - [x] Free Worker password verification分離: [`r7-password-verification-free-worker`](plans/r7-password-verification-free-worker/plan.md) / PR: [#150](https://github.com/RitukoIsibasi0222/gensoko/pull/150) — R7PV-01〜R7PV-15のrepository実装を完了した。bcrypt cost 12を維持し、valid loginの照合だけをstorageなしのSQLite-backed Durable Objectへaccount単位の内部RPCで分離した。Worker fallback禁止、固定503 + `Retry-After: 60`、値非露出、既存v1を変えないv2 class migration、Node adapter bundle禁止をTDDで固定し、backend 1124件、Workers 32件、build・staging/production dry-run・lint・format checkが成功した。Cloudflare resource変更、deployment、staging requestは未実施でR7PV-16/17の別承認待ち、R7-05とR7全体は未完了
   - [x] Password verification rollback互換baseline repository実装: [`r7-password-verification-rollback-baseline`](plans/r7-password-verification-rollback-baseline/plan.md) — v2 lifecycleを共有するstaging専用baseline、既存cost 12 local adapterの専用entrypoint明示DI、profile別bundle contract、一時Wrangler config、通常/baseline/production dry-runをR7PVRB-01〜12としてPR #152へ実装した。Cloudflare resource変更、deploy、version rollback、staging/production request、workflow dispatch、fixture・flag操作、namespace cleanupは未実施。R7PVRB-13〜15、R7PV-17、R7-05、R7全体は未完了だが、rollback drillはM1の空DB・初回配備条件が成立するv0.1のblockerにしない
 - [ ] R8: headers・CORS・safe error・logを最終確認する
-- [-] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する（code・contract test完了。review・merge後の日次schedule 2回と未失効2世代は観測待ち）
+- [-] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する（code・contract test完了。main昇格・default branch切替後の日次schedule 2回と未失効2世代は観測待ち）
 - [ ] R10: 基本responsive・keyboard/A11Yを確認する
 - [x] R11A: backend production依存を安全に更新し、Critical/High/Moderate/Low 0件を確認する
 - [x] R11: review済みSHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`でrelease候補の品質gateとnpm auditを実行する
@@ -321,7 +323,7 @@
 - [-] 認証系・ゲーム送信APIのアプリレベルrate limit — Hono/DO、staging binding、manual境界証拠workflowまで実装済み。server-side診断でauth 5回目の503をmain stateless Workerの`exceededCpu`まで絞り、E-08のローカルworkerd診断でcost 12の`bcrypt.compare`を`BCRYPT_DOMINANT`へ分類した。無料枠修正は計画作成のみで、実装、実HTTP 429成功証拠、制御された503契約、production binding待ち
 - [ ] production CORS、HttpOnly/Secure/SameSite Cookie、security headersの実HTTP確認
 - [ ] staging/production logでPII・token・Cookie・Authorization・DB URL・raw error非出力を最終確認
-- [-] 暗号化backupの日次化 — 日次cronのcontract testとworkflowの2行変更はRed→Greenで実装済み。初回Artifact・checksum・復号はrun 29322979476で確認済み。review・`develop`へのmerge後の日次schedule 2回と未失効Artifact 2世代の確認待ち
+- [-] 暗号化backupの日次化 — 日次cronのcontract testとworkflowの2行変更はRed→Greenで実装済み。初回Artifact・checksum・復号はrun 29322979476で確認済み。main昇格・default branch切替後の日次schedule 2回と未失効Artifact 2世代の確認待ち
 - [x] backend production依存を安全に更新し、回帰後にCritical/High/Moderate/Low 0件を確認
 - [x] review済みSHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`でtest・Workers test・build・lint・format・Prisma validate・production npm auditを完了（frontend production依存も0件）
 - [ ] dark/privacyを含むstaging主要導線の最終確認
