@@ -27,13 +27,16 @@ function countOccurrences(source: string, fragment: string): number {
 describe("production database GitHub Actions workflow", () => {
   const workflow = readFileSync(WORKFLOW_PATH, "utf8");
 
-  it("rejects non-main runs before the production Environment and secrets", () => {
+  it("skips non-main schedules and rejects non-main manual runs before Environment and secrets", () => {
     const validationJobStart = workflow.indexOf("  validate-production-branch:");
     const productionJobStart = workflow.indexOf("  production-database:");
     const validationJob = workflow.slice(validationJobStart, productionJobStart);
 
     expect(validationJobStart).toBeGreaterThanOrEqual(0);
     expect(productionJobStart).toBeGreaterThan(validationJobStart);
+    expect(validationJob).toContain(
+      "if: github.event_name != 'schedule' || github.ref_name == 'main'",
+    );
     expect(validationJob).toContain('if [ "$GITHUB_REF_NAME" != "main" ]; then');
     expect(validationJob).toContain("permissions: {}");
     expect(validationJob).not.toContain("environment:");

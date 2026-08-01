@@ -588,6 +588,8 @@ main確定SHAのM3・M1Rを再固定し、ポートフォリオ版v0.1のM5 prod
 - [ ] kill switchが`false`で、production workflow未実行であることを再確認する。
 - [ ] kill switch有効化後、最初に自然発生する各jobの成功・skip・失敗理由と秘密非出力を確認する。
 
+default branch切替前に非mainから発生するproduction database scheduleは、branch validation jobと後続jobをskipしてproduction Environment・Secretへ到達させない。このskipをcapacity-checkまたはbackupの成功実績として数えず、main切替後の自然発生runを観測する。workflow_dispatchの非main実行はfail-closedを維持する。
+
 公開後の長期baselineは任意であり、運用完了条件に含めない。
 
 ## Repository実装記録

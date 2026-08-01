@@ -367,6 +367,8 @@ productionはSupabase Free planで運用する。[Supabase pricing](https://supa
 
 `.github/workflows/production-database.yml`はproduction Environmentへ固定し、既存batchと同じ`gensoko-batch-jobs`concurrency groupでDB操作を直列化する。
 
+repository default branchが`main`へ切り替わるまで、非mainから発生したscheduleはbranch validation jobと後続jobをskipし、production Environment・Secretへ到達させない。移行期間のskipはcapacity-checkまたはbackupの成功実績として数えず、manual実行は非mainのままfail-closedを維持する。
+
 | operation                       | schedule                     | 内容                                                                                                 |
 | ------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `capacity-check`                | UTC毎日19:23（JST毎日04:23） | `pg_database_size(current_database())`でDB容量を取得し、500MBに対する使用率を確認                    |
@@ -382,7 +384,7 @@ productionはSupabase Free planで運用する。[Supabase pricing](https://supa
 
 次は旧R9とbackup計画全体の公開後観測手順であり、M4の完了条件ではない。原則として自動scheduleを待ち、2回以上確認する。
 
-1. eventが`schedule`、head branchが`develop`で、head SHAが日次化commitを含む。
+1. eventが`schedule`、head branchが`main`で、head SHAが日次化commitを含む。
 2. `Resolve requested operation`が`backup`を解決し、暗号化backup作成・復号検証・uploadが成功する。
 3. 各runに`production-db-backup-{run ID}`が1件あり、同一確認時点で未失効Artifactが2世代以上ある。
 4. `retention-days: 7`の保持境界をmetadataで確認し、run ID、head SHA、実行日時、Artifact名、expiry、確認日時だけを記録する。

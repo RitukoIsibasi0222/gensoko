@@ -50,6 +50,7 @@ on:
 jobs:
   validate-production-branch:
     name: Validate production branch
+    if: github.event_name != 'schedule' || github.ref_name == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}

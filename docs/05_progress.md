@@ -295,7 +295,7 @@
   - [x] Free Worker password verification分離: [`r7-password-verification-free-worker`](plans/r7-password-verification-free-worker/plan.md) / PR: [#150](https://github.com/RitukoIsibasi0222/gensoko/pull/150) — R7PV-01〜R7PV-15のrepository実装を完了した。bcrypt cost 12を維持し、valid loginの照合だけをstorageなしのSQLite-backed Durable Objectへaccount単位の内部RPCで分離した。Worker fallback禁止、固定503 + `Retry-After: 60`、値非露出、既存v1を変えないv2 class migration、Node adapter bundle禁止をTDDで固定し、backend 1124件、Workers 32件、build・staging/production dry-run・lint・format checkが成功した。Cloudflare resource変更、deployment、staging requestは未実施でR7PV-16/17の別承認待ち、R7-05とR7全体は未完了
   - [x] Password verification rollback互換baseline repository実装: [`r7-password-verification-rollback-baseline`](plans/r7-password-verification-rollback-baseline/plan.md) — v2 lifecycleを共有するstaging専用baseline、既存cost 12 local adapterの専用entrypoint明示DI、profile別bundle contract、一時Wrangler config、通常/baseline/production dry-runをR7PVRB-01〜12としてPR #152へ実装した。Cloudflare resource変更、deploy、version rollback、staging/production request、workflow dispatch、fixture・flag操作、namespace cleanupは未実施。R7PVRB-13〜15、R7PV-17、R7-05、R7全体は未完了だが、rollback drillはM1の空DB・初回配備条件が成立するv0.1のblockerにしない
 - [ ] R8: headers・CORS・safe error・logを最終確認する
-- [-] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する（code・contract test完了。review・merge後の日次schedule 2回と未失効2世代は観測待ち）
+- [-] R9: 暗号化backupを日次化し、未失効Artifact 2世代以上を確認する（code・contract test完了。main昇格・default branch切替後の日次schedule 2回と未失効2世代は観測待ち）
 - [ ] R10: 基本responsive・keyboard/A11Yを確認する
 - [x] R11A: backend production依存を安全に更新し、Critical/High/Moderate/Low 0件を確認する
 - [x] R11: review済みSHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`でrelease候補の品質gateとnpm auditを実行する
@@ -323,7 +323,7 @@
 - [-] 認証系・ゲーム送信APIのアプリレベルrate limit — Hono/DO、staging binding、manual境界証拠workflowまで実装済み。server-side診断でauth 5回目の503をmain stateless Workerの`exceededCpu`まで絞り、E-08のローカルworkerd診断でcost 12の`bcrypt.compare`を`BCRYPT_DOMINANT`へ分類した。無料枠修正は計画作成のみで、実装、実HTTP 429成功証拠、制御された503契約、production binding待ち
 - [ ] production CORS、HttpOnly/Secure/SameSite Cookie、security headersの実HTTP確認
 - [ ] staging/production logでPII・token・Cookie・Authorization・DB URL・raw error非出力を最終確認
-- [-] 暗号化backupの日次化 — 日次cronのcontract testとworkflowの2行変更はRed→Greenで実装済み。初回Artifact・checksum・復号はrun 29322979476で確認済み。review・`develop`へのmerge後の日次schedule 2回と未失効Artifact 2世代の確認待ち
+- [-] 暗号化backupの日次化 — 日次cronのcontract testとworkflowの2行変更はRed→Greenで実装済み。初回Artifact・checksum・復号はrun 29322979476で確認済み。main昇格・default branch切替後の日次schedule 2回と未失効Artifact 2世代の確認待ち
 - [x] backend production依存を安全に更新し、回帰後にCritical/High/Moderate/Low 0件を確認
 - [x] review済みSHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`でtest・Workers test・build・lint・format・Prisma validate・production npm auditを完了（frontend production依存も0件）
 - [ ] dark/privacyを含むstaging主要導線の最終確認
