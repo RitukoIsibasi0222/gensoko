@@ -22,6 +22,23 @@ function readDocument(path: string): string {
 }
 
 describe("production initial state evidence workflow", () => {
+  it("main以外をproduction EnvironmentとSecretの前で拒否する", () => {
+    const workflow = readWorkflow();
+    const validationJobStart = workflow.indexOf("  validate-production-evidence-branch:");
+    const evidenceJobStart = workflow.indexOf("  production-initial-state-evidence:");
+    const validationJob = workflow.slice(validationJobStart, evidenceJobStart);
+
+    expect(validationJobStart).toBeGreaterThanOrEqual(0);
+    expect(evidenceJobStart).toBeGreaterThan(validationJobStart);
+    expect(validationJob).toContain('if [ "$GITHUB_REF_NAME" != "main" ]; then');
+    expect(validationJob).toContain("permissions: {}");
+    expect(validationJob).not.toContain("environment:");
+    expect(validationJob).not.toContain("secrets.");
+    expect(workflow.slice(evidenceJobStart)).toContain(
+      "needs: validate-production-evidence-branch",
+    );
+  });
+
   it("manual-only triggerとproduction承認境界へ固定する", () => {
     const workflow = readWorkflow();
 
@@ -35,7 +52,7 @@ describe("production initial state evidence workflow", () => {
     );
   });
 
-  it("review済みdevelop SHAと固定確認・attestationをcheckout前に検証する", () => {
+  it("review済みmain SHAと固定確認・attestationをcheckout前に検証する", () => {
     const workflow = readWorkflow();
     const validationIndex = workflow.indexOf("Validate read-only request");
     const checkoutIndex = workflow.indexOf("actions/checkout@v4");
@@ -49,7 +66,7 @@ describe("production initial state evidence workflow", () => {
     expect(workflow).toContain("READ_ONLY_PRODUCTION_INITIAL_STATE");
     expect(workflow).toContain("NO_DELETED_DEPLOYMENT_OR_EXTERNAL_BACKUP_COPY");
     expect(workflow).toContain("NO_CONCURRENT_PRODUCTION_CHANGE");
-    expect(workflow).toContain('if [ "$GITHUB_REF_NAME" != "develop" ]; then');
+    expect(workflow).toContain('if [ "$GITHUB_REF_NAME" != "main" ]; then');
     expect(workflow).toContain('if [ "$REVIEWED_SHA" != "$GITHUB_SHA" ]; then');
     expect(validationIndex).toBeGreaterThanOrEqual(0);
     expect(checkoutIndex).toBeGreaterThan(validationIndex);

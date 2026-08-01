@@ -37,6 +37,22 @@ function getWorkflowDispatchInput(inputName: string, nextInputName: string): str
 }
 
 describe("batch GitHub Actions workflow", () => {
+  it("validates staging=develop and production/schedule=main before any Environment or secret", () => {
+    const validationJobStart = workflow.indexOf("  validate-batch-request:");
+    const batchJobStart = workflow.indexOf("  scheduled-batch:");
+    const validationJob = workflow.slice(validationJobStart, batchJobStart);
+
+    expect(validationJobStart).toBeGreaterThanOrEqual(0);
+    expect(batchJobStart).toBeGreaterThan(validationJobStart);
+    expect(validationJob).toContain('expected_branch="main"');
+    expect(validationJob).toContain('expected_branch="develop"');
+    expect(validationJob).toContain('if [ "$GITHUB_REF_NAME" != "$expected_branch" ]; then');
+    expect(validationJob).toContain("permissions: {}");
+    expect(validationJob).not.toContain("environment:");
+    expect(validationJob).not.toContain("secrets.");
+    expect(workflow.slice(batchJobStart)).toContain("needs: validate-batch-request");
+  });
+
   it("uses staging or production for manual runs and production-batch only for schedules", () => {
     const targetEnvironmentInput = getWorkflowDispatchInput("target_environment", "batch_job");
 
@@ -50,14 +66,14 @@ describe("batch GitHub Actions workflow", () => {
   });
 
   it("keeps scheduled runs disabled unless the repository kill switch is true", () => {
-    const jobStart = workflow.indexOf("  scheduled-batch:");
+    const jobStart = workflow.indexOf("  validate-batch-request:");
     const conditionStart = workflow.indexOf("    if: >-", jobStart);
-    const environmentStart = workflow.indexOf("    environment:", jobStart);
+    const validationStepStart = workflow.indexOf("    steps:", jobStart);
 
     expect(jobStart).toBeGreaterThanOrEqual(0);
     expect(conditionStart).toBeGreaterThan(jobStart);
-    expect(conditionStart).toBeLessThan(environmentStart);
-    expect(workflow.slice(conditionStart, environmentStart)).toContain(
+    expect(conditionStart).toBeLessThan(validationStepStart);
+    expect(workflow.slice(conditionStart, validationStepStart)).toContain(
       "github.event_name == 'workflow_dispatch' ||\n      vars.PRODUCTION_SCHEDULED_BATCH_ENABLED == 'true'",
     );
   });
@@ -182,7 +198,7 @@ describe("batch GitHub Actions workflow", () => {
 
     expect(integrityWorkflow).toContain("name: Repository Integrity");
     expect(integrityWorkflow).toContain("pull_request:");
-    expect(integrityWorkflow).toContain("branches: [develop]");
+    expect(integrityWorkflow).toContain("branches: [develop, main]");
     expect(integrityWorkflow).not.toContain("paths:");
     expect(integrityWorkflow).toContain("permissions:\n  contents: read");
     expect(integrityWorkflow).toContain("  repository-integrity:");

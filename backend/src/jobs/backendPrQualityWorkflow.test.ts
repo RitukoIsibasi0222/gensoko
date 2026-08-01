@@ -8,11 +8,11 @@ const WORKFLOW_PATH = fileURLToPath(
 );
 
 describe("backend pull request quality workflow", () => {
-  it("develop向けPRのbackend変更で必須品質checkを実行する", () => {
+  it("develop・main向けPRのbackend変更で必須品質checkを実行する", () => {
     const workflow = readFileSync(WORKFLOW_PATH, "utf8");
 
     expect(workflow).toContain("pull_request:");
-    expect(workflow).toContain("branches: [develop]");
+    expect(workflow).toContain("branches: [develop, main]");
     expect(workflow).toContain('"backend/**"');
     expect(workflow).toContain("npm ci");
     expect(workflow).toContain("npx prisma generate");
