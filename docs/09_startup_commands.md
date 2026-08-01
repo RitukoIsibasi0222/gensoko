@@ -222,10 +222,10 @@ npm run test:e2e:production
 - このCLIを`batch:scheduled`へ追加しない。本番実行は承認付きmanual workflowだけで行う
 - ローカルshellからstaging/productionの`DATABASE_URL`を渡して実行しない。実環境では次のGitHub Actionsだけを入口とする
 
-| Environment | workflow                         | operation                                               | 主なgate                                                                                                |
-| ----------- | -------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| staging     | `Staging Account Data Deletion`  | `dry-run` / `execute`                                   | `develop`、staging固定、execute flag、確認文字列                                                        |
-| production  | `Production Database Operations` | `account-deletion-dry-run` / `account-deletion-execute` | `develop`、production固定、24時間以内のbackup・dry-run、execute flag、確認文字列、承認者、change record |
+| Environment | workflow                         | operation                                               | 主なgate                                                                                             |
+| ----------- | -------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| staging     | `Staging Account Data Deletion`  | `dry-run` / `execute`                                   | `develop`、staging固定、execute flag、確認文字列                                                     |
+| production  | `Production Database Operations` | `account-deletion-dry-run` / `account-deletion-execute` | `main`、production固定、24時間以内のbackup・dry-run、execute flag、確認文字列、承認者、change record |
 
 - workflowは実装済みだが実環境では未実行である。privacy・監査保持・backup境界・全損時replayの残存リスクはR4で2026-07-22に承認済みである。staging executeはT35で明示承認を得てから行い、production cleanupの実行者・承認者・実行時間帯・通知先など残るT1B gateが確定するまでproduction executeを行わない
 - staging dry-run/executeはT35、production dry-run/executeはT38のタスク境界で、`docs/11_deployment.md`のrunbookに従って実行する
@@ -275,7 +275,7 @@ GitHub Actions schedule と同じ入口を Docker 内で確認する場合は、
       -e AUDIT_LOG_CLEANUP_ENABLED=false \
       hono npm run batch:scheduled
 
-GitHub Actionsではworkflow_dispatchで最初に`target_environment`を選び、次に`weekly-reset`、`game-question-set-cleanup`、`audit-log-cleanup-dry-run`、`audit-log-cleanup-execute`を選択する。手動実行の既定は`staging`で、`staging` / `production`だけを選択できる。scheduleはmanual選択肢に含めない`production-batch` Environmentを参照し、repository Variable `PRODUCTION_SCHEDULED_BATCH_ENABLED`が文字列`true`の場合だけ起動する。`production-batch`のEnvironment・Secret名・Variable名・develop限定policyを値非表示で確認し、ownerが有効化を別途明示承認するまでは未設定または`false`を維持する。
+GitHub Actionsではworkflow_dispatchで最初に`target_environment`を選び、次に`weekly-reset`、`game-question-set-cleanup`、`audit-log-cleanup-dry-run`、`audit-log-cleanup-execute`を選択する。手動実行の既定は`staging`で、`staging` / `production`だけを選択できる。staging manualは`develop`、production manualとscheduleは`main`だけを許可する。scheduleはmanual選択肢に含めない`production-batch` Environmentを参照し、repository Variable `PRODUCTION_SCHEDULED_BATCH_ENABLED`が文字列`true`の場合だけ起動する。`production-batch`のEnvironment・Secret名・Variable名・main限定policyを値非表示で確認し、ownerが有効化を別途明示承認するまでは未設定または`false`を維持する。
 
 ローカルの`batch:scheduled`はGitHub repository Variableを評価しない。staging / productionの`DATABASE_URL`をローカルshellへ渡さず、実環境の手動retryは承認境界を維持した`Batch Jobs`のworkflow_dispatchから行う。監査ログの本実行は、選択したEnvironmentの`AUDIT_LOG_CLEANUP_ENABLED=true`が設定された場合だけ削除する。T19の確認では必ず`staging`を選び、`production`はrelease gate完了前に選択しない。
 
@@ -283,7 +283,7 @@ T19の期限境界確認はActionsの`Staging Audit Cleanup Fixtures`から`prep
 
 ### production DB operation
 
-本番DBの容量確認・backup・migrationはローカルshellから接続せず、Actionsの`Production Database Operations`を`develop` branchで実行する。
+本番DBの容量確認・backup・migrationはローカルshellから接続せず、Actionsの`Production Database Operations`をreview済みの`main`固定SHAで実行する。
 
 | operation                  | 入力                                                     | 実行条件                                                         |
 | -------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------- |

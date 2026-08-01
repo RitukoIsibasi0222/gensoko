@@ -5,6 +5,14 @@
 > 2026-07-26以降のv0.1は[`portfolio-release-v0-1-minimal`](../portfolio-release-v0-1-minimal/plan.md)を正本とする。
 > 本計画のCookie・hostname・refresh安全契約は維持し、外部確認をM2・M5・M6の各1回へ集約する。
 
+## Production branch境界
+
+- `develop`はstaging・開発統合、`main`はproduction・公開済みcodeとする。
+- release branchは使用せず、通常releaseはreview済みdevelop固定SHAからmainへの直接PRで昇格する。
+- Vercel ProductionとCloudflare production deployは、mainへmerge後の確定SHAだけを許可する。
+- stagingとproductionのproject、Secret、binding、resourceを共有しない。same-site CookieとCORS単一originの契約は変更しない。
+- 通常releaseではmain→develop同期を行わず、main固有hotfixがある場合だけ別PRで同期する。
+
 ## 概要
 
 Release Task R5「認証・refreshのproduction構成を確定する」では、Vercel frontendとCloudflare Workers APIをCookie上のsame-site、HTTPS上のcross-originとして配備し、`HttpOnly`・`Secure`・`SameSite=Strict`を維持したままlogin、full reload後のrefresh、rotation、logout、旧token拒否を成立させる。
@@ -111,7 +119,7 @@ custom domainの所有状況とproduction hostnameはrepositoryから確認で�
 | G1   | 所有済みregistrable domain | 所有済みdomain / 新規取得              | 所有・更新責任が明確な1 domain                  | プロダクトオーナー     | 実装はfixture値まで、外部設定停止 |
 | G2   | frontend hostname          | apex / `www` / `app`                   | apexまたは`www`の1 canonical origin             | domain管理者           | `FRONTEND_URL`を設定しない        |
 | G3   | API hostname               | `api.<domain>`                         | frontendと同じscheme・registrable domainの`api` | domain管理者           | Worker custom domainを作らない    |
-| G4   | Vercel production branch   | `main` / release branch                | release戦略と一致する`main`                     | release manager        | Production deployを作らない       |
+| G4   | Vercel production branch   | `main`                                 | release戦略と一致する`main`                     | release manager        | Production deployを作らない       |
 | G5   | Cloudflare zone・routing   | Custom Domain / Route                  | WorkerがoriginのためCustom Domain               | infra owner            | DNS/routeを変更しない             |
 | G6   | `workers.dev`公開          | 有効 / 無効                            | productionは無効、custom domainだけ公開         | security owner         | WAF迂回確認を合格にしない         |
 | G7   | production smoke account   | 専用account / 公開登録で都度作成       | 削除・rotationを安全に反復できる専用account     | product/security owner | auth smokeを開始しない            |

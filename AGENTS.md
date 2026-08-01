@@ -601,6 +601,10 @@ middleware/
 | 作業ブランチ | マージ先 |
 |---|---|
 | `feature/*` | `develop` |
-| `release/*` | `main` → `develop` |
-| `hotfix/*` | `main` → `develop` |
+| `fix/*` | `develop` |
+| `develop`（release昇格PR） | `main` |
+| `hotfix/*` | `main` |
 | `docs/*` | `develop` |
+
+- release branchは作成しない。通常releaseはreview済みの`develop`固定SHAから`main`への直接PRで昇格する。
+- 通常release後の`main`→`develop`同期は行わない。hotfixなど`main`だけに変更が生じた場合に限り、別PRで`develop`へ同期する。

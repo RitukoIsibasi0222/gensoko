@@ -616,7 +616,7 @@ guard SQLは`backend/prisma/contract-migrations`へ隔離され、通常の`pris
 
 ## GitHub Actions による自動デプロイ（CI/CD）
 
-> backend変更を含む`develop`向けPRでは、`.github/workflows/backend-pr-quality.yml`が通常test、ESLint、Prettier、TypeScript build、Prisma generate/validateを自動実行する。staging/productionのDB・batch workflowは手動gate付きで運用する。アプリケーションdeploy workflowは未実装であり、以下はフェーズ12で追加する`.github/workflows/deploy.yml`のサンプル。
+> backend変更を含む`develop`または`main`向けPRでは、`.github/workflows/backend-pr-quality.yml`が通常test、ESLint、Prettier、TypeScript build、Prisma generate/validateを自動実行する。staging/productionのDB・batch workflowは手動gate付きで運用する。アプリケーションdeploy workflowは未実装であり、以下はフェーズ12で追加する`.github/workflows/deploy.yml`のサンプル。
 
 ```yaml
 name: Deploy
@@ -755,10 +755,10 @@ Actionsのscheduleは遅延・スキップされる可能性があるため、�
 - PR #166は`develop`へmerge済みで、merge commitは`ffb66269be48897da3904308a690a9cc9913ff94`である。
 - 外部設定記録のPR #168も`develop`へmerge済みで、merge commitは`4c1a3739b61698a8562fb91db425502c5fa8f872`、最終headは`d5f9d5c8f7b6d5e9495a345e403a84a2db3b1cd8`である。
 - 旧run #804（ID `30419479066`）と#868（ID `30613767092`）は、jobの`steps`が空でDB処理未開始であることを確認してcancel済みである。再確認時のwaiting / queued / in-progress / pendingは0件である。
-- `production-batch` Environmentはrequired reviewerなし・`develop`限定で作成済みである。`DATABASE_URL` Secret名と、必要な4 Environment Variable名と期待値の一致を値非表示で確認した。
+- `production-batch` Environmentはrequired reviewerなし・`develop`限定で作成済みだが、main境界への外部切替は未実施である。切替後は`main`だけを許可する。`DATABASE_URL` Secret名と、必要な4 Environment Variable名と期待値の一致を値非表示で確認した。
 - repository Variable `PRODUCTION_SCHEDULED_BATCH_ENABLED`は安全側の無効設定で登録済みである。
 - `staging`と`production`の`REFRESH_TOKEN_CLEANUP_ENABLED`は安全側設定で登録済みである。
-- `production`のrequired reviewerと`develop`限定branch policy、`staging`の`develop`限定branch policyは維持されている。
+- `production`のrequired reviewerは維持する。repository変更のmerge後、別承認で`production`と`production-batch`を`main`限定へ変更し、`staging`は`develop`限定を維持する。
 - 外部設定後のactive Batch Jobsは0件である。kill switch有効化、workflow実行、production DB queryは行っていない。
 
 ### scheduled productionの軽量source contract
@@ -768,29 +768,40 @@ Actionsのscheduleは遅延・スキップされる可能性があるため、�
 1. `.github/workflows/repository-integrity.yml`が`develop`向け全PRでpath filterなしに起動することを確認する。
 2. check名`Repository Integrity / repository-integrity`を固定し、Secret・Environmentを参照せずbatchの安全境界contractだけを検証する。
 3. 既存`Backend PR Quality` / `Frontend PR Quality`はpath filter付きのため、全PR共通のrequired checkへ直接指定しない。
-4. `production` Environmentのrequired reviewerと`develop`限定branch policyを維持する。
-5. `production-batch`は`develop`だけを許可し、workflow_dispatchの選択肢へ追加しない。
+4. `production` Environmentのrequired reviewerと`main`限定branch policyを維持する。
+5. `production-batch`は`main`だけを許可し、workflow_dispatchの選択肢へ追加しない。
 
 Gensokoはcollaboratorがowner 1名の個人ポートフォリオである。非作成者レビュー、厳格なruleset、`Repository Integrity`のrequired check化、docs-only検証PRは運用完了条件にしない。将来複数人運営へ移行する場合は、その時点の権限・費用・運用負担に応じて追加保護を別途検討する。
+
+### v0.1のbranch昇格境界
+
+1. feature/fix/docs変更はdevelop向けPRで統合し、staging・開発品質を確認する。
+2. release branchは作成せず、review済みdevelop固定SHAからmainへの直接PRを作成する。
+3. main向けPRでもBackend PR Quality、Frontend PR Quality、Repository Integrityを実行する。このPRはPreview/build確認だけでproduction deployを起動しない。
+4. review後、別の明示承認でmainへmergeし、生成されたmain SHAと昇格元develop SHAのtree一致を確認する。
+5. 確定main SHAでM3を再実行し、続けて同じSHAでM1R read-only evidenceを別承認により再取得する。
+6. `production` / `production-batch`をmain限定へ変更してからdefault branchをmainへ切り替える。production required reviewerとkill switch `false`を維持する。
+7. 通常release後のmain→develop同期は行わない。main固有hotfixがある場合だけmain→develop PRを作成する。
 
 ### v0.1公開とBO15〜BO18の実行順序
 
 定期バッチの外部設定が完了していても、ポートフォリオ版v0.1の公開前にBO15を先行しない。次の順序を維持する。
 
-1. M5でsame-site URL、Cookie、CORS、メール送信元、production専用Secret・binding、DB target、pending migration、review済みSHA、rollback先を値非表示でpreflightし、別承認後にAPI、frontendの順でdeployする。
-2. M6で単一synthetic Userによる登録・メール受信から退会、game、refresh、通常password verifier DO、最小429、security、User所有row cleanup、flag復旧を確認する。
-3. M5/M6完了後、BO15の別承認を得て`PRODUCTION_SCHEDULED_BATCH_ENABLED=true`へ変更する。workflow_dispatchは実行しない。
-4. BO16では自然発生する日次GameQuestionSet cleanup、日次audit cleanup、週次resetを確認する。問題があればkill switchを`false`へ戻す。
-5. 初回run確認後にBO18として計画書・進捗・runbookを実態へ同期する。
+1. main merge後の確定SHAでM3とM1Rを再固定する。
+2. M5でsame-site URL、Cookie、CORS、メール送信元、production専用Secret・binding、DB target、pending migration、review済みmain SHA、rollback先を値非表示でpreflightし、別承認後にAPI、frontendの順でdeployする。
+3. M6で単一synthetic Userによる登録・メール受信から退会、game、refresh、通常password verifier DO、最小429、security、User所有row cleanup、flag復旧を確認する。
+4. M5/M6完了後、BO15の別承認を得て`PRODUCTION_SCHEDULED_BATCH_ENABLED=true`へ変更する。workflow_dispatchは実行しない。
+5. BO16では自然発生する日次GameQuestionSet cleanup、日次audit cleanup、週次resetを確認する。問題があればkill switchを`false`へ戻す。
+6. 初回run確認後にBO18として計画書・進捗・runbookを実態へ同期する。
 
-文書変更のmerge、M5 preflight、M5 deploy、M6 smoke、BO15有効化はそれぞれ別の境界である。この文書だけを根拠にdeploy、workflow dispatch、production DB query、Secret値参照、kill switch有効化を行わない。
+repository変更のdevelop merge、develop→main PR作成、main merge、外部branch切替、M3、M1R、M5 preflight、M5 deploy、M6 smoke、BO15有効化はそれぞれ別の境界である。この文書だけを根拠にmerge、外部設定変更、deploy、workflow dispatch、production DB query、Secret値参照、kill switch有効化を行わない。
 
 ### scheduled production初回有効化
 
-BO13の外部設定が完了していても、M5/M6完了とBO15の明示承認までは定期実行を有効化しない。次の順序で行う。
+BO13の外部設定が完了していても、確定main SHAのM3/M1RとM5/M6完了、BO15の明示承認までは定期実行を有効化しない。次の順序で行う。
 
 1. M5/M6の完了記録、review済みSHA、軽量`Repository Integrity`、`production` reviewer維持を確認する。
-2. `production-batch`がrequired reviewerなし・`develop`限定であり、workflow_dispatchから選択できないことを再確認する。
+2. `production-batch`がrequired reviewerなし・`main`限定であり、workflow_dispatchから選択できないことを再確認する。
 3. `DATABASE_URL` Secret名と必要なVariable名・期待値を値非表示で再確認する。Secret値はCLI、log、Artifact、summary、Issue、PR、文書へ出さない。
 4. active Batch Jobsが0件であることを確認する。
 5. `PRODUCTION_SCHEDULED_BATCH_ENABLED=false`を維持したまま停止し、有効化の別承認を得る。
@@ -998,7 +1009,7 @@ M1の正本は[`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-p
 
 実装PRがreviewされて`develop`へmergeされた後、次を値非表示で確認し、Environment変更とworkflow dispatchをそれぞれ別承認する。read-only権限、対象scope、owner attestationのいずれかを確認できない場合は準備を止め、M1を未完了のままPath Bとして扱う。
 
-- GitHub `production` Environmentのrequired reviewer、deployment branch policy、`develop`のreview済みSHA
+- GitHub `production` Environmentのrequired reviewer、deployment branch policy、`main`のreview済みSHA
 - Variable `BATCH_ENVIRONMENT=production`
 - Secret `DATABASE_URL`、`PRODUCTION_SUPABASE_PROJECT_REF`
 - Secret `M1_VERCEL_ACCESS_TOKEN`、`M1_VERCEL_SCOPE_ID`、`M1_VERCEL_REPOSITORY`
@@ -1011,7 +1022,7 @@ owner attestationを確認できない場合はworkflowをdispatchしない。re
 
 ### dispatchと確認
 
-1. Actionsの`Production Initial State Evidence`を`develop`から選ぶ。
+1. Actionsの`Production Initial State Evidence`をreview済みの`main`固定SHAから選ぶ。
 2. `reviewed_sha`に実行中の`develop` SHA、`confirmation`に`READ_ONLY_PRODUCTION_INITIAL_STATE`を入力する。
 3. `approver`と`change_record`には正規表現で許可された非秘密識別子だけを使う。
 4. 削除済みdeployment・外部backup copyがないことを確認済みの場合だけ`history_attestation=NO_DELETED_DEPLOYMENT_OR_EXTERNAL_BACKUP_COPY`を入力する。

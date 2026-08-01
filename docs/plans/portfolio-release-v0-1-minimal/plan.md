@@ -13,6 +13,10 @@ Gensokoを、一般ユーザーが登録・メール認証・ログイン・学�
 
 ## 初回公開の方針
 
+- branch境界は`develop=staging/開発統合`、`main=production/公開済み`とする。
+- release branchは作成せず、review済みdevelop固定SHAからmainへの直接PRでrelease候補を昇格する。
+- 通常release後はmainからdevelopへ同期しない。hotfixなどmainだけに変更が生じた場合に限りmain→develop PRを作成する。
+- production deploy、scheduled workflow、Environment、Vercel Production、Cloudflare productionはmainの確定SHAを基準にする。
 - 一般ユーザー登録、メール認証、login・refresh・logout、ゲーム、本人退会を公開する。
 - 既存機能をゲスト版へ作り直さず、現在の実装とstaging実績を利用する。
 - 基本的なセキュリティはポートフォリオ用途でも省略しない。
@@ -47,6 +51,7 @@ Gensokoを、一般ユーザーが登録・メール認証・ログイン・学�
 ### 重要な制約
 
 - 本計画PRではproduction deploy、migration、DB query、workflow dispatch、Cloudflare resource変更を実行しない。
+- mainへmergeする前にproduction deploy・M1R dispatch・M5を実行しない。main merge後に生成された確定SHAでM3を再実行し、その後にM1R read-only evidenceを再取得する。
 - production DBが空であると推測しない。M1の承認付きread-only証拠でDB target、全User、legacy User、User関連row、AuditLogが`clear`でない場合は本計画を停止し、既存の通常移行gateへ戻る。
 - M1 schema v1のPath B判定は変更しない。Vercel・GitHub Environment・backup履歴の`present`は、ownerが一般公開・一般登録・実利用者data保存の実績なしを確認できる場合に限り、v0.1の既存利用者向け移行gateを起動する根拠から除外する。
 - M1証拠SHA後のcommitが`docs/**`だけを変更し、backend、frontend、`.github/workflows`、schema/migration、lockfile、deployment configとproduction stateを変更していないことを差分確認できる場合、文書同期だけを理由にM1を再実行しない。実行時のreview済みdocs SHAを別に記録する。
@@ -69,6 +74,15 @@ Gensokoを、一般ユーザーが登録・メール認証・ログイン・学�
 | `docs/05_progress.md`                                           | 修正     | M1R・M3〜M6を進捗ダッシュボードへ反映                      |
 | `docs/09_startup_commands.md`                                   | 修正     | backupのv0.1条件をmigration時だけへ限定                    |
 | `docs/11_deployment.md`                                         | 修正     | 最小deploy・smoke・fix-forward手順を追加                   |
+| `AGENTS.md`                                                     | 修正     | no-release-branchのPR base対応を固定                       |
+| `.github/workflows/backend-pr-quality.yml`                      | 修正     | develop/main向けPRでbackend品質gateを実行                  |
+| `.github/workflows/frontend-pr-quality.yml`                     | 修正     | develop/main向けPRをpreview buildとして検証                |
+| `.github/workflows/repository-integrity.yml`                    | 修正     | develop/main向けPRで常時source contractを実行              |
+| `.github/workflows/batch.yml`                                   | 修正     | staging=develop、production/schedule=mainを事前検証        |
+| `.github/workflows/production-database.yml`                     | 修正     | production DB処理をmainへ固定                              |
+| `.github/workflows/production-initial-state-evidence.yml`       | 修正     | M1Rをreview済みmain SHAへ固定                              |
+| `backend/src/jobs/*Workflow.test.ts`                            | 修正     | production/mainとPR baseのsource contractを固定            |
+| `frontend/src/frontend-pr-quality.test.ts`                      | 修正     | main向けPRのpreview品質contractを固定                      |
 | `docs/plans/backup-resilience/plan.md`                          | 修正     | 2世代観測を公開後へ移動                                    |
 | `docs/plans/r6-account-deletion-gates/plan.md`                  | 修正     | 空DB時のT35対象外条件を同期                                |
 | `docs/plans/r7-rate-limit-environment-gates/plan.md`            | 修正     | v0.1 subsetとR7全体を分離                                  |
@@ -160,8 +174,8 @@ APIのリクエスト、レスポンス、status、error messageは変更しな�
 | M5       | preflight後にproduction deploy  | Vercel/Cloudflare/Supabase/Resend | same-site URL、Cookie、CORS、送信元、Secret/binding分離、review済みSHA、別承認deploy成功             |
 | M6       | production smokeとrelease記録   | production/docs                   | synthetic Userで主要導線、DO、429、security、退会、cleanup、残課題引継ぎ                             |
 
-- [x] M1R: M4後のrelease候補`64ff4d2eccb5c6cd008d472f1940feaa5a2de4c3`のrun [30416382440](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30416382440)でDB 5項目`clear`を再確認し、ownerが一般公開・一般登録・実利用者data保存実績なしを再確認した。Vercel履歴の`unknown`はM1のPath Bへ保持する
-- [x] M3: review済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`で最終品質gateとproduction依存監査を完了する
+- [ ] M1R: 旧develop SHAの証拠を履歴として維持し、main merge後の確定SHAでread-only evidenceとowner判断を再固定する
+- [ ] M3: main merge後の確定SHAで最終品質gateとproduction依存監査を再実行する
 - [x] M4: backup run [30301334445](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30301334445)を確認し、対象SHA `7dbe5649a4057baa3b123aaadb6531422f96fd2f`のmigration run [30342343404](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30342343404)で`prisma migrate deploy`に成功した。検証run [30406227957](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30406227957)で対象run・SHAと5 indexの`indisvalid`・`indisready`を値非表示確認した
 - [ ] M5: 値非表示preflightでURL・Cookie・CORS・送信元・Secret/bindingを確認し、別承認でproductionへdeployする
 - [ ] M6: production smoke、DO valid login、最小429、synthetic cleanup、release record、公開後引継ぎを完了する
@@ -170,9 +184,9 @@ APIのリクエスト、レスポンス、status、error messageは変更しな�
 
 同日、owner `RitukoIsibasi0222`は、productionを一般利用者向けに運用しておらず、一般利用者の登録および実利用者dataの保存実績がなく、3件の`present`は開発・運用準備による履歴であることを確認した。これをM1Rとして記録し、provider・backup履歴だけを理由に既存利用者向け通常移行gateへ戻さず、v0.1限定の最小経路を再開する。schema v1 Artifactを再分類せず、schema v2またはPath C判定コードも実装しない。
 
-旧M1 evidence SHA `7a6979761428759c744ba3bf9c1ed16527c7b33d`と中間SHA `c3ca68c5173c1fb586162418e839baec8cc49bf3`は履歴として維持する。現在のM1 evidence SHAは`64ff4d2eccb5c6cd008d472f1940feaa5a2de4c3`とする。この後のrelease文書同期commitはapplication codeを変更しないため、M5/M6で使用するreview済み実行SHAとの差分が`docs/**`だけであることをpreflightで確認し、M1の再実行条件にしない。docs以外の差分またはproduction state変更があれば、この例外を使わずM1Rを再reviewする。
+旧M1 evidence SHA `7a6979761428759c744ba3bf9c1ed16527c7b33d`、中間SHA `c3ca68c5173c1fb586162418e839baec8cc49bf3`、M4後SHA `64ff4d2eccb5c6cd008d472f1940feaa5a2de4c3`は履歴として維持する。2026-08-01のbranch境界変更は`.github/workflows/**`を含むためdocs-only例外を使用できない。main merge後の確定SHAでM3とM1Rを再実行し、旧develop evidenceをM5/M6の根拠として再利用しない。
 
-M3の初回監査では、docs-onlyの`fbb10efc9e122e96a46e098e26149bc4e878d036`にbackend production依存High 3件、Moderate 4件があり、必須条件を満たさなかった。関連packageを更新した`c127b72bae8bc00956bf7a978b5a64242d466a4b`でproduction依存をCritical 0、High 0、Moderate 0にした後、PR reviewとCIでNode runtime範囲の未宣言およびnpm 10.9.8から見たlockfile不整合を検出した。`engines.node`を`22.x`へ固定し、CIと同じNode 22.23.1 / npm 10.9.8でlockfileを再生成した`3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`を最終review済み実行SHAとする。M3自体は完了したが、`backend/package.json`と`backend/package-lock.json`が旧M1 evidence SHAから変わったためdocs-only例外は使わず、PR #160のmerge後に新しい`develop` SHAでM1 read-only証拠とowner判断を再確認した。
+M3の初回監査では、docs-onlyの`fbb10efc9e122e96a46e098e26149bc4e878d036`にbackend production依存High 3件、Moderate 4件があり、必須条件を満たさなかった。関連packageを更新した`c127b72bae8bc00956bf7a978b5a64242d466a4b`でproduction依存をCritical 0、High 0、Moderate 0にした後、PR reviewとCIでNode runtime範囲の未宣言およびnpm 10.9.8から見たlockfile不整合を検出した。`engines.node`を`22.x`へ固定し、CIと同じNode 22.23.1 / npm 10.9.8でlockfileを再生成した`3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`を当時のreview済み実行SHAとした。この成功は履歴として維持するが、現在のM3は確定main SHAでの再実行待ちである。
 
 2026-07-28に最新`develop`のrelease候補`c3ca68c5173c1fb586162418e839baec8cc49bf3`を固定し、M1 run [30335685074](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30335685074)を1回実行した。safe Artifactのschema version 1、outer/evidence exact key、対象SHA、UTC millisecond timestamp、11 status allowlist、decision再計算をreviewし、DB target、全User、legacy User、User関連row、AuditLog、Cloudflare、両attestationは`clear`、Vercel production deployment、GitHub production deployment、production backup historyは`present`、`unknown`は0件だった。decisionはPath Bで、M1自体は未完了のまま維持する。owner `RitukoIsibasi0222`は、現在も一般公開・一般登録・実利用者data保存の実績がないことを再確認したため、M1Rの再確認を完了する。M4/M5以降は本作業で開始しない。
 
@@ -235,11 +249,13 @@ M6	production smokeとrelease記録	production・docs	高
 
 ## rollout手順
 
-1. M1 schema v1のPath BとDB 5項目`clear`を維持し、M1Rのowner判断を確認する。DBまたは実利用者dataの前提が不明なら停止する。
-2. M3の品質gateをrelease候補SHAで1回実行する。失敗時は対象testへ絞って修正し、新しいSHAをreviewする。
-3. M5の値非表示preflightでpending Prisma migrationを確認する。必要な場合だけM4の新鮮な暗号化backup確認と別承認migrationを行う。
-4. 別承認で通常password verifier DOを含むAPI、frontendの順にproductionへdeployする。smoke完了までは公開を告知しない。
-5. M6でsynthetic User 1件の主要導線、DO valid login、最小429、Cookie・CORS・security headersを確認し、同じchange内で本人退会・flag復旧・記録を完了する。
+1. repository境界修正をdevelopへmergeし、review済みdevelop固定SHAからmainへの直接PRを作成する。
+2. review後の別承認でmainへmergeし、実際に生成されたmain SHAと昇格元develop SHAのtree一致を確認する。
+3. 確定main SHAでM3の品質gateを実行する。失敗時は対象testへ絞って修正し、新しいmain SHAをreviewする。
+4. 確定main SHAでM1 schema v1 read-only evidenceを再取得し、Path B、DB 5項目、owner判断をM1Rとして再固定する。DBまたは実利用者dataの前提が不明なら停止する。
+5. M5の値非表示preflightでpending Prisma migrationを確認する。必要な場合だけM4の新鮮な暗号化backup確認と別承認migrationを行う。
+6. 別承認で通常password verifier DOを含むAPI、frontendの順にproductionへdeployする。smoke完了までは公開を告知しない。
+7. M6でsynthetic User 1件の主要導線、DO valid login、最小429、Cookie・CORS・security headersを確認し、同じchange内で本人退会・flag復旧・記録を完了する。
 
 ## workflow実行・承認回数
 
