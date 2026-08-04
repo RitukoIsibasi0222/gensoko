@@ -65,6 +65,58 @@ describe("production database GitHub Actions workflow", () => {
     expect(workflow).toContain("permissions:\n      actions: read\n      contents: read");
   });
 
+  it("adds a manual-only production Element seed operation with explicit approval inputs", () => {
+    expect(workflow).toContain("          - seed-elements");
+    expect(workflow).toContain("element_seed_reviewed_sha:");
+    expect(workflow).toContain("element_seed_confirmation:");
+    expect(workflow).toContain("element_seed_approver:");
+    expect(workflow).toContain("element_seed_change_record:");
+    expect(workflow).toContain(
+      "capacity-check|backup|migrate-deploy|verify-v0-1-migration-indexes|account-deletion-dry-run|account-deletion-execute|seed-elements)",
+    );
+    expect(workflow).not.toContain('operation="seed-elements"');
+  });
+
+  it("rejects an unreviewed production Element seed before database access", () => {
+    expect(workflow).toContain('if [ "$ELEMENT_SEED_REVIEWED_SHA" != "$GITHUB_SHA" ]; then');
+    expect(workflow).toContain(
+      'if [ "$ELEMENT_SEED_CONFIRMATION" != "SEED_PRODUCTION_ELEMENTS" ]; then',
+    );
+    expect(workflow).toContain(
+      'if ! [[ "$ELEMENT_SEED_APPROVER" =~ ^[A-Za-z0-9._@/-]{1,100}$ ]]; then',
+    );
+    expect(workflow).toContain(
+      'if ! [[ "$ELEMENT_SEED_CHANGE_RECORD" =~ ^[A-Za-z0-9._:/-]{1,200}$ ]]; then',
+    );
+  });
+
+  it("validates the exact production target and current migrations before Element seed", () => {
+    expect(workflow).toContain(
+      "PRODUCTION_SUPABASE_PROJECT_REF: ${{ secrets.PRODUCTION_SUPABASE_PROJECT_REF }}",
+    );
+    const targetValidationIndex = workflow.indexOf("npm run production:validate-database-target");
+    const migrationValidationIndex = workflow.indexOf(
+      "Validate current migrations before production Element seed",
+    );
+    const seedIndex = workflow.indexOf("npm run seed:elements");
+
+    expect(targetValidationIndex).toBeGreaterThanOrEqual(0);
+    expect(migrationValidationIndex).toBeGreaterThan(targetValidationIndex);
+    expect(seedIndex).toBeGreaterThan(migrationValidationIndex);
+  });
+
+  it("hides seed logs and independently verifies the committed 118 Elements", () => {
+    expect(workflow).toContain('seed_log="$RUNNER_TEMP/production-element-seed.log"');
+    expect(workflow).toContain('verify_log="$RUNNER_TEMP/production-element-seed-verify.log"');
+    expect(workflow).toContain('npm run seed:elements > "$seed_log" 2>&1');
+    expect(workflow).toContain('npm run verify:element-seed > "$verify_log" 2>&1');
+    expect(workflow).not.toContain('cat "$seed_log"');
+    expect(workflow).not.toContain('cat "$verify_log"');
+    expect(workflow).toContain("production元素データ118件を独立検証しました");
+    expect(workflow).toContain("- Reviewed SHA: verified");
+    expect(workflow).toContain("- Element count and canonical data: 118 verified");
+  });
+
   it("validates production markers and secrets without printing secret values", () => {
     expect(workflow).toContain("BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}");
     expect(workflow).toContain("DATABASE_URL: ${{ secrets.DATABASE_URL }}");

@@ -138,7 +138,49 @@ M1のDB 5項目またはownerの実利用者data不存在確認が不明な場�
 
 pending Prisma migrationがない通常経路の追加workflow dispatchは、既存`Production Account Deletion Smoke`の`main` 1回だけとする。登録、メール認証、login、reloadによるrefresh、game、最小429は同じsynthetic Userで手動確認し、`Production Auth Smoke`を重複実行しない。承認はM5のAPI・frontend deployをまとめたrelease承認と、M6本人退会workflowのproduction Environment承認の2回とする。migrationが必要なら`migrate-deploy`を1回追加し、有効な24時間以内のbackup Artifactもなければbackup作成を1回追加する。失敗時の`recovery-only`は必要時だけ別承認で実行する。
 
+初回productionで正本118元素が未投入の場合は、上記通常経路に承認付き`seed-elements`を1回追加する。seedはM5 deploy後かつM6のElement・game確認前に行い、直接CLI、ローカルshell、provider SQL editor、staging workflowの流用は禁止する。production Environment approvalを通すため、M5/M6の承認回数はElement seedを含む場合に3回となる。
+
 初回productionでv2より前の互換versionがない間は、障害時にCloudflareのproduction公開routeを停止してAPI trafficを遮断し、pre-v2 rollbackを行わずfix-forwardする。未実装のapplication flagやmaintenance UIを前提にしない。v2適用後の互換versionが複数揃った後は通常のversion rollbackを利用できる。
+
+### Production 元素seed runbook
+
+このrunbookは、M6でElement APIが通信成功の空配列を返し、production DBに正本118元素が未投入であることをread-only確認した場合だけ使用する。workflow実装がreview済みで`main`へmergeされ、ownerが実行直前に別の明示承認を行うまでdispatchしない。
+
+#### 実行前gate
+
+1. `Production Database Operations`の実行元が`main`で、対象commitがreview済みrelease SHAと完全一致することを値非表示で確認する。
+2. GitHub `production` Environmentがrequired reviewerと`main`限定branch policyを維持していることを確認する。
+3. `BATCH_ENVIRONMENT=production`、production専用DB Secret、production project ref Secretが存在することだけを確認し、値は読み戻さない。
+4. pending Prisma migrationがなく、M5のAPI・frontend healthが成功していることを確認する。
+5. `gensoko-batch-jobs`で実行中・承認待ちの別runがないことを確認する。既存runをseedのためにcancelしない。
+6. M6 synthetic Userと一時メールルーティングルールをcleanup前の状態で維持する。
+
+#### 手動dispatch
+
+1. Actionsの`Production Database Operations`を開き、`main`から`seed-elements`を選ぶ。
+2. review済みSHA、固定確認文字列、承認者、change recordを入力する。DB URL、project ref、credential、resource IDは入力しない。
+3. 画面の最終`Run workflow`はownerの明示承認後だけ押す。
+4. production Environment approval画面でworkflow名、`main`、review済みSHA、operationが`seed-elements`であることを確認して承認する。
+
+#### workflow内の順序
+
+1. Environment・Secretへ到達する前に`main`を検証する。
+2. manual operation、実行SHA、固定確認文字列、承認者、change recordを検証する。
+3. production project refとSession pooler接続先を値非表示で完全検証する。
+4. migrationがcurrentであることを生log非表示で確認する。
+5. Elementが0件または既に正本118件のどちらかであることをtransaction内で確認する。部分件数、余分なrow、field不一致があればwrite前に停止する。
+6. 118件を同一transactionで主キー`upsert`し、transaction内で件数・ID集合・全fieldの正本一致を検証する。
+7. commit後に別process・別接続で同じ118件完全一致を再検証する。
+8. Summaryにはreview・承認記録・DB target・118件検証の固定statusだけを残し、入力値やDB値を表示しない。
+
+#### 成功・停止・再実行
+
+- seed stepと独立verify stepが両方成功し、Summaryが固定statusだけを示す場合に限りM6を再開する。
+- validation、target、migration、preflight、seed、verifyのどれかが失敗した場合は、元素一覧やgame requestを増やさずM6を停止する。
+- raw logを表示・Artifact化せず、固定errorとsource testから原因を調査する。
+- transaction失敗は部分投入を残さない。状態不明時は直接query・DELETE・再seedを行わず、read-only確認と新しい承認を先に行う。
+- 正規118件への再実行は冪等だが、成功runを理由なく再実行しない。
+- workflow成功後はproduction元素一覧で118件を確認し、同じsynthetic Userでgame、ranking、rate limit、security、本人退会、cleanupへ進む。
 
 ## staging frontend/API配備runbook
 
