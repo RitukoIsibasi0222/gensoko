@@ -273,12 +273,13 @@
 ### 最小リリース工程（M1R・M3・M5・M6、条件付きM4）
 
 - [-] M1: production初回状態のschema v1証拠を取得・review済み — 計画書: [`docs/plans/m1-production-read-only-evidence/plan.md`](plans/m1-production-read-only-evidence/plan.md) — 旧run [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)と中間run [30335685074](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30335685074)は履歴として維持する。M4後の最新候補`64ff4d2eccb5c6cd008d472f1940feaa5a2de4c3`のrun [30416382440](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30416382440)でDB 5項目・Cloudflare・両attestationは`clear`、GitHub deployment・backup履歴は`present`、Vercel deploymentは`unknown`だった。schema v1のPath BとM1未完了を維持する
-- [-] M1R: 旧develop SHAの証拠とowner判断は履歴として維持する。main merge後の確定SHAでM3を成功させ、production Environmentだけを別承認でmain限定へ変更した後、同じmain SHAのread-only evidenceとowner判断を再固定するまで未完了とし、M5は開始しない
+- [x] M1R: 旧develop SHAの証拠とowner判断を履歴として維持し、main merge後の確定SHAでM3成功後、production Environmentをrequired reviewer・main限定のまま同じmain SHAのread-only evidenceとowner判断を再固定した
 - [-] M2: repository実装完了、外部実行は未完了のまま公開後へ移管。同じrelease候補SHAのstaging campaignは実行せず、M2P-17〜M2P-22を完了扱いにしない。通常password verifier DO、valid login、最小429、主要導線はM6 production smokeで確認する
-- [-] M3: 旧develop SHAの品質gate成功は履歴として維持する。直接release PRをmainへmergeした後、その確定main SHAで同じ品質gateとproduction依存監査を再実行するまで未完了とする
+- [x] M3: 旧develop SHAの品質gate成功を履歴として維持し、release PRをmainへmergeした後の確定main SHAで品質gateとproduction依存監査を再実行した
 - [x] M4: backup run [30301334445](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30301334445)を確認し、対象SHA `7dbe5649a4057baa3b123aaadb6531422f96fd2f`のmigration run [30342343404](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30342343404)で`prisma migrate deploy`に成功した。検証run [30406227957](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30406227957)で対象run・SHAとv0.1対象5 indexの`indisvalid`・`indisready`を値非表示確認し、M4を完了した
-- [ ] M5: same-site URL、Cookie、CORS、メール送信元、Secret/binding分離を値非表示でpreflightし、別承認でproductionへdeployする
-- [ ] M6: productionでsynthetic Userの登録・メール受信〜退会、game、refresh、通常DO、最小429、securityを確認し、User所有row cleanup・release記録・公開後引継ぎを完了する。AuditLogは365日保持方針に従う
+- [x] M5: same-site URL、Cookie、CORS、メール送信元、Secret/binding分離を値非表示でpreflightし、別承認でproduction API・frontendをdeployして両healthを確認した
+- [-] M6: productionの単一synthetic Userで登録、転送メール受信、メール認証、login、reload後の認証維持まで成功した。Element APIは通信成功の空配列で、production DBに正本118元素が未投入であることをread-only確認したため、承認付きseed成功までgame以降を停止する。本人退会、User所有row cleanup、release記録、公開後引継ぎは未完了で、AuditLogは365日保持方針に従う
+  - [-] Production元素seed手順: M6でElement APIが正常な空配列を返し、production DBに正本118元素が未投入であることをread-only確認した。直接seedを禁止したまま、main限定・required reviewer・review済みSHA・接続先検証・原子的な冪等upsert・実行後118件検証・秘密情報非表示を満たす承認付きworkflowのTDD実装とローカル品質gateを完了し、develop向けPRを準備中 — 計画書: [`production-elements-seed`](plans/production-elements-seed/plan.md)
 
 ### 旧リリース実行タスク（R1〜R18・履歴）
 
