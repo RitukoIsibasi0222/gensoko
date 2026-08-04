@@ -627,6 +627,7 @@ jobs:
 
       - name: Seed production Elements
         if: env.OPERATION == 'seed-elements'
+        timeout-minutes: 3
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
