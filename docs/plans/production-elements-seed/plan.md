@@ -127,7 +127,7 @@ export function validateProductionDatabaseTarget(
 - [x] PES5: workflow contract test
 - [x] PES6: release正本・runbook同期
 - [x] PES7: 最終品質gate
-- [ ] PES8: commit・push・develop向けPR
+- [x] PES8: commit・push・develop向けPR
 
 ## 技術的注意点
 
@@ -161,3 +161,41 @@ export function validateProductionDatabaseTarget(
 - Workers test: 32件成功
 - build / Workers build / lint / format check / Prisma schema validate: 成功
 - production DB接続、production workflow実行、外部deploy: 未実施
+
+## 実装完了
+
+- 完了日: 2026-08-04
+- 実装ブランチ: `feature/production-elements-seed`
+- PR: #175
+
+### 計画からの変更点
+
+- 既存`backend/prisma/seed.ts`の118元素定義を共通moduleへ移し、従来entrypointは共通CLIを呼ぶ互換wrapperとして維持した。
+- seed/verifyが利用するPrisma依存は、testと実装の型整合を保つため実際に使うmethodだけのinterfaceへ限定した。
+- production実行、PR merge、developからmainへの昇格、M6再開は本feature実装の完了対象に含めず、別承認工程として維持した。
+
+### 実際の変更ファイル
+
+| ファイル                                                        | 変更種別 | 内容                                 |
+| --------------------------------------------------------------- | -------- | ------------------------------------ |
+| `backend/src/lib/production-database-target.ts`                 | 新規     | production接続先validator            |
+| `backend/src/lib/production-database-target.test.ts`            | 新規     | target validator test                |
+| `backend/src/jobs/validateProductionDatabaseTarget.cli.ts`      | 新規     | 値非表示validation CLI               |
+| `backend/src/jobs/validateProductionDatabaseTarget.cli.test.ts` | 新規     | CLI契約test                          |
+| `backend/src/lib/elements/seed-data.ts`                         | 新規     | 正本118元素                          |
+| `backend/src/jobs/seedElements.ts`                              | 新規     | preflight・transaction用seed・verify |
+| `backend/src/jobs/seedElements.test.ts`                         | 新規     | 冪等性・fail-closed test             |
+| `backend/src/jobs/seedElements.cli.ts`                          | 新規     | 共通transaction CLI                  |
+| `backend/src/jobs/seedElements.cli.test.ts`                     | 新規     | transaction・秘密非表示test          |
+| `backend/src/jobs/verifyElementSeed.cli.ts`                     | 新規     | 独立verify CLI                       |
+| `backend/src/jobs/verifyElementSeed.cli.test.ts`                | 新規     | 独立verify契約test                   |
+| `backend/prisma/seed.ts`                                        | 修正     | 共通CLI互換entrypoint                |
+| `backend/package.json`                                          | 修正     | production seed関連script            |
+| `.github/workflows/production-database.yml`                     | 修正     | 承認付きseed operation               |
+| `.github/workflows/staging-database.yml`                        | 修正     | 共通seed CLI                         |
+| `backend/src/jobs/productionDatabaseWorkflow.test.ts`           | 修正     | production workflow契約              |
+| `backend/src/jobs/stagingDatabaseWorkflow.test.ts`              | 修正     | staging workflow契約                 |
+| `docs/05_progress.md`                                           | 修正     | M6停止・repository実装状況           |
+| `docs/11_deployment.md`                                         | 修正     | production seed runbook              |
+| `docs/plans/portfolio-release-v0-1-minimal/plan.md`             | 修正     | M6再開条件                           |
+| `docs/plans/production-elements-seed/plan.md`                   | 新規     | 設計・TDD・完了記録                  |
