@@ -202,7 +202,7 @@ jobs:
         run: |
           set -euo pipefail
           seed_log="$RUNNER_TEMP/staging-element-seed.log"
-          if ! npx tsx prisma/seed.ts > "$seed_log" 2>&1; then
+          if ! npm run seed:elements > "$seed_log" 2>&1; then
             echo "staging元素データの投入に失敗しました"
             exit 1
           fi

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const WORKFLOW_PATH = fileURLToPath(
   new URL("../../../.github/workflows/staging-database.yml", import.meta.url),
 );
-const SEED_PATH = fileURLToPath(new URL("../../prisma/seed.ts", import.meta.url));
+const SEED_PATH = fileURLToPath(new URL("./seedElements.cli.ts", import.meta.url));
 
 describe("staging database GitHub Actions workflow", () => {
   const workflow = readFileSync(WORKFLOW_PATH, "utf8");
@@ -112,22 +112,24 @@ describe("staging database GitHub Actions workflow", () => {
     expect(workflow).toContain("Element seed前に対象外のstaging migrationを適用してください");
 
     const targetValidationIndex = workflow.indexOf("run: npm run staging:validate-database-target");
-    const seedIndex = workflow.indexOf("npx tsx prisma/seed.ts");
+    const seedIndex = workflow.indexOf("npm run seed:elements");
 
     expect(seedIndex).toBeGreaterThan(targetValidationIndex);
     expect(workflow).toContain("if: inputs.operation == 'seed-elements'");
     expect(workflow).toContain('seed_log="$RUNNER_TEMP/staging-element-seed.log"');
-    expect(workflow).toContain('npx tsx prisma/seed.ts > "$seed_log" 2>&1');
+    expect(workflow).toContain('npm run seed:elements > "$seed_log" 2>&1');
     expect(workflow).not.toContain('cat "$seed_log"');
   });
 
   it("Element seedとdisconnectの失敗時は生Errorを出さず非ゼロ終了する", () => {
     const seed = readFileSync(SEED_PATH, "utf8");
 
-    expect(seed).toContain('console.error("元素データの投入に失敗しました")');
-    expect(seed).toContain('console.error("元素データ投入後のDB接続終了に失敗しました")');
-    expect(seed).toContain("await prisma.$disconnect()");
-    expect(seed).toContain("process.exitCode = 1");
+    expect(seed).toContain('const FAILED_MESSAGE = "元素データの投入に失敗しました"');
+    expect(seed).toContain(
+      'const DISCONNECT_FAILED_MESSAGE = "元素データ投入後のDB接続終了に失敗しました"',
+    );
+    expect(seed).toContain("await client.$disconnect()");
+    expect(seed).toContain("exitCode = 1");
     expect(seed).not.toContain(".catch(console.error)");
     expect(seed).not.toContain(".finally(");
   });

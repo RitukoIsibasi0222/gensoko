@@ -173,13 +173,15 @@ APIのリクエスト、レスポンス、status、error messageは変更しな�
 | M3       | release候補SHAの品質gate        | backend/frontend                  | test・Workers test・build・lint・format・Prisma validate成功、production依存Critical/High 0          |
 | M4       | 必要な場合だけbackup・migration | production Actions                | 新鮮な暗号化backup確認後に別承認migrationを行い、対象indexの`indisvalid`・`indisready`を値非表示確認 |
 | M5       | preflight後にproduction deploy  | Vercel/Cloudflare/Supabase/Resend | same-site URL、Cookie、CORS、送信元、Secret/binding分離、review済みSHA、別承認deploy成功             |
-| M6       | production smokeとrelease記録   | production/docs                   | synthetic Userで主要導線、DO、429、security、退会、cleanup、残課題引継ぎ                             |
+| M6       | production smokeとrelease記録   | production/docs                   | 正本118元素、synthetic User主要導線、DO、429、security、退会、cleanup、残課題引継ぎ                  |
 
-- [ ] M1R: 旧develop SHAの証拠を履歴として維持し、main merge後の確定SHAでread-only evidenceとowner判断を再固定する
-- [ ] M3: main merge後の確定SHAで最終品質gateとproduction依存監査を再実行する
+- [x] M1R: 旧develop SHAの証拠を履歴として維持し、main merge後の確定SHAでread-only evidenceとowner判断を再固定した
+- [x] M3: main merge後の確定SHAで最終品質gateとproduction依存監査を再実行した
 - [x] M4: backup run [30301334445](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30301334445)を確認し、対象SHA `7dbe5649a4057baa3b123aaadb6531422f96fd2f`のmigration run [30342343404](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30342343404)で`prisma migrate deploy`に成功した。検証run [30406227957](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30406227957)で対象run・SHAと5 indexの`indisvalid`・`indisready`を値非表示確認した
-- [ ] M5: 値非表示preflightでURL・Cookie・CORS・送信元・Secret/bindingを確認し、別承認でproductionへdeployする
-- [ ] M6: production smoke、DO valid login、最小429、synthetic cleanup、release record、公開後引継ぎを完了する
+- [x] M5: 値非表示preflightでURL・Cookie・CORS・送信元・Secret/bindingを確認し、別承認でproduction API・frontendをdeployしてhealthを確認した
+- [-] M6: 登録・メール認証・login・reload後の認証維持まで成功した。production DBのElement未投入をread-only確認し、承認付き118元素seed手順の整備中はgame以降を停止する
+
+2026-08-04の再開時点で、release PRのmain merge、確定main SHAのM3、M1R、M5のAPI・frontend deployと両health確認は完了している。M6の単一synthetic Userは登録、転送メール受信、メール認証、login、reload後の認証維持まで成功したが、Element APIが正常な空配列を返し、production DBに正本118元素が未投入であることをread-only確認したため停止した。productionへの直接seedを禁止し、[`production-elements-seed`](../production-elements-seed/plan.md)のreview・main merge・別承認付きworkflow成功までgame以降へ進まない。synthetic UserとM6専用メールルーティングルールはcleanup工程まで維持し、BO15とscheduled batch kill switchは有効化しない。
 
 2026-07-28にrelease候補`7a6979761428759c744ba3bf9c1ed16527c7b33d`を固定し、M1の承認付きmanual-only・GET-only run [30321699906](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30321699906)を1回実行した。Environment approval、対象SHA、safe Artifactのexact schema、11 status、decision再計算をreviewした結果、DB target、全User、legacy User、User関連row、AuditLog、Cloudflare、削除済み履歴・外部copy attestation、production変更凍結attestationは`clear`、Vercel production deployment、GitHub production deployment、production backup historyは`present`だった。schema v1の判定はPath B、M1自体は未完了のまま維持し、履歴やdataをPath Aへ合わせる削除は行わない。
 
@@ -258,18 +260,20 @@ M6	production smokeとrelease記録	production・docs	高
 6. M1R review完了後の別承認でproduction-batchをmain限定へ変更し、default branchをmainへ切り替える。stagingはdevelop限定、kill switchは`false`を維持する。Vercel ProductionとCloudflare productionのmain SHA基準は同じ外部切替工程で値非表示確認し、deployは行わない。
 7. M5の値非表示preflightでpending Prisma migrationを確認する。必要な場合だけM4の新鮮な暗号化backup確認と別承認migrationを行う。
 8. 別承認で通常password verifier DOを含むAPI、frontendの順にproductionへdeployする。smoke完了までは公開を告知しない。
-9. M6でsynthetic User 1件の主要導線、DO valid login、最小429、Cookie・CORS・security headersを確認し、同じchange内で本人退会・flag復旧・記録を完了する。
+9. production DBに正本118元素が未投入の場合だけ、review済みmain SHAの`Production Database Operations`へ追加した`seed-elements`を別承認で1回実行する。main、required reviewer、SHA、確認文字列、承認記録、production接続先、migration current、原子的upsert、別processの118件完全一致を値非表示確認する。直接CLI・SQL・staging workflowは使用しない。
+10. M6でsynthetic User 1件の主要導線、DO valid login、最小429、Cookie・CORS・security headersを確認し、同じchange内で本人退会・flag復旧・記録を完了する。
 
 ## workflow実行・承認回数
 
-main昇格後は、M3成功後にM1R read-only workflowを同じmain SHAで1回だけ別承認により実行する。その後、pending Prisma migrationがない通常経路では、M5は承認済みのprovider deployとして扱い、production副作用を伴うGitHub Actionsの追加dispatchはM6の既存`Production Account Deletion Smoke` 1回だけとする。登録、メール認証、login、reloadによるrefresh、game、最小429は同じsynthetic Userで手動確認し、別の`Production Auth Smoke`は重複実行しない。
+main昇格後は、M3成功後にM1R read-only workflowを同じmain SHAで1回だけ別承認により実行する。その後、pending Prisma migrationがなく正本118元素が投入済みの通常経路では、M5は承認済みのprovider deployとして扱い、production副作用を伴うGitHub Actionsの追加dispatchはM6の既存`Production Account Deletion Smoke` 1回だけとする。正本118元素が未投入の場合は、`Production Database Operations`の`seed-elements`を別承認で1回追加する。登録、メール認証、login、reloadによるrefresh、game、最小429は同じsynthetic Userで手動確認し、別の`Production Auth Smoke`は重複実行しない。
 
 release PR作成、main merge、production EnvironmentのM1R前切替、M1R dispatch、production-batch・default branch・provider基準の後段切替は、それぞれ別の明示承認とする。以下の2回は、その後に残るM5/M6のproduction変更承認だけを数える。
 
-必要な明示承認は2回とする。
+正本118元素が投入済みの通常経路で必要な明示承認は2回とする。初回seedが必要な場合は3回とする。
 
 1. M5のAPI・frontend production deployをまとめたrelease承認。
-2. M6の本人退会workflowに対するproduction Environment承認。
+2. 必要な場合だけ、M6再開前のproduction Element seed workflowに対するproduction Environment承認。
+3. M6の本人退会workflowに対するproduction Environment承認。
 
 pending Prisma migrationがある場合は`migrate-deploy`のdispatchと承認を1回追加する。24時間以内の有効なbackup Artifactがなければ、その作成dispatchとproduction Environment承認も1回追加する。M6失敗時の`recovery-only`は成功経路の予定回数に含めず、必要になった場合だけ別承認で実行する。
 
