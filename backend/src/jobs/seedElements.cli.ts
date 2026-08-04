@@ -10,12 +10,23 @@ const PREFLIGHT_FAILED_MESSAGE = "元素データの事前状態が空または�
 const VERIFICATION_FAILED_MESSAGE = "元素データのトランザクション内検証に失敗しました";
 const TRANSACTION_FAILED_MESSAGE = "元素データのDBトランザクション実行に失敗しました";
 const DISCONNECT_FAILED_MESSAGE = "元素データ投入後のDB接続終了に失敗しました";
+const BOOTSTRAP_FAILED_MESSAGE = "元素データCLIの初期化に失敗しました";
+const COMMAND_STARTED_MESSAGE = "元素データCLIの起動を開始しました";
 const ELEMENT_SEED_TRANSACTION_OPTIONS = {
   maxWait: 10_000,
   timeout: 120_000,
 } as const;
 
 export type ElementSeedTransactionClient = Pick<PrismaClient, "$transaction" | "$disconnect">;
+export type ElementSeedClientFactory = (
+  connectionString: string | undefined,
+) => ElementSeedTransactionClient;
+
+export interface ElementSeedCommandOptions {
+  environment?: Readonly<Record<string, string | undefined>>;
+  createClient?: ElementSeedClientFactory;
+  logger?: Pick<Console, "info" | "error">;
+}
 
 function seedFailureMessage(error: unknown): string {
   if (error instanceof ElementSeedStateError) {
@@ -55,13 +66,37 @@ export async function runSeedElementsCli(
   return exitCode;
 }
 
-export async function runSeedElementsCommand(): Promise<void> {
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
-  const prisma = new PrismaClient({ adapter });
-  process.exitCode = await runSeedElementsCli(prisma);
+function createElementSeedClient(
+  connectionString: string | undefined,
+): ElementSeedTransactionClient {
+  const adapter = new PrismaPg({ connectionString });
+  return new PrismaClient({ adapter });
+}
+
+export async function runSeedElementsCommand({
+  environment = process.env,
+  createClient = createElementSeedClient,
+  logger = console,
+}: ElementSeedCommandOptions = {}): Promise<number> {
+  logger.info(COMMAND_STARTED_MESSAGE);
+
+  try {
+    const client = createClient(environment.DATABASE_URL);
+    return await runSeedElementsCli(client, logger);
+  } catch {
+    logger.error(BOOTSTRAP_FAILED_MESSAGE);
+    return 1;
+  }
+}
+
+async function main(): Promise<void> {
+  process.exitCode = await runSeedElementsCommand();
 }
 
 const entrypointPath = process.argv[1];
 if (entrypointPath && import.meta.url === pathToFileURL(entrypointPath).href) {
-  void runSeedElementsCommand();
+  void main().catch(() => {
+    console.error(BOOTSTRAP_FAILED_MESSAGE);
+    process.exitCode = 1;
+  });
 }

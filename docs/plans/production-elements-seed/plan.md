@@ -127,6 +127,7 @@ export function validateProductionDatabaseTarget(
 | PES8     | commit・push・PR                   | Git/GitHub              | 高     | base develop           |
 | PES9     | production初回失敗のtimeout修正    | backend/workflow/docs   | 高     | 再実行は別承認         |
 | PES10    | production再失敗の安全カテゴリ診断 | backend/workflow/docs   | 高     | raw error非表示        |
+| PES11    | CLI起動境界の固定カテゴリ診断      | backend/workflow/docs   | 高     | entrypoint前後を区別   |
 
 - [x] PES1: 計画・進捗記録
 - [x] PES2: production DB target validator
@@ -138,6 +139,7 @@ export function validateProductionDatabaseTarget(
 - [x] PES8: commit・push・develop向けPR
 - [x] PES9: production初回失敗のtransaction timeout修正
 - [x] PES10: production再失敗の安全カテゴリ診断
+- [x] PES11: CLI起動境界の固定カテゴリ診断
 
 ## 技術的注意点
 
@@ -185,6 +187,7 @@ export function validateProductionDatabaseTarget(
 - timeout修正をreview・main昇格し、別の明示承認後に再実行したが、2回目もDB target・migration current成功後のseed stepで失敗し、独立verify前に安全停止した。GitHubのstep時刻は同一秒内であり、120秒上限到達ではないため、timeoutを根因とする断定を撤回した。
 - 同じCLIはローカルPostgreSQLの既存正本118件と、新規一時空DBへのmigration後のseed・独立verifyで成功した。一時DBは検証後に削除し、残存0件を確認した。
 - production固有の既存状態不一致、transaction内検証不一致、DB transaction失敗、disconnect失敗をraw errorなしの固定カテゴリで区別し、workflowはallowlist済み固定文言だけを表示する。review・main昇格・別の明示承認が完了するまで再実行しない。
+- 固定4分類をmainへ昇格した後の別承認付き3回目もtarget・migration current成功後のseed stepで汎用fallbackへ停止し、独立verifyはskip、失敗後の元素一覧も空のままだった。transaction内分類へ到達していないため、CLI client初期化とentrypoint起動前後を追加の固定カテゴリで区別し、review・main昇格・さらに別の明示承認まで再実行しない。
 
 ## 実装完了
 
@@ -241,3 +244,12 @@ export function validateProductionDatabaseTarget(
 - Green: preflight / verification段階、DB transaction・disconnectを含む固定カテゴリを追加し、対象24 test・関連34 test成功
 - 最終品質gate: backend全1304 test成功・10件skip、Workers 32 test、build / Workers build / lint / format check / Prisma schema validate、workflow・正本Prettier check成功
 - production再実行: review・develop/main昇格・別の明示承認まで禁止
+
+### Production汎用fallbackからのCLI起動境界診断修正
+
+- 修正日: 2026-08-04
+- 修正ブランチ: `fix/production-elements-seed-bootstrap-diagnostics`
+- Red: client初期化固定カテゴリとworkflow allowlistが未実装で対象2 test失敗し、entrypoint開始markerと起動前後分類の追加testも2件失敗
+- Green: client factory境界、top-level Promise catch、固定entrypoint開始marker、起動前・初期化・起動後分類を追加し、対象17 test・関連35 test成功
+- 最終品質gate: backend全1305 test成功・10件skip、Workers 32 test、build / Workers build / lint / format check / Prisma schema validate、workflow・正本Prettier check成功
+- production再実行: review・develop/main昇格・さらに別の明示承認まで禁止

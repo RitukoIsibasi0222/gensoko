@@ -648,8 +648,12 @@ jobs:
               echo "production元素データのDBトランザクション実行に失敗しました"
             elif grep -Fq "元素データ投入後のDB接続終了に失敗しました" "$seed_log"; then
               echo "production元素データ投入後のDB接続終了に失敗しました"
+            elif grep -Fq "元素データCLIの初期化に失敗しました" "$seed_log"; then
+              echo "production元素データCLIの初期化に失敗しました"
+            elif grep -Fq "元素データCLIの起動を開始しました" "$seed_log"; then
+              echo "production元素データCLIの起動後に予期せず失敗しました"
             else
-              echo "production元素データの投入に失敗しました"
+              echo "production元素データCLIの起動前に失敗しました"
             fi
             exit 1
           fi

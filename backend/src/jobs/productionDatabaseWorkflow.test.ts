@@ -128,6 +128,10 @@ describe("production database GitHub Actions workflow", () => {
       'grep -Fq "元素データのDBトランザクション実行に失敗しました" "$seed_log"',
     );
     expect(workflow).toContain('grep -Fq "元素データ投入後のDB接続終了に失敗しました" "$seed_log"');
+    expect(workflow).toContain('grep -Fq "元素データCLIの初期化に失敗しました" "$seed_log"');
+    expect(workflow).toContain('grep -Fq "元素データCLIの起動を開始しました" "$seed_log"');
+    expect(workflow).toContain("production元素データCLIの起動前に失敗しました");
+    expect(workflow).toContain("production元素データCLIの起動後に予期せず失敗しました");
     expect(workflow).toContain('npm run verify:element-seed > "$verify_log" 2>&1');
     expect(workflow).not.toContain('cat "$seed_log"');
     expect(workflow).not.toContain('cat "$verify_log"');
