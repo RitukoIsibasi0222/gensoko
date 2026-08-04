@@ -98,11 +98,15 @@ describe("production database GitHub Actions workflow", () => {
     const migrationValidationIndex = workflow.indexOf(
       "Validate current migrations before production Element seed",
     );
-    const seedIndex = workflow.indexOf("npm run seed:elements");
+    const startupProbeIndex = workflow.indexOf("node --import tsx --input-type=module --eval");
+    const seedIndex = workflow.indexOf(
+      'node --import tsx src/jobs/seedElements.cli.ts > "$seed_log" 2>&1',
+    );
 
     expect(targetValidationIndex).toBeGreaterThanOrEqual(0);
     expect(migrationValidationIndex).toBeGreaterThan(targetValidationIndex);
-    expect(seedIndex).toBeGreaterThan(migrationValidationIndex);
+    expect(startupProbeIndex).toBeGreaterThan(migrationValidationIndex);
+    expect(seedIndex).toBeGreaterThan(startupProbeIndex);
   });
 
   it("hides seed logs and independently verifies the committed 118 Elements", () => {
@@ -115,9 +119,15 @@ describe("production database GitHub Actions workflow", () => {
     const seedStep = workflow.slice(seedStepStart, verifyStepStart);
 
     expect(seedStep).toContain("timeout-minutes: 3");
+    expect(workflow).toContain('startup_log="$RUNNER_TEMP/production-element-seed-startup.log"');
     expect(workflow).toContain('seed_log="$RUNNER_TEMP/production-element-seed.log"');
+    expect(workflow).toContain('rm -f "$startup_log" "$seed_log"');
     expect(workflow).toContain('verify_log="$RUNNER_TEMP/production-element-seed-verify.log"');
-    expect(workflow).toContain('npm run seed:elements > "$seed_log" 2>&1');
+    expect(workflow).toContain(
+      'node --import tsx --input-type=module --eval "await import(\'./src/jobs/seedElements.cli.ts\')" > "$startup_log" 2>&1',
+    );
+    expect(workflow).toContain("production元素データCLI moduleの読込に失敗しました");
+    expect(workflow).toContain('node --import tsx src/jobs/seedElements.cli.ts > "$seed_log" 2>&1');
     expect(workflow).toContain(
       'grep -Fq "元素データの事前状態が空または正本118件ではありません" "$seed_log"',
     );
@@ -132,7 +142,12 @@ describe("production database GitHub Actions workflow", () => {
     expect(workflow).toContain('grep -Fq "元素データCLIの起動を開始しました" "$seed_log"');
     expect(workflow).toContain("production元素データCLIの起動前に失敗しました");
     expect(workflow).toContain("production元素データCLIの起動後に予期せず失敗しました");
-    expect(workflow).toContain('npm run verify:element-seed > "$verify_log" 2>&1');
+    expect(workflow).toContain(
+      'node --import tsx src/jobs/verifyElementSeed.cli.ts > "$verify_log" 2>&1',
+    );
+    expect(workflow).not.toContain("npm run seed:elements");
+    expect(workflow).not.toContain("npm run verify:element-seed");
+    expect(workflow).not.toContain('cat "$startup_log"');
     expect(workflow).not.toContain('cat "$seed_log"');
     expect(workflow).not.toContain('cat "$verify_log"');
     expect(workflow).toContain("production元素データ118件を独立検証しました");
