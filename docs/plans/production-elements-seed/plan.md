@@ -215,6 +215,7 @@ export function validateProductionDatabaseTarget(
 
 - 修正日: 2026-08-04
 - 修正ブランチ: `fix/production-elements-seed-transaction-timeout`
+- 修正PR: #177
 - Red: transaction optionsとworkflow step上限が未指定で2 test失敗
 - Green: maxWait 10秒・timeout 120秒・workflow step 3分上限を追加し、対象14 testと関連38 test成功
 - production再実行: review・develop/main昇格・別の明示承認まで未実施

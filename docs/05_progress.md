@@ -279,7 +279,7 @@
 - [x] M4: backup run [30301334445](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30301334445)を確認し、対象SHA `7dbe5649a4057baa3b123aaadb6531422f96fd2f`のmigration run [30342343404](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30342343404)で`prisma migrate deploy`に成功した。検証run [30406227957](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/30406227957)で対象run・SHAとv0.1対象5 indexの`indisvalid`・`indisready`を値非表示確認し、M4を完了した
 - [x] M5: same-site URL、Cookie、CORS、メール送信元、Secret/binding分離を値非表示でpreflightし、別承認でproduction API・frontendをdeployして両healthを確認した
 - [-] M6: productionの単一synthetic Userで登録、転送メール受信、メール認証、login、reload後の認証維持まで成功した。Element APIは通信成功の空配列で、production DBに正本118元素が未投入であることをread-only確認したため、承認付きseed成功までgame以降を停止する。本人退会、User所有row cleanup、release記録、公開後引継ぎは未完了で、AuditLogは365日保持方針に従う
-  - [-] Production元素seed手順: 承認付きworkflowのrepository実装とmain昇格後、初回production seedはmain・入力・DB target・migration currentの検証に成功したが、seed transactionで失敗した。Element APIが空配列のままで部分投入がないことを確認し、Prisma既定5秒timeoutに対して有限120秒timeout・10秒maxWait・workflow 3分上限をTDD実装してローカル品質gateまで完了した。review・develop/main再昇格・別承認まで再実行しない — 計画書: [`production-elements-seed`](plans/production-elements-seed/plan.md)
+  - [-] Production元素seed手順: 承認付きworkflowのrepository実装とmain昇格後、初回production seedはmain・入力・DB target・migration currentの検証に成功したが、seed transactionで失敗した。Element APIが空配列のままで部分投入がないことを確認し、Prisma既定5秒timeoutに対して有限120秒timeout・10秒maxWait・workflow 3分上限をTDD実装して品質gateを完了し、develop向けfix PR #177を作成した。review・develop/main再昇格・別承認まで再実行しない — 計画書: [`production-elements-seed`](plans/production-elements-seed/plan.md)
 
 ### 旧リリース実行タスク（R1〜R18・履歴）
 
