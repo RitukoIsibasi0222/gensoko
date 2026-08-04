@@ -23,6 +23,10 @@ describe("runSeedElementsCli", () => {
 
     await expect(runSeedElementsCli(client as never, logger)).resolves.toBe(0);
     expect(client.$transaction).toHaveBeenCalledTimes(1);
+    expect(client.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      maxWait: 10_000,
+      timeout: 120_000,
+    });
     expect(transaction.element.upsert).toHaveBeenCalledTimes(118);
     expect(logger.info).toHaveBeenCalledWith("完了: 118 件の元素を登録しました");
     expect(logger.error).not.toHaveBeenCalled();
