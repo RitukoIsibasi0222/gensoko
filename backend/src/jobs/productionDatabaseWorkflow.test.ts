@@ -106,10 +106,13 @@ describe("production database GitHub Actions workflow", () => {
   });
 
   it("hides seed logs and independently verifies the committed 118 Elements", () => {
-    const seedStep = workflow.slice(
-      workflow.indexOf("- name: Seed production Elements"),
-      workflow.indexOf("- name: Verify production Elements independently"),
-    );
+    const seedStepStart = workflow.indexOf("- name: Seed production Elements");
+    const verifyStepStart = workflow.indexOf("- name: Verify production Elements independently");
+
+    expect(seedStepStart).toBeGreaterThanOrEqual(0);
+    expect(verifyStepStart).toBeGreaterThan(seedStepStart);
+
+    const seedStep = workflow.slice(seedStepStart, verifyStepStart);
 
     expect(seedStep).toContain("timeout-minutes: 3");
     expect(workflow).toContain('seed_log="$RUNNER_TEMP/production-element-seed.log"');
