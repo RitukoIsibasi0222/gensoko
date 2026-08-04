@@ -2,7 +2,7 @@ import type { Element } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { ELEMENT_SEED } from "../lib/elements/seed-data.js";
-import { ElementSeedStateError, seedElements, verifyElementSeed } from "./seedElements.js";
+import { seedElements, verifyElementSeed } from "./seedElements.js";
 
 function cloneElements(elements: readonly Element[]): Element[] {
   return elements.map((element) => ({ ...element }));
@@ -65,7 +65,10 @@ describe("seedElements", () => {
   it("一部だけ存在する不明状態はupsert前に拒否する", async () => {
     const { client, upsert } = createMemoryClient(ELEMENT_SEED.slice(0, 1));
 
-    await expect(seedElements(client)).rejects.toBeInstanceOf(ElementSeedStateError);
+    await expect(seedElements(client)).rejects.toMatchObject({
+      name: "ElementSeedStateError",
+      stage: "preflight",
+    });
     expect(upsert).not.toHaveBeenCalled();
   });
 
@@ -74,7 +77,10 @@ describe("seedElements", () => {
     modified[0] = { ...modified[0], nameJa: "不正な値" };
     const { client, upsert } = createMemoryClient(modified);
 
-    await expect(seedElements(client)).rejects.toBeInstanceOf(ElementSeedStateError);
+    await expect(seedElements(client)).rejects.toMatchObject({
+      name: "ElementSeedStateError",
+      stage: "preflight",
+    });
     expect(upsert).not.toHaveBeenCalled();
   });
 
@@ -85,9 +91,10 @@ describe("seedElements", () => {
       .mockResolvedValueOnce(cloneElements(ELEMENT_SEED.slice(0, 117)));
     const upsert = vi.fn().mockResolvedValue({});
 
-    await expect(seedElements({ element: { findMany, upsert } })).rejects.toBeInstanceOf(
-      ElementSeedStateError,
-    );
+    await expect(seedElements({ element: { findMany, upsert } })).rejects.toMatchObject({
+      name: "ElementSeedStateError",
+      stage: "verification",
+    });
   });
 });
 
@@ -101,6 +108,9 @@ describe("verifyElementSeed", () => {
   it("不足・余分・field不一致を成功扱いにしない", async () => {
     const { client } = createMemoryClient(ELEMENT_SEED.slice(0, 117));
 
-    await expect(verifyElementSeed(client)).rejects.toBeInstanceOf(ElementSeedStateError);
+    await expect(verifyElementSeed(client)).rejects.toMatchObject({
+      name: "ElementSeedStateError",
+      stage: "verification",
+    });
   });
 });

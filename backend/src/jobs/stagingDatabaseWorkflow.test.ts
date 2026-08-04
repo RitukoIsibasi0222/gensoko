@@ -121,10 +121,18 @@ describe("staging database GitHub Actions workflow", () => {
     expect(workflow).not.toContain('cat "$seed_log"');
   });
 
-  it("Element seedとdisconnectの失敗時は生Errorを出さず非ゼロ終了する", () => {
+  it("Element seedとdisconnectの失敗を固定カテゴリにし、生Errorを出さない", () => {
     const seed = readFileSync(SEED_PATH, "utf8");
 
-    expect(seed).toContain('const FAILED_MESSAGE = "元素データの投入に失敗しました"');
+    expect(seed).toContain(
+      'const PREFLIGHT_FAILED_MESSAGE = "元素データの事前状態が空または正本118件ではありません"',
+    );
+    expect(seed).toContain(
+      'const VERIFICATION_FAILED_MESSAGE = "元素データのトランザクション内検証に失敗しました"',
+    );
+    expect(seed).toContain(
+      'const TRANSACTION_FAILED_MESSAGE = "元素データのDBトランザクション実行に失敗しました"',
+    );
     expect(seed).toContain(
       'const DISCONNECT_FAILED_MESSAGE = "元素データ投入後のDB接続終了に失敗しました"',
     );

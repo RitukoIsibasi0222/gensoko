@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ELEMENT_SEED } from "../lib/elements/seed-data.js";
+import { ElementSeedStateError } from "./seedElements.js";
 import { runSeedElementsCli } from "./seedElements.cli.js";
 
 function createLogger() {
@@ -32,7 +33,7 @@ describe("runSeedElementsCli", () => {
     expect(logger.error).not.toHaveBeenCalled();
   });
 
-  it("raw errorを出さず失敗し、DB接続を終了する", async () => {
+  it("DB transaction失敗を固定カテゴリにし、raw errorを出さない", async () => {
     const client = {
       $transaction: vi.fn().mockRejectedValue(new Error("secret connection detail")),
       $disconnect: vi.fn().mockResolvedValue(undefined),
@@ -42,7 +43,31 @@ describe("runSeedElementsCli", () => {
     await expect(runSeedElementsCli(client as never, logger)).resolves.toBe(1);
     expect(client.$disconnect).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("secret connection detail");
-    expect(logger.error).toHaveBeenCalledWith("元素データの投入に失敗しました");
+    expect(logger.error).toHaveBeenCalledWith("元素データのDBトランザクション実行に失敗しました");
+  });
+
+  it("既存状態不一致をpreflight固定カテゴリにする", async () => {
+    const client = {
+      $transaction: vi.fn().mockRejectedValue(new ElementSeedStateError("preflight")),
+      $disconnect: vi.fn().mockResolvedValue(undefined),
+    };
+    const logger = createLogger();
+
+    await expect(runSeedElementsCli(client as never, logger)).resolves.toBe(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      "元素データの事前状態が空または正本118件ではありません",
+    );
+  });
+
+  it("transaction内の事後不一致をverification固定カテゴリにする", async () => {
+    const client = {
+      $transaction: vi.fn().mockRejectedValue(new ElementSeedStateError("verification")),
+      $disconnect: vi.fn().mockResolvedValue(undefined),
+    };
+    const logger = createLogger();
+
+    await expect(runSeedElementsCli(client as never, logger)).resolves.toBe(1);
+    expect(logger.error).toHaveBeenCalledWith("元素データのトランザクション内検証に失敗しました");
   });
 
   it("disconnect失敗もraw errorなしで非zeroにする", async () => {

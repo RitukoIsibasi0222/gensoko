@@ -4,6 +4,8 @@ import { ELEMENT_SEED } from "../lib/elements/seed-data.js";
 
 const INVALID_STATE_MESSAGE = "元素データの状態を正本118件として確認できませんでした";
 
+export type ElementSeedStateStage = "preflight" | "verification";
+
 export interface ElementReadClient {
   element: {
     findMany(args: { orderBy: { id: "asc" } }): Promise<Element[]>;
@@ -17,7 +19,7 @@ export interface ElementSeedClient extends ElementReadClient {
 }
 
 export class ElementSeedStateError extends Error {
-  constructor() {
+  constructor(public readonly stage: ElementSeedStateStage) {
     super(INVALID_STATE_MESSAGE);
     this.name = "ElementSeedStateError";
   }
@@ -51,7 +53,7 @@ async function readElements(client: ElementReadClient): Promise<readonly Element
 export async function verifyElementSeed(client: ElementReadClient): Promise<{ count: number }> {
   const elements = await readElements(client);
   if (!isCanonicalElementSeed(elements)) {
-    throw new ElementSeedStateError();
+    throw new ElementSeedStateError("verification");
   }
   return { count: elements.length };
 }
@@ -59,7 +61,7 @@ export async function verifyElementSeed(client: ElementReadClient): Promise<{ co
 export async function seedElements(client: ElementSeedClient): Promise<{ count: number }> {
   const existingElements = await readElements(client);
   if (existingElements.length !== 0 && !isCanonicalElementSeed(existingElements)) {
-    throw new ElementSeedStateError();
+    throw new ElementSeedStateError("preflight");
   }
 
   for (const element of ELEMENT_SEED) {
