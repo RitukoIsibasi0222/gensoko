@@ -8,6 +8,10 @@ import { seedElements } from "./seedElements.js";
 const COMPLETED_MESSAGE = "完了: 118 件の元素を登録しました";
 const FAILED_MESSAGE = "元素データの投入に失敗しました";
 const DISCONNECT_FAILED_MESSAGE = "元素データ投入後のDB接続終了に失敗しました";
+const ELEMENT_SEED_TRANSACTION_OPTIONS = {
+  maxWait: 10_000,
+  timeout: 120_000,
+} as const;
 
 export type ElementSeedTransactionClient = Pick<PrismaClient, "$transaction" | "$disconnect">;
 
@@ -18,7 +22,10 @@ export async function runSeedElementsCli(
   let exitCode = 0;
 
   try {
-    const result = await client.$transaction((transaction) => seedElements(transaction));
+    const result = await client.$transaction(
+      (transaction) => seedElements(transaction),
+      ELEMENT_SEED_TRANSACTION_OPTIONS,
+    );
     if (result.count !== 118) {
       throw new Error(FAILED_MESSAGE);
     }
