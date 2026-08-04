@@ -128,6 +128,7 @@ export function validateProductionDatabaseTarget(
 | PES9     | production初回失敗のtimeout修正    | backend/workflow/docs   | 高     | 再実行は別承認         |
 | PES10    | production再失敗の安全カテゴリ診断 | backend/workflow/docs   | 高     | raw error非表示        |
 | PES11    | CLI起動境界の固定カテゴリ診断      | backend/workflow/docs   | 高     | entrypoint前後を区別   |
+| PES12    | production直接entrypointへ変更     | workflow/test/docs      | 高     | 書込前module probe     |
 
 - [x] PES1: 計画・進捗記録
 - [x] PES2: production DB target validator
@@ -140,6 +141,7 @@ export function validateProductionDatabaseTarget(
 - [x] PES9: production初回失敗のtransaction timeout修正
 - [x] PES10: production再失敗の安全カテゴリ診断
 - [x] PES11: CLI起動境界の固定カテゴリ診断
+- [x] PES12: production直接entrypoint・書込前module-load probe
 
 ## 技術的注意点
 
@@ -188,6 +190,7 @@ export function validateProductionDatabaseTarget(
 - 同じCLIはローカルPostgreSQLの既存正本118件と、新規一時空DBへのmigration後のseed・独立verifyで成功した。一時DBは検証後に削除し、残存0件を確認した。
 - production固有の既存状態不一致、transaction内検証不一致、DB transaction失敗、disconnect失敗をraw errorなしの固定カテゴリで区別し、workflowはallowlist済み固定文言だけを表示する。review・main昇格・別の明示承認が完了するまで再実行しない。
 - 固定4分類をmainへ昇格した後の別承認付き3回目もtarget・migration current成功後のseed stepで汎用fallbackへ停止し、独立verifyはskip、失敗後の元素一覧も空のままだった。transaction内分類へ到達していないため、CLI client初期化とentrypoint起動前後を追加の固定カテゴリで区別し、review・main昇格・さらに別の明示承認まで再実行しない。
+- CLI起動境界分類をmainへ昇格した後の別承認付き4回目はtarget・migration current成功後のseed stepで起動前カテゴリへ0秒で停止し、独立verifyはskip、失敗後の元素一覧も空のままだった。remote main sourceに最新markerがあること、ローカルのNode+tsx直接entrypointが固定transactionカテゴリへ到達することを確認した。production workflowだけ書込前module-load probeとNode+tsx直接seed・verifyへ変更し、review・main昇格・さらに別の明示承認まで再実行しない。
 
 ## 実装完了
 
@@ -251,5 +254,15 @@ export function validateProductionDatabaseTarget(
 - 修正ブランチ: `fix/production-elements-seed-bootstrap-diagnostics`
 - Red: client初期化固定カテゴリとworkflow allowlistが未実装で対象2 test失敗し、entrypoint開始markerと起動前後分類の追加testも2件失敗
 - Green: client factory境界、top-level Promise catch、固定entrypoint開始marker、起動前・初期化・起動後分類を追加し、対象17 test・関連35 test成功
+- 最終品質gate: backend全1305 test成功・10件skip、Workers 32 test、build / Workers build / lint / format check / Prisma schema validate、workflow・正本Prettier check成功
+- production再実行: review・develop/main昇格・さらに別の明示承認まで禁止
+
+### Production CLI直接entrypoint修正
+
+- 修正日: 2026-08-04
+- 修正ブランチ: `fix/production-elements-seed-direct-entrypoint`
+- Red: 書込前module-load probe、Node+tsx直接seed・独立verify、npm wrapper不使用のworkflow contractが未実装で対象2 test失敗
+- Green: 一時logを必ず削除するmodule-load probeとNode+tsx直接entrypointを追加し、対象11 test・関連27 test成功
+- ローカル境界確認: DB非接続module-load probe成功、到達不能接続で直接seed entrypointが開始markerと固定transactionカテゴリを出力
 - 最終品質gate: backend全1305 test成功・10件skip、Workers 32 test、build / Workers build / lint / format check / Prisma schema validate、workflow・正本Prettier check成功
 - production再実行: review・develop/main昇格・さらに別の明示承認まで禁止

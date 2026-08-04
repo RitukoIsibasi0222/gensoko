@@ -633,13 +633,20 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           set -euo pipefail
+          startup_log="$RUNNER_TEMP/production-element-seed-startup.log"
           seed_log="$RUNNER_TEMP/production-element-seed.log"
-          cleanup_seed_log() {
-            rm -f "$seed_log"
+          cleanup_seed_logs() {
+            rm -f "$startup_log" "$seed_log"
           }
-          trap cleanup_seed_log EXIT
+          trap cleanup_seed_logs EXIT
 
-          if ! npm run seed:elements > "$seed_log" 2>&1; then
+          if ! node --import tsx --input-type=module --eval "await import('./src/jobs/seedElements.cli.ts')" > "$startup_log" 2>&1; then
+            echo "production元素データCLI moduleの読込に失敗しました"
+            exit 1
+          fi
+          rm -f "$startup_log"
+
+          if ! node --import tsx src/jobs/seedElements.cli.ts > "$seed_log" 2>&1; then
             if grep -Fq "元素データの事前状態が空または正本118件ではありません" "$seed_log"; then
               echo "production元素データの事前状態が正本条件と一致しないため停止しました"
             elif grep -Fq "元素データのトランザクション内検証に失敗しました" "$seed_log"; then
@@ -662,7 +669,7 @@ jobs:
             exit 1
           fi
 
-          cleanup_seed_log
+          cleanup_seed_logs
           trap - EXIT
           echo "production元素データ118件を原子的にupsertしました"
 
@@ -679,7 +686,7 @@ jobs:
           }
           trap cleanup_verify_log EXIT
 
-          if ! npm run verify:element-seed > "$verify_log" 2>&1; then
+          if ! node --import tsx src/jobs/verifyElementSeed.cli.ts > "$verify_log" 2>&1; then
             echo "production元素データ118件の独立検証に失敗しました"
             exit 1
           fi
