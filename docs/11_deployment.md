@@ -169,7 +169,7 @@ pending Prisma migrationがない通常経路の追加workflow dispatchは、既
 3. production project refとSession pooler接続先を値非表示で完全検証する。
 4. migrationがcurrentであることを生log非表示で確認する。
 5. Elementが0件または既に正本118件のどちらかであることをtransaction内で確認する。部分件数、余分なrow、field不一致があればwrite前に停止する。
-6. 118件を同一transactionで主キー`upsert`し、transaction内で件数・ID集合・全fieldの正本一致を検証する。
+6. 118件を同一transactionで主キー`upsert`し、transaction内で件数・ID集合・全fieldの正本一致を検証する。interactive transactionはmaxWait 10秒・timeout 120秒、workflowのseed stepは3分上限とし、無制限に待機させない。
 7. commit後に別process・別接続で同じ118件完全一致を再検証する。
 8. Summaryにはreview・承認記録・DB target・118件検証の固定statusだけを残し、入力値やDB値を表示しない。
 
@@ -179,6 +179,7 @@ pending Prisma migrationがない通常経路の追加workflow dispatchは、既
 - validation、target、migration、preflight、seed、verifyのどれかが失敗した場合は、元素一覧やgame requestを増やさずM6を停止する。
 - raw logを表示・Artifact化せず、固定errorとsource testから原因を調査する。
 - transaction失敗は部分投入を残さない。状態不明時は直接query・DELETE・再seedを行わず、read-only確認と新しい承認を先に行う。
+- 初回runはPrisma既定5秒timeoutを明示変更していなかったためseed stepで失敗し、Element APIの空配列からrollbackを確認した。有限timeout修正をreview・main昇格した後も、別の明示承認まで再実行しない。
 - 正規118件への再実行は冪等だが、成功runを理由なく再実行しない。
 - workflow成功後はproduction元素一覧で118件を確認し、同じsynthetic Userでgame、ranking、rate limit、security、本人退会、cleanupへ進む。
 
