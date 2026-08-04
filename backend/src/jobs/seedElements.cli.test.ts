@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ELEMENT_SEED } from "../lib/elements/seed-data.js";
 import { ElementSeedStateError } from "./seedElements.js";
-import { runSeedElementsCli } from "./seedElements.cli.js";
+import { runSeedElementsCli, runSeedElementsCommand } from "./seedElements.cli.js";
 
 function createLogger() {
   return { info: vi.fn(), error: vi.fn() };
@@ -86,5 +86,27 @@ describe("runSeedElementsCli", () => {
     await expect(runSeedElementsCli(client as never, logger)).resolves.toBe(1);
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("private disconnect detail");
     expect(logger.error).toHaveBeenCalledWith("元素データ投入後のDB接続終了に失敗しました");
+  });
+});
+
+describe("runSeedElementsCommand", () => {
+  it("client初期化失敗を固定カテゴリにし、raw errorを出さない", async () => {
+    const logger = createLogger();
+    const createClient = vi.fn(() => {
+      throw new Error("private production connection detail");
+    });
+
+    await expect(
+      runSeedElementsCommand({
+        environment: { DATABASE_URL: "masked" },
+        createClient,
+        logger,
+      }),
+    ).resolves.toBe(1);
+    expect(logger.info).toHaveBeenCalledWith("元素データCLIの起動を開始しました");
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain(
+      "private production connection detail",
+    );
+    expect(logger.error).toHaveBeenCalledWith("元素データCLIの初期化に失敗しました");
   });
 });
