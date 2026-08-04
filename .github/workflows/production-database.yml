@@ -15,6 +15,7 @@ on:
           - verify-v0-1-migration-indexes
           - account-deletion-dry-run
           - account-deletion-execute
+          - seed-elements
       confirmed_backup_run_id:
         description: migrate-deploy・account deletion execute時に確認する24時間以内の成功backup run ID
         required: false
@@ -41,6 +42,22 @@ on:
         type: string
       account_deletion_change_record:
         description: executeに対応するchange record識別子
+        required: false
+        type: string
+      element_seed_reviewed_sha:
+        description: Element seedを承認したmainの40文字SHA
+        required: false
+        type: string
+      element_seed_confirmation:
+        description: Element seed時だけSEED_PRODUCTION_ELEMENTSを入力
+        required: false
+        type: string
+      element_seed_approver:
+        description: Element seedを承認した担当者識別子
+        required: false
+        type: string
+      element_seed_change_record:
+        description: Element seedに対応するchange record識別子
         required: false
         type: string
   schedule:
@@ -110,7 +127,7 @@ jobs:
           fi
 
           case "$operation" in
-            capacity-check|backup|migrate-deploy|verify-v0-1-migration-indexes|account-deletion-dry-run|account-deletion-execute)
+            capacity-check|backup|migrate-deploy|verify-v0-1-migration-indexes|account-deletion-dry-run|account-deletion-execute|seed-elements)
               ;;
             *)
               echo "未対応の本番DB操作です"
@@ -129,6 +146,10 @@ jobs:
           ACCOUNT_DELETION_CHANGE_RECORD: ${{ inputs.account_deletion_change_record }}
           CONFIRMED_MIGRATION_RUN_ID: ${{ inputs.confirmed_migration_run_id }}
           EXPECTED_MIGRATION_SHA: ${{ inputs.expected_migration_sha }}
+          ELEMENT_SEED_REVIEWED_SHA: ${{ inputs.element_seed_reviewed_sha }}
+          ELEMENT_SEED_CONFIRMATION: ${{ inputs.element_seed_confirmation }}
+          ELEMENT_SEED_APPROVER: ${{ inputs.element_seed_approver }}
+          ELEMENT_SEED_CHANGE_RECORD: ${{ inputs.element_seed_change_record }}
         run: |
           set -euo pipefail
 
@@ -174,6 +195,28 @@ jobs:
             fi
             if ! [[ "$ACCOUNT_DELETION_CHANGE_RECORD" =~ ^[A-Za-z0-9._:/-]{1,200}$ ]]; then
               echo "account deletion change recordの形式が不正です"
+              exit 1
+            fi
+          fi
+          if [ "$OPERATION" = "seed-elements" ]; then
+            if [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]; then
+              echo "production Element seedは手動実行だけ許可されています"
+              exit 1
+            fi
+            if [ "$ELEMENT_SEED_REVIEWED_SHA" != "$GITHUB_SHA" ]; then
+              echo "production Element seedのreview済みSHAが実行SHAと一致しません"
+              exit 1
+            fi
+            if [ "$ELEMENT_SEED_CONFIRMATION" != "SEED_PRODUCTION_ELEMENTS" ]; then
+              echo "production Element seedの確認文字列が一致しません"
+              exit 1
+            fi
+            if ! [[ "$ELEMENT_SEED_APPROVER" =~ ^[A-Za-z0-9._@/-]{1,100}$ ]]; then
+              echo "Element seed approverの形式が不正です"
+              exit 1
+            fi
+            if ! [[ "$ELEMENT_SEED_CHANGE_RECORD" =~ ^[A-Za-z0-9._:/-]{1,200}$ ]]; then
+              echo "Element seed change recordの形式が不正です"
               exit 1
             fi
           fi
@@ -540,7 +583,7 @@ jobs:
           echo "account deletion execute前のdry-runを確認しました"
 
       - name: Setup Node.js
-        if: env.OPERATION == 'migrate-deploy' || env.OPERATION == 'account-deletion-dry-run' || env.OPERATION == 'account-deletion-execute'
+        if: env.OPERATION == 'migrate-deploy' || env.OPERATION == 'account-deletion-dry-run' || env.OPERATION == 'account-deletion-execute' || env.OPERATION == 'seed-elements'
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -548,9 +591,104 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - name: Install backend dependencies
-        if: env.OPERATION == 'migrate-deploy' || env.OPERATION == 'account-deletion-dry-run' || env.OPERATION == 'account-deletion-execute'
+        if: env.OPERATION == 'migrate-deploy' || env.OPERATION == 'account-deletion-dry-run' || env.OPERATION == 'account-deletion-execute' || env.OPERATION == 'seed-elements'
         working-directory: backend
         run: npm ci
+
+      - name: Validate exact production database target
+        if: env.OPERATION == 'seed-elements'
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PRODUCTION_SUPABASE_PROJECT_REF: ${{ secrets.PRODUCTION_SUPABASE_PROJECT_REF }}
+        run: npm run production:validate-database-target
+
+      - name: Validate current migrations before production Element seed
+        if: env.OPERATION == 'seed-elements'
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          migration_log="$RUNNER_TEMP/production-element-seed-migration-status.log"
+          cleanup_migration_log() {
+            rm -f "$migration_log"
+          }
+          trap cleanup_migration_log EXIT
+
+          if ! npx prisma migrate status > "$migration_log" 2>&1; then
+            echo "production Element seed前にmigrationがcurrentであることを確認できませんでした"
+            exit 1
+          fi
+
+          cleanup_migration_log
+          trap - EXIT
+          echo "production Element seed前のmigration状態を確認しました"
+
+      - name: Seed production Elements
+        if: env.OPERATION == 'seed-elements'
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          seed_log="$RUNNER_TEMP/production-element-seed.log"
+          cleanup_seed_log() {
+            rm -f "$seed_log"
+          }
+          trap cleanup_seed_log EXIT
+
+          if ! npm run seed:elements > "$seed_log" 2>&1; then
+            echo "production元素データの投入に失敗しました"
+            exit 1
+          fi
+          if ! grep -Fq "完了: 118 件の元素を登録しました" "$seed_log"; then
+            echo "production元素データの投入結果を確認できませんでした"
+            exit 1
+          fi
+
+          cleanup_seed_log
+          trap - EXIT
+          echo "production元素データ118件を原子的にupsertしました"
+
+      - name: Verify production Elements independently
+        if: env.OPERATION == 'seed-elements'
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          verify_log="$RUNNER_TEMP/production-element-seed-verify.log"
+          cleanup_verify_log() {
+            rm -f "$verify_log"
+          }
+          trap cleanup_verify_log EXIT
+
+          if ! npm run verify:element-seed > "$verify_log" 2>&1; then
+            echo "production元素データ118件の独立検証に失敗しました"
+            exit 1
+          fi
+          if ! grep -Fq "確認完了: 118 件の元素が正本と一致しました" "$verify_log"; then
+            echo "production元素データ118件の独立検証結果を確認できませんでした"
+            exit 1
+          fi
+
+          cleanup_verify_log
+          trap - EXIT
+          echo "production元素データ118件を独立検証しました"
+
+      - name: Record production Element seed change
+        if: env.OPERATION == 'seed-elements'
+        run: |
+          {
+            echo "### Production Element seed change"
+            echo
+            echo "- Reviewed SHA: verified"
+            echo "- Approver: recorded"
+            echo "- Change record: recorded"
+            echo "- Database target: verified without displaying values"
+            echo "- Element count and canonical data: 118 verified"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Preview legacy soft-deleted users
         if: env.OPERATION == 'account-deletion-dry-run'
