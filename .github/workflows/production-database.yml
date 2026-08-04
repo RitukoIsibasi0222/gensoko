@@ -640,7 +640,17 @@ jobs:
           trap cleanup_seed_log EXIT
 
           if ! npm run seed:elements > "$seed_log" 2>&1; then
-            echo "production元素データの投入に失敗しました"
+            if grep -Fq "元素データの事前状態が空または正本118件ではありません" "$seed_log"; then
+              echo "production元素データの事前状態が正本条件と一致しないため停止しました"
+            elif grep -Fq "元素データのトランザクション内検証に失敗しました" "$seed_log"; then
+              echo "production元素データのトランザクション内検証に失敗しました"
+            elif grep -Fq "元素データのDBトランザクション実行に失敗しました" "$seed_log"; then
+              echo "production元素データのDBトランザクション実行に失敗しました"
+            elif grep -Fq "元素データ投入後のDB接続終了に失敗しました" "$seed_log"; then
+              echo "production元素データ投入後のDB接続終了に失敗しました"
+            else
+              echo "production元素データの投入に失敗しました"
+            fi
             exit 1
           fi
           if ! grep -Fq "完了: 118 件の元素を登録しました" "$seed_log"; then

@@ -3,10 +3,12 @@ import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { seedElements } from "./seedElements.js";
+import { ElementSeedStateError, seedElements } from "./seedElements.js";
 
 const COMPLETED_MESSAGE = "完了: 118 件の元素を登録しました";
-const FAILED_MESSAGE = "元素データの投入に失敗しました";
+const PREFLIGHT_FAILED_MESSAGE = "元素データの事前状態が空または正本118件ではありません";
+const VERIFICATION_FAILED_MESSAGE = "元素データのトランザクション内検証に失敗しました";
+const TRANSACTION_FAILED_MESSAGE = "元素データのDBトランザクション実行に失敗しました";
 const DISCONNECT_FAILED_MESSAGE = "元素データ投入後のDB接続終了に失敗しました";
 const ELEMENT_SEED_TRANSACTION_OPTIONS = {
   maxWait: 10_000,
@@ -14,6 +16,14 @@ const ELEMENT_SEED_TRANSACTION_OPTIONS = {
 } as const;
 
 export type ElementSeedTransactionClient = Pick<PrismaClient, "$transaction" | "$disconnect">;
+
+function seedFailureMessage(error: unknown): string {
+  if (error instanceof ElementSeedStateError) {
+    return error.stage === "preflight" ? PREFLIGHT_FAILED_MESSAGE : VERIFICATION_FAILED_MESSAGE;
+  }
+
+  return TRANSACTION_FAILED_MESSAGE;
+}
 
 export async function runSeedElementsCli(
   client: ElementSeedTransactionClient,
@@ -27,11 +37,11 @@ export async function runSeedElementsCli(
       ELEMENT_SEED_TRANSACTION_OPTIONS,
     );
     if (result.count !== 118) {
-      throw new Error(FAILED_MESSAGE);
+      throw new ElementSeedStateError("verification");
     }
     logger.info(COMPLETED_MESSAGE);
-  } catch {
-    logger.error(FAILED_MESSAGE);
+  } catch (error) {
+    logger.error(seedFailureMessage(error));
     exitCode = 1;
   }
 

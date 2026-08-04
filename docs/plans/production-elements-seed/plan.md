@@ -94,6 +94,12 @@ APIのendpoint、request、response、status、error messageは変更しない�
 ```typescript
 export const ELEMENT_SEED: readonly Element[];
 
+export type ElementSeedStateStage = "preflight" | "verification";
+
+export class ElementSeedStateError extends Error {
+  constructor(public readonly stage: ElementSeedStateStage);
+}
+
 export async function seedElements(
   client: ElementSeedClient,
 ): Promise<{ count: number }>;
@@ -120,6 +126,7 @@ export function validateProductionDatabaseTarget(
 | PES7     | 最終品質gate                       | backend                 | 高     | 外部DB・workflowなし   |
 | PES8     | commit・push・PR                   | Git/GitHub              | 高     | base develop           |
 | PES9     | production初回失敗のtimeout修正    | backend/workflow/docs   | 高     | 再実行は別承認         |
+| PES10    | production再失敗の安全カテゴリ診断 | backend/workflow/docs   | 高     | raw error非表示        |
 
 - [x] PES1: 計画・進捗記録
 - [x] PES2: production DB target validator
@@ -130,6 +137,7 @@ export function validateProductionDatabaseTarget(
 - [x] PES7: 最終品質gate
 - [x] PES8: commit・push・develop向けPR
 - [x] PES9: production初回失敗のtransaction timeout修正
+- [x] PES10: production再失敗の安全カテゴリ診断
 
 ## 技術的注意点
 
@@ -165,13 +173,18 @@ export function validateProductionDatabaseTarget(
 - production DB接続、production workflow実行、外部deploy: 未実施
 - timeout修正後の関連test: 38件成功
 - timeout修正後のbackend全test 1302件、Workers test 32件、build / lint / format check / Prisma schema validate: 成功
+- 安全診断修正の対象test: 24件成功、関連test: 34件成功
+- 安全診断修正後のbackend全test: 1304件成功、10件skip
+- 安全診断修正後のWorkers test 32件、build / Workers build / lint / format check / Prisma schema validate、workflow・正本Prettier check: 成功
 
 ## Production初回実行の停止記録
 
 - production seedの初回runは、main・入力・DB target・migration currentの検証成功後、`Seed production Elements`で失敗した。
 - Element APIは失敗後も空配列を返し、transaction rollbackにより部分投入が残っていないことを確認した。
-- Prisma interactive transactionの既定timeoutが5秒である一方、118件を逐次upsertするCLIがtimeoutを明示していなかった。
-- 有限120秒のtransaction timeout、10秒のmaxWait、workflow stepの3分上限をTDDで追加し、review・main昇格・別の明示承認が完了するまで再実行しない。
+- Prisma interactive transactionの既定timeoutが5秒である一方、118件を逐次upsertするCLIがtimeoutを明示していなかったため、有限120秒のtransaction timeout、10秒のmaxWait、workflow stepの3分上限を防御的に追加した。
+- timeout修正をreview・main昇格し、別の明示承認後に再実行したが、2回目もDB target・migration current成功後のseed stepで失敗し、独立verify前に安全停止した。GitHubのstep時刻は同一秒内であり、120秒上限到達ではないため、timeoutを根因とする断定を撤回した。
+- 同じCLIはローカルPostgreSQLの既存正本118件と、新規一時空DBへのmigration後のseed・独立verifyで成功した。一時DBは検証後に削除し、残存0件を確認した。
+- production固有の既存状態不一致、transaction内検証不一致、DB transaction失敗、disconnect失敗をraw errorなしの固定カテゴリで区別し、workflowはallowlist済み固定文言だけを表示する。review・main昇格・別の明示承認が完了するまで再実行しない。
 
 ## 実装完了
 
@@ -219,3 +232,12 @@ export function validateProductionDatabaseTarget(
 - Red: transaction optionsとworkflow step上限が未指定で2 test失敗
 - Green: maxWait 10秒・timeout 120秒・workflow step 3分上限を追加し、対象14 testと関連38 test成功
 - production再実行: review・develop/main昇格・別の明示承認まで未実施
+
+### Production再実行失敗からの安全診断修正
+
+- 修正日: 2026-08-04
+- 修正ブランチ: `fix/production-elements-seed-safe-diagnostics`
+- Red: 状態段階・CLI固定カテゴリ・workflow allowlistが未実装で対象8 test失敗
+- Green: preflight / verification段階、DB transaction・disconnectを含む固定カテゴリを追加し、対象24 test・関連34 test成功
+- 最終品質gate: backend全1304 test成功・10件skip、Workers 32 test、build / Workers build / lint / format check / Prisma schema validate、workflow・正本Prettier check成功
+- production再実行: review・develop/main昇格・別の明示承認まで禁止
