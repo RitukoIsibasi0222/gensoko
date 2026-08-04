@@ -118,6 +118,16 @@ describe("production database GitHub Actions workflow", () => {
     expect(workflow).toContain('seed_log="$RUNNER_TEMP/production-element-seed.log"');
     expect(workflow).toContain('verify_log="$RUNNER_TEMP/production-element-seed-verify.log"');
     expect(workflow).toContain('npm run seed:elements > "$seed_log" 2>&1');
+    expect(workflow).toContain(
+      'grep -Fq "元素データの事前状態が空または正本118件ではありません" "$seed_log"',
+    );
+    expect(workflow).toContain(
+      'grep -Fq "元素データのトランザクション内検証に失敗しました" "$seed_log"',
+    );
+    expect(workflow).toContain(
+      'grep -Fq "元素データのDBトランザクション実行に失敗しました" "$seed_log"',
+    );
+    expect(workflow).toContain('grep -Fq "元素データ投入後のDB接続終了に失敗しました" "$seed_log"');
     expect(workflow).toContain('npm run verify:element-seed > "$verify_log" 2>&1');
     expect(workflow).not.toContain('cat "$seed_log"');
     expect(workflow).not.toContain('cat "$verify_log"');

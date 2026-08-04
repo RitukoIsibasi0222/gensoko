@@ -179,7 +179,8 @@ pending Prisma migrationがない通常経路の追加workflow dispatchは、既
 - validation、target、migration、preflight、seed、verifyのどれかが失敗した場合は、元素一覧やgame requestを増やさずM6を停止する。
 - raw logを表示・Artifact化せず、固定errorとsource testから原因を調査する。
 - transaction失敗は部分投入を残さない。状態不明時は直接query・DELETE・再seedを行わず、read-only確認と新しい承認を先に行う。
-- 初回runはPrisma既定5秒timeoutを明示変更していなかったためseed stepで失敗し、Element APIの空配列からrollbackを確認した。有限timeout修正をreview・main昇格した後も、別の明示承認まで再実行しない。
+- 初回runはseed stepで失敗し、Element APIの空配列からrollbackを確認した。既定5秒timeoutを根因候補として有限120秒timeout・10秒maxWait・workflow 3分上限を追加したが、review・main昇格・別承認後の2回目もDB target・migration current成功後のseed stepで即時失敗したため、timeoutを根因とする断定は撤回する。
+- 同じCLIはローカルPostgreSQLの既存正本118件と新規一時空DBの両方でseed・独立verifyに成功した。production固有の既存状態不一致、transaction内検証不一致、DB transaction失敗、disconnect失敗をraw errorなしの固定allowlistで区別できる修正をreview・main昇格し、さらに別の明示承認を得るまで再実行しない。
 - 正規118件への再実行は冪等だが、成功runを理由なく再実行しない。
 - workflow成功後はproduction元素一覧で118件を確認し、同じsynthetic Userでgame、ranking、rate limit、security、本人退会、cleanupへ進む。
 
