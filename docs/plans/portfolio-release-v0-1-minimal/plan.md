@@ -62,6 +62,12 @@ Gensokoを、一般ユーザーが登録・メール認証・ログイン・学�
 - password verifier DOの通常版を配備し、main Workerのlocal bcrypt fallbackを禁止する。
 - raw password、hash、email、username、User ID、IP、token、Cookie、Authorization、DB URL、Secret、resource ID、raw errorを証拠へ記録しない。
 
+### scheduled production DB workflowのrelease安全境界
+
+`Production Database Operations`の旧scheduled経路は、kill switch判定より前にrequired reviewer付き`production` Environmentとmanual用concurrencyへ入り、旧main SHAのwaiting / pending runとしてmanual production gateを阻害できた。恒久修正ではEnvironmentを持たないpreflightで`disabled / skipped / failure / ready`を固定分類し、kill switch無効時はSecret、checkout、依存導入、DB接続、concurrency取得より前に終了する。`ready`だけをschedule=`production-batch`＋専用group、manual=`production`＋既存manual groupへ送る。`cancel-in-progress: false`は維持し、実行中DB操作を自動中断しない。
+
+このfixを含むmain SHAがreviewされるまで、`Production Database Operations`のmanual dispatch、再実行、Environment承認を行わない。古いrunのcleanupが必要でも自動cancelせず、step未開始と中断影響を確認してrunごとに別承認を得る。M6用productionユーザー、専用メールルーティング、cleanup手順は変更しない。`PRODUCTION_SCHEDULED_BATCH_ENABLED=false`とBO15未実施を維持する。
+
 ## 対象ファイル一覧
 
 | ファイル                                                        | 変更種別 | 内容                                                       |

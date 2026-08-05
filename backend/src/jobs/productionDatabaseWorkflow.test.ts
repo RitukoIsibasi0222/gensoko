@@ -1,4 +1,7 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -24,24 +27,99 @@ function countOccurrences(source: string, fragment: string): number {
   return source.split(fragment).length - 1;
 }
 
+function extractPreflightScript(workflow: string): string {
+  const stepStart = workflow.indexOf("      - name: Resolve and classify request");
+  const runStart = workflow.indexOf("        run: |\n", stepStart);
+  const jobEnd = workflow.indexOf("\n  production-database:", runStart);
+
+  expect(stepStart).toBeGreaterThanOrEqual(0);
+  expect(runStart).toBeGreaterThan(stepStart);
+  expect(jobEnd).toBeGreaterThan(runStart);
+
+  return workflow
+    .slice(runStart + "        run: |\n".length, jobEnd)
+    .split("\n")
+    .map((line) => (line.startsWith("          ") ? line.slice(10) : line))
+    .join("\n");
+}
+
 describe("production database GitHub Actions workflow", () => {
   const workflow = readFileSync(WORKFLOW_PATH, "utf8");
 
-  it("skips non-main schedules and rejects non-main manual runs before Environment and secrets", () => {
-    const validationJobStart = workflow.indexOf("  validate-production-branch:");
+  it("classifies every request before Environment, secrets, dependencies, or database access", () => {
+    const validationJobStart = workflow.indexOf("  validate-production-request:");
     const productionJobStart = workflow.indexOf("  production-database:");
     const validationJob = workflow.slice(validationJobStart, productionJobStart);
 
     expect(validationJobStart).toBeGreaterThanOrEqual(0);
     expect(productionJobStart).toBeGreaterThan(validationJobStart);
-    expect(validationJob).toContain(
-      "if: github.event_name != 'schedule' || github.ref_name == 'main'",
-    );
+    expect(validationJob).toContain("PRODUCTION_SCHEDULED_BATCH_ENABLED");
+    expect(validationJob).toContain('result_category="disabled"');
+    expect(validationJob).toContain('result_category="skipped"');
+    expect(validationJob).toContain('result_category="failure"');
+    expect(validationJob).toContain('result_category="ready"');
+    expect(validationJob).toContain('should_run="false"');
+    expect(validationJob).toContain('should_run="true"');
     expect(validationJob).toContain('if [ "$GITHUB_REF_NAME" != "main" ]; then');
     expect(validationJob).toContain("permissions: {}");
     expect(validationJob).not.toContain("environment:");
     expect(validationJob).not.toContain("secrets.");
-    expect(workflow.slice(productionJobStart)).toContain("needs: validate-production-branch");
+    expect(validationJob).not.toContain("actions/checkout");
+    expect(validationJob).not.toContain("npm ");
+    expect(validationJob).not.toContain("psql ");
+    expect(workflow.slice(productionJobStart)).toContain("needs: validate-production-request");
+    expect(workflow.slice(productionJobStart)).toContain(
+      "if: needs.validate-production-request.outputs.should_run == 'true'",
+    );
+  });
+
+  it("ends a disabled schedule before operation resolution and exposes only a fixed safe category", () => {
+    const validationJobStart = workflow.indexOf("  validate-production-request:");
+    const productionJobStart = workflow.indexOf("  production-database:");
+    const validationJob = workflow.slice(validationJobStart, productionJobStart);
+    const disabledCheckIndex = validationJob.indexOf(
+      'if [ "$PRODUCTION_SCHEDULED_BATCH_ENABLED" != "true" ]; then',
+    );
+    const scheduleResolutionIndex = validationJob.indexOf('case "$SCHEDULE_EXPRESSION" in');
+
+    expect(disabledCheckIndex).toBeGreaterThanOrEqual(0);
+    expect(scheduleResolutionIndex).toBeGreaterThan(disabledCheckIndex);
+    expect(validationJob).toContain('echo "- Result category: $result_category"');
+    expect(validationJob).toContain("- Database access: not started");
+    expect(validationJob).not.toContain('echo "$PRODUCTION_SCHEDULED_BATCH_ENABLED"');
+  });
+
+  it("reproduces a disabled schedule locally without entering protected work", () => {
+    const temporaryDirectory = mkdtempSync(join(tmpdir(), "gensoko-production-preflight-"));
+    const outputPath = join(temporaryDirectory, "output.txt");
+    const summaryPath = join(temporaryDirectory, "summary.txt");
+
+    try {
+      const result = spawnSync("bash", ["-c", extractPreflightScript(workflow)], {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GITHUB_EVENT_NAME: "schedule",
+          GITHUB_REF_NAME: "main",
+          GITHUB_OUTPUT: outputPath,
+          GITHUB_STEP_SUMMARY: summaryPath,
+          PRODUCTION_SCHEDULED_BATCH_ENABLED: "false",
+          REQUESTED_OPERATION: "",
+          SCHEDULE_EXPRESSION: CAPACITY_CHECK_CRON,
+        },
+      });
+
+      expect(result.status).toBe(0);
+      expect(readFileSync(outputPath, "utf8")).toBe(
+        "operation=none\nresult_category=disabled\nshould_run=false\n",
+      );
+      expect(readFileSync(summaryPath, "utf8")).toContain("- Result category: disabled");
+      expect(readFileSync(summaryPath, "utf8")).toContain("- Database access: not started");
+      expect(result.stdout).toContain("kill switchにより無効です");
+      expect(result.stderr).toBe("");
+    } finally {
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
   });
 
   it("schedules encrypted backups daily at JST 04:41 without changing the capacity schedule", () => {
@@ -54,15 +132,33 @@ describe("production database GitHub Actions workflow", () => {
     ).toBe(1);
   });
 
-  it("fixes every operation to production and serializes database jobs", () => {
+  it("keeps manual protection while separating scheduled Environment and concurrency", () => {
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("          - backup");
     expect(workflow).toContain("schedule:");
-    expect(workflow).toContain("environment: production");
+    expect(workflow).toContain(
+      "name: ${{ github.event_name == 'schedule' && 'production-batch' || 'production' }}",
+    );
     expect(workflow).not.toContain("environment: staging");
-    expect(workflow).toContain("group: gensoko-batch-jobs");
+    expect(workflow).toContain(
+      "group: ${{ github.event_name == 'schedule' && 'gensoko-scheduled-production-database' || 'gensoko-batch-jobs' }}",
+    );
     expect(workflow).toContain("cancel-in-progress: false");
     expect(workflow).toContain("permissions:\n      actions: read\n      contents: read");
+  });
+
+  it("resolves the requested operation before the protected production job", () => {
+    const validationJobStart = workflow.indexOf("  validate-production-request:");
+    const productionJobStart = workflow.indexOf("  production-database:");
+    const validationJob = workflow.slice(validationJobStart, productionJobStart);
+    const productionJob = workflow.slice(productionJobStart);
+
+    expect(validationJob).toContain('operation="$REQUESTED_OPERATION"');
+    expect(validationJob).toContain('echo "operation=$operation" >> "$GITHUB_OUTPUT"');
+    expect(productionJob).toContain(
+      "OPERATION: ${{ needs.validate-production-request.outputs.operation }}",
+    );
+    expect(productionJob).not.toContain("- name: Resolve requested operation");
   });
 
   it("adds a manual-only production Element seed operation with explicit approval inputs", () => {
@@ -204,6 +300,9 @@ describe("production database GitHub Actions workflow", () => {
     expect(workflow).toContain("SELECT pg_database_size(current_database());");
     expect(workflow).toContain("容量警告");
     expect(workflow).toContain("容量重大");
+    expect(workflow).toContain('capacity_error_log="$RUNNER_TEMP/production-capacity-error.log"');
+    expect(workflow).toContain('2>"$capacity_error_log"');
+    expect(workflow).not.toContain('cat "$capacity_error_log"');
   });
 
   it("uploads only an encrypted logical backup and verifies it before upload", () => {
@@ -218,6 +317,9 @@ describe("production database GitHub Actions workflow", () => {
     expect(workflow).toContain("tar -tzf");
     expect(workflow).toContain("sha256sum");
     expect(workflow).toContain("trap cleanup_plaintext EXIT");
+    expect(workflow).toContain('backup_command_log="$RUNNER_TEMP/production-backup-command.log"');
+    expect(workflow).toContain('> "$backup_command_log" 2>&1');
+    expect(workflow).not.toContain('cat "$backup_command_log"');
     expect(workflow).toContain("actions/upload-artifact@v4");
     expect(workflow).toContain("retention-days: 7");
     expect(workflow).toContain("path: ${{ runner.temp }}/production-db-artifacts");
