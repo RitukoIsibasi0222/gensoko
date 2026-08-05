@@ -109,6 +109,36 @@ describe("production database GitHub Actions workflow", () => {
     expect(seedIndex).toBeGreaterThan(startupProbeIndex);
   });
 
+  it("generates Prisma Client only for Element seed before database access and module loading", () => {
+    const installIndex = workflow.indexOf("- name: Install backend dependencies");
+    const generateStepStart = workflow.indexOf(
+      "- name: Generate Prisma Client for production Element seed",
+    );
+    const targetValidationIndex = workflow.indexOf(
+      "- name: Validate exact production database target",
+    );
+    const startupProbeIndex = workflow.indexOf("node --import tsx --input-type=module --eval");
+
+    expect(installIndex).toBeGreaterThanOrEqual(0);
+    expect(generateStepStart).toBeGreaterThan(installIndex);
+    expect(targetValidationIndex).toBeGreaterThan(generateStepStart);
+    expect(startupProbeIndex).toBeGreaterThan(targetValidationIndex);
+
+    const generateStep = workflow.slice(generateStepStart, targetValidationIndex);
+
+    expect(generateStep).toContain("if: env.OPERATION == 'seed-elements'");
+    expect(generateStep).toContain("working-directory: backend");
+    expect(generateStep).toContain(
+      'generate_log="$RUNNER_TEMP/production-element-seed-prisma-generate.log"',
+    );
+    expect(generateStep).toContain('npx prisma generate > "$generate_log" 2>&1');
+    expect(generateStep).toContain('rm -f "$generate_log"');
+    expect(generateStep).toContain("production元素データ用Prisma Clientの生成に失敗しました");
+    expect(generateStep).not.toContain('cat "$generate_log"');
+    expect(generateStep).not.toContain("DATABASE_URL");
+    expect(generateStep).not.toContain("secrets.");
+  });
+
   it("hides seed logs and independently verifies the committed 118 Elements", () => {
     const seedStepStart = workflow.indexOf("- name: Seed production Elements");
     const verifyStepStart = workflow.indexOf("- name: Verify production Elements independently");

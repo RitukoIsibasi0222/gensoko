@@ -166,12 +166,13 @@ pending Prisma migrationがない通常経路の追加workflow dispatchは、既
 
 1. Environment・Secretへ到達する前に`main`を検証する。
 2. manual operation、実行SHA、固定確認文字列、承認者、change recordを検証する。
-3. production project refとSession pooler接続先を値非表示で完全検証する。
-4. migrationがcurrentであることを生log非表示で確認する。
-5. Elementが0件または既に正本118件のどちらかであることをtransaction内で確認する。部分件数、余分なrow、field不一致があればwrite前に停止する。
-6. 118件を同一transactionで主キー`upsert`し、transaction内で件数・ID集合・全fieldの正本一致を検証する。interactive transactionはmaxWait 10秒・timeout 120秒、workflowのseed stepは3分上限とし、無制限に待機させない。
-7. commit後に別process・別接続で同じ118件完全一致を再検証する。
-8. Summaryにはreview・承認記録・DB target・118件検証の固定statusだけを残し、入力値やDB値を表示しない。
+3. `npm ci`後、`seed-elements`時だけPrisma Clientを生成する。生成logは一時fileへ閉じ、成功・失敗とも削除して固定文言だけを表示する。DB接続情報をstepへ渡さない。
+4. production project refとSession pooler接続先を値非表示で完全検証する。
+5. migrationがcurrentであることを生log非表示で確認する。
+6. Elementが0件または既に正本118件のどちらかであることをtransaction内で確認する。部分件数、余分なrow、field不一致があればwrite前に停止する。
+7. 118件を同一transactionで主キー`upsert`し、transaction内で件数・ID集合・全fieldの正本一致を検証する。interactive transactionはmaxWait 10秒・timeout 120秒、workflowのseed stepは3分上限とし、無制限に待機させない。
+8. commit後に別process・別接続で同じ118件完全一致を再検証する。
+9. Summaryにはreview・承認記録・DB target・118件検証の固定statusだけを残し、入力値やDB値を表示しない。
 
 #### 成功・停止・再実行
 
@@ -183,6 +184,8 @@ pending Prisma migrationがない通常経路の追加workflow dispatchは、既
 - 同じCLIはローカルPostgreSQLの既存正本118件と新規一時空DBの両方でseed・独立verifyに成功した。production固有の既存状態不一致、transaction内検証不一致、DB transaction失敗、disconnect失敗をraw errorなしの固定allowlistで区別できる修正をreview・main昇格した。
 - 上記修正後の別承認付き3回目は、main・入力・target・migration current成功後のseed stepでtransaction内4分類へ到達せず汎用fallbackへ安全停止し、独立verifyはskip、失敗後の元素一覧も空のままだった。CLI client初期化失敗を固定分類し、entrypoint開始markerの有無で起動前・起動後の予期せぬ失敗を区別する。追加修正のreview・main昇格・さらに別の明示承認が完了するまで再実行しない。
 - CLI起動境界修正後の別承認付き4回目は、main・入力・target・migration current成功後のseed stepでCLI起動前カテゴリへ0秒で安全停止し、独立verifyはskip、失敗後の元素一覧も空のままだった。remote mainに最新markerが存在し、同じNode+tsx直接entrypointはローカルの到達不能接続を固定transactionカテゴリへ変換できることを確認した。production workflowでは書込前module-load probeを実行し、seed・独立verifyをnpm wrapperではなくNode+tsxで直接起動する。追加修正のreview・main昇格・さらに別の明示承認が完了するまで再実行しない。
+- Node+tsx直接entrypoint修正後の別承認付き5回目は、main・入力・target・migration current成功後、書込前module-load probeで`module_load_failure`へ安全停止した。書込み用CLI本体とDB transactionには未到達で、独立verifyはskip、失敗後の元素一覧は0件のままだった。同じrunを再実行しない。
+- production接続・Secretなしのclean一時環境で、実workflow相当の`npm ci`直後はPrisma Client生成物がなくmodule importが失敗し、`npx prisma generate`後は生成物が作成され同importが成功することを確認した。production workflowではseed時だけ`npm ci`後・DB target検証前にPrisma Clientを生成し、生の生成logを表示しない。追加修正のreview・develop/main再昇格・さらに別の明示承認が完了するまで再実行しない。
 - 正規118件への再実行は冪等だが、成功runを理由なく再実行しない。
 - workflow成功後はproduction元素一覧で118件を確認し、同じsynthetic Userでgame、ranking、rate limit、security、本人退会、cleanupへ進む。
 
@@ -1176,8 +1179,8 @@ Artifactは`m2-staging-release-candidate-evidence`という固定名のexact JSO
 [x] M1R: c3ca68c5173c1fb586162418e839baec8cc49bf3でDB 5項目clear・unknown 0件とowner判断を再確認
 [x] M3: 3370cefbc6934e5e3d68ddf9c22eaaf4c5a634aeで最終品質gateとproduction依存監査を完了
 [x] M4: backup run 30301334445確認後、対象SHA `7dbe5649a4057baa3b123aaadb6531422f96fd2f`のmigration run 30342343404と、検証run 30406227957の`indisvalid`・`indisready`値非表示確認が成功
-[ ] M5: URL/Cookie/CORS/メール/Secret/bindingを値非表示でpreflightし、承認後にdeploy
-[ ] M6: production synthetic userで主要導線、通常DO、最小429、securityを確認し、退会・cleanup・記録を完了
+[x] M5: URL/Cookie/CORS/メール/Secret/bindingを値非表示でpreflightし、承認後にAPI・frontend deployと両health確認を完了
+[-] M6: 登録・メール認証・login・reload後の認証維持まで成功。第五回Element seedは`module_load_failure`で書込み前に停止し、元素0件・独立verify skipを維持。Prisma Client生成修正のreview・main昇格・別承認付き成功までgame以降を停止
 ```
 
 2026-07-28のM3では、初回production監査で検出したbackend High 3件・Moderate 4件を関連依存の更新で解消した。PR review対応でbackendのNode runtimeを`22.x`へ固定し、CIと同じNode 22.23.1 / npm 10.9.8でlockfileを再生成した。review済み実行SHA `3370cefbc6934e5e3d68ddf9c22eaaf4c5a634ae`で`npm ci`、backend通常test 1268件・Workers test 32件、frontend test 680件、両build、lint、format、Prisma validate、Svelte checkが成功し、backend/frontendのproduction依存はCritical 0、High 0、Moderate 0、Low 0となった。Moderateの個別判断対象はない。全依存ではbackend dev-onlyの`esbuild@0.27.7`にLow 1件が残るが、`tsx`経由でproductionへ到達せず、Windows開発serverを公開しない。2026-08-31または上流修正版公開時の早い方で再確認する。
