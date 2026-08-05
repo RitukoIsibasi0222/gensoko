@@ -162,6 +162,19 @@ describe("batch GitHub Actions workflow", () => {
     }
   });
 
+  it("documents the scheduled backup secret for production-batch without exposing its value", () => {
+    const documentedRows = deploymentGuide
+      .split("\n")
+      .filter(
+        (line) =>
+          line.startsWith("| production-batch") && line.includes("`BACKUP_ENCRYPTION_PASSPHRASE`"),
+      );
+
+    expect(documentedRows).toHaveLength(1);
+    expect(documentedRows[0]).toContain("別承認");
+    expect(documentedRows[0]).toContain("表示・記録しない");
+  });
+
   it("states that batch configuration belongs to Environments rather than repository-level Actions settings", () => {
     expect(deploymentGuide).toContain(
       "repository-level（Settings > Secrets and variables > Actions）へ登録せず、表に示す各Environmentへ登録する。",
@@ -175,15 +188,16 @@ describe("batch GitHub Actions workflow", () => {
     expect(workflow).toContain("cancel-in-progress: false");
   });
 
-  it("allows production-batch references only in the batch workflow", () => {
+  it("allows production-batch only in scheduled batch responsibility workflows", () => {
     const workflowFiles = readdirSync(WORKFLOWS_DIRECTORY).filter(
       (fileName) => fileName.endsWith(".yml") || fileName.endsWith(".yaml"),
     );
+    const allowedWorkflowFiles = new Set(["batch.yml", "production-database.yml"]);
 
     for (const fileName of workflowFiles) {
       const source = readFileSync(`${WORKFLOWS_DIRECTORY}/${fileName}`, "utf8");
 
-      if (fileName === "batch.yml") {
+      if (allowedWorkflowFiles.has(fileName)) {
         expect(source).toContain("production-batch");
       } else {
         expect(source, `${fileName} must not use production-batch`).not.toContain(
@@ -191,6 +205,14 @@ describe("batch GitHub Actions workflow", () => {
         );
       }
     }
+
+    const productionDatabaseWorkflow = readFileSync(
+      `${WORKFLOWS_DIRECTORY}/production-database.yml`,
+      "utf8",
+    );
+    expect(productionDatabaseWorkflow).toContain(
+      "name: ${{ github.event_name == 'schedule' && 'production-batch' || 'production' }}",
+    );
   });
 
   it("defines an always-on minimum-permission repository integrity check", () => {

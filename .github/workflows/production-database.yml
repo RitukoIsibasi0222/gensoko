@@ -65,51 +65,59 @@ on:
     - cron: "41 19 * * *"
 
 jobs:
-  validate-production-branch:
-    name: Validate production branch
-    if: github.event_name != 'schedule' || github.ref_name == 'main'
+  validate-production-request:
+    name: Validate production database request
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
+    outputs:
+      operation: ${{ steps.resolve-request.outputs.operation }}
+      result_category: ${{ steps.resolve-request.outputs.result_category }}
+      should_run: ${{ steps.resolve-request.outputs.should_run }}
     steps:
-      - name: Validate production branch
-        run: |
-          set -euo pipefail
-
-          if [ "$GITHUB_REF_NAME" != "main" ]; then
-            echo "production DB操作はmain branchから実行してください"
-            exit 1
-          fi
-
-  production-database:
-    name: Run production database operation
-    needs: validate-production-branch
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: production
-    concurrency:
-      group: gensoko-batch-jobs
-      cancel-in-progress: false
-    permissions:
-      actions: read
-      contents: read
-    env:
-      BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
-      ACCOUNT_DATA_DELETION_EXECUTE_ENABLED: ${{ vars.ACCOUNT_DATA_DELETION_EXECUTE_ENABLED }}
-      ACCOUNT_DATA_DELETION_BATCH_SIZE: ${{ vars.ACCOUNT_DATA_DELETION_BATCH_SIZE || '25' }}
-      DATABASE_QUOTA_BYTES: "500000000"
-      DATABASE_WARNING_PERCENT: "70"
-      DATABASE_CRITICAL_PERCENT: "85"
-
-    steps:
-      - name: Resolve requested operation
+      - name: Resolve and classify request
+        id: resolve-request
         env:
           REQUESTED_OPERATION: ${{ inputs.operation }}
           SCHEDULE_EXPRESSION: ${{ github.event.schedule }}
+          PRODUCTION_SCHEDULED_BATCH_ENABLED: ${{ vars.PRODUCTION_SCHEDULED_BATCH_ENABLED }}
         run: |
           set -euo pipefail
 
+          operation="none"
+          result_category="failure"
+          should_run="false"
+
+          record_result() {
+            echo "operation=$operation" >> "$GITHUB_OUTPUT"
+            echo "result_category=$result_category" >> "$GITHUB_OUTPUT"
+            echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Production database request preflight"
+              echo
+              echo "- Result category: $result_category"
+              echo "- Protected Environment: not entered"
+              echo "- Secrets: not accessed"
+              echo "- Dependencies: not installed"
+              echo "- Database access: not started"
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
+
           if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+            if [ "$GITHUB_REF_NAME" != "main" ]; then
+              result_category="skipped"
+              record_result
+              echo "scheduled production DB requestをbranch policyによりskipしました"
+              exit 0
+            fi
+
+            if [ "$PRODUCTION_SCHEDULED_BATCH_ENABLED" != "true" ]; then
+              result_category="disabled"
+              record_result
+              echo "scheduled production DB requestはkill switchにより無効です"
+              exit 0
+            fi
+
             case "$SCHEDULE_EXPRESSION" in
               "23 19 * * *")
                 operation="capacity-check"
@@ -118,25 +126,64 @@ jobs:
                 operation="backup"
                 ;;
               *)
+                record_result
                 echo "未対応の本番DB scheduleです"
                 exit 1
                 ;;
             esac
-          else
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$GITHUB_REF_NAME" != "main" ]; then
+              record_result
+              echo "production DB操作はmain branchから実行してください"
+              exit 1
+            fi
             operation="$REQUESTED_OPERATION"
+          else
+            record_result
+            echo "未対応の本番DB workflow eventです"
+            exit 1
           fi
 
           case "$operation" in
             capacity-check|backup|migrate-deploy|verify-v0-1-migration-indexes|account-deletion-dry-run|account-deletion-execute|seed-elements)
               ;;
             *)
+              operation="none"
+              record_result
               echo "未対応の本番DB操作です"
               exit 1
               ;;
           esac
 
-          printf 'OPERATION=%s\n' "$operation" >> "$GITHUB_ENV"
+          result_category="ready"
+          should_run="true"
+          record_result
+          echo "production DB requestのpreflightが完了しました"
 
+  production-database:
+    name: Run production database operation
+    needs: validate-production-request
+    if: needs.validate-production-request.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: ${{ github.event_name == 'schedule' && 'production-batch' || 'production' }}
+    concurrency:
+      group: ${{ github.event_name == 'schedule' && 'gensoko-scheduled-production-database' || 'gensoko-batch-jobs' }}
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: read
+    env:
+      OPERATION: ${{ needs.validate-production-request.outputs.operation }}
+      BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}
+      ACCOUNT_DATA_DELETION_EXECUTE_ENABLED: ${{ vars.ACCOUNT_DATA_DELETION_EXECUTE_ENABLED }}
+      ACCOUNT_DATA_DELETION_BATCH_SIZE: ${{ vars.ACCOUNT_DATA_DELETION_BATCH_SIZE || '25' }}
+      DATABASE_QUOTA_BYTES: "500000000"
+      DATABASE_WARNING_PERCENT: "70"
+      DATABASE_CRITICAL_PERCENT: "85"
+
+    steps:
       - name: Validate production environment
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -294,14 +341,24 @@ jobs:
         run: |
           set -euo pipefail
 
-          DATABASE_SIZE_BYTES="$(
+          capacity_error_log="$RUNNER_TEMP/production-capacity-error.log"
+          cleanup_capacity_error_log() {
+            rm -f "$capacity_error_log"
+          }
+          trap cleanup_capacity_error_log EXIT
+
+          if ! DATABASE_SIZE_BYTES="$(
             psql "$DATABASE_URL" \
               --no-psqlrc \
               --tuples-only \
               --no-align \
               --set ON_ERROR_STOP=1 \
-              --command "SELECT pg_database_size(current_database());"
-          )"
+              --command "SELECT pg_database_size(current_database());" \
+              2>"$capacity_error_log"
+          )"; then
+            echo "本番DB容量を安全に取得できませんでした"
+            exit 1
+          fi
           DATABASE_SIZE_BYTES="${DATABASE_SIZE_BYTES//[[:space:]]/}"
 
           if ! [[ "$DATABASE_SIZE_BYTES" =~ ^[0-9]+$ ]]; then
@@ -333,6 +390,8 @@ jobs:
             exit 1
           fi
 
+          cleanup_capacity_error_log
+          trap - EXIT
           echo "本番DB容量は警告閾値未満です"
 
       - name: Verify v0.1 migration indexes
@@ -422,29 +481,43 @@ jobs:
           ARCHIVE_PATH="$WORK_DIR/production-db-backup-$GITHUB_RUN_ID.tar.gz"
           ENCRYPTED_PATH="$ARTIFACT_DIR/production-db-backup-$GITHUB_RUN_ID.tar.gz.gpg"
           VERIFY_ARCHIVE="$WORK_DIR/verified-backup.tar.gz"
+          backup_command_log="$RUNNER_TEMP/production-backup-command.log"
 
           cleanup_plaintext() {
             rm -rf "$PLAINTEXT_DIR" "$WORK_DIR"
+            rm -f "$backup_command_log"
           }
           trap cleanup_plaintext EXIT
 
           mkdir -p "$PLAINTEXT_DIR" "$WORK_DIR" "$ARTIFACT_DIR"
 
-          supabase db dump --db-url "$DATABASE_URL" --file "$PLAINTEXT_DIR/roles.sql" --role-only
-          supabase db dump --db-url "$DATABASE_URL" --file "$PLAINTEXT_DIR/schema.sql"
-          supabase db dump \
+          if ! supabase db dump --db-url "$DATABASE_URL" --file "$PLAINTEXT_DIR/roles.sql" --role-only > "$backup_command_log" 2>&1; then
+            echo "production role backupの作成に失敗しました"
+            exit 1
+          fi
+          if ! supabase db dump --db-url "$DATABASE_URL" --file "$PLAINTEXT_DIR/schema.sql" > "$backup_command_log" 2>&1; then
+            echo "production schema backupの作成に失敗しました"
+            exit 1
+          fi
+          if ! supabase db dump \
             --db-url "$DATABASE_URL" \
             --file "$PLAINTEXT_DIR/data.sql" \
             --data-only \
-            --use-copy
+            --use-copy > "$backup_command_log" 2>&1; then
+            echo "production data backupの作成に失敗しました"
+            exit 1
+          fi
 
           test -s "$PLAINTEXT_DIR/roles.sql"
           test -s "$PLAINTEXT_DIR/schema.sql"
           test -s "$PLAINTEXT_DIR/data.sql"
 
-          tar -C "$PLAINTEXT_DIR" -czf "$ARCHIVE_PATH" roles.sql schema.sql data.sql
+          if ! tar -C "$PLAINTEXT_DIR" -czf "$ARCHIVE_PATH" roles.sql schema.sql data.sql > "$backup_command_log" 2>&1; then
+            echo "production backup archiveの作成に失敗しました"
+            exit 1
+          fi
 
-          printf '%s' "$BACKUP_ENCRYPTION_PASSPHRASE" | gpg \
+          if ! printf '%s' "$BACKUP_ENCRYPTION_PASSPHRASE" | gpg \
             --batch \
             --yes \
             --pinentry-mode loopback \
@@ -452,17 +525,26 @@ jobs:
             --symmetric \
             --cipher-algo AES256 \
             --output "$ENCRYPTED_PATH" \
-            "$ARCHIVE_PATH"
+            "$ARCHIVE_PATH" > "$backup_command_log" 2>&1; then
+            echo "production backupの暗号化に失敗しました"
+            exit 1
+          fi
 
-          printf '%s' "$BACKUP_ENCRYPTION_PASSPHRASE" | gpg --decrypt \
+          if ! printf '%s' "$BACKUP_ENCRYPTION_PASSPHRASE" | gpg --decrypt \
             --batch \
             --yes \
             --pinentry-mode loopback \
             --passphrase-fd 0 \
             --output "$VERIFY_ARCHIVE" \
-            "$ENCRYPTED_PATH"
+            "$ENCRYPTED_PATH" > "$backup_command_log" 2>&1; then
+            echo "production backupの復号検証に失敗しました"
+            exit 1
+          fi
 
-          backup_contents="$(tar -tzf "$VERIFY_ARCHIVE")"
+          if ! backup_contents="$(tar -tzf "$VERIFY_ARCHIVE" 2>"$backup_command_log")"; then
+            echo "production backup内容の検証に失敗しました"
+            exit 1
+          fi
           for expected_file in roles.sql schema.sql data.sql; do
             if ! grep --fixed-strings --line-regexp --quiet "$expected_file" <<< "$backup_contents"; then
               echo "暗号化backupの検証に失敗しました"
@@ -470,10 +552,13 @@ jobs:
             fi
           done
 
-          (
+          if ! (
             cd "$ARTIFACT_DIR"
             sha256sum "$(basename "$ENCRYPTED_PATH")" > "$(basename "$ENCRYPTED_PATH").sha256"
-          )
+          ) 2>"$backup_command_log"; then
+            echo "production backup checksumの作成に失敗しました"
+            exit 1
+          fi
 
           cleanup_plaintext
           trap - EXIT
