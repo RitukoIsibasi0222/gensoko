@@ -82,7 +82,9 @@ describe("production account data deletion workflow", () => {
   it("production・main・execute flag・確認文字列・承認記録を必須にする", () => {
     const workflow = readProductionWorkflow();
 
-    expect(workflow).toContain("environment: production");
+    expect(workflow).toContain(
+      "name: ${{ github.event_name == 'schedule' && 'production-batch' || 'production' }}",
+    );
     expect(workflow).toContain("BATCH_ENVIRONMENT: ${{ vars.BATCH_ENVIRONMENT }}");
     expect(workflow).toContain(
       "ACCOUNT_DATA_DELETION_EXECUTE_ENABLED: ${{ vars.ACCOUNT_DATA_DELETION_EXECUTE_ENABLED }}",
@@ -127,7 +129,7 @@ describe("production account data deletion workflow", () => {
     expect(workflow).not.toContain('echo "$DATABASE_URL"');
   });
 
-  it("account deletionをscheduleから選択せず、既存batch concurrencyを維持する", () => {
+  it("account deletionをscheduleから選択せず、manual用batch concurrencyを維持する", () => {
     const workflow = readProductionWorkflow();
     const scheduleBranchStart = workflow.indexOf('if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then');
     const manualBranchStart = workflow.indexOf("else", scheduleBranchStart);
@@ -137,7 +139,9 @@ describe("production account data deletion workflow", () => {
     expect(manualBranchStart).toBeGreaterThan(scheduleBranchStart);
     expect(scheduleBranch).not.toContain("account-deletion-dry-run");
     expect(scheduleBranch).not.toContain("account-deletion-execute");
-    expect(workflow).toContain("group: gensoko-batch-jobs");
+    expect(workflow).toContain(
+      "group: ${{ github.event_name == 'schedule' && 'gensoko-scheduled-production-database' || 'gensoko-batch-jobs' }}",
+    );
     expect(workflow).toContain("cancel-in-progress: false");
   });
 });
