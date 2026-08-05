@@ -686,7 +686,7 @@ BO13後の再開順序は、M5 production preflight・deploy、M6 production smo
 ## 2026-08-05 Production Database Operations scheduled滞留の恒久修正
 
 - 実装ブランチ: `fix/production-scheduled-workflow-stall`
-- PR: develop向け作成後に追記
+- PR: develop向け作成済み（セキュリティ制約により識別子・URLは記録しない）
 - production状態変更: なし
 - kill switch: `false`維持
 - BO15: 未実施
