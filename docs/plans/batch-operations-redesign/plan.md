@@ -227,6 +227,7 @@ Cloudflare移行はproduction Worker安定稼働後の別タスクとする。
 | 種別     | 名前                            | 扱い                                                     |
 | -------- | ------------------------------- | -------------------------------------------------------- |
 | Secret   | `DATABASE_URL`                  | production専用Session pooler。値を取得・表示・記録しない |
+| Secret   | `BACKUP_ENCRYPTION_PASSPHRASE`  | scheduled暗号化backup専用。BO15前に別承認で追加する      |
 | Variable | `BATCH_ENVIRONMENT`             | `production`                                             |
 | Variable | `AUDIT_LOG_RETENTION_DAYS`      | 承認済みの`365`                                          |
 | Variable | `AUDIT_LOG_CLEANUP_ENABLED`     | release gate完了までは`false`                            |
@@ -257,7 +258,7 @@ repository Variable:
 
 このcheckはproduction Secretを一切参照せず、`contents: read`だけを持ち、次のbatch security contractを毎回検証する。
 
-- `production-batch`を参照できるworkflowは`.github/workflows/batch.yml`だけである。
+- `production-batch`を参照できるworkflowは`.github/workflows/batch.yml`と`.github/workflows/production-database.yml`だけで、いずれもscheduled経路に限定する。
 - `production-batch`は`workflow_dispatch`の入力候補ではない。
 - scheduled jobはkill switchが文字列`true`のときだけEnvironment評価へ進む。
 - manual productionは引き続き`production`を参照する。
@@ -347,7 +348,7 @@ export function runScheduledBatch(
    - scheduleは`production-batch`、manualは入力Environmentを参照する。
    - schedule/manualのconcurrency groupが異なる。
    - workflow_dispatchに`production-batch`選択肢がない。
-   - 全workflowを走査し、`production-batch`参照が`batch.yml`以外にない。
+   - 全workflowを走査し、`production-batch`参照が`batch.yml`と`production-database.yml`のscheduled経路以外にない。
 2. `scheduled.test.ts`を先に変更する。
    - 日次cronがGameQuestionSet cleanupを1回だけ呼ぶ。
    - 旧30分cronは受理しない。
@@ -390,27 +391,27 @@ DB schema / migrationを変更しないため、`prisma migrate deploy`とPlaywr
 
 ## テストケース一覧
 
-| ケース                        | 期待結果                                               |
-| ----------------------------- | ------------------------------------------------------ |
-| schedule・kill switch未設定   | jobはEnvironmentへ入らずskip                           |
-| schedule・kill switch=`false` | jobはEnvironmentへ入らずskip                           |
-| schedule・kill switch=`true`  | `production-batch`を参照                               |
-| manual staging                | `staging`を参照                                        |
-| manual production             | required reviewer付き`production`を参照                |
-| workflow_dispatch選択肢       | `production-batch`を選択できない                       |
-| workflow全体のEnvironment参照 | `production-batch`参照は`batch.yml`のscheduled経路だけ |
-| Repository Integrity trigger  | `develop`向け全PRでpath filterなしに起動               |
-| Repository Integrity権限      | `contents: read`のみ、Secret / Environment参照なし     |
-| GameQuestionSet cron          | `17 18 * * *`だけを登録                                |
-| 旧cron                        | `17,47 * * * *`と`*/30 * * * *`を登録・受理しない      |
-| weekly cron                   | 既存週次jobを実行                                      |
-| audit cron                    | 既存日次jobを実行                                      |
-| 未知cron                      | 固定日本語エラー、DB job 0回、CLI非0終了               |
-| scheduled concurrency         | `gensoko-scheduled-batch`                              |
-| manual concurrency            | `gensoko-batch-jobs`                                   |
-| scheduled active run中の次run | running runをcancelしない                              |
-| Secret欠落                    | DB処理・依存install前に失敗                            |
-| Environment識別不一致         | DB処理・依存install前に失敗                            |
+| ケース                        | 期待結果                                              |
+| ----------------------------- | ----------------------------------------------------- |
+| schedule・kill switch未設定   | jobはEnvironmentへ入らずskip                          |
+| schedule・kill switch=`false` | jobはEnvironmentへ入らずskip                          |
+| schedule・kill switch=`true`  | `production-batch`を参照                              |
+| manual staging                | `staging`を参照                                       |
+| manual production             | required reviewer付き`production`を参照               |
+| workflow_dispatch選択肢       | `production-batch`を選択できない                      |
+| workflow全体のEnvironment参照 | `production-batch`参照は2 workflowのscheduled経路だけ |
+| Repository Integrity trigger  | `develop`向け全PRでpath filterなしに起動              |
+| Repository Integrity権限      | `contents: read`のみ、Secret / Environment参照なし    |
+| GameQuestionSet cron          | `17 18 * * *`だけを登録                               |
+| 旧cron                        | `17,47 * * * *`と`*/30 * * * *`を登録・受理しない     |
+| weekly cron                   | 既存週次jobを実行                                     |
+| audit cron                    | 既存日次jobを実行                                     |
+| 未知cron                      | 固定日本語エラー、DB job 0回、CLI非0終了              |
+| scheduled concurrency         | `gensoko-scheduled-batch`                             |
+| manual concurrency            | `gensoko-batch-jobs`                                  |
+| scheduled active run中の次run | running runをcancelしない                             |
+| Secret欠落                    | DB処理・依存install前に失敗                           |
+| Environment識別不一致         | DB処理・依存install前に失敗                           |
 
 ## タスクリスト（進捗管理）
 
@@ -558,7 +559,7 @@ main確定SHAのM3・M1Rを再固定し、ポートフォリオ版v0.1のM5 prod
 | 自動EnvironmentのSecret露出面が増える     | main限定、scheduled専用、manual選択禁止、contents read、Secret非出力                   |
 | Environmentを別workflowから参照できる     | main限定policy、source contract、manual選択禁止、kill switchで低コストに多層防御       |
 | kill switch誤有効化                       | 初期false、外部preflight、review済みSHA、別承認                                        |
-| manual DB操作とscheduledが重なる          | kill switch停止手順、maintenance前確認、online-safeなPrisma操作のみ                    |
+| manual DB操作とscheduledが重なる          | scheduled専用concurrencyへ分離し、manual用groupを取得させない                          |
 | schedule遅延                              | jobはscheduled時刻ではなく実行時点の期限行を冪等処理。日次保守で厳密時刻を要件にしない |
 | 未知cronが正常表示される                  | fail-closedへ変更                                                                      |
 | Cloudflare移行との二重実行                | 本タスクではWorkers cronを追加しない。将来移行時にActions scheduleを先にdisable        |
@@ -681,6 +682,63 @@ PR #166のrepository実装ではGitHub Environment、Secret、Variable、ruleset
 外部設定記録はPR #168として`develop`へmerge済みで、merge commitは`4c1a3739b61698a8562fb91db425502c5fa8f872`、最終headは`d5f9d5c8f7b6d5e9495a345e403a84a2db3b1cd8`である。merge後の再監査でも、kill switchの無効状態、3 Environmentのbranch policy、`production` required reviewer、`production-batch`のSecret名・Variable名、active Batch Jobs 0件を値非表示で確認した。
 
 BO13後の再開順序は、M5 production preflight・deploy、M6 production smoke・cleanup、別承認によるBO15、自然発生するscheduled runのBO16、最終文書同期のBO18とする。この文書整備はBO15以降の実行許可ではなく、BO15/BO16/BO18は未完了を維持する。
+
+## 2026-08-05 Production Database Operations scheduled滞留の恒久修正
+
+- 実装ブランチ: `fix/production-scheduled-workflow-stall`
+- PR: develop向け作成後に追記
+- production状態変更: なし
+- kill switch: `false`維持
+- BO15: 未実施
+
+### 根因・再現条件・影響
+
+旧`Production Database Operations`はschedule trigger後、branch validationだけをEnvironment前に実行し、operation解決とkill switch判定をrequired reviewer付き`production` job内で行っていた。後続jobはmanualと同じ`gensoko-batch-jobs` group、`cancel-in-progress: false`だったため、scheduled 1件がEnvironment review待ちのwaiting、後続1件がpendingとなり、manual production DB操作の同一group取得を阻害できた。滞留中はproduction jobのstep開始0件で、Secret参照、依存導入、DB対象検証、capacity、backup、migration、seedは未開始だった。
+
+再現条件は、旧workflowを持つmain SHAのschedule、required reviewer付き`production`、同一manual concurrency、未承認waiting run、後続scheduleの組合せである。新しいpendingは既存pendingを置換し得るが、waiting側は`cancel-in-progress: false`で残るため、古いSHAのrunも明示cleanupまでmanual gateを阻害し得る。
+
+### 恒久設計と安全性
+
+1. Environment、Secret、checkout、依存導入、DB接続を持たない`validate-production-request`でevent、branch、kill switch、operationを解決する。
+2. 非main schedule=`skipped`、kill switch無効schedule=`disabled`、不正request=`failure`、実行可能request=`ready`へ固定分類する。
+3. `ready`だけ後続jobを起動し、scheduleは`production-batch`＋`gensoko-scheduled-production-database`、manualはrequired reviewer付き`production`＋`gensoko-batch-jobs`を使う。
+4. `cancel-in-progress: false`を維持し、実行中DB操作を自動cancelしない。古いrun cleanupはjob/step到達状況を確認したうえでrunごとの別承認とする。
+5. capacityと暗号化backupの外部コマンドerrorを一時fileへ隔離し、Actions logには固定メッセージだけを出す。
+6. `production-batch`のscheduled backup用Secret名追加はBO15前の別承認操作とし、本修正ではGitHub/provider/production設定を変更しない。
+
+### 実際の変更ファイル
+
+| ファイル                                              | 変更種別 | 内容                                                      |
+| ----------------------------------------------------- | -------- | --------------------------------------------------------- |
+| `.github/workflows/production-database.yml`           | 修正     | preflight、Environment/concurrency分離、raw error隔離     |
+| `backend/src/jobs/productionDatabaseWorkflow.test.ts` | 修正     | 固定分類、到達順序、ローカルdisabled再現、安全ログ契約    |
+| `backend/src/jobs/batchWorkflow.test.ts`              | 修正     | scheduled責務workflowとproduction-batch設定契約           |
+| `backend/src/jobs/accountDeletionWorkflow.test.ts`    | 修正     | manual required reviewer/concurrency互換契約              |
+| `docs/05_progress.md`                                 | 修正     | 恒久修正完了と未実施境界を同期                            |
+| `docs/11_deployment.md`                               | 修正     | 根因、旧/新時系列、停止・BO15前提を同期                   |
+| `docs/plans/batch-operations-redesign/plan.md`        | 修正     | source contract、TDD・品質記録を同期                      |
+| `docs/plans/portfolio-release-v0-1-minimal/plan.md`   | 修正     | main反映前のmanual production操作停止境界とM6非変更を同期 |
+
+### TDD記録
+
+| フェーズ | 結果                                                              |
+| -------- | ----------------------------------------------------------------- |
+| Red      | 対象3 filesで9 testsが意図した契約不足により失敗、29 tests成功    |
+| Green    | 対象3 files / 38 tests成功                                        |
+| Refactor | local preflight再現と文書契約を追加し、対象3 files / 40 tests成功 |
+
+### 最終品質ゲート
+
+| 確認                               | 結果                                                        |
+| ---------------------------------- | ----------------------------------------------------------- |
+| backend全test                      | 128 files / 1310 tests成功、外部DB用4 files / 10 tests skip |
+| Workers test                       | 4 files / 32 tests成功                                      |
+| backend build                      | TypeScript / Workers typecheck成功                          |
+| Workers build                      | types check / typecheck / dry-run成功                       |
+| lint                               | 成功                                                        |
+| backend format check               | 成功                                                        |
+| 変更workflow・docsのPrettier check | 成功                                                        |
+| `git diff --check`                 | 成功                                                        |
 
 ## 実装完了時の記録
 

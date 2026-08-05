@@ -765,6 +765,7 @@ GitHub の Settings > Environments でmanual用`staging` / `production`とschedu
 | production       | Variable | `AUDIT_LOG_CLEANUP_ENABLED`          | 全release gate完了までは`false`                                                     |
 | production       | Variable | `REFRESH_TOKEN_CLEANUP_ENABLED`      | refresh token実削除が別途承認されるまでは`false`                                    |
 | production-batch | Secret   | `DATABASE_URL`                       | production専用Session pooler。値を取得・表示・記録しない                            |
+| production-batch | Secret   | `BACKUP_ENCRYPTION_PASSPHRASE`       | scheduled暗号化backup専用。BO15前に別承認で追加し、値を取得・表示・記録しない       |
 | production-batch | Variable | `BATCH_ENVIRONMENT`                  | `production`                                                                        |
 | production-batch | Variable | `AUDIT_LOG_RETENTION_DAYS`           | 承認済みの正式保持期間`365`                                                         |
 | production-batch | Variable | `AUDIT_LOG_CLEANUP_ENABLED`          | release gate完了までは`false`                                                       |
@@ -772,7 +773,7 @@ GitHub の Settings > Environments でmanual用`staging` / `production`とschedu
 
 repository Variable `PRODUCTION_SCHEDULED_BATCH_ENABLED`はscheduled job全体のkill switchである。初期値は未設定または`false`とし、`production-batch`の設定を値非表示で確認し、ownerが有効化を別途明示承認した後だけ文字列`true`へ変更する。
 
-workflow jobは、手動実行では選択した`staging` / `production`、scheduleでは`production-batch`を参照する。`production-batch`はworkflow_dispatchの選択肢へ追加しない。`BATCH_ENVIRONMENT`が期待値と一致しない場合、または`DATABASE_URL`が未登録の場合は、DB処理や依存関係installの前に失敗する。
+`Batch Jobs`は、手動実行では選択した`staging` / `production`、scheduleでは`production-batch`を参照する。`Production Database Operations`はmanualでrequired reviewer付き`production`、scheduleで`production-batch`を参照する。どちらも`production-batch`をworkflow_dispatchの選択肢へ追加しない。scheduled requestはEnvironmentを持たないpreflightでkill switchを判定し、無効ならSecret、依存関係install、DB接続、concurrency取得より前に`disabled`として安全終了する。`BATCH_ENVIRONMENT`が期待値と一致しない場合、または必要なSecretが未登録の場合はDB処理前に失敗する。
 
 保持期間・cleanup flagは秘密情報ではないためEnvironment Variablesで管理する。`AUDIT_LOG_RETENTION_DAYS`の未設定・空文字・不正値は削除前に失敗する。`AUDIT_LOG_CLEANUP_ENABLED`と`REFRESH_TOKEN_CLEANUP_ENABLED`はruntime環境変数自体が省略された場合だけ`false`になるが、workflowでは未登録Variableが空文字として渡りvalidation失敗になるため、3 Environmentすべてへ両方を`false`で明示登録する。
 
@@ -799,7 +800,7 @@ GitHub Actions の Batch Jobs workflow は workflow_dispatch に対応してい�
 | `batch_job`          | `audit-log-cleanup-dry-run` | 期限超過件数とcutoffをpreviewし、削除しない |
 | `batch_job`          | `audit-log-cleanup-execute` | cleanup有効時だけ実削除する                 |
 
-Actionsのscheduleは遅延・スキップされる可能性があるため、毎時00分付近を避けて7分・17分・37分に分散している。scheduled runは`gensoko-scheduled-batch`、workflow_dispatchは既存の`gensoko-batch-jobs` concurrency groupを使う。両方とも`cancel-in-progress: false`を維持するが、同じgroupではrunning最大1件・pending最大1件で、新しいrunが既存pendingを置き換える。失敗時は安全ログを確認し、原因解消後にworkflow_dispatchで対象jobを1回だけ再実行する。
+Actionsのscheduleは遅延・スキップされる可能性があるため、毎時00分付近を避けて分散している。`Batch Jobs`のscheduleは`gensoko-scheduled-batch`、`Production Database Operations`のscheduleは`gensoko-scheduled-production-database`、manual production DB操作は既存の`gensoko-batch-jobs` concurrency groupを使う。すべて`cancel-in-progress: false`を維持する。同じgroupではrunning最大1件・pending最大1件で、新しいrunが既存pendingを置き換えるが、実行中DB操作は自動中断しない。scheduled runはmanual用groupを取得しないため、manual production DB操作を待たせない。失敗時は安全ログを確認し、原因解消後もworkflow dispatch、再実行、cancelはそれぞれ明示承認を得る。
 
 ### 2026-07-31 運用再開時点
 
@@ -812,6 +813,30 @@ Actionsのscheduleは遅延・スキップされる可能性があるため、�
 - `production`のrequired reviewerは維持する。repository変更のmerge後、別承認で`production`と`production-batch`を`main`限定へ変更し、`staging`は`develop`限定を維持する。
 - 外部設定後のactive Batch Jobsは0件である。kill switch有効化、workflow実行、production DB queryは行っていない。
 
+### 2026-08-05 Production Database Operations scheduled滞留の恒久対策
+
+read-only再確認では、`Production Database Operations`のcompleted以外のrunは0件だった。直近の滞留事象はschedule 2件で、いずれもmainの旧SHA、1時間超、production jobのstep開始0件、DB対象検証・migration・seed・容量確認などのsensitive step開始0件だった。manual runは含まれていなかった。識別子、URL、Secret、接続情報は証拠へ記録しない。
+
+旧workflowの時系列は次のとおりだった。
+
+1. schedule triggerを受ける。
+2. Environmentを持たないbranch validationだけが成功する。
+3. operation解決とkill switch判定を行わないまま、後続jobがmanualと同じ`gensoko-batch-jobs` concurrencyを取得する。
+4. 後続jobがrequired reviewer付き`production` Environmentへ入り、1件がwaitingになる。
+5. `cancel-in-progress: false`のためwaitingを中断せず、同じgroupの後続1件がpendingになる。
+6. operation解決、Secret参照、依存導入、DB処理はEnvironment承認後のstepなので未開始のまま、manual production DB操作のgateを阻害する。
+
+恒久修正後の時系列は次のとおりとする。
+
+1. scheduleまたはworkflow_dispatch triggerを受ける。
+2. Environment、Secret、checkout、依存導入、DB接続を持たない`validate-production-request`がevent、branch、kill switch、cron/manual operationを解決する。
+3. 非main scheduleは`skipped`、kill switchが文字列`true`でないscheduleは`disabled`、未知event・cron・operationまたは非main manualは`failure`、実行可能requestだけを`ready`へ固定分類する。
+4. `disabled` / `skipped`は成功終了、`failure`は固定errorで失敗し、いずれも後続jobを起動しない。summaryは分類と「Environment・Secret・依存・DB未開始」だけを記録する。
+5. `ready`だけが後続jobへ進む。scheduleは`production-batch`と専用concurrency、manualはrequired reviewer付き`production`と既存manual concurrencyを使う。
+6. Environment設定検証後にcheckout、必要な依存導入、DB処理へ進む。capacity/backupの外部コマンドerrorは一時fileへ隔離し、raw errorをlogへ出さず固定メッセージだけを出す。
+
+この修正は既存runを自動cancelしない。古いSHAのrunが残る場合はjob/step到達状況を値非表示で確認し、実行中DB操作の中断影響を評価したうえで、runごとに別承認を得る。repository修正中も`PRODUCTION_SCHEDULED_BATCH_ENABLED=false`を維持し、BO15を有効化しない。read-only inventoryでは`production-batch`にscheduled backup用Secret名がまだないため、その追加は対象と影響を説明した別承認操作とし、このrepository修正では外部設定を変更しない。
+
 ### scheduled productionの軽量source contract
 
 `production-batch`はruntime承認を持たないため、次の低コストなsource contractを維持する。
@@ -820,7 +845,7 @@ Actionsのscheduleは遅延・スキップされる可能性があるため、�
 2. check名`Repository Integrity / repository-integrity`を固定し、Secret・Environmentを参照せずbatchの安全境界contractだけを検証する。
 3. 既存`Backend PR Quality` / `Frontend PR Quality`はpath filter付きのため、全PR共通のrequired checkへ直接指定しない。
 4. `production` Environmentのrequired reviewerと`main`限定branch policyを維持する。
-5. `production-batch`は`main`だけを許可し、workflow_dispatchの選択肢へ追加しない。
+5. `production-batch`は`main`だけを許可し、workflow_dispatchの選択肢へ追加しない。参照元は`.github/workflows/batch.yml`と`.github/workflows/production-database.yml`のscheduled経路だけに限定する。
 
 Gensokoはcollaboratorがowner 1名の個人ポートフォリオである。非作成者レビュー、厳格なruleset、`Repository Integrity`のrequired check化、docs-only検証PRは運用完了条件にしない。将来複数人運営へ移行する場合は、その時点の権限・費用・運用負担に応じて追加保護を別途検討する。
 
@@ -842,9 +867,10 @@ Gensokoはcollaboratorがowner 1名の個人ポートフォリオである。非
 1. main merge後の確定SHAでM3とM1Rを再固定する。
 2. M5でsame-site URL、Cookie、CORS、メール送信元、production専用Secret・binding、DB target、pending migration、review済みmain SHA、rollback先を値非表示でpreflightし、別承認後にAPI、frontendの順でdeployする。
 3. M6で単一synthetic Userによる登録・メール受信から退会、game、refresh、通常password verifier DO、最小429、security、User所有row cleanup、flag復旧を確認する。
-4. M5/M6完了後、BO15の別承認を得て`PRODUCTION_SCHEDULED_BATCH_ENABLED=true`へ変更する。workflow_dispatchは実行しない。
-5. BO16では自然発生する日次GameQuestionSet cleanup、日次audit cleanup、週次resetを確認する。問題があればkill switchを`false`へ戻す。
-6. 初回run確認後にBO18として計画書・進捗・runbookを実態へ同期する。
+4. M5/M6完了後、`production-batch`にscheduled backup用Secret名が存在することを値非表示で確認する。未登録なら対象と影響を説明し、BO15とは別の明示承認で1操作だけ追加する。
+5. BO15の別承認を得て`PRODUCTION_SCHEDULED_BATCH_ENABLED=true`へ変更する。workflow_dispatchは実行しない。
+6. BO16では自然発生する日次GameQuestionSet cleanup、日次audit cleanup、週次reset、production DB容量確認、暗号化backupを確認する。問題があればkill switchを`false`へ戻す。
+7. 初回run確認後にBO18として計画書・進捗・runbookを実態へ同期する。
 
 repository変更のdevelop merge、develop→main PR作成、main merge、M3、production EnvironmentのM1R前切替、M1R、production-batch・default branch・provider基準の後段切替、M5 preflight、M5 deploy、M6 smoke、BO15有効化はそれぞれ別の境界である。この文書だけを根拠にmerge、外部設定変更、deploy、workflow dispatch、production DB query、Secret値参照、kill switch有効化を行わない。
 
