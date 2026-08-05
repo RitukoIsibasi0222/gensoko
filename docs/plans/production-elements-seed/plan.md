@@ -129,6 +129,7 @@ export function validateProductionDatabaseTarget(
 | PES10    | production再失敗の安全カテゴリ診断 | backend/workflow/docs   | 高     | raw error非表示        |
 | PES11    | CLI起動境界の固定カテゴリ診断      | backend/workflow/docs   | 高     | entrypoint前後を区別   |
 | PES12    | production直接entrypointへ変更     | workflow/test/docs      | 高     | 書込前module probe     |
+| PES13    | production Prisma Client生成       | workflow/test/docs      | 高     | DB接続前・seed時限定   |
 
 - [x] PES1: 計画・進捗記録
 - [x] PES2: production DB target validator
@@ -142,6 +143,7 @@ export function validateProductionDatabaseTarget(
 - [x] PES10: production再失敗の安全カテゴリ診断
 - [x] PES11: CLI起動境界の固定カテゴリ診断
 - [x] PES12: production直接entrypoint・書込前module-load probe
+- [x] PES13: production Prisma Client生成step・非表示ログ契約
 
 ## 技術的注意点
 
@@ -180,6 +182,10 @@ export function validateProductionDatabaseTarget(
 - 安全診断修正の対象test: 24件成功、関連test: 34件成功
 - 安全診断修正後のbackend全test: 1304件成功、10件skip
 - 安全診断修正後のWorkers test 32件、build / Workers build / lint / format check / Prisma schema validate、workflow・正本Prettier check: 成功
+- Prisma Client生成修正の対象test: 12件成功、関連test: 28件成功
+- Prisma Client生成修正後のbackend全test: 1306件成功、10件skip
+- Prisma Client生成修正後のWorkers test 32件、build / Workers build / lint / format check / Prisma schema validate、workflow・正本Prettier check: 成功
+- production接続・Secretなしのfresh install再現: `npm ci`直後は生成物不在・module import失敗、`prisma generate`後は生成物存在・同import成功
 
 ## Production初回実行の停止記録
 
@@ -191,6 +197,8 @@ export function validateProductionDatabaseTarget(
 - production固有の既存状態不一致、transaction内検証不一致、DB transaction失敗、disconnect失敗をraw errorなしの固定カテゴリで区別し、workflowはallowlist済み固定文言だけを表示する。review・main昇格・別の明示承認が完了するまで再実行しない。
 - 固定4分類をmainへ昇格した後の別承認付き3回目もtarget・migration current成功後のseed stepで汎用fallbackへ停止し、独立verifyはskip、失敗後の元素一覧も空のままだった。transaction内分類へ到達していないため、CLI client初期化とentrypoint起動前後を追加の固定カテゴリで区別し、review・main昇格・さらに別の明示承認まで再実行しない。
 - CLI起動境界分類をmainへ昇格した後の別承認付き4回目はtarget・migration current成功後のseed stepで起動前カテゴリへ0秒で停止し、独立verifyはskip、失敗後の元素一覧も空のままだった。remote main sourceに最新markerがあること、ローカルのNode+tsx直接entrypointが固定transactionカテゴリへ到達することを確認した。production workflowだけ書込前module-load probeとNode+tsx直接seed・verifyへ変更し、review・main昇格・さらに別の明示承認まで再実行しない。
+- Node+tsx直接entrypointをmainへ昇格した後の別承認付き5回目は、production branch・DB target・migration currentの検証成功後、書込前module-load probeで`module_load_failure`へ安全停止した。書込み用CLI本体とDB transactionには未到達で、独立verifyはskip、失敗後の元素一覧は0件のままだった。
+- production接続・Secretなしの一時clean環境で実workflow相当の`npm ci`を実行すると、Prisma Client生成物が存在せず同じmodule importが失敗し、`npx prisma generate`後は生成物が作成され同importが成功した。production workflowへseed時だけ実行する生成stepを`npm ci`直後かつDB target検証・module-load probe前に追加し、生成logは一時fileへ閉じて固定成否だけを表示する。review・develop/main再昇格・さらに別の明示承認まで再実行しない。
 
 ## 実装完了
 
@@ -265,4 +273,14 @@ export function validateProductionDatabaseTarget(
 - Green: 一時logを必ず削除するmodule-load probeとNode+tsx直接entrypointを追加し、対象11 test・関連27 test成功
 - ローカル境界確認: DB非接続module-load probe成功、到達不能接続で直接seed entrypointが開始markerと固定transactionカテゴリを出力
 - 最終品質gate: backend全1305 test成功・10件skip、Workers 32 test、build / Workers build / lint / format check / Prisma schema validate、workflow・正本Prettier check成功
+- production再実行: review・develop/main昇格・さらに別の明示承認まで禁止
+
+### Production Prisma Client生成修正
+
+- 修正日: 2026-08-05
+- 修正ブランチ: `fix/production-elements-seed-prisma-generate`
+- Red: seed時限定のPrisma Client生成step、`npm ci`後・DB接続前の順序、生成log非表示契約が未実装で対象1 test失敗
+- Green: 一時logを必ず削除する`npx prisma generate` stepを追加し、対象12 test成功
+- ローカル再現: production接続・Secretなしのfresh `npm ci`直後は生成物不在・module import失敗、`prisma generate`後は生成物存在・同import成功
+- 関連test・最終品質gate: 関連28 test、backend全1306 test・Workers 32 test、build / Workers build / lint / format check / Prisma schema validate、workflow・正本Prettier check成功
 - production再実行: review・develop/main昇格・さらに別の明示承認まで禁止
