@@ -595,6 +595,26 @@ jobs:
         working-directory: backend
         run: npm ci
 
+      - name: Generate Prisma Client for production Element seed
+        if: env.OPERATION == 'seed-elements'
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          generate_log="$RUNNER_TEMP/production-element-seed-prisma-generate.log"
+          cleanup_generate_log() {
+            rm -f "$generate_log"
+          }
+          trap cleanup_generate_log EXIT
+
+          if ! npx prisma generate > "$generate_log" 2>&1; then
+            echo "production元素データ用Prisma Clientの生成に失敗しました"
+            exit 1
+          fi
+
+          cleanup_generate_log
+          trap - EXIT
+          echo "production元素データ用Prisma Clientを生成しました"
+
       - name: Validate exact production database target
         if: env.OPERATION == 'seed-elements'
         working-directory: backend
