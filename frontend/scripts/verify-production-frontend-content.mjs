@@ -11,6 +11,10 @@ function isProviderHostname(hostname) {
   );
 }
 
+function isValidBypassSecret(bypassSecret) {
+  return typeof bypassSecret === 'string' && bypassSecret.length > 0 && !/\s/.test(bypassSecret);
+}
+
 function isExpectedProductionUrl(candidateUrl, domainUrl) {
   try {
     const candidate = new URL(candidateUrl);
@@ -63,6 +67,7 @@ export async function verifyProductionFrontendCandidate({
   bypassSecret,
   fetchImpl = fetch
 }) {
+  if (!isValidBypassSecret(bypassSecret)) return false;
   if (!isExpectedProductionCandidateUrl(candidateUrl)) return false;
   return verifySingleFrontendContent({ candidateUrl, smokeMarker, bypassSecret, fetchImpl });
 }
@@ -74,12 +79,14 @@ export async function verifyProductionFrontendContent({
   bypassSecret,
   fetchImpl = fetch
 }) {
+  if (!isValidBypassSecret(bypassSecret)) return false;
   if (!isExpectedProductionUrl(candidateUrl, domainUrl)) return false;
   return verifyFrontendContent({
     candidateUrl,
     domainUrl,
     smokeMarker,
     bypassSecret,
+    domainBypassSecret: '',
     fetchImpl
   });
 }

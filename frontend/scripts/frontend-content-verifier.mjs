@@ -38,23 +38,29 @@ export async function verifyFrontendContent({
   domainUrl,
   smokeMarker,
   bypassSecret,
+  domainBypassSecret = bypassSecret,
   fetchImpl = fetch
 }) {
   if (
     typeof smokeMarker !== 'string' ||
     smokeMarker.length === 0 ||
-    typeof bypassSecret !== 'string'
+    typeof bypassSecret !== 'string' ||
+    typeof domainBypassSecret !== 'string'
   ) {
     return false;
   }
-  const headers = {
+  const candidateHeaders = {
     'cache-control': 'no-cache',
     ...(bypassSecret ? { 'x-vercel-protection-bypass': bypassSecret } : {})
   };
+  const domainHeaders = {
+    'cache-control': 'no-cache',
+    ...(domainBypassSecret ? { 'x-vercel-protection-bypass': domainBypassSecret } : {})
+  };
   try {
     const [candidateHtml, domainHtml] = await Promise.all([
-      fetchHtml(candidateUrl, headers, fetchImpl),
-      fetchHtml(domainUrl, headers, fetchImpl)
+      fetchHtml(candidateUrl, candidateHeaders, fetchImpl),
+      fetchHtml(domainUrl, domainHeaders, fetchImpl)
     ]);
     if (candidateHtml === null || domainHtml === null) return false;
     const candidateAssets = immutableAssetFingerprint(candidateHtml, candidateUrl);

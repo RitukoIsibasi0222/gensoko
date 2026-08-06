@@ -154,6 +154,33 @@ jobs:
             exit 1
           fi
 
+      - name: Validate production provider credentials
+        shell: bash
+        env:
+          PRODUCTION_CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUCTION_CLOUDFLARE_API_TOKEN }}
+          PRODUCTION_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.PRODUCTION_CLOUDFLARE_ACCOUNT_ID }}
+          PRODUCTION_VERCEL_TOKEN: ${{ secrets.PRODUCTION_VERCEL_TOKEN }}
+          PRODUCTION_VERCEL_ORG_ID: ${{ secrets.PRODUCTION_VERCEL_ORG_ID }}
+          PRODUCTION_VERCEL_PROJECT_ID: ${{ secrets.PRODUCTION_VERCEL_PROJECT_ID }}
+          PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          set -euo pipefail
+          credentials=(
+            PRODUCTION_CLOUDFLARE_API_TOKEN
+            PRODUCTION_CLOUDFLARE_ACCOUNT_ID
+            PRODUCTION_VERCEL_TOKEN
+            PRODUCTION_VERCEL_ORG_ID
+            PRODUCTION_VERCEL_PROJECT_ID
+            PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET
+          )
+          for credential_name in "${credentials[@]}"; do
+            credential="${!credential_name-}"
+            if [ -z "$credential" ] || [[ "$credential" =~ [[:space:]] ]]; then
+              echo "production provider credentialが不正です: $credential_name"
+              exit 1
+            fi
+          done
+
       - name: Revalidate live main before API mutation
         uses: ./.github/actions/validate-live-main
         with:
@@ -196,6 +223,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.PRODUCTION_VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.PRODUCTION_VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.PRODUCTION_VERCEL_PROJECT_ID }}
+          PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           set -euo pipefail
           umask 077
@@ -294,6 +322,7 @@ jobs:
         env:
           CANDIDATE_REF: ${{ steps.frontend-candidate.outputs.candidate_ref }}
           PRODUCTION_DOMAIN_URL: ${{ vars.PRODUCTION_FRONTEND_ORIGIN }}
+          PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           set -euo pipefail
           domain_ready=false
