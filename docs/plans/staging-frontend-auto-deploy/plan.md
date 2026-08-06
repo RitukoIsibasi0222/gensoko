@@ -2,6 +2,7 @@
 
 > 設計者ロール: シニアDevOps / フロントエンドエンジニア
 > 対応Issue: [#173 developマージ後に固定ステージングURLを自動更新する](https://github.com/RitukoIsibasi0222/gensoko/issues/173)
+> Repository実装PR: [#192](https://github.com/RitukoIsibasi0222/gensoko/pull/192)
 
 ## 概要
 
