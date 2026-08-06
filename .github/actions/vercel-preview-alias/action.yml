@@ -127,7 +127,7 @@ runs:
           echo "candidate deployment参照がありません"
           exit 1
         fi
-        candidate_url="$(tr -d '\r\n' <"$INPUT_DEPLOYMENT_URL_FILE")"
+        candidate_url="$(awk 'NF { line=$0 } END { print line }' "$INPUT_DEPLOYMENT_URL_FILE" | tr -d '\r')"
         candidate_host="${candidate_url#https://}"
         if [ "$candidate_url" != "https://$candidate_host" ] || [[ ! "$candidate_host" =~ ^[a-z0-9-]+\.vercel\.app$ ]]; then
           echo "candidate deployment参照が不正です"

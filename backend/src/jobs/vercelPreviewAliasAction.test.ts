@@ -73,4 +73,11 @@ describe("Vercel Preview alias action", () => {
     expect(source).not.toContain("environment: production");
     expect(source).not.toMatch(/--target[ =]production|--prod\b/);
   });
+
+  it("複数行のprovider出力から最後の非空URL行だけを読む", () => {
+    const source = action();
+
+    expect(source).toContain("NF { line=$0 } END { print line }");
+    expect(source).not.toContain("tr -d '\\r\\n'");
+  });
 });
