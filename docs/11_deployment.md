@@ -197,17 +197,29 @@ pending Prisma migrationがない通常経路の追加workflow dispatchは、既
 - 追加検証Userはlogin拒否と再設定メール非発行で不在を確認した。本人退会用一時Secret 2件・対象Variable・M6専用Email Routingルールを削除し、本人退会flagと`PRODUCTION_SCHEDULED_BATCH_ENABLED`は`false`、BO15は無効、active workflowは0件を維持した。
 - Secret値、email、URL、resource ID、DB URL、token、内部ID、接続文字列、raw errorはrelease記録へ残していない。AuditLogは365日保持方針に従う。
 
+## 初回公開後のdeploy自動化境界（2026-08-06）
+
+M1R・M3・M4・M5・M6は完了し、default branchは`main`である。2026-08-06のM6完了docsをmainへmergeしたcommit [`2171cf9`](https://github.com/RitukoIsibasi0222/gensoko/commit/2171cf9494d2a6d62ed3262df3c3445fd3b16e2b)でも、Vercel Git Integration由来のGitHub `Production` deploymentは成功した。これはfrontend productionがmain mergeへ自動反応している証拠だが、API deploy、health、frontend、smokeのsame SHA・順序を保証する通常release workflowの完成を意味しない。
+
+現在の境界は次のとおり。
+
+- `develop`: Vercel Previewは自動作成されるが、固定staging aliasが最新の成功deploymentへ追従しない場合がある。Issue [#173](https://github.com/RitukoIsibasi0222/gensoko/issues/173) / 計画書 [`staging-frontend-auto-deploy`](plans/staging-frontend-auto-deploy/plan.md)で、frontend変更mergeだけを対象にexact SHA確認後のalias更新と軽量smokeを自動化する。
+- `main`: frontendのprovider自動deployは観測済みだが、production API deployはmain mergeだけでは自動化されていない。Issue [#174](https://github.com/RitukoIsibasi0222/gensoko/issues/174)でproduction Environment承認、pending migration停止、API → health → frontend → smokeをsame SHAへ固定する。
+- M2: 日常の固定staging URL更新には使わない。auth / API / DB / provider設定などの高リスク変更時に使う手動総合試験として維持する。
+
+Issue #174が完了するまでは、mainへmergeしただけでproduction APIも自動更新されたと判断しない。Vercel Git Integrationのproduction挙動やIgnored Build Stepを先行変更せず、#173を完了してからproduction deployの所有権を設計する。
+
 ## staging frontend/API配備runbook
 
 ### コード基盤の現在地点
 
-2026-07-21時点で、staging API/frontendは配備・基本smoke済みであり、PR #125 merge後のSD16 synthetic Admin Playwrightも成功した。staging配備計画はAPI rollback実確認、完全削除計画はT33/T35以降を残している。
+2026-08-06時点で、staging API/frontendは配備・基本smoke済みであり、PR #125 merge後のSD16 synthetic Admin Playwrightも成功した。production baselineはM5/M6で別途配備・smoke済みである。staging配備計画はAPI rollback実確認、固定frontend alias自動更新はIssue #173、完全削除計画はT33/T35以降を残している。
 
 - API: Workers専用entrypoint、request-scoped Prisma/mail/DO adapter、`wrangler.jsonc` staging設定、生成binding型、dry-run、bundle contract、production相当Workers runtime test
 - frontend: `@sveltejs/adapter-vercel`、Node.js 22、公開API URL fail-fast、Vercel Build Output/secret contract、frontend PR CIを固定
 - 実環境確認済み: Vercel Hobby `develop` Preview、staging Worker、SQLite-backed DO、Hyperdrive、7件のWorker secret、Supabase migration current、health/CORS/OPTIONS、元素118件
 - synthetic確認済み: 登録・メール認証・login・ゲーム10問/score 500・password reset・本人退会・削除後login拒否・Admin強制退会・旧credential拒否。Resendはallowlist宛の確認メール2通・resetメール1通だけを送信
-- 未実施: staging API rollback実確認、T35 legacy cleanup、production resource・deploy・DB操作
+- 未実施: staging API rollback実確認、固定staging alias自動更新、T35 legacy cleanup
 
 コード基盤のローカル再確認は外部serviceへ接続せず、次で行う。
 
@@ -246,13 +258,21 @@ env \
 
 branch scoped値は新しいdeploymentのbuild時に反映される。設定変更後は既存deploymentを合格扱いにせず、承認後に新しい`develop` Previewを作成して成果物を確認する。固定branch URLだけをAPIの`FRONTEND_URL`に使い、commit URLやwildcard CORSは使わない。
 
-Vercel Project Settings → Build and Deployment → Ignored Build StepはCustomとし、次のcommandで`develop`だけをbuildする。Vercelの契約どおりexit code 1はbuild、0はskipを表す。`VITE_API_BASE_URL`を持たないfeature branchの不要なPreview buildと、`main`のProduction buildを作成しない。
+初回公開前のSD15では、Vercel Project Settings → Build and Deployment → Ignored Build StepをCustomとし、次のcommandで`develop`だけをbuildする契約だった。Vercelの契約どおりexit code 1はbuild、0はskipを表す。
 
 ```bash
 if [ "$VERCEL_GIT_COMMIT_REF" = "develop" ]; then exit 1; else exit 0; fi
 ```
 
-rollback時はIgnored Build Stepを`Only build pre-production`へ戻す。feature branchへstaging API URLを広げて失敗を回避してはいけない。
+2026-08-06時点では、mainのM6完了docs mergeでもVercel Git IntegrationのProduction deployment成功を確認しており、上記は現在の外部設定を示す正本ではない。Issue #173では`develop` Previewの固定alias追従だけを実装し、mainのProduction build条件は変更しない。Issue #174でAPI → frontendの順序とdeploy所有権を決定するまで、上記commandの復元・再適用を独断で行わない。feature branchへstaging API URLを広げて失敗を回避してはいけない。
+
+### 日常staging frontend自動更新（Issue #173）
+
+実装計画の正本は[`docs/plans/staging-frontend-auto-deploy/plan.md`](plans/staging-frontend-auto-deploy/plan.md)とする。Vercel Git Integrationが`develop`のfrontend変更から作成したPreviewを再deployせず、GitHub Actionsがfrontend品質gate、exact SHA / ref / preview / READY確認、develop先端再確認、固定alias更新、更新後確認、read-only smokeを実行する。
+
+docsなどfrontend成果物へ影響しないdevelop変更は、GitHub Actionsの`paths`とrepository管理のVercel Ignored Build Step scriptの両方でskipする。Ignored Build Stepの外部設定はrepository実装と混ぜず、対象project・影響・rollbackを確認した別承認で行う。mainのproduction build条件はIssue #174まで変更しない。
+
+docsだけのmerge、quality失敗、Preview timeout、metadata不一致、古いdevelop SHAではaliasを変更しない。alias更新後の確認またはsmokeが失敗した場合は直前の正常deploymentへ戻し、rollbackも確認できない場合はfailureで停止してVercel dashboardから手動復旧する。固有deployment URL、provider ID、raw response、tokenをlog・Summary・Artifactへ残さない。
 
 ### SD13以降の承認境界
 
