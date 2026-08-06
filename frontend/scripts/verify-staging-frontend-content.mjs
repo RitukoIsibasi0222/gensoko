@@ -40,6 +40,35 @@ async function fetchHtml(url, headers, fetchImpl) {
   return response.text();
 }
 
+function immutableAssetFingerprint(html, pageUrl) {
+  const pageOrigin = new URL(pageUrl).origin;
+  const assets = new Set();
+
+  for (const match of html.matchAll(/(?:src|href)=["']([^"']+)["']/g)) {
+    try {
+      const asset = new URL(match[1], pageUrl);
+      if (asset.origin === pageOrigin && asset.pathname.startsWith('/_app/immutable/')) {
+        assets.add(`${asset.pathname}${asset.search}`);
+      }
+    } catch {
+      // Ignore malformed URLs and provider-injected markup.
+    }
+  }
+
+  return [...assets].sort();
+}
+
+function hasMatchingImmutableAssets(candidateHtml, domainHtml, candidateUrl, domainUrl) {
+  const candidateAssets = immutableAssetFingerprint(candidateHtml, candidateUrl);
+  const domainAssets = immutableAssetFingerprint(domainHtml, domainUrl);
+
+  return (
+    candidateAssets.length > 0 &&
+    candidateAssets.length === domainAssets.length &&
+    candidateAssets.every((asset, index) => asset === domainAssets[index])
+  );
+}
+
 export async function verifyStagingFrontendContent({
   candidateUrl,
   domainUrl,
@@ -69,8 +98,9 @@ export async function verifyStagingFrontendContent({
     return (
       candidateHtml !== null &&
       domainHtml !== null &&
-      candidateHtml === domainHtml &&
-      domainHtml.includes(smokeMarker)
+      candidateHtml.includes(smokeMarker) &&
+      domainHtml.includes(smokeMarker) &&
+      hasMatchingImmutableAssets(candidateHtml, domainHtml, candidateUrl, domainUrl)
     );
   } catch {
     return false;
