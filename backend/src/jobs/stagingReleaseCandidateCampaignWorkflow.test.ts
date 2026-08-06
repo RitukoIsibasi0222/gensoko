@@ -107,22 +107,43 @@ describe("M2 staging release candidate workflow", () => {
     expect(apiJob).toContain(
       "M2_FRONTEND_ORIGIN: https://gensoko-frontend-staging-develop.vercel.app",
     );
-    expect(frontendJob).toContain("uses: ./.github/actions/vercel-preview-alias");
+    expect(frontendJob).toContain("uses: ./.github/actions/vercel-preview-domain");
     expect(frontendJob).not.toContain("frontend.includes(expected)");
   });
 
-  it("frontend deploy後のalias更新とsmokeを共通actionへ委譲する", () => {
+  it("frontend deploy後のbranch domain確認とsmokeをread-only共通actionへ委譲する", () => {
     const source = workflow();
     const frontendJob = source.slice(
       source.indexOf("  deploy-frontend:"),
       source.indexOf("  campaign:"),
     );
 
-    expect(frontendJob).toContain("uses: ./.github/actions/vercel-preview-alias");
+    expect(frontendJob).toContain("uses: ./.github/actions/vercel-preview-domain");
     expect(frontendJob).toContain("deployment-url-file:");
     expect(frontendJob).toContain("expected-sha:");
     expect(frontendJob).toContain("expected-ref: develop");
     expect(frontendJob).toContain("expected-target: preview");
+    expect(frontendJob).toContain("domain: gensoko-frontend-staging-develop.vercel.app");
+    expect(frontendJob).not.toContain("alias set");
+    expect(frontendJob).not.toContain(" inspect ");
+  });
+
+  it("campaign前後のactive SHA確認もalias listだけを使う", () => {
+    const source = workflow();
+    const campaignJob = source.slice(
+      source.indexOf("  campaign:"),
+      source.indexOf("  recovery-cleanup:"),
+    );
+
+    expect(campaignJob).toContain("alias ls --limit=100 --format=json");
+    expect(campaignJob).toContain("alias.alias ===");
+    expect(campaignJob).toContain(
+      "exactDeployments.some((deployment) => alias.url === deployment.url)",
+    );
+    expect(campaignJob).toContain(
+      "exactDeployments.filter((deployment) => deployment.url === domainMatches[0].url)",
+    );
+    expect(campaignJob).not.toContain(" inspect ");
   });
 
   it("45分campaign・5分cleanup・独立recovery・秘密のstep scopeを固定する", () => {

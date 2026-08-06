@@ -43,8 +43,8 @@ jobs:
       - run: npm run format:check
       - run: npm run build:preview
 
-  promote-preview:
-    name: Promote exact Preview to fixed staging alias
+  verify-preview:
+    name: Verify exact Preview on fixed staging domain
     needs: frontend-quality
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -113,7 +113,7 @@ jobs:
           done
           rm -f "$candidate_state"
 
-      - name: Revalidate develop head before alias update
+      - name: Revalidate develop head before domain verification
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -135,8 +135,8 @@ jobs:
           fi
           rm -f "$head_state"
 
-      - name: Update fixed staging alias and smoke
-        uses: ./.github/actions/vercel-preview-alias
+      - name: Verify fixed staging branch domain and smoke
+        uses: ./.github/actions/vercel-preview-domain
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -145,7 +145,7 @@ jobs:
           expected-sha: ${{ github.sha }}
           expected-ref: develop
           expected-target: preview
-          alias: gensoko-frontend-staging-develop.vercel.app
+          domain: gensoko-frontend-staging-develop.vercel.app
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           automation-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           smoke-marker: Gensoko

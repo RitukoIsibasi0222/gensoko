@@ -18,7 +18,7 @@ describe('Vercel CLI CI scope contract', () => {
   it('team IDをslug用--scopeへ渡さずCI環境IDでprojectを固定する', () => {
     const sources = [
       repositoryFile('.github/workflows/staging-frontend-deploy.yml'),
-      repositoryFile('.github/actions/vercel-preview-alias/action.yml'),
+      repositoryFile('.github/actions/vercel-preview-domain/action.yml'),
       repositoryFile('.github/workflows/staging-release-candidate-campaign.yml')
     ];
 
@@ -29,18 +29,16 @@ describe('Vercel CLI CI scope contract', () => {
     }
   });
 
-  it('project限定tokenではlist候補をinspectしてIDとproject nameを取得・検証する', () => {
-    const action = repositoryFile('.github/actions/vercel-preview-alias/action.yml');
+  it('project限定tokenではlistとalias listだけを使いprovider状態を変更しない', () => {
+    const action = repositoryFile('.github/actions/vercel-preview-domain/action.yml');
 
-    expect(action).not.toContain('api.vercel.com/v9/projects/');
     expect(action).toContain('list gensoko-frontend-staging');
-    expect(action).toContain('inspect "$candidate_url"');
-    expect(action).toContain(
-      'validate_inspected_deployment "" "$INPUT_EXPECTED_TARGET" "$candidate_inspect_state" "$candidate_host" "$candidate_id_file"'
-    );
-    expect(action).toContain('writeFileSync(process.env.RESULT_ID_FILE, deployment.id)');
-    expect(
-      action.match(/deployment\.name !== "gensoko-frontend-staging"/g)?.length
-    ).toBeGreaterThanOrEqual(2);
+    expect(action).toContain('alias ls --limit=100 --format=json');
+    expect(action).not.toContain(' inspect ');
+    expect(action).not.toContain('alias set');
+    expect(action).not.toContain('alias rm');
+    expect(action).not.toMatch(/vercel@[^\n]+ deploy/);
+    expect(action).not.toContain('api.vercel.com/v9/projects/');
+    expect(action).not.toContain('/v13/deployments/');
   });
 });

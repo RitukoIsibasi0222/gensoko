@@ -252,7 +252,7 @@ jobs:
           npm run staging:release-candidate-health
 
   deploy-frontend:
-    name: Deploy and alias frontend candidate
+    name: Deploy and verify frontend candidate
     needs: deploy-api
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -306,8 +306,8 @@ jobs:
           fi
           rm -f "$provider_log"
 
-      - name: Update fixed staging alias and smoke
-        uses: ./.github/actions/vercel-preview-alias
+      - name: Verify fixed staging branch domain and smoke
+        uses: ./.github/actions/vercel-preview-domain
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -316,7 +316,7 @@ jobs:
           expected-sha: ${{ github.sha }}
           expected-ref: develop
           expected-target: preview
-          alias: gensoko-frontend-staging-develop.vercel.app
+          domain: gensoko-frontend-staging-develop.vercel.app
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           automation-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           smoke-marker: Gensoko
@@ -391,44 +391,55 @@ jobs:
           verify_active_sha() {
             worker_state="$RUNNER_TEMP/m2-worker-state.json"
             frontend_candidates="$RUNNER_TEMP/m2-frontend-candidates.json"
-            frontend_alias="$RUNNER_TEMP/m2-frontend-alias.json"
+            frontend_domains="$RUNNER_TEMP/m2-frontend-domains.json"
             if ! npx wrangler deployments status --config wrangler.jsonc --env staging --json >"$worker_state" 2>/dev/null; then
-              rm -f "$worker_state" "$frontend_candidates" "$frontend_alias"
+              rm -f "$worker_state" "$frontend_candidates" "$frontend_domains"
               return 1
             fi
             vercel_list=(npx --yes vercel@50.17.1 list gensoko-frontend-staging --meta "githubCommitSha=$GITHUB_SHA" --status READY --environment preview --format=json --token="$VERCEL_TOKEN")
             if ! "${vercel_list[@]}" >"$frontend_candidates" 2>/dev/null; then
-              rm -f "$worker_state" "$frontend_candidates" "$frontend_alias"
+              rm -f "$worker_state" "$frontend_candidates" "$frontend_domains"
               return 1
             fi
-            if ! npx --yes vercel@50.17.1 inspect https://gensoko-frontend-staging-develop.vercel.app --format=json --token="$VERCEL_TOKEN" >"$frontend_alias" 2>/dev/null; then
-              rm -f "$worker_state" "$frontend_candidates" "$frontend_alias"
+            if ! npx --yes vercel@50.17.1 alias ls --limit=100 --format=json --token="$VERCEL_TOKEN" >"$frontend_domains" 2>/dev/null; then
+              rm -f "$worker_state" "$frontend_candidates" "$frontend_domains"
               return 1
             fi
-            if ! EXPECTED_SHA="$GITHUB_SHA" WORKER_STATE="$worker_state" FRONTEND_CANDIDATES="$frontend_candidates" FRONTEND_ALIAS="$frontend_alias" node --input-type=module -e '
+            if ! EXPECTED_SHA="$GITHUB_SHA" WORKER_STATE="$worker_state" FRONTEND_CANDIDATES="$frontend_candidates" FRONTEND_DOMAINS="$frontend_domains" node --input-type=module -e '
               import { readFileSync } from "node:fs";
               const expected = process.env.EXPECTED_SHA;
               const worker = readFileSync(process.env.WORKER_STATE, "utf8");
               const payload = JSON.parse(readFileSync(process.env.FRONTEND_CANDIDATES, "utf8"));
-              const alias = JSON.parse(readFileSync(process.env.FRONTEND_ALIAS, "utf8"));
+              const domainPayload = JSON.parse(readFileSync(process.env.FRONTEND_DOMAINS, "utf8"));
               const deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
-              const matches = deployments.filter((deployment) => {
+              const exactDeployments = deployments.filter((deployment) => {
                 const target = deployment.target ?? "preview";
                 return deployment.state === "READY"
                   && target === "preview"
                   && deployment.meta?.githubCommitSha === expected
-                  && deployment.meta?.githubCommitRef === "develop";
+                  && deployment.meta?.githubCommitRef === "develop"
+                  && typeof deployment.url === "string"
+                  && /^[a-z0-9-]+\.vercel\.app$/.test(deployment.url);
               });
+              const aliases = Array.isArray(domainPayload.aliases) ? domainPayload.aliases : [];
+              const domainMatches = aliases.filter((alias) =>
+                alias.alias === "gensoko-frontend-staging-develop.vercel.app"
+                && typeof alias.url === "string"
+                && exactDeployments.some((deployment) => alias.url === deployment.url)
+                && typeof alias.deploymentId === "string"
+                && alias.deploymentId.length > 0
+              );
+              const activeDeployments = domainMatches.length === 1
+                ? exactDeployments.filter((deployment) => deployment.url === domainMatches[0].url)
+                : [];
               if (!worker.includes(expected)
-                || matches.length !== 1
-                || alias.id !== matches[0].id
-                || alias.readyState !== "READY"
-                || alias.target !== "preview") process.exit(1);
+                || domainMatches.length !== 1
+                || activeDeployments.length !== 1) process.exit(1);
             '; then
-              rm -f "$worker_state" "$frontend_candidates" "$frontend_alias"
+              rm -f "$worker_state" "$frontend_candidates" "$frontend_domains"
               return 1
             fi
-            rm -f "$worker_state" "$frontend_candidates" "$frontend_alias"
+            rm -f "$worker_state" "$frontend_candidates" "$frontend_domains"
           }
 
           if ! verify_active_sha; then
