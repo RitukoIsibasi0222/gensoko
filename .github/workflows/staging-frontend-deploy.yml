@@ -1,0 +1,159 @@
+name: Staging Frontend Deploy
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - "frontend/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-frontend-deploy
+  cancel-in-progress: true
+
+jobs:
+  frontend-quality:
+    name: Validate exact develop frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      VERCEL_ENV: preview
+      VERCEL_GIT_COMMIT_REF: develop
+      VITE_API_BASE_URL: https://staging-api.example.invalid/api/v1
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=moderate
+      - run: npm run test:run
+      - run: npm run lint
+      - run: npm run check
+      - run: npm run format:check
+      - run: npm run build:preview
+
+  promote-preview:
+    name: Promote exact Preview to fixed staging alias
+    needs: frontend-quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Find exact READY Preview deployment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          candidate_state="$RUNNER_TEMP/staging-frontend-candidates.json"
+          deployment_ref="$RUNNER_TEMP/staging-frontend-deployment-url"
+          rm -f "$candidate_state" "$deployment_ref"
+
+          for attempt in $(seq 1 30); do
+            vercel_list=(npx --yes vercel@50.17.1 list --meta "githubCommitSha=$GITHUB_SHA" --status READY --environment preview --format=json --token="$VERCEL_TOKEN")
+            if "${vercel_list[@]}" >"$candidate_state" 2>/dev/null; then
+              if EXPECTED_SHA="$GITHUB_SHA" CANDIDATE_STATE="$candidate_state" node --input-type=module -e '
+                import { readFileSync } from "node:fs";
+                const payload = JSON.parse(readFileSync(process.env.CANDIDATE_STATE, "utf8"));
+                const deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
+                const matches = deployments.filter((deployment) => {
+                  const target = deployment.target ?? "preview";
+                  return deployment.state === "READY"
+                    && target === "preview"
+                    && deployment.meta?.githubCommitSha === process.env.EXPECTED_SHA
+                    && deployment.meta?.githubCommitRef === "develop"
+                    && typeof deployment.url === "string"
+                    && /^[a-z0-9-]+\.vercel\.app$/.test(deployment.url);
+                });
+                if (matches.length === 0) process.exit(2);
+                if (matches.length !== 1) process.exit(3);
+                process.stdout.write(`https://${matches[0].url}`);
+              ' >"$deployment_ref"; then
+                break
+              else
+                parse_status=$?
+                rm -f "$deployment_ref"
+                if [ "$parse_status" -ne 2 ]; then
+                  rm -f "$candidate_state"
+                  echo "対象Preview deploymentを一意に確認できません"
+                  exit 1
+                fi
+              fi
+            fi
+
+            if [ "$attempt" -eq 30 ]; then
+              rm -f "$candidate_state"
+              echo "対象Preview deploymentがREADYになる前にtimeoutしました"
+              exit 1
+            fi
+            sleep 10
+          done
+          rm -f "$candidate_state"
+
+      - name: Revalidate develop head before alias update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          head_state="$RUNNER_TEMP/staging-frontend-develop-head.json"
+          if ! gh api "/repos/$GITHUB_REPOSITORY/git/refs/heads/develop" >"$head_state" 2>/dev/null; then
+            rm -f "$head_state"
+            echo "develop先端を確認できません"
+            exit 1
+          fi
+          if ! EXPECTED_SHA="$GITHUB_SHA" HEAD_STATE="$head_state" node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const state = JSON.parse(readFileSync(process.env.HEAD_STATE, "utf8"));
+            if (state.object?.sha !== process.env.EXPECTED_SHA) process.exit(1);
+          '; then
+            rm -f "$head_state"
+            echo "対象SHAは現在のdevelop先端ではありません"
+            exit 1
+          fi
+          rm -f "$head_state"
+
+      - name: Update fixed staging alias and smoke
+        uses: ./.github/actions/vercel-preview-alias
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        with:
+          deployment-url-file: ${{ runner.temp }}/staging-frontend-deployment-url
+          expected-sha: ${{ github.sha }}
+          expected-ref: develop
+          expected-target: preview
+          alias: gensoko-frontend-staging-develop.vercel.app
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          automation-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          smoke-marker: Gensoko
+
+      - name: Record safe deployment summary
+        run: |
+          printf '%s\n' "- SHA: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove temporary deployment reference
+        if: ${{ always() }}
+        run: rm -f "$RUNNER_TEMP/staging-frontend-deployment-url"
