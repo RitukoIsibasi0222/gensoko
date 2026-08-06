@@ -203,7 +203,7 @@ M1R・M3・M4・M5・M6は完了し、default branchは`main`である。2026-08
 
 現在の境界は次のとおり。
 
-- `develop`: Vercel Previewは自動作成されるが、固定staging aliasが最新の成功deploymentへ追従しない場合がある。Issue [#173](https://github.com/RitukoIsibasi0222/gensoko/issues/173) / 計画書 [`staging-frontend-auto-deploy`](plans/staging-frontend-auto-deploy/plan.md)で、frontend変更mergeだけを対象にexact SHA確認後のalias更新と軽量smokeを自動化する。
+- `develop`: Vercel Previewと固定staging branch domainはVercel Git Integrationが自動更新する。Issue [#173](https://github.com/RitukoIsibasi0222/gensoko/issues/173) / 計画書 [`staging-frontend-auto-deploy`](plans/staging-frontend-auto-deploy/plan.md)で、frontend変更mergeだけを対象にexact SHA、固定domain参照先、軽量smokeをGitHub Actionsからread-only検証する。
 - `main`: frontendのprovider自動deployは観測済みだが、production API deployはmain mergeだけでは自動化されていない。Issue [#174](https://github.com/RitukoIsibasi0222/gensoko/issues/174)でproduction Environment承認、pending migration停止、API → health → frontend → smokeをsame SHAへ固定する。
 - M2: 日常の固定staging URL更新には使わない。auth / API / DB / provider設定などの高リスク変更時に使う手動総合試験として維持する。
 
@@ -213,13 +213,13 @@ Issue #174が完了するまでは、mainへmergeしただけでproduction API�
 
 ### コード基盤の現在地点
 
-2026-08-06時点で、staging API/frontendは配備・基本smoke済みであり、PR #125 merge後のSD16 synthetic Admin Playwrightも成功した。production baselineはM5/M6で別途配備・smoke済みである。staging配備計画はAPI rollback実確認、固定frontend alias自動更新はIssue #173、完全削除計画はT33/T35以降を残している。
+2026-08-06時点で、staging API/frontendは配備・基本smoke済みであり、PR #125 merge後のSD16 synthetic Admin Playwrightも成功した。production baselineはM5/M6で別途配備・smoke済みである。staging配備計画はAPI rollback実確認と完全削除計画のT33/T35以降を残し、固定frontend domainは`develop` Preview branchへ割り当て済みである。
 
 - API: Workers専用entrypoint、request-scoped Prisma/mail/DO adapter、`wrangler.jsonc` staging設定、生成binding型、dry-run、bundle contract、production相当Workers runtime test
 - frontend: `@sveltejs/adapter-vercel`、Node.js 22、公開API URL fail-fast、Vercel Build Output/secret contract、frontend PR CIを固定
 - 実環境確認済み: Vercel Hobby `develop` Preview、staging Worker、SQLite-backed DO、Hyperdrive、7件のWorker secret、Supabase migration current、health/CORS/OPTIONS、元素118件
 - synthetic確認済み: 登録・メール認証・login・ゲーム10問/score 500・password reset・本人退会・削除後login拒否・Admin強制退会・旧credential拒否。Resendはallowlist宛の確認メール2通・resetメール1通だけを送信
-- 未実施: staging API rollback実確認、固定staging alias自動更新、T35 legacy cleanup
+- 未実施: staging API rollback実確認、branch domain移行workflowのmerge後run、T35 legacy cleanup
 
 コード基盤のローカル再確認は外部serviceへ接続せず、次で行う。
 
@@ -268,27 +268,27 @@ Vercelの契約どおりexit code 1はbuild、0はskipを表す。Issue #173の�
 
 ### 日常staging frontend自動更新（Issue #173）
 
-実装計画の正本は[`docs/plans/staging-frontend-auto-deploy/plan.md`](plans/staging-frontend-auto-deploy/plan.md)とする。Vercel Git Integrationが`develop`のfrontend変更から作成したPreviewを再deployせず、GitHub Actionsがfrontend品質gate、exact SHA / ref / preview / READY確認、develop先端再確認、固定alias更新、更新後確認、read-only smokeを実行する。
+実装計画の正本は[`docs/plans/staging-frontend-auto-deploy/plan.md`](plans/staging-frontend-auto-deploy/plan.md)とする。Vercel Git Integrationが`develop`のfrontend変更からPreviewを作成し、Vercel Project Settingsのbranch domainが成功Previewを固定URLへ自動反映する。GitHub Actionsはfrontend品質gate、exact SHA / ref / preview / READY確認、develop先端再確認、固定domain参照先、read-only smokeだけを実行する。
 
 docsなどfrontend成果物へ影響しないdevelop変更は、GitHub Actionsの`paths`とrepository管理のVercel Ignored Build Step scriptの両方でskipする。Ignored Build Stepの外部設定は対象project・影響・rollbackを確認した承認後に反映済みである。mainのproduction build条件はIssue #174まで変更しない。
 
-docsだけのmerge、quality失敗、Preview timeout、metadata不一致、古いdevelop SHAではaliasを変更しない。alias更新後の確認またはsmokeが失敗した場合は直前の正常deploymentへ戻し、rollbackも確認できない場合はfailureで停止してVercel dashboardから手動復旧する。固有deployment URL、provider ID、raw response、tokenをlog・Summary・Artifactへ残さない。
+docsだけのmergeではworkflowとVercel buildをskipする。quality失敗、Preview timeout、metadata不一致、古いdevelop SHA、domain追従timeout、smoke失敗ではGitHub Actionsからprovider状態を変更せずfailureにする。固有deployment URL、provider ID、raw response、tokenをlog・Summary・Artifactへ残さない。
 
 #### 外部設定preflight
 
 自動更新を有効化する前に、値を表示せず次を確認する。
 
 1. GitHub `staging` Environmentのdeployment branch policyが`develop`限定で、日常自動runを止めるrequired reviewerがないこと。
-2. `staging` Environment Secretに`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`、必要な場合は`VERCEL_AUTOMATION_BYPASS_SECRET`が存在すること。repository secretやproduction Environmentと共用しない。
+2. `staging` Environment Secretにproject限定`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`、必要な場合は`VERCEL_AUTOMATION_BYPASS_SECRET`が存在すること。repository secretやproduction Environmentと共用しない。
 3. Vercel projectがHobby `gensoko-frontend-staging`で、Git Integrationが`develop`のfrontend変更からPreviewを作成し、Previewの`VITE_API_BASE_URL`がstaging APIへbranch scopeされていること。
 4. Vercel Ignored Build Stepを`npm run vercel:ignore-build`へ変更すること。repository側scriptのmerge前に先行変更しない。
-5. 固定aliasの現在の参照先をdashboardで確認できること。
+5. 固定domain `gensoko-frontend-staging-develop.vercel.app`がPreview環境・`develop` branchへ割り当てられていること。
 
-2026-08-06のread-only確認では対象`develop`先端のPreviewが`READY`でも固定aliasへ未割当であり、古いUI問題を再現した。承認後、対象Hobby project限定・1年有効のautomation tokenを作成し、`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`を`staging` Environmentへ値非表示で登録した。Ignored Build Stepも`npm run vercel:ignore-build`へ変更済みである。production Environment、main、production deploymentは変更していない。
+2026-08-06のread-only確認では対象`develop`先端のPreviewが`READY`でも固定URLが古いdeploymentを参照する問題を再現した。承認後、対象Hobby project限定・1年有効のautomation tokenを作成し、`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`を`staging` Environmentへ値非表示で登録した。Ignored Build Stepは`npm run vercel:ignore-build`へ変更済みである。PR #196の失敗確定後、ownerの包括承認に基づき固定domainをPreview環境・`develop` branchへ追加し、Valid Configurationと最新UIを確認した。production Environment、main、production deploymentは変更していない。
 
 PR #192のmerge SHA `b84667a166c296355dd5a5f98957954b5950b203`で起動したrun [31072094165](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31072094165)は、初回は3 Secret未登録、preflight後のfailed job再実行はPreview探索timeoutでalias更新前に失敗した。再実行でも固定aliasは維持され、安全側で停止した。
 
-Vercel CLIでは`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数としてprojectを固定する。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡してはいけない。project限定tokenへ追加のProjects REST権限を要求せず、`list gensoko-frontend-staging --format=json`でSHA、ref、URL、target、READYを確認し、同じ候補URLの`inspect --format=json`で初めてdeployment IDを取得してproject name、URL、target、READYを完全一致させる。更新前・更新後・rollbackもinspectのproject nameと取得済みIDを検証する。固定aliasの自動run、exact SHA、smokeが成功するまで完了扱いにしない。
+Vercel CLIでは`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数としてprojectを固定する。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡してはいけない。project限定tokenのまま`list gensoko-frontend-staging --format=json`でSHA、ref、URL、target、READYを確認し、`alias ls --limit=100 --format=json`で固定domainの参照先URLと対象Preview URLを完全一致させる。`inspect`、`alias set`、deployment detail API、provider状態を変更するREST methodは使用しない。
 
 PR #193のmerge SHA `ef97e98d72a6fa159c424c02cc9a0e0523231aaa`で起動したrun [31076459494](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31076459494)は、exact `READY` Preview探索とalias直前のdevelop先端再確認に成功した後、共通alias actionで失敗した。固定aliasは旧CSS bundleを維持し、merge SHA固有Previewのbundleとは一致しなかった。provider raw値をlogへ出さない契約は維持し、次の修正では失敗箇所をcandidate不一致、更新前metadata、alias set、更新後inspect、更新後不一致、smokeの固定メッセージだけで分類する。
 
@@ -296,23 +296,24 @@ PR #194のmerge SHA `0918f9a545276f4fa4973927886055683d78fdeb`で起動したrun
 
 PR #195のmerge SHA `d40bf3657b806449c0abc5b2bc18bb53cba397e2`で起動したrun [31081222649](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31081222649)は、同じ前段gateの成功後、candidate list metadata不一致でalias更新前に停止した。pinned CLI `50.17.1`ではlistのdeployment IDもprovider応答次第で省略されるため、候補の一意なURLをinspectして初めてIDを取得し、以後の更新後・rollback検証へ一時fileで引き継ぐ。固定aliasはこの修正のmerge runまで既存参照を維持する。
 
+PR #196のmerge SHA `2fa65d4c5857a2a048e56d60062309091af369db`で起動したrun [31082530994](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31082530994)とfailed job再実行は、品質gate、exact `READY` Preview探索、develop先端再確認まで成功した後、candidate inspectが内部利用するdeployment detail APIの権限制約で同じ固定段階へ安全停止した。Vercel CLI最新版でも同API依存が残るため、tokenをteam scopeへ広げずbranch domain方式へ移行した。
+
 #### 通常の自動更新
 
 1. `frontend/**`を含むreview済みPRを`develop`へmergeする。
 2. `Staging Frontend Deploy`の`frontend-quality`がmerge commitのexact SHAでaudit、test、lint、Svelte check、format check、Preview build検証を通す。
-3. `promote-preview`がVercel Git Integration由来の`READY` Previewを最大5分bounded pollし、listでSHA、ref=`develop`、target=`preview`、URL、候補一意性を確認し、同じ候補のinspectでIDを取得してproject nameを含む境界を構造化JSONで再確認する。
-4. alias更新直前にGitHubの`develop`先端を再確認する。先端が移動していれば旧runを安全に失敗させ、新しいrunへ委譲する。
-5. 共通actionが直前参照を一時fileへ保存し、固定aliasを更新する。更新前・更新後ともproject name、deployment ID、`READY`、`preview`を再確認し、固定URLへ15秒timeoutのread-only HTML smokeを行う。
-6. Summaryにexact SHAと`ALIAS_UPDATED` / `SMOKE_CLEAR`だけが残り、固定URLで最新UIを確認できることを確認する。
+3. `verify-preview`がVercel Git Integration由来の`READY` Previewを最大5分bounded pollし、listでSHA、ref=`develop`、target=`preview`、URL、候補一意性を構造化JSONで確認する。
+4. domain確認直前にGitHubの`develop`先端を再確認する。先端が移動していれば旧runを安全に失敗させ、新しいrunへ委譲する。
+5. 共通actionが候補metadataを再確認し、Vercelのbranch domain自動割り当てをalias listで最大5分bounded pollする。固定domainの参照先URLと対象Preview URLが一致した後だけ、15秒timeoutのread-only HTML smokeを行う。
+6. Summaryにexact SHAと`BRANCH_DOMAIN_READY` / `SMOKE_CLEAR`だけが残り、固定URLで最新UIを確認できることを確認する。
 
 同じSHAのPreviewをGitHub Actionsから再deployしない。日常workflowを手動dispatchへ拡張せず、失敗修正後の次のfrontend mergeで再実行する。API、DB、fixture、synthetic campaignを伴う高リスク変更だけ、既存M2を別承認で使う。
 
 #### 失敗時の復旧
 
-- alias更新前の失敗: 固定aliasを変更せず、quality、Vercel Preview、metadata、develop先端、Environment Secretの存在を値非表示で確認する。
-- alias更新後のpost-check / smoke失敗: 共通actionの`ROLLED_BACK`を確認する。固有URLやprovider JSONをworkflow logへ出さない。
-- rollback未確認: 新しいrunやM2を重ねず、Vercel dashboardで固定aliasと直前の正常deploymentを確認する。手動alias復旧は対象project・影響・rollbackを再提示した別承認後だけ行う。
-- 自動更新の緊急停止: workflowを無効化するか`staging` EnvironmentのVercel Secretを削除し、Ignored Build Stepを直前commandへ戻す。固定aliasは最後に確認済みの参照先を維持する。
+- Preview / domain確認前の失敗: provider状態を変更せず、quality、Vercel Preview、metadata、develop先端、Environment Secret名、branch domain設定を値非表示で確認する。
+- domain追従timeout / smoke失敗: 新しいrunやM2を重ねず、Vercel dashboardで固定domainの`develop`割り当てと直前の正常deploymentを確認する。固有URLやprovider JSONをworkflow logへ出さない。
+- 自動更新の緊急停止: Vercel staging projectのbranch domain割り当てを外すか、Git Integrationを停止する。GitHub検証だけを止める場合はworkflowを無効化する。production project、main、production domainは変更しない。
 
 ### SD13以降の承認境界
 
