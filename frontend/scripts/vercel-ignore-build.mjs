@@ -7,7 +7,7 @@ const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const commitRef = process.env.VERCEL_GIT_COMMIT_REF ?? '';
 
 if (commitRef === 'main') {
-  process.exit(BUILD);
+  process.exit(SKIP);
 }
 
 if (commitRef !== 'develop') {
