@@ -54,6 +54,16 @@ describe("Vercel Preview alias action", () => {
     expect(smoke).toContain("process.exit(1)");
   });
 
+  it("全Node検証の例外詳細を捨てて固定段階メッセージだけを残す", () => {
+    const commands = action().split("node --input-type=module -e '").slice(1);
+
+    expect(commands).toHaveLength(5);
+    for (const command of commands) {
+      const closingLine = command.split("\n").find((line) => line.trimStart().startsWith("'"));
+      expect(closingLine).toContain("2>/dev/null");
+    }
+  });
+
   it("候補確認→直前参照保存→alias更新→post-check→smokeの順に実行する", () => {
     const source = action();
     const main = source.slice(source.indexOf("        vercel_list=("));

@@ -71,7 +71,7 @@ runs:
                 || deployment.name !== "gensoko-frontend-staging"
                 || deployment.readyState !== "READY"
                 || deployment.target !== process.env.EXPECTED_TARGET) process.exit(1);
-            '; then
+            ' 2>/dev/null; then
               rollback_ok=true
             fi
           fi
@@ -143,7 +143,7 @@ runs:
             });
             if (matches.length !== 1) process.exit(1);
             process.stdout.write(matches[0].id);
-          ' >"$candidate_id_file"; then
+          ' >"$candidate_id_file" 2>/dev/null; then
           echo "candidate deployment metadataが不一致です"
           exit 1
         fi
@@ -163,7 +163,7 @@ runs:
               || !/^[a-z0-9-]+\.vercel\.app$/.test(deployment.url)) process.exit(1);
             writeFileSync(process.env.PREVIOUS_DEPLOYMENT, `https://${deployment.url}`);
             writeFileSync(process.env.PREVIOUS_ID_FILE, deployment.id);
-          '; then
+          ' 2>/dev/null; then
           echo "現在のstaging alias metadataを確認できません"
           exit 1
         fi
@@ -184,7 +184,7 @@ runs:
               || deployment.name !== "gensoko-frontend-staging"
               || deployment.readyState !== "READY"
               || deployment.target !== process.env.EXPECTED_TARGET) process.exit(1);
-          '
+          ' 2>/dev/null
 
         alias_failure_message="staging alias smokeに失敗しました"
         SMOKE_URL="https://$INPUT_ALIAS/" SMOKE_MARKER="$INPUT_SMOKE_MARKER" AUTOMATION_BYPASS_SECRET="$INPUT_AUTOMATION_BYPASS_SECRET" node --input-type=module -e '
@@ -206,7 +206,7 @@ runs:
             } catch {
               process.exit(1);
             }
-          '
+          ' 2>/dev/null
 
         trap - ERR
         printf '%s\n' "- Status: ALIAS_UPDATED" "- Status: SMOKE_CLEAR" >> "$GITHUB_STEP_SUMMARY"
