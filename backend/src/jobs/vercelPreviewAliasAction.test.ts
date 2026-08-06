@@ -13,7 +13,7 @@ function action(): string {
 }
 
 describe("Vercel Preview alias action", () => {
-  it("listでexact候補を特定しinspectで同じID・project・URL・target・READYを検証する", () => {
+  it("listでexact候補を特定しinspectでID・project・URL・target・READYを取得・検証する", () => {
     const source = action();
     const candidateStart = source.indexOf("        vercel_list=(");
     const candidateEnd = source.indexOf(
@@ -37,10 +37,15 @@ describe("Vercel Preview alias action", () => {
     expect(source).toContain("list gensoko-frontend-staging");
     expect(candidate).toContain('inspect "$candidate_url"');
     expect(candidate).not.toContain('deployment.name === "gensoko-frontend-staging"');
-    expect(candidate).toContain('validate_inspected_deployment "$candidate_id_file"');
+    expect(candidate).not.toContain('typeof deployment.id === "string"');
+    expect(candidate).toContain(
+      'validate_inspected_deployment "" "$INPUT_EXPECTED_TARGET" "$candidate_inspect_state" "$candidate_host" "$candidate_id_file"',
+    );
     expect(validator).toContain('deployment.name !== "gensoko-frontend-staging"');
+    expect(validator).toContain('typeof deployment.id !== "string"');
     expect(validator).toContain("deployment.id !== expectedId");
     expect(validator).toContain("deployment.url !== process.env.EXPECTED_URL");
+    expect(validator).toContain("writeFileSync(process.env.RESULT_ID_FILE, deployment.id)");
     expect(
       source.match(/deployment\.name !== "gensoko-frontend-staging"/g)?.length,
     ).toBeGreaterThanOrEqual(2);
