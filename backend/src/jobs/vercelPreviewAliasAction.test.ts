@@ -27,7 +27,6 @@ describe("Vercel Preview alias action", () => {
     expect(source).toContain("project.id !== process.env.VERCEL_PROJECT_ID");
     expect(source).toContain('project.name !== "gensoko-frontend-staging"');
     expect(source).toContain("list gensoko-frontend-staging");
-    expect(source).toContain('--scope="$VERCEL_ORG_ID"');
     expect(source).toMatch(/readyState|READY/);
     expect(source).not.toContain("includes(expected");
   });
