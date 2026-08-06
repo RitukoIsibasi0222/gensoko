@@ -309,12 +309,15 @@ baseline deployとcustom domain切替は一回限りの外部production変更で
 | `.github/workflows/production-deploy.yml`                    | 新規     | main exact SHAのvalidation、quality、承認付きproduction release |
 | `.github/actions/backend-quality/action.yml`                 | 新規     | backend PR/main exact SHA品質gateの共通action                   |
 | `.github/actions/frontend-quality/action.yml`                | 新規     | frontend PR/main exact SHA品質gateの共通action                  |
+| `.github/actions/validate-live-main/action.yml`              | 新規     | protected jobのprovider mutation前live main検証を共通化         |
 | `.github/workflows/backend-pr-quality.yml`                   | 修正     | 共通action利用とproduction workflow/action差分のpaths追加       |
 | `.github/workflows/frontend-pr-quality.yml`                  | 修正     | 共通action利用とproduction workflow/action差分のpaths追加       |
+| `.github/workflows/repository-integrity.yml`                 | 修正     | production workflow・helperのsource contract testを追加         |
 | `backend/package.json`                                       | 修正     | production migration/deploy/health/evidence用script追加         |
-| `backend/src/lib/production-worker-config.ts`                | 修正     | dry-runとdeployで共有する一時config生成・cleanup境界を整理      |
+| `backend/src/jobs/backendPrQualityWorkflow.test.ts`          | 修正     | backend共有quality action利用のsource contractを同期            |
 | `backend/src/lib/production-worker-deployment.ts`            | 新規     | production Worker deploy・exact SHA metadata・固定error処理     |
 | `backend/src/lib/production-worker-deployment.test.ts`       | 新規     | config cleanup、target分離、raw非出力、exact SHA test           |
+| `backend/src/scripts/runProductionWorkerDeployment.cli.ts`   | 新規     | 固定statusだけを出すproduction Worker deploy CLI                |
 | `backend/src/jobs/productionMigrationGate.ts`                | 新規     | Prisma statusをcurrent/pending/unknownへ固定分類                |
 | `backend/src/jobs/productionMigrationGate.test.ts`           | 新規     | Prisma v7 status分類、timeout、raw非出力test                    |
 | `backend/src/jobs/productionMigrationGate.cli.ts`            | 新規     | production migration read-only gate CLI                         |
@@ -323,6 +326,7 @@ baseline deployとcustom domain切替は一回限りの外部production変更で
 | `backend/src/jobs/productionReleaseHealth.cli.ts`            | 新規     | 固定statusだけを出すhealth CLI                                  |
 | `backend/src/jobs/productionReleaseEvidence.ts`              | 新規     | safe evidence exact schema生成                                  |
 | `backend/src/jobs/productionReleaseEvidence.test.ts`         | 新規     | SHA/status/schema/禁止値contract test                           |
+| `backend/src/jobs/productionReleaseEvidence.cli.ts`          | 新規     | success/failureのcanonical status prefix Artifact生成CLI        |
 | `backend/src/jobs/productionDeploymentWorkflow.test.ts`      | 新規     | trigger、permission、Environment、順序、Secret、分離test        |
 | `frontend/scripts/frontend-content-verifier.mjs`             | 新規     | immutable asset fingerprint・markerの純粋共通helper             |
 | `frontend/scripts/verify-staging-frontend-content.mjs`       | 修正     | staging URL allowlist wrapperとして共通helperを利用             |
@@ -331,6 +335,7 @@ baseline deployとcustom domain切替は一回限りの外部production変更で
 | `backend/src/jobs/productionFrontendContentVerifier.test.ts` | 新規     | production URL分離、asset、marker、redirect、非HTML test        |
 | `frontend/scripts/vercel-ignore-build.mjs`                   | 修正     | `main` Git Integration buildをskipし、develop契約を維持         |
 | `frontend/src/vercel-ignore-build.test.ts`                   | 修正     | main skip、develop差分、判定不能境界test                        |
+| `frontend/src/frontend-pr-quality.test.ts`                   | 修正     | frontend共有quality action利用のsource contractを同期           |
 | `docs/05_progress.md`                                        | 修正     | Issue #174の進捗・完了証拠を同期                                |
 | `docs/11_deployment.md`                                      | 修正     | 通常/high-risk release、migration、rollback、外部移行runbook    |
 | `docs/plans/production-auto-deploy/plan.md`                  | 修正     | 実装判断、task、実変更ファイル、完了記録を同期                  |
@@ -461,22 +466,33 @@ export async function verifyProductionFrontendContent(options) {}
 | PDA-15   | develop→main release PRをreview・merge                   | GitHub PR                                               | 高     | ownerがmerge、main自動merge禁止              |
 | PDA-16   | same main SHAのproduction runを検証                      | GitHub Actions/providers                                | 高     | API→health→frontend→smoke→evidence           |
 
-- [ ] PDA-01: production workflow境界のRed contract test
-- [ ] PDA-02: backend/frontend共有quality actionをTDD実装
-- [ ] PDA-03: migration gateをTDD実装
-- [ ] PDA-04: production Worker deploy・exact SHA確認をTDD実装
-- [ ] PDA-05: production API healthをTDD実装
-- [ ] PDA-06: frontend content verifierを安全に共通化
-- [ ] PDA-07: production Vercel staged deploy・promote・smokeをTDD実装
-- [ ] PDA-08: Git Integration main buildを停止
-- [ ] PDA-09: safe evidence generatorをTDD実装
-- [ ] PDA-10: failure/rollback/runbookを同期
-- [ ] PDA-11: 計画書・進捗を実態へ同期
-- [ ] PDA-12: 最終品質gateを実行
+- [x] PDA-01: production workflow境界のRed contract test
+- [x] PDA-02: backend/frontend共有quality actionをTDD実装
+- [x] PDA-03: migration gateをTDD実装
+- [x] PDA-04: production Worker deploy・exact SHA確認をTDD実装
+- [x] PDA-05: production API healthをTDD実装
+- [x] PDA-06: frontend content verifierを安全に共通化
+- [x] PDA-07: production Vercel staged deploy・promote・smokeをTDD実装
+- [x] PDA-08: Git Integration main buildを停止
+- [x] PDA-09: safe evidence generatorをTDD実装
+- [x] PDA-10: failure/rollback/runbookを同期
+- [x] PDA-11: 計画書・進捗を実態へ同期
+- [x] PDA-12: 最終品質gateを実行
 - [ ] PDA-13: feature PRを作成しCopilot reviewへ対応
 - [ ] PDA-14: production外部設定を直前承認後に分離
 - [ ] PDA-15: develop→main release PRをreview・merge
 - [ ] PDA-16: same main SHAのproduction runを検証
+
+## Repository実装時の計画差分
+
+- `backend/src/lib/production-worker-config.ts`は既存のproduction専用target・resource分離検証をそのまま再利用できたため変更しなかった。deploy側の一時file・provider log・exact SHA・cleanup責務は`production-worker-deployment.ts`へ分離した。
+- Environment承認待ち中のmain更新をDB/provider前で同じ実装により拒否するため、Secret非参照の`.github/actions/validate-live-main/action.yml`を追加した。validation jobはEnvironmentなし・`permissions: {}`を維持するためcheckoutせず、同じfail-closed契約をinline実行する。
+- production releaseのCLI境界としてWorker deploy、health、evidenceのCLIを追加した。各CLIはraw provider/DB値を出さず固定event・status・messageだけを出す。
+- safe evidenceは成功時の8 statusだけでなく、失敗runでも達成済みstatusのcanonical prefixだけを`if: always()`で生成する。schema検証に失敗した場合はArtifactをuploadしない。
+- Vercel candidateはpromote前にmarker・空でないimmutable assetを単体検証し、promote後にcandidateとcustom domainのasset集合・marker一致をbounded pollする二段階へ明確化した。
+- production workflow source contractを通常backend全testだけでなくRepository Integrityにも含めるため、`.github/workflows/repository-integrity.yml`を更新した。
+- exact SHA checkout後の`git rev-parse HEAD`とlive `main`先端を同じ共通actionで照合し、backend/frontend quality jobとprovider mutation前の全境界でfail-closedにした。
+- Vercel CLIがrunnerへ生成するproduction project link・環境設定・build outputはrelease中だけ利用し、`if: always()`の最終stepで`.vercel`全体を削除する。
 
 ### スプレッドシート貼り付け用（v4確定）
 
@@ -563,6 +579,17 @@ env VERCEL_ENV=preview VERCEL_GIT_COMMIT_REF=develop VITE_API_BASE_URL=https://s
 - staging / productionのEnvironment、Secret名、URL、resource、concurrency、targetが混ざっていないことをsource contractで確認する。
 
 repository品質gateではproduction/staging provider、DB、URLへ接続せず、workflow dispatch、Environment変更、Secret追加、deployを行わない。
+
+### Repository品質ゲート実績（2026-08-06）
+
+- backend通常test: 137 files成功、4 files skip、1357 tests成功、10 tests skip
+- backend Workers test: 4 files・32 tests成功
+- backend TypeScript build、Workers typecheck/build、production Worker dry-run、ESLint、Prettier、Prisma validate成功
+- frontend test: 66 files・685 tests成功
+- frontend ESLint、Svelte check（error 0 / warning 0）、Prettier、Preview build output contract成功
+- frontend production依存audit: moderate以上0件。既知のlow 3件は強制更新がbreaking changeになるため本Issueでは変更しない
+- 変更YAML 7件をparserで検証し、埋め込みBash 30 blockを`bash -n`で検証
+- `git diff --check`とproduction/staging分離source contract成功
 
 ## コミット方針
 
