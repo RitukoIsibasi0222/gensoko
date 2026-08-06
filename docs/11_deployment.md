@@ -203,9 +203,11 @@ Issue [#174](https://github.com/RitukoIsibasi0222/gensoko/issues/174)の設計�
 [`production-auto-deploy`](plans/production-auto-deploy/plan.md)とする。repositoryには
 `.github/workflows/production-deploy.yml`を置き、production frontendのdeploy所有権をGitHub Actionsへ一本化する。Vercel Git Integrationはstaging Preview専用projectだけに残し、production専用projectからはGit連携によるProduction deployを発生させない。
 
-repository実装のmergeだけでは自動releaseを有効化しない。production専用Vercel project、Git Integration停止、custom domain移行、production専用credential登録、Cloudflare最小権限credential登録は、実行直前に対象・影響・費用・rollbackを提示し、ownerの明示承認後に別工程で行う。移行完了前に`develop`から`main`へのrelease PRをmergeしない。
+repository実装のmergeだけでは自動releaseを有効化しない。production専用Vercel project、Git Integration停止、Protection Bypass for Automation、custom domain移行、production専用credential登録、Cloudflare最小権限credential登録は、実行直前に対象・影響・費用・rollbackを提示し、ownerの明示承認後に別工程で行う。移行完了前に`develop`から`main`へのrelease PRをmergeしない。
 
-production Environmentへ別承認で追加するdeploy専用Secret名は、`PRODUCTION_CLOUDFLARE_API_TOKEN`、`PRODUCTION_CLOUDFLARE_ACCOUNT_ID`、`PRODUCTION_VERCEL_TOKEN`、`PRODUCTION_VERCEL_ORG_ID`、`PRODUCTION_VERCEL_PROJECT_ID`とする。既存のproduction Variables `PRODUCTION_WORKER_NAME`、`PRODUCTION_API_HOSTNAME`、`PRODUCTION_FRONTEND_ORIGIN`、`PRODUCTION_REGISTRABLE_DOMAIN`、`PRODUCTION_HYPERDRIVE_ID`は値を表示せず再検証する。`DATABASE_URL`と`PRODUCTION_SUPABASE_PROJECT_REF`はmigration gate専用であり、provider stepやfrontendへ渡さない。
+production Environmentへ別承認で追加するdeploy専用Secret名は、`PRODUCTION_CLOUDFLARE_API_TOKEN`、`PRODUCTION_CLOUDFLARE_ACCOUNT_ID`、`PRODUCTION_VERCEL_TOKEN`、`PRODUCTION_VERCEL_ORG_ID`、`PRODUCTION_VERCEL_PROJECT_ID`、`PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET`とする。既存のproduction Variables `PRODUCTION_WORKER_NAME`、`PRODUCTION_API_HOSTNAME`、`PRODUCTION_FRONTEND_ORIGIN`、`PRODUCTION_REGISTRABLE_DOMAIN`、`PRODUCTION_HYPERDRIVE_ID`は値を表示せず再検証する。`DATABASE_URL`と`PRODUCTION_SUPABASE_PROJECT_REF`はmigration gate専用であり、provider stepやfrontendへ渡さない。
+
+Vercel HobbyのStandard Protectionではproduction custom domain以外のdeployment URLが認証保護される。production project限定のautomation bypassを使い、candidate単体検証とpromote後のcandidate/custom domain比較へ同じ`x-vercel-protection-bypass` headerを渡す。6件のprovider credentialはmigration gate後かつAPI mutation前に非空・空白なしを検証し、値をlog、summary、Artifactへ出さない。
 
 ### 通常release
 
@@ -219,7 +221,7 @@ production Environmentへ別承認で追加するdeploy専用Secret名は、`PRO
 8. `prisma migrate status`をread-only実行し、`current`だけを許可する。`pending`または`unknown`はAPI deploy前に停止する。
 9. provider mutation直前にもlive `main`を再確認し、production専用一時Wrangler configでAPIをdeployする。deployment metadataのexact SHAが一致しない場合はfrontendへ進まない。
 10. API health、CORS、security headerをGETだけで確認する。失敗時はfrontend build/deployを行わない。
-11. production専用Vercel projectへ`--prod --skip-domain`で候補をdeployし、project境界、SHA、ref=`main`、target=`production`、READY、candidate marker・immutable assetを検証する。
+11. production専用Vercel projectへ`--prod --skip-domain`で候補をdeployし、project境界、SHA、ref=`main`、target=`production`、READY、automation bypass header経由のcandidate marker・immutable assetを検証する。
 12. 検証済みcandidateだけを`vercel promote`し、custom domainが同じasset集合とmarkerを参照するまで有限回pollする。
 13. production frontendとAPIをread-only smokeし、SHA、run ID、run attempt、固定status、UTC時刻だけのJSON Artifactを7日保持する。
 

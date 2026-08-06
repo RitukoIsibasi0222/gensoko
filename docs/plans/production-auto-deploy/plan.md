@@ -108,12 +108,14 @@ Vercel Git Integrationを所有者のままにすると、`main` merge直後にV
 
 GitHub ActionsがAPI・health成功後にVercel CLIでproduction build / deployを行えば、1回のproduction Environment承認内で順序を固定できる。Git Integrationはstaging Preview専用projectに残し、production専用projectはGitHub Actionsからだけdeployする。
 
+Vercel Hobbyのproduction専用projectではStandard Protectionによりproduction custom domain以外のdeployment URLが認証保護される。候補deployをpromote前に検証するため、production project限定のProtection Bypass for Automationを作成し、同じ値をproduction Environmentの`PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET`へ登録する。verifierは空・空白入りのbypass Secretをfetch前に拒否し、値をlog・evidenceへ出さず`x-vercel-protection-bypass` headerだけへ渡す。
+
 ### 二重deploy防止
 
 1. repositoryのIgnored Build StepをTDDで変更し、既存staging projectの`main` Git buildをskipする。
 2. production専用Vercel projectを作成し、Git接続によるProduction deployを無効にするか接続しない。
 3. production custom domainとproduction環境変数を専用projectへ移す。
-4. production GitHub Environmentの専用token / project情報だけでCLI deployする。
+4. production GitHub Environmentの専用token / project情報 / automation bypassだけでCLI deploy・候補検証する。
 5. 移行後に同じmain SHAでGit Integration由来の二重Production deploymentがないことをread-only確認する。
 
 外部設定1〜4はrepository実装・review・merge後、対象、影響、費用、rollbackを提示した別承認で実行する。
@@ -189,7 +191,7 @@ developで確認
 
 - `environment: production`とし、既存required reviewer・main限定policyを維持する。
 - Secretは使用stepの`env`だけへ渡し、job全体へ設定しない。
-- `PRODUCTION_CLOUDFLARE_API_TOKEN`、`PRODUCTION_CLOUDFLARE_ACCOUNT_ID`、`PRODUCTION_VERCEL_TOKEN`、`PRODUCTION_VERCEL_ORG_ID`、`PRODUCTION_VERCEL_PROJECT_ID`を別承認で追加する。既存M1証拠収集用・staging用credentialは使わない。
+- `PRODUCTION_CLOUDFLARE_API_TOKEN`、`PRODUCTION_CLOUDFLARE_ACCOUNT_ID`、`PRODUCTION_VERCEL_TOKEN`、`PRODUCTION_VERCEL_ORG_ID`、`PRODUCTION_VERCEL_PROJECT_ID`、`PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET`を別承認で追加する。既存M1証拠収集用・staging用credentialは使わない。
 - 既存production VariablesのWorker名、API hostname、frontend origin、registrable domain、接続resource参照を値非表示で検証する。
 - `DATABASE_URL`はproduction Environment内の既存production値だけをmigration gateへ渡す。
 
@@ -478,7 +480,7 @@ export async function verifyProductionFrontendContent(options) {}
 - [x] PDA-10: failure/rollback/runbookを同期
 - [x] PDA-11: 計画書・進捗を実態へ同期
 - [x] PDA-12: 最終品質gateを実行
-- [ ] PDA-13: feature PRを作成しCopilot reviewへ対応
+- [x] PDA-13: feature PRを作成しCopilot reviewへ対応
 - [ ] PDA-14: production外部設定を直前承認後に分離
 - [ ] PDA-15: develop→main release PRをreview・merge
 - [ ] PDA-16: same main SHAのproduction runを検証
@@ -488,6 +490,8 @@ export async function verifyProductionFrontendContent(options) {}
 - `backend/src/lib/production-worker-config.ts`は既存のproduction専用target・resource分離検証をそのまま再利用できたため変更しなかった。deploy側の一時file・provider log・exact SHA・cleanup責務は`production-worker-deployment.ts`へ分離した。
 - Environment承認待ち中のmain更新をDB/provider前で同じ実装により拒否するため、Secret非参照の`.github/actions/validate-live-main/action.yml`を追加した。validation jobはEnvironmentなし・`permissions: {}`を維持するためcheckoutせず、同じfail-closed契約をinline実行する。
 - production releaseのCLI境界としてWorker deploy、health、evidenceのCLIを追加した。各CLIはraw provider/DB値を出さず固定event・status・messageだけを出す。
+- PR #203のreview・develop merge後にPDA-14を開始し、production専用Vercel project、Git非接続、project限定token、Cloudflare最小権限token、production Environment deploy Secret 5件を分離した。baselineはsame `main` SHA・production target・READY・project境界まで一致したが、Vercel Hobby Standard Protectionによりcandidate contentが認証画面となったためcustom domain移管前に停止した。
+- 上記実機差分により`PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET`を公開interfaceへ追加した。repository側はprovider mutation前の6 credential検証とcandidate/promote後の同一bypass header利用をTDDで追加し、外部bypass作成・登録は別承認へ分離する。
 - safe evidenceは成功時の8 statusだけでなく、失敗runでも達成済みstatusのcanonical prefixだけを`if: always()`で生成する。schema検証に失敗した場合はArtifactをuploadしない。
 - Vercel candidateはpromote前にmarker・空でないimmutable assetを単体検証し、promote後にcandidateとcustom domainのasset集合・marker一致をbounded pollする二段階へ明確化した。
 - production workflow source contractを通常backend全testだけでなくRepository Integrityにも含めるため、`.github/workflows/repository-integrity.yml`を更新した。
@@ -557,7 +561,14 @@ npm run test -- --run
 npm run test:workers
 npm run build
 npm run workers:build
-npm run workers:production:dry-run
+# production形状の検証専用値を環境変数へ注入する。実在resource IDは使わず、providerへ接続しない
+env \
+  PRODUCTION_WORKER_NAME=gensoko-production-quality-gate \
+  PRODUCTION_API_HOSTNAME=api.gensoko-quality-gate.dev \
+  PRODUCTION_FRONTEND_ORIGIN=https://gensoko-quality-gate.dev \
+  PRODUCTION_REGISTRABLE_DOMAIN=gensoko-quality-gate.dev \
+  PRODUCTION_HYPERDRIVE_ID=ffffffffffffffffffffffffffffffff \
+  npm run workers:production:dry-run
 npm run lint
 npm run format:check
 npx prisma validate
@@ -590,6 +601,19 @@ repository品質gateではproduction/staging provider、DB、URLへ接続せず�
 - frontend production依存audit: moderate以上0件。既知のlow 3件は強制更新がbreaking changeになるため本Issueでは変更しない
 - 変更YAML 7件をparserで検証し、埋め込みBash 30 blockを`bash -n`で検証
 - `git diff --check`とproduction/staging分離source contract成功
+
+### Vercel automation bypass修正の品質ゲート実績（2026-08-06）
+
+- Red: workflowのprovider credential事前検証・bypass Secret伝播、およびverifierの空・空白入りbypass拒否を追加し、意図した4件のfailureを確認
+- Green / Refactor: 対象2 files・10 tests成功
+- backend通常test: 137 files成功、4 files skip、1359 tests成功、10 tests skip
+- backend Workers test: 4 files・32 tests成功
+- backend TypeScript build、Workers typecheck/build、production形状の検証専用値を使うWorker dry-run、ESLint、Prettier、Prisma validate成功
+- frontend test: 66 files・685 tests成功
+- frontend ESLint、Svelte check（error 0 / warning 0）、Prettier、Preview build output contract成功
+- 変更YAML 1件をparserで検証し、埋め込みBash 12 blockを`bash -n`で検証
+- verifierの`node --check`、`git diff --check`成功
+- production Worker dry-runは必須変数なしでは意図どおりfail-closedとなり、実在値を使わないproduction形状の検証専用値を明示した再実行で成功
 
 ## コミット方針
 
