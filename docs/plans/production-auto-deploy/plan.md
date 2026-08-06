@@ -108,7 +108,7 @@ Vercel Git Integrationを所有者のままにすると、`main` merge直後にV
 
 GitHub ActionsがAPI・health成功後にVercel CLIでproduction build / deployを行えば、1回のproduction Environment承認内で順序を固定できる。Git Integrationはstaging Preview専用projectに残し、production専用projectはGitHub Actionsからだけdeployする。
 
-Vercel Hobbyのproduction専用projectではStandard Protectionによりproduction custom domain以外のdeployment URLが認証保護される。候補deployをpromote前に検証するため、production project限定のProtection Bypass for Automationを作成し、同じ値をproduction Environmentの`PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET`へ登録する。verifierは空・空白入りのbypass Secretをfetch前に拒否し、値をlog・evidenceへ出さず`x-vercel-protection-bypass` headerだけへ渡す。
+Vercel Hobbyのproduction専用projectではStandard Protectionによりproduction custom domain以外のdeployment URLが認証保護される。候補deployをpromote前に検証するため、production project限定のProtection Bypass for Automationを作成し、同じ値をproduction Environmentの`PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET`へ登録する。verifierは空・空白入りのbypass Secretをfetch前に拒否し、値をlog・evidenceへ出さずcandidate requestの`x-vercel-protection-bypass` headerだけへ渡す。custom domain requestにはSecret headerを送らない。
 
 ### 二重deploy防止
 
@@ -491,7 +491,7 @@ export async function verifyProductionFrontendContent(options) {}
 - Environment承認待ち中のmain更新をDB/provider前で同じ実装により拒否するため、Secret非参照の`.github/actions/validate-live-main/action.yml`を追加した。validation jobはEnvironmentなし・`permissions: {}`を維持するためcheckoutせず、同じfail-closed契約をinline実行する。
 - production releaseのCLI境界としてWorker deploy、health、evidenceのCLIを追加した。各CLIはraw provider/DB値を出さず固定event・status・messageだけを出す。
 - PR #203のreview・develop merge後にPDA-14を開始し、production専用Vercel project、Git非接続、project限定token、Cloudflare最小権限token、production Environment deploy Secret 5件を分離した。baselineはsame `main` SHA・production target・READY・project境界まで一致したが、Vercel Hobby Standard Protectionによりcandidate contentが認証画面となったためcustom domain移管前に停止した。
-- 上記実機差分により`PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET`を公開interfaceへ追加した。repository側はprovider mutation前の6 credential検証とcandidate/promote後の同一bypass header利用をTDDで追加し、外部bypass作成・登録は別承認へ分離する。
+- 上記実機差分により`PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET`を公開interfaceへ追加した。repository側はprovider mutation前の6 credential検証とcandidate requestだけへの同一bypass利用をTDDで追加し、custom domain requestはheaderなしとした。外部bypass作成・登録は別承認へ分離する。
 - safe evidenceは成功時の8 statusだけでなく、失敗runでも達成済みstatusのcanonical prefixだけを`if: always()`で生成する。schema検証に失敗した場合はArtifactをuploadしない。
 - Vercel candidateはpromote前にmarker・空でないimmutable assetを単体検証し、promote後にcandidateとcustom domainのasset集合・marker一致をbounded pollする二段階へ明確化した。
 - production workflow source contractを通常backend全testだけでなくRepository Integrityにも含めるため、`.github/workflows/repository-integrity.yml`を更新した。
@@ -614,6 +614,7 @@ repository品質gateではproduction/staging provider、DB、URLへ接続せず�
 - 変更YAML 1件をparserで検証し、埋め込みBash 12 blockを`bash -n`で検証
 - verifierの`node --check`、`git diff --check`成功
 - production Worker dry-runは必須変数なしでは意図どおりfail-closedとなり、実在値を使わないproduction形状の検証専用値を明示した再実行で成功
+- Copilot reviewのSecret露出面指摘に対し、candidateだけにbypass headerを付けcustom domainには送らないRed 1件を確認後、production/staging直接影響test 2 files・7 tests成功
 
 ## コミット方針
 

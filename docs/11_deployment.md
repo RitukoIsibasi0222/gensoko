@@ -207,7 +207,7 @@ repository実装のmergeだけでは自動releaseを有効化しない。product
 
 production Environmentへ別承認で追加するdeploy専用Secret名は、`PRODUCTION_CLOUDFLARE_API_TOKEN`、`PRODUCTION_CLOUDFLARE_ACCOUNT_ID`、`PRODUCTION_VERCEL_TOKEN`、`PRODUCTION_VERCEL_ORG_ID`、`PRODUCTION_VERCEL_PROJECT_ID`、`PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET`とする。既存のproduction Variables `PRODUCTION_WORKER_NAME`、`PRODUCTION_API_HOSTNAME`、`PRODUCTION_FRONTEND_ORIGIN`、`PRODUCTION_REGISTRABLE_DOMAIN`、`PRODUCTION_HYPERDRIVE_ID`は値を表示せず再検証する。`DATABASE_URL`と`PRODUCTION_SUPABASE_PROJECT_REF`はmigration gate専用であり、provider stepやfrontendへ渡さない。
 
-Vercel HobbyのStandard Protectionではproduction custom domain以外のdeployment URLが認証保護される。production project限定のautomation bypassを使い、candidate単体検証とpromote後のcandidate/custom domain比較へ同じ`x-vercel-protection-bypass` headerを渡す。6件のprovider credentialはmigration gate後かつAPI mutation前に非空・空白なしを検証し、値をlog、summary、Artifactへ出さない。
+Vercel HobbyのStandard Protectionではproduction custom domain以外のdeployment URLが認証保護される。production project限定のautomation bypassを使い、candidate単体検証とpromote後比較のcandidate requestだけへ`x-vercel-protection-bypass` headerを渡す。custom domain requestにはSecret headerを送らない。6件のprovider credentialはmigration gate後かつAPI mutation前に非空・空白なしを検証し、値をlog、summary、Artifactへ出さない。
 
 ### 通常release
 
