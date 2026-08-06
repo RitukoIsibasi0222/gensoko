@@ -34,7 +34,7 @@ describe("staging frontend deployment workflow", () => {
     expect(source).not.toContain("environment: production");
   });
 
-  it("frontend品質gateの成功後だけalias actionへ進む", () => {
+  it("frontend品質gate後にVercel branch domainをread-only検証する", () => {
     const source = workflow();
     const commands = [
       "npm ci",
@@ -44,7 +44,7 @@ describe("staging frontend deployment workflow", () => {
       "npm run check",
       "npm run format:check",
       "npm run build:preview",
-      "uses: ./.github/actions/vercel-preview-alias",
+      "uses: ./.github/actions/vercel-preview-domain",
     ];
 
     let previous = -1;
@@ -55,8 +55,9 @@ describe("staging frontend deployment workflow", () => {
     }
   });
 
-  it("exact SHA Previewをbounded pollしdevelop先端再確認後に昇格する", () => {
+  it("exact SHA Previewをbounded pollしdevelop先端再確認後に固定domainを検証する", () => {
     const source = workflow();
+    const verifyJob = source.slice(source.indexOf("  verify-preview:"));
 
     expect(source).toContain("vercel@50.17.1 list");
     expect(source).toContain("list gensoko-frontend-staging");
@@ -66,7 +67,11 @@ describe("staging frontend deployment workflow", () => {
     expect(source).toContain("githubCommitSha");
     expect(source).toContain("refs/heads/develop");
     expect(source).toContain("deployment-url-file:");
+    expect(source).toContain("domain: gensoko-frontend-staging-develop.vercel.app");
     expect(source).not.toMatch(/vercel@[^\n]+ deploy/);
+    expect(source).not.toContain("alias set");
+    expect(source).not.toContain(" inspect ");
+    expect(verifyJob).toContain("timeout-minutes: 15");
   });
 
   it("production・API・DB・fixture・artifactを日常経路へ混ぜない", () => {
