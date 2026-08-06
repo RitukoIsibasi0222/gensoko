@@ -188,6 +188,14 @@ Admin role反映待ち、見出し文言、10秒timeout、API停止が原因で�
 
 省略条件を満たした場合も「完了」にはせず、release recordで「v0.1対象外」、証拠、再着手条件を記録する。
 
+## ポートフォリオ版 v0.1 最小公開完了記録（2026-08-06）
+
+- M1R、M3、条件付きM4、M5、M6を[`portfolio-release-v0-1-minimal`](../portfolio-release-v0-1-minimal/plan.md)の境界で完了した。旧Rタスク全体や公開後項目を完了扱いにはしない。
+- production元素seedは失敗runを再実行せず、Prisma Client生成修正のreview・develop/main昇格後の新規承認付きrunで原子的upsertと独立118件verifyが成功した。production DBへの直接CLI・SQL seedは行っていない。
+- synthetic Userの主要導線、通常password verifier DO、最小429とreset、password reset、本人退会を確認した。本人退会workflowの失敗は成功扱いにせず、再認証後の通常UIで物理削除し、削除成功表示、再設定メール非発行、保護画面拒否、ランキング消失を独立確認した。
+- synthetic Userと追加検証Userの不在を確認し、本人退会用一時GitHub設定とM6専用Email Routingルールをcleanupした。本人退会flagとscheduled batchは`false`、BO15は無効、active workflowは0件を維持した。
+- Secret値、email、URL、resource ID、DB URL、token、内部ID、接続文字列、raw errorはrelease recordへ残していない。AuditLogは365日保持方針に従う。
+
 ## セキュリティ最低基準
 
 v0.1で次を維持する。ポートフォリオ用途を理由に無効化しない。
