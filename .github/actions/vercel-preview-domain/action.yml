@@ -1,5 +1,5 @@
 name: Validate Vercel Preview branch domain
-description: Validate an exact staging Preview and compare its HTML with the fixed branch domain.
+description: Validate an exact staging Preview and compare its app assets with the fixed branch domain.
 
 inputs:
   deployment-url-file:

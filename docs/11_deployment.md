@@ -203,7 +203,7 @@ M1R・M3・M4・M5・M6は完了し、default branchは`main`である。2026-08
 
 現在の境界は次のとおり。
 
-- `develop`: Vercel Previewと固定staging branch domainはVercel Git Integrationが自動更新する。Issue [#173](https://github.com/RitukoIsibasi0222/gensoko/issues/173) / 計画書 [`staging-frontend-auto-deploy`](plans/staging-frontend-auto-deploy/plan.md)で、frontend変更mergeだけを対象にexact SHA、対象Previewと固定domainのHTML完全一致、markerをGitHub Actionsからread-only検証する。
+- `develop`: Vercel Previewと固定staging branch domainはVercel Git Integrationが自動更新する。Issue [#173](https://github.com/RitukoIsibasi0222/gensoko/issues/173) / 計画書 [`staging-frontend-auto-deploy`](plans/staging-frontend-auto-deploy/plan.md)で、frontend変更mergeだけを対象にexact SHA、対象Previewと固定domainのSvelteKit immutable asset集合一致、両URLのmarkerをGitHub Actionsからread-only検証する。
 - `main`: frontendのprovider自動deployは観測済みだが、production API deployはmain mergeだけでは自動化されていない。Issue [#174](https://github.com/RitukoIsibasi0222/gensoko/issues/174)でproduction Environment承認、pending migration停止、API → health → frontend → smokeをsame SHAへ固定する。
 - M2: 日常の固定staging URL更新には使わない。auth / API / DB / provider設定などの高リスク変更時に使う手動総合試験として維持する。
 
@@ -219,7 +219,7 @@ Issue #174が完了するまでは、mainへmergeしただけでproduction API�
 - frontend: `@sveltejs/adapter-vercel`、Node.js 22、公開API URL fail-fast、Vercel Build Output/secret contract、frontend PR CIを固定
 - 実環境確認済み: Vercel Hobby `develop` Preview、staging Worker、SQLite-backed DO、Hyperdrive、7件のWorker secret、Supabase migration current、health/CORS/OPTIONS、元素118件
 - synthetic確認済み: 登録・メール認証・login・ゲーム10問/score 500・password reset・本人退会・削除後login拒否・Admin強制退会・旧credential拒否。Resendはallowlist宛の確認メール2通・resetメール1通だけを送信
-- 未実施: staging API rollback実確認、HTML content一致方式のmerge後run、T35 legacy cleanup
+- 未実施: staging API rollback実確認、immutable asset fingerprint方式のmerge後run、T35 legacy cleanup
 
 コード基盤のローカル再確認は外部serviceへ接続せず、次で行う。
 
@@ -268,7 +268,7 @@ Vercelの契約どおりexit code 1はbuild、0はskipを表す。Issue #173の�
 
 ### 日常staging frontend自動更新（Issue #173）
 
-実装計画の正本は[`docs/plans/staging-frontend-auto-deploy/plan.md`](plans/staging-frontend-auto-deploy/plan.md)とする。Vercel Git Integrationが`develop`のfrontend変更からPreviewを作成し、Vercel Project Settingsのbranch domainが成功Previewを固定URLへ自動反映する。GitHub Actionsはfrontend品質gate、exact SHA / ref / preview / READY確認、develop先端再確認、対象Previewと固定domainのread-only HTML完全一致・marker検証だけを実行する。
+実装計画の正本は[`docs/plans/staging-frontend-auto-deploy/plan.md`](plans/staging-frontend-auto-deploy/plan.md)とする。Vercel Git Integrationが`develop`のfrontend変更からPreviewを作成し、Vercel Project Settingsのbranch domainが成功Previewを固定URLへ自動反映する。GitHub Actionsはfrontend品質gate、exact SHA / ref / preview / READY確認、develop先端再確認、対象Previewと固定domainのread-only immutable asset fingerprint・marker検証だけを実行する。
 
 docsなどfrontend成果物へ影響しないdevelop変更は、GitHub Actionsの`paths`とrepository管理のVercel Ignored Build Step scriptの両方でskipする。Ignored Build Stepの外部設定は対象project・影響・rollbackを確認した承認後に反映済みである。mainのproduction build条件はIssue #174まで変更しない。
 
@@ -288,7 +288,7 @@ docsだけのmergeではworkflowとVercel buildをskipする。quality失敗、P
 
 PR #192のmerge SHA `b84667a166c296355dd5a5f98957954b5950b203`で起動したrun [31072094165](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31072094165)は、初回は3 Secret未登録、preflight後のfailed job再実行はPreview探索timeoutでalias更新前に失敗した。再実行でも固定aliasは維持され、安全側で停止した。
 
-Vercel CLIでは`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数としてprojectを固定する。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡してはいけない。project限定tokenのまま`list gensoko-frontend-staging --format=json`でSHA、ref、URL、target、READYを確認する。固定domain追従は、同じbypass / no-cache条件で対象Previewと固定domainを取得し、200、同一origin、`text/html`、HTML完全一致、markerを確認する。`inspect`、`alias ls`、`alias set`、deployment detail API、provider状態を変更するREST methodは使用しない。
+Vercel CLIでは`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数としてprojectを固定する。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡してはいけない。project限定tokenのまま`list gensoko-frontend-staging --format=json`でSHA、ref、URL、target、READYを確認する。固定domain追従は、同じbypass / no-cache条件で対象Previewと固定domainを取得し、200、同一origin、`text/html`、同一originの`/_app/immutable/` asset集合一致、両URLのmarkerを確認する。外部provider markupは比較対象にせず、asset集合は空を許可しない。`inspect`、`alias ls`、`alias set`、deployment detail API、provider状態を変更するREST methodは使用しない。
 
 PR #193のmerge SHA `ef97e98d72a6fa159c424c02cc9a0e0523231aaa`で起動したrun [31076459494](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31076459494)は、exact `READY` Preview探索とalias直前のdevelop先端再確認に成功した後、共通alias actionで失敗した。固定aliasは旧CSS bundleを維持し、merge SHA固有Previewのbundleとは一致しなかった。provider raw値をlogへ出さない契約は維持し、次の修正では失敗箇所をcandidate不一致、更新前metadata、alias set、更新後inspect、更新後不一致、smokeの固定メッセージだけで分類する。
 
@@ -300,13 +300,15 @@ PR #196のmerge SHA `2fa65d4c5857a2a048e56d60062309091af369db`で起動したrun
 
 PR #198のmerge SHA `0091f71342ab07d19684b0f2e5e11b0702f84b63`で起動したrun [31086958523](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31086958523)は、frontend品質gate、exact `READY` Preview探索、develop先端再確認まで成功した後、project限定tokenで`alias ls`を利用できず固定domain確認で安全停止した。token権限を広げずstaging / production分離を維持するため、固定domainのprovider metadataではなく対象PreviewとのHTML content一致をread-only検証する方式へ変更した。
 
+PR #199のmerge SHA `a817d3682acc5732cd01798ed8fcfb8f1c42e40b`で起動したrun [31090151492](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31090151492)は、frontend品質gate、exact `READY` Preview探索、develop先端再確認まで成功し、固定domain content待機だけがtimeoutした。ログイン済みbrowserで固定domainの最新トップページUIを確認し、候補Previewと固定domainが同じ14件のSvelteKit `/_app/immutable/` assetを参照していることを確認した。候補HTMLだけにVercel Toolbarの外部scriptが注入されていたため、HTML全体比較は同じapplication buildを誤検知する。候補固有originのhydration時API errorはstaging API CORSが固定domainだけを許可する契約によるもので、固定domainの動作確認結果には影響しない。
+
 #### 通常の自動更新
 
 1. `frontend/**`を含むreview済みPRを`develop`へmergeする。
 2. `Staging Frontend Deploy`の`frontend-quality`がmerge commitのexact SHAでaudit、test、lint、Svelte check、format check、Preview build検証を通す。
 3. `verify-preview`がVercel Git Integration由来の`READY` Previewを最大5分bounded pollし、listでSHA、ref=`develop`、target=`preview`、URL、候補一意性を構造化JSONで確認する。
 4. domain確認直前にGitHubの`develop`先端を再確認する。先端が移動していれば旧runを安全に失敗させ、新しいrunへ委譲する。
-5. 共通actionが候補metadataを再確認し、対象Previewと固定domainを同じbypass / no-cache条件で取得する。200、同一origin、`text/html`、HTML完全一致、markerを最大5分bounded pollし、redirect・非HTML・content不一致は安全に失敗させる。
+5. 共通actionが候補metadataを再確認し、対象Previewと固定domainを同じbypass / no-cache条件で取得する。200、同一origin、`text/html`、空でないSvelteKit immutable asset集合一致、両URLのmarkerを最大5分bounded pollし、redirect・非HTML・asset不一致・asset欠落・marker欠落は安全に失敗させる。外部provider markupとabsolute / relative URL表記差は比較対象外にする。
 6. Summaryにexact SHAと`BRANCH_DOMAIN_READY` / `SMOKE_CLEAR`だけが残り、固定URLで対象Previewと同じ最新UIを確認できることを確認する。
 
 同じSHAのPreviewをGitHub Actionsから再deployしない。日常workflowを手動dispatchへ拡張せず、失敗修正後の次のfrontend mergeで再実行する。API、DB、fixture、synthetic campaignを伴う高リスク変更だけ、既存M2を別承認で使う。
@@ -314,7 +316,7 @@ PR #198のmerge SHA `0091f71342ab07d19684b0f2e5e11b0702f84b63`で起動したrun
 #### 失敗時の復旧
 
 - Preview / domain確認前の失敗: provider状態を変更せず、quality、Vercel Preview、metadata、develop先端、Environment Secret名、branch domain設定を値非表示で確認する。
-- domain content追従timeout: 新しいrunやM2を重ねず、Vercel dashboardで固定domainの`develop`割り当てと直前の正常deploymentを確認する。候補・固定domainのHTTP status、同一origin、content type、HTML一致を値非表示で切り分け、固有URLやprovider JSONをworkflow logへ出さない。
+- domain content追従timeout: 新しいrunやM2を重ねず、Vercel dashboardで固定domainの`develop`割り当てと直前の正常deploymentを確認する。候補・固定domainのHTTP status、同一origin、content type、immutable asset集合、markerを値非表示で切り分け、固有URLやprovider JSONをworkflow logへ出さない。
 - 自動更新の緊急停止: Vercel staging projectのbranch domain割り当てを外すか、Git Integrationを停止する。GitHub検証だけを止める場合はworkflowを無効化する。production project、main、production domainは変更しない。
 
 ### SD13以降の承認境界

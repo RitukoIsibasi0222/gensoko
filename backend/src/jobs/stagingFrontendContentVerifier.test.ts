@@ -34,13 +34,41 @@ function htmlResponse(url: string, html: string): Response {
   return response;
 }
 
+function appHtml({
+  assetOrigin = "",
+  assetHash = "same-build",
+  marker = "Gensoko",
+  providerMarkup = "",
+}: {
+  assetOrigin?: string;
+  assetHash?: string;
+  marker?: string;
+  providerMarkup?: string;
+} = {}): string {
+  return `<html><head>
+    <link rel="stylesheet" href="${assetOrigin}/_app/immutable/assets/0.${assetHash}.css">
+    <link rel="modulepreload" href="${assetOrigin}/_app/immutable/chunks/app.${assetHash}.js">
+  </head><body>${marker}${providerMarkup}</body></html>`;
+}
+
 describe("staging frontend content verifier", () => {
-  it("candidateと固定domainのHTMLが一致する場合だけ成功する", async () => {
+  it("provider注入HTMLとoriginが異なってもapp asset fingerprint一致で成功する", async () => {
     const { verifyStagingFrontendContent } = await verifier();
-    const html = "<html><title>Gensoko</title></html>";
-    const fetchMock = vi.fn(async (input: string | URL | Request, _init?: RequestInit) =>
-      htmlResponse(String(input), html),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        htmlResponse(
+          "https://gensoko-candidate.vercel.app/",
+          appHtml({
+            assetOrigin: "https://gensoko-candidate.vercel.app",
+            providerMarkup:
+              '<script src="https://vercel.live/_next-live/feedback/feedback.js"></script>',
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        htmlResponse("https://gensoko-frontend-staging-develop.vercel.app/", appHtml()),
+      );
     const fetchImpl = fetchMock as unknown as typeof fetch;
 
     await expect(
@@ -66,17 +94,20 @@ describe("staging frontend content verifier", () => {
     }
   });
 
-  it("HTML不一致・非HTML・不正URLをfalseへ寄せる", async () => {
+  it("app asset hash不一致・asset欠落・marker欠落をfalseへ寄せる", async () => {
     const { verifyStagingFrontendContent } = await verifier();
     const mismatchFetch = vi
       .fn()
       .mockResolvedValueOnce(
-        htmlResponse("https://gensoko-candidate.vercel.app/", "<html>Gensoko candidate</html>"),
+        htmlResponse(
+          "https://gensoko-candidate.vercel.app/",
+          appHtml({ assetHash: "candidate-build" }),
+        ),
       )
       .mockResolvedValueOnce(
         htmlResponse(
           "https://gensoko-frontend-staging-develop.vercel.app/",
-          "<html>Gensoko old</html>",
+          appHtml({ assetHash: "old-build" }),
         ),
       ) as unknown as typeof fetch;
 
@@ -90,6 +121,40 @@ describe("staging frontend content verifier", () => {
       }),
     ).resolves.toBe(false);
 
+    const noAssetsFetch = vi.fn(async (input: string | URL | Request) =>
+      htmlResponse(String(input), "<html>Gensoko</html>"),
+    ) as unknown as typeof fetch;
+    await expect(
+      verifyStagingFrontendContent({
+        candidateUrl: "https://gensoko-candidate.vercel.app/",
+        domainUrl: "https://gensoko-frontend-staging-develop.vercel.app/",
+        smokeMarker: "Gensoko",
+        bypassSecret: "",
+        fetchImpl: noAssetsFetch,
+      }),
+    ).resolves.toBe(false);
+
+    const missingMarkerFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        htmlResponse("https://gensoko-candidate.vercel.app/", appHtml({ marker: "" })),
+      )
+      .mockResolvedValueOnce(
+        htmlResponse("https://gensoko-frontend-staging-develop.vercel.app/", appHtml()),
+      ) as unknown as typeof fetch;
+    await expect(
+      verifyStagingFrontendContent({
+        candidateUrl: "https://gensoko-candidate.vercel.app/",
+        domainUrl: "https://gensoko-frontend-staging-develop.vercel.app/",
+        smokeMarker: "Gensoko",
+        bypassSecret: "",
+        fetchImpl: missingMarkerFetch,
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it("非HTML・不正URLをfalseへ寄せる", async () => {
+    const { verifyStagingFrontendContent } = await verifier();
     const nonHtmlFetch = vi.fn(async (input: string | URL | Request) => {
       const response = new Response('{"name":"Gensoko"}', {
         status: 200,
