@@ -333,6 +333,7 @@ Repository品質gateではVercel、staging URL、API、DBへ接続せず、workf
 - Vercel Hobby projectでは対象`develop`先端SHAのPreviewが`READY`だが、固定staging aliasはそのdeploymentに付与されていない。固定URLが最新UIへ追従しない問題を再現できた。
 - Vercel Ignored Build Stepは`develop`と`main`を常にbuildする既存Custom commandのままで、`npm run vercel:ignore-build`へ未変更である。
 - Node.js `22.23.1`でbackend 1320 test、Workers 32 test、frontend 683 test、build、lint、Svelte check、format check、Preview build contractを通した。frontend auditのmoderate/highは非破壊lockfile更新で解消し、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
+- PR #192のGitHub Copilot reviewでproject identityのfail-closed検証不足を指摘された。Vercel REST `GET /v9/projects/{projectId}`を`teamId` scopeで照合し、project IDと固定project名を完全一致検証したうえで、Vercel CLIの全候補探索・alias操作も固定app名と`--scope`へ限定する修正をRed 2件→Green 18件で追加した。
 - 上記3 Secretの登録、Ignored Build Step変更、PR merge、alias更新は外部変更を伴うため、対象project、費用・影響、rollbackを提示した直前承認後にSFA-09〜SFA-11として実施する。
 
 ## 参考資料
