@@ -131,8 +131,8 @@ developへfrontend変更をmerge
    - 根拠: concurrencyの処理順は保証されないため、provider変更直前の二重確認が必要である。
 
 5. **deployment候補をどう特定するか**
-   - 選択: `VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数として設定したpinned Vercel CLIで`githubCommitSha` metadataを使ってbounded pollする。`list <project> --format=json`でSHA、ref、target、state、URL、deployment IDを完全一致させ、同じURLの`inspect --format=json`でdeployment ID、project name、URL、target、READYを二段検証する。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡さず、project限定tokenへ追加のProjects REST権限を要求しない。
-   - 根拠: raw JSON文字列への`includes`は別fieldの偶然一致を許すためfail-closedにならない。Vercel CLI `50.17.1`の`list --format=json`はprovider応答の`name`が未定義ならproject nameをJSONから省略する一方、`inspect --format=json`はproject nameを構造化fieldとして整形する。Git metadataを持つlistとproject境界を持つinspectをdeployment IDで結べば、実出力に存在しないfieldへ依存せず、候補・更新前・更新後・rollbackの全境界で固定projectを検証できる。
+   - 選択: `VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数として設定したpinned Vercel CLIで`githubCommitSha` metadataを使ってbounded pollする。`list <project> --format=json`でSHA、ref、target、state、URLを完全一致させ、同じURLの`inspect --format=json`で初めてdeployment IDを取得してproject name、URL、target、READYを二段検証する。取得したIDはworkflow内の一時fileだけで更新後・rollback検証へ引き継ぐ。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡さず、project限定tokenへ追加のProjects REST権限を要求しない。
+   - 根拠: raw JSON文字列への`includes`は別fieldの偶然一致を許すためfail-closedにならない。Vercel CLI `50.17.1`の`list --format=json`はprovider応答の`name`または`id`が未定義なら該当fieldをJSONから省略する一方、`inspect --format=json`はproject nameとdeployment IDを構造化fieldとして整形する。Git metadataと一意な候補URLを持つlistから同じURLのinspectへ接続すれば、実出力に存在しないfieldへ依存せず、候補・更新前・更新後・rollbackの全境界で固定projectとIDを検証できる。
 
 6. **alias更新処理をどこへ置くか**
    - 選択: repository local composite actionへ共通化し、日常workflowとM2の両方から呼ぶ。
@@ -246,6 +246,7 @@ repository実装PRではEnvironment、Secret、Vercel Project Settings、alias�
 | SFA-08A  | Vercel CLI scope解決の回帰修正            | workflow / action / test                          | 高     | Repository   |
 | SFA-08B  | project限定tokenのalias検証回帰修正       | alias action / test / docs                        | 高     | Repository   |
 | SFA-08C  | list / inspect候補metadataの回帰修正      | alias action / test / docs                        | 高     | Repository   |
+| SFA-08D  | list ID省略時のinspect取得回帰修正        | alias action / test / docs                        | 高     | Repository   |
 | SFA-09   | staging Environment / Vercel preflight    | GitHub / Vercel                                   | 高     | 別承認・外部 |
 | SFA-10   | implementation mergeで自動run確認         | GitHub Actions / Vercel                           | 高     | 別承認・外部 |
 | SFA-11   | fixed alias SHA・smoke・旧run非上書き確認 | staging                                           | 高     | 別承認・外部 |
@@ -263,6 +264,7 @@ repository実装PRではEnvironment、Secret、Vercel Project Settings、alias�
 - [x] SFA-08A: Vercel CLIへteam IDをslug用scopeとして渡さない回帰修正を行う
 - [x] SFA-08B: project限定tokenではCLI JSONのproject nameを完全一致検証し、段階別の安全な失敗診断を追加する
 - [x] SFA-08C: listでexact Git metadataを確認し、同じ候補をinspectしてproject境界を完全一致検証する
+- [x] SFA-08D: listのID省略を許容し、同じ候補のinspectからIDを取得して後続検証へ引き継ぐ
 - [x] SFA-09: 別承認でstaging Environment / Vercelをpreflightする
 - [ ] SFA-10: implementation mergeによる自動runを確認する
 - [ ] SFA-11: fixed aliasのexact SHA、smoke、旧run非上書きを確認する
@@ -284,6 +286,7 @@ SFA-08	repository全体品質gate	repository	高
 SFA-08A	Vercel CLI scope解決の回帰修正	workflow / action / test	高
 SFA-08B	project限定tokenのalias検証回帰修正	alias action / test / docs	高
 SFA-08C	list / inspect候補metadataの回帰修正	alias action / test / docs	高
+SFA-08D	list ID省略時のinspect取得回帰修正	alias action / test / docs	高
 SFA-09	staging Environment / Vercel preflight	GitHub / Vercel	高
 SFA-10	implementation mergeで自動run確認	GitHub Actions / Vercel	高
 SFA-11	fixed alias SHA・smoke・旧run非上書き確認	staging	高
@@ -354,6 +357,8 @@ Repository品質gateではVercel、staging URL、API、DBへ接続せず、workf
 - SFA-08Bの最終品質gateはbackend 1324 test、Workers 32 test、frontend 685 test、backend/frontend build、lint、Svelte check、format check、YAML parse、埋め込みBash構文、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
 - PR #194は`develop`へmerge済みで、merge SHAは`0918f9a545276f4fa4973927886055683d78fdeb`である。run [31079563100](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31079563100)では品質gate、exact `READY` Preview探索、alias直前のdevelop先端再確認まで成功したが、共通actionのcandidate project metadata検証で安全に停止し、固定aliasを維持した。Vercel CLI `50.17.1`の配布コードと実runを照合し、`list --format=json`で省略され得るproject name条件を外し、listで確定したIDと同じcandidate URLを`inspect --format=json`してproject境界を完全一致させた。Redはbackend 4件・frontend 1件、直接影響testはbackend 22件・frontend 5件、YAML parseと埋め込みBash構文がGreenである。
 - SFA-08Cの最終品質gateはbackend 1324 test、Workers 32 test、frontend 685 test、backend/frontend build、lint、Svelte check、format check、YAML parse、埋め込みBash構文、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
+- PR #195は`develop`へmerge済みで、merge SHAは`d40bf3657b806449c0abc5b2bc18bb53cba397e2`である。run [31081222649](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31081222649)では品質gate、exact `READY` Preview探索、alias直前のdevelop先端再確認まで成功したが、list JSONのdeployment ID省略を共通actionが不一致としてalias更新前に安全停止した。listのID条件を外し、同じ候補URLのinspectからIDを取得して後続検証へ引き継ぐ修正をRed backend 1件・frontend 1件からGreenへ進め、直接影響testはbackend 22件・frontend 5件、YAML parseと埋め込みBash構文が通過した。
+- SFA-08Dの最終品質gateはbackend 1324 test、Workers 32 test、frontend 685 test、backend/frontend build、lint、Svelte check、format check、YAML parse、埋め込みBash構文、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
 
 ## 参考資料
 
