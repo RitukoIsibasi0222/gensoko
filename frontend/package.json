@@ -21,6 +21,7 @@
     "test:e2e:staging-release-candidate": "playwright test --config playwright.staging-release-candidate.config.ts",
     "test:e2e:production": "playwright test --config playwright.production.config.ts",
     "test:e2e:production-account-deletion": "playwright test --config playwright.production-account-deletion.config.ts",
+    "vercel:ignore-build": "node scripts/vercel-ignore-build.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

@@ -258,13 +258,13 @@ env \
 
 branch scoped値は新しいdeploymentのbuild時に反映される。設定変更後は既存deploymentを合格扱いにせず、承認後に新しい`develop` Previewを作成して成果物を確認する。固定branch URLだけをAPIの`FRONTEND_URL`に使い、commit URLやwildcard CORSは使わない。
 
-初回公開前のSD15では、Vercel Project Settings → Build and Deployment → Ignored Build StepをCustomとし、次のcommandで`develop`だけをbuildする契約だった。Vercelの契約どおりexit code 1はbuild、0はskipを表す。
+初回公開前のSD15では、Vercel Project Settings → Build and Deployment → Ignored Build StepをCustomとし、`develop`だけをbuildする契約だった。2026-08-06のread-only再確認では、外部設定は次の既存commandへ変わっており、`develop`と`main`を常にbuildする。
 
 ```bash
-if [ "$VERCEL_GIT_COMMIT_REF" = "develop" ]; then exit 1; else exit 0; fi
+if [ "$VERCEL_GIT_COMMIT_REF" = "develop" ] || [ "$VERCEL_GIT_COMMIT_REF" = "main" ]; then exit 1; else exit 0; fi
 ```
 
-2026-08-06時点では、mainのM6完了docs mergeでもVercel Git IntegrationのProduction deployment成功を確認しており、上記は現在の外部設定を示す正本ではない。Issue #173では`develop` Previewの固定alias追従だけを実装し、mainのProduction build条件は変更しない。Issue #174でAPI → frontendの順序とdeploy所有権を決定するまで、上記commandの復元・再適用を独断で行わない。feature branchへstaging API URLを広げて失敗を回避してはいけない。
+Vercelの契約どおりexit code 1はbuild、0はskipを表す。Issue #173では外部設定を`npm run vercel:ignore-build`へ変更する。このscriptは`main`の現行production buildを維持し、`develop`は前後SHA間の`frontend`差分がある場合だけbuildし、差分判定不能時はfail-openでbuildする。他branchはskipする。Issue #174でAPI → frontendの順序とdeploy所有権を決定するまで、mainのProduction build条件を変更しない。feature branchへstaging API URLを広げて失敗を回避してはいけない。
 
 ### 日常staging frontend自動更新（Issue #173）
 
@@ -273,6 +273,36 @@ if [ "$VERCEL_GIT_COMMIT_REF" = "develop" ]; then exit 1; else exit 0; fi
 docsなどfrontend成果物へ影響しないdevelop変更は、GitHub Actionsの`paths`とrepository管理のVercel Ignored Build Step scriptの両方でskipする。Ignored Build Stepの外部設定はrepository実装と混ぜず、対象project・影響・rollbackを確認した別承認で行う。mainのproduction build条件はIssue #174まで変更しない。
 
 docsだけのmerge、quality失敗、Preview timeout、metadata不一致、古いdevelop SHAではaliasを変更しない。alias更新後の確認またはsmokeが失敗した場合は直前の正常deploymentへ戻し、rollbackも確認できない場合はfailureで停止してVercel dashboardから手動復旧する。固有deployment URL、provider ID、raw response、tokenをlog・Summary・Artifactへ残さない。
+
+#### 外部設定preflight
+
+自動更新を有効化する前に、値を表示せず次を確認する。
+
+1. GitHub `staging` Environmentのdeployment branch policyが`develop`限定で、日常自動runを止めるrequired reviewerがないこと。
+2. `staging` Environment Secretに`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`、必要な場合は`VERCEL_AUTOMATION_BYPASS_SECRET`が存在すること。repository secretやproduction Environmentと共用しない。
+3. Vercel projectがHobby `gensoko-frontend-staging`で、Git Integrationが`develop`のfrontend変更からPreviewを作成し、Previewの`VITE_API_BASE_URL`がstaging APIへbranch scopeされていること。
+4. Vercel Ignored Build Stepを`npm run vercel:ignore-build`へ変更すること。repository側scriptのmerge前に先行変更しない。
+5. 固定aliasの現在の参照先をdashboardで確認できること。
+
+2026-08-06のread-only確認では1とGit Integrationを確認済みだが、`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`は未登録で、Ignored Build Stepも既存Custom commandのままである。対象`develop`先端のPreviewは`READY`だが固定aliasへ未割当であり、古いUI問題を再現した。Secret登録、Vercel設定保存、PR merge、alias変更は別の直前承認が完了するまで実行しない。
+
+#### 通常の自動更新
+
+1. `frontend/**`を含むreview済みPRを`develop`へmergeする。
+2. `Staging Frontend Deploy`の`frontend-quality`がmerge commitのexact SHAでaudit、test、lint、Svelte check、format check、Preview build検証を通す。
+3. `promote-preview`がVercel Git Integration由来の`READY` Previewを最大5分bounded pollし、SHA、ref=`develop`、target=`preview`、project、候補一意性を構造化JSONで確認する。
+4. alias更新直前にGitHubの`develop`先端を再確認する。先端が移動していれば旧runを安全に失敗させ、新しいrunへ委譲する。
+5. 共通actionが直前参照を一時fileへ保存し、固定aliasを更新する。更新後deployment ID、`READY`、`preview`を再確認し、固定URLへ15秒timeoutのread-only HTML smokeを行う。
+6. Summaryにexact SHAと`ALIAS_UPDATED` / `SMOKE_CLEAR`だけが残り、固定URLで最新UIを確認できることを確認する。
+
+同じSHAのPreviewをGitHub Actionsから再deployしない。日常workflowを手動dispatchへ拡張せず、失敗修正後の次のfrontend mergeで再実行する。API、DB、fixture、synthetic campaignを伴う高リスク変更だけ、既存M2を別承認で使う。
+
+#### 失敗時の復旧
+
+- alias更新前の失敗: 固定aliasを変更せず、quality、Vercel Preview、metadata、develop先端、Environment Secretの存在を値非表示で確認する。
+- alias更新後のpost-check / smoke失敗: 共通actionの`ROLLED_BACK`を確認する。固有URLやprovider JSONをworkflow logへ出さない。
+- rollback未確認: 新しいrunやM2を重ねず、Vercel dashboardで固定aliasと直前の正常deploymentを確認する。手動alias復旧は対象project・影響・rollbackを再提示した別承認後だけ行う。
+- 自動更新の緊急停止: workflowを無効化するか`staging` EnvironmentのVercel Secretを削除し、Ignored Build Stepを直前commandへ戻す。固定aliasは最後に確認済みの参照先を維持する。
 
 ### SD13以降の承認境界
 
