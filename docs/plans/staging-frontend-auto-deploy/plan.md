@@ -347,8 +347,8 @@ Repository品質gateではVercel、staging URL、API、DBへ接続せず、workf
 - scope回帰修正後はNode.js 22でbackend 1321 test、Workers 32 test、frontend 684 test、backend/frontend build、lint、Svelte check、format check、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
 - PR #193のCopilot reviewで、scope回帰testが`process.cwd()`からrepository rootを推測しており、repo直下の`vitest --root frontend`実行で失敗する指摘を受けた。別cwd実行のRedを再現し、既存source contract testと同じ`import.meta.url` / `fileURLToPath`基準へ修正した。
 - PR #193は`develop`へmerge済みで、merge SHAは`ef97e98d72a6fa159c424c02cc9a0e0523231aaa`である。run [31076459494](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31076459494)ではexact `READY` Preview探索とalias直前のdevelop先端再確認まで成功したが、共通alias actionが失敗し、固定aliasは旧CSS bundleを維持した。project限定tokenに不要なProjects REST権限面を増やさず、pinned CLI JSONのproject nameを候補・更新前・更新後・rollbackで完全一致検証し、秘密やprovider raw値を出さない固定段階メッセージをRed 3件→Green backend 6件・frontend 2件で追加した。SFA-10〜SFA-12はこの修正のmerge後に再確認する。
-- PR #194のCopilot reviewで、smoke内の`fetch`やURL処理が例外を投げるとNode stack traceがstderrへ出て固定段階メッセージ契約から外れる指摘を受けた。意図した挙動ではないため、smoke範囲だけを検査するRed 1件を追加し、処理全体を`try/catch`で囲んで例外内容を出さず`process.exit(1)`へ寄せた。直接影響testはbackend 21件・frontend 2件がGreenである。
-- SFA-08Bの最終品質gateはbackend 1323 test、Workers 32 test、frontend 685 test、backend/frontend build、lint、Svelte check、format check、YAML parse、埋め込みBash構文、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
+- PR #194のCopilot reviewで、smoke内の`fetch`やURL処理が例外を投げるとNode stack traceがstderrへ出て固定段階メッセージ契約から外れる指摘を受けた。意図した挙動ではないため、smoke範囲だけを検査するRed 1件を追加し、処理全体を`try/catch`で囲んで例外内容を出さず`process.exit(1)`へ寄せた。再reviewでは候補・更新前・更新後・rollbackのmetadata検証にも同じ例外露出経路があると確認したため、重複した`try/catch`を増やさず、5つの埋め込みNode検証すべてでstderrを破棄し、shell側の固定段階メッセージだけを残した。直接影響testはRed 1件からbackend 22件・frontend 2件がGreenである。
+- SFA-08Bの最終品質gateはbackend 1324 test、Workers 32 test、frontend 685 test、backend/frontend build、lint、Svelte check、format check、YAML parse、埋め込みBash構文、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
 
 ## 参考資料
 
