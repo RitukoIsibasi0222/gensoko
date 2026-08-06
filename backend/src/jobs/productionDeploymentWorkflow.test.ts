@@ -58,6 +58,7 @@ describe("production deployment workflow", () => {
       "Validate live main head before protected access",
       "Validate production database target",
       "Check production migration status",
+      "Validate production provider credentials",
       "Deploy exact production API",
       "Validate production API health",
       "Deploy staged production frontend",
@@ -83,11 +84,35 @@ describe("production deployment workflow", () => {
     expect(source).toContain("cancel-in-progress: false");
     expect(source).toContain("PRODUCTION_CLOUDFLARE_API_TOKEN");
     expect(source).toContain("PRODUCTION_VERCEL_TOKEN");
+    expect(source).toContain("PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET");
     expect(source).not.toMatch(/secrets\.(VERCEL_TOKEN|CLOUDFLARE_API_TOKEN|STAGING_[A-Z0-9_]+)/);
     expect(source).not.toContain("environment: staging");
     expect(source).not.toContain("gensoko-api-staging");
     expect(source).not.toContain("gensoko-frontend-staging");
     expect(source).not.toContain("target preview");
+  });
+
+  it("全provider credentialをAPI mutation前に検証しbypass Secretを両frontend検証へ渡す", () => {
+    const source = workflow();
+    const credentials = source.slice(
+      source.indexOf("Validate production provider credentials"),
+      source.indexOf("Deploy exact production API"),
+    );
+
+    for (const name of [
+      "PRODUCTION_CLOUDFLARE_API_TOKEN",
+      "PRODUCTION_CLOUDFLARE_ACCOUNT_ID",
+      "PRODUCTION_VERCEL_TOKEN",
+      "PRODUCTION_VERCEL_ORG_ID",
+      "PRODUCTION_VERCEL_PROJECT_ID",
+      "PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET",
+    ]) {
+      expect(credentials).toContain(name + ": ${{ secrets." + name + " }}");
+      expect(credentials).toContain(name);
+    }
+    expect(credentials).toContain('[ -z "$credential" ]');
+    expect(credentials).toContain('[[ "$credential" =~ [[:space:]] ]]');
+    expect(source.match(/PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET:/g)).toHaveLength(3);
   });
 
   it("provider raw responseを一時fileへ閉じtrap cleanupしsafe evidenceだけを短期保存する", () => {

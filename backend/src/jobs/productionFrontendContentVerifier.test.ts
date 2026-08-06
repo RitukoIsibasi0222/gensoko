@@ -50,11 +50,47 @@ describe("production frontend content verifier", () => {
       module.verifyProductionFrontendCandidate({
         candidateUrl: "https://gensoko-production-candidate.vercel.app/",
         smokeMarker: "Gensoko",
-        bypassSecret: "",
+        bypassSecret: "production-bypass-secret",
         fetchImpl,
       }),
     ).resolves.toBe(true);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://gensoko-production-candidate.vercel.app/",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-vercel-protection-bypass": "production-bypass-secret",
+        }),
+      }),
+    );
+  });
+
+  it("production bypass Secretが空または空白を含む場合はfetch前に拒否する", async () => {
+    expect(existsSync(VERIFIER_PATH)).toBe(true);
+    const module = (await import(pathToFileURL(VERIFIER_PATH).href)) as {
+      verifyProductionFrontendCandidate: (
+        options: Omit<Parameters<VerifyProduction>[0], "domainUrl">,
+      ) => Promise<boolean>;
+    };
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+
+    await expect(
+      module.verifyProductionFrontendCandidate({
+        candidateUrl: "https://gensoko-production-candidate.vercel.app/",
+        smokeMarker: "Gensoko",
+        bypassSecret: "",
+        fetchImpl,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      module.verifyProductionFrontendCandidate({
+        candidateUrl: "https://gensoko-production-candidate.vercel.app/",
+        smokeMarker: "Gensoko",
+        bypassSecret: "invalid bypass",
+        fetchImpl,
+      }),
+    ).resolves.toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("production candidateとcustom domainのasset・marker一致をGETだけで確認する", async () => {
@@ -71,7 +107,7 @@ describe("production frontend content verifier", () => {
         candidateUrl: "https://gensoko-production-candidate.vercel.app/",
         domainUrl: "https://www.gensoko.example.co/",
         smokeMarker: "Gensoko",
-        bypassSecret: "",
+        bypassSecret: "production-bypass-secret",
         fetchImpl,
       }),
     ).resolves.toBe(true);
@@ -94,7 +130,7 @@ describe("production frontend content verifier", () => {
         candidateUrl: "https://gensoko-production-candidate.vercel.app/",
         domainUrl: "https://www.gensoko.example.co/",
         smokeMarker: "Gensoko",
-        bypassSecret: "",
+        bypassSecret: "production-bypass-secret",
         fetchImpl: invalidFetch,
       }),
     ).resolves.toBe(false);
@@ -103,7 +139,7 @@ describe("production frontend content verifier", () => {
         candidateUrl: "https://gensoko-frontend-staging-develop.vercel.app/",
         domainUrl: "https://www.gensoko.example.co/",
         smokeMarker: "Gensoko",
-        bypassSecret: "",
+        bypassSecret: "production-bypass-secret",
         fetchImpl: vi.fn() as unknown as typeof fetch,
       }),
     ).resolves.toBe(false);
