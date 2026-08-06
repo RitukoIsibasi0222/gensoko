@@ -71,9 +71,10 @@
 | `frontend/scripts/vercel-ignore-build.mjs`                         | 新規     | developのfrontend無変更commitと対象外branchをbuild前にskip         |
 | `frontend/src/vercel-ignore-build.test.ts`                         | 新規     | develop/main/featureとgit diff結果のcontract test                  |
 | `frontend/package.json`                                            | 修正     | Vercel Ignored Build Step用scriptを追加                            |
+| `frontend/package-lock.json`                                       | 修正     | auditで検出したmoderate/high transitive依存を安全なversionへ更新   |
 | `docs/11_deployment.md`                                            | 修正     | 日常staging、M2、高リスク、rollbackのrunbook                       |
 | `docs/05_progress.md`                                              | 修正     | Issue #173を進捗管理へ追加し初回公開済み状態を同期                 |
-| `docs/plans/staging-frontend-auto-deploy/plan.md`                  | 新規     | 本計画                                                             |
+| `docs/plans/staging-frontend-auto-deploy/plan.md`                  | 修正     | 実装結果・外部preflight結果を同期                                  |
 
 ## 設計フロー
 
@@ -245,15 +246,15 @@ repository実装PRではEnvironment、Secret、Vercel Project Settings、alias�
 | SFA-11   | fixed alias SHA・smoke・旧run非上書き確認 | staging                                           | 高     | 別承認・外部 |
 | SFA-12   | Issue #173完了記録                        | docs / GitHub                                     | 中     | 外部証拠後   |
 
-- [ ] SFA-01: workflow trigger・境界のRed testを作成する
-- [ ] SFA-02: alias actionのRed testを作成する
-- [ ] SFA-03: 共通Vercel preview alias actionを実装する
-- [ ] SFA-03A: Vercel Ignored Build Step scriptとtestを実装する
-- [ ] SFA-04: develop自動workflowを実装する
-- [ ] SFA-05: M2のalias処理を共通actionへrefactorする
-- [ ] SFA-06: runbook・進捗・計画を同期する
-- [ ] SFA-07: 対象testとfrontend品質gateを通す
-- [ ] SFA-08: repository全体の必要な品質gateを通す
+- [x] SFA-01: workflow trigger・境界のRed testを作成する
+- [x] SFA-02: alias actionのRed testを作成する
+- [x] SFA-03: 共通Vercel preview alias actionを実装する
+- [x] SFA-03A: Vercel Ignored Build Step scriptとtestを実装する
+- [x] SFA-04: develop自動workflowを実装する
+- [x] SFA-05: M2のalias処理を共通actionへrefactorする
+- [x] SFA-06: runbook・進捗・計画を同期する
+- [x] SFA-07: 対象testとfrontend品質gateを通す
+- [x] SFA-08: repository全体の必要な品質gateを通す
 - [ ] SFA-09: 別承認でstaging Environment / Vercelをpreflightする
 - [ ] SFA-10: implementation mergeによる自動runを確認する
 - [ ] SFA-11: fixed aliasのexact SHA、smoke、旧run非上書きを確認する
@@ -322,6 +323,16 @@ env VERCEL_ENV=preview VERCEL_GIT_COMMIT_REF=develop VITE_API_BASE_URL=https://s
 ```
 
 Repository品質gateではVercel、staging URL、API、DBへ接続せず、workflow dispatch、alias更新、Environment変更を行わない。実staging確認はSFA-09以降の別承認工程とする。
+
+## 実装時の確認結果（2026-08-06）
+
+- Vercel CLI `50.17.1`のJSON出力は`--format=json`を使用する。既存M2の`inspect --json`は同versionの公開optionと一致しなかったため、共通actionとM2を`--format=json`へ統一した。
+- GitHub `staging` Environmentは`develop`限定branch policyを維持しており、自動runを止めるrequired reviewerは設定されていない。
+- `VERCEL_AUTOMATION_BYPASS_SECRET`は存在するが、`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`は`staging` Environmentに未登録である。値は読み取っていない。
+- Vercel Hobby projectでは対象`develop`先端SHAのPreviewが`READY`だが、固定staging aliasはそのdeploymentに付与されていない。固定URLが最新UIへ追従しない問題を再現できた。
+- Vercel Ignored Build Stepは`develop`と`main`を常にbuildする既存Custom commandのままで、`npm run vercel:ignore-build`へ未変更である。
+- Node.js `22.23.1`でbackend 1320 test、Workers 32 test、frontend 683 test、build、lint、Svelte check、format check、Preview build contractを通した。frontend auditのmoderate/highは非破壊lockfile更新で解消し、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
+- 上記3 Secretの登録、Ignored Build Step変更、PR merge、alias更新は外部変更を伴うため、対象project、費用・影響、rollbackを提示した直前承認後にSFA-09〜SFA-11として実施する。
 
 ## 参考資料
 
