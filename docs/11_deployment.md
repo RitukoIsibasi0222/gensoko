@@ -258,19 +258,19 @@ env \
 
 branch scoped値は新しいdeploymentのbuild時に反映される。設定変更後は既存deploymentを合格扱いにせず、承認後に新しい`develop` Previewを作成して成果物を確認する。固定branch URLだけをAPIの`FRONTEND_URL`に使い、commit URLやwildcard CORSは使わない。
 
-初回公開前のSD15では、Vercel Project Settings → Build and Deployment → Ignored Build StepをCustomとし、`develop`だけをbuildする契約だった。2026-08-06のread-only再確認では、外部設定は次の既存commandへ変わっており、`develop`と`main`を常にbuildする。
+初回公開前のSD15では、Vercel Project Settings → Build and Deployment → Ignored Build StepをCustomとし、`develop`だけをbuildする契約だった。2026-08-06のread-only再確認では、外部設定は次の既存commandへ変わっており、`develop`と`main`を常にbuildしていた。
 
 ```bash
 if [ "$VERCEL_GIT_COMMIT_REF" = "develop" ] || [ "$VERCEL_GIT_COMMIT_REF" = "main" ]; then exit 1; else exit 0; fi
 ```
 
-Vercelの契約どおりexit code 1はbuild、0はskipを表す。Issue #173では外部設定を`npm run vercel:ignore-build`へ変更する。このscriptは`main`の現行production buildを維持し、`develop`は前後SHA間の`frontend`差分がある場合だけbuildし、差分判定不能時はfail-openでbuildする。他branchはskipする。Issue #174でAPI → frontendの順序とdeploy所有権を決定するまで、mainのProduction build条件を変更しない。feature branchへstaging API URLを広げて失敗を回避してはいけない。
+Vercelの契約どおりexit code 1はbuild、0はskipを表す。Issue #173の承認済み外部設定で`npm run vercel:ignore-build`へ変更し、保存後の設定表示で反映を確認した。このscriptは`main`の現行production buildを維持し、`develop`は前後SHA間の`frontend`差分がある場合だけbuildし、差分判定不能時はfail-openでbuildする。他branchはskipする。Issue #174でAPI → frontendの順序とdeploy所有権を決定するまで、mainのProduction build条件を変更しない。feature branchへstaging API URLを広げて失敗を回避してはいけない。上記の旧Custom commandは設定rollback時だけ使用する。
 
 ### 日常staging frontend自動更新（Issue #173）
 
 実装計画の正本は[`docs/plans/staging-frontend-auto-deploy/plan.md`](plans/staging-frontend-auto-deploy/plan.md)とする。Vercel Git Integrationが`develop`のfrontend変更から作成したPreviewを再deployせず、GitHub Actionsがfrontend品質gate、exact SHA / ref / preview / READY確認、develop先端再確認、固定alias更新、更新後確認、read-only smokeを実行する。
 
-docsなどfrontend成果物へ影響しないdevelop変更は、GitHub Actionsの`paths`とrepository管理のVercel Ignored Build Step scriptの両方でskipする。Ignored Build Stepの外部設定はrepository実装と混ぜず、対象project・影響・rollbackを確認した別承認で行う。mainのproduction build条件はIssue #174まで変更しない。
+docsなどfrontend成果物へ影響しないdevelop変更は、GitHub Actionsの`paths`とrepository管理のVercel Ignored Build Step scriptの両方でskipする。Ignored Build Stepの外部設定は対象project・影響・rollbackを確認した承認後に反映済みである。mainのproduction build条件はIssue #174まで変更しない。
 
 docsだけのmerge、quality失敗、Preview timeout、metadata不一致、古いdevelop SHAではaliasを変更しない。alias更新後の確認またはsmokeが失敗した場合は直前の正常deploymentへ戻し、rollbackも確認できない場合はfailureで停止してVercel dashboardから手動復旧する。固有deployment URL、provider ID、raw response、tokenをlog・Summary・Artifactへ残さない。
 
@@ -284,7 +284,11 @@ docsだけのmerge、quality失敗、Preview timeout、metadata不一致、古�
 4. Vercel Ignored Build Stepを`npm run vercel:ignore-build`へ変更すること。repository側scriptのmerge前に先行変更しない。
 5. 固定aliasの現在の参照先をdashboardで確認できること。
 
-2026-08-06のread-only確認では1とGit Integrationを確認済みだが、`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`は未登録で、Ignored Build Stepも既存Custom commandのままである。対象`develop`先端のPreviewは`READY`だが固定aliasへ未割当であり、古いUI問題を再現した。Secret登録、Vercel設定保存、PR merge、alias変更は別の直前承認が完了するまで実行しない。
+2026-08-06のread-only確認では対象`develop`先端のPreviewが`READY`でも固定aliasへ未割当であり、古いUI問題を再現した。承認後、対象Hobby project限定・1年有効のautomation tokenを作成し、`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`を`staging` Environmentへ値非表示で登録した。Ignored Build Stepも`npm run vercel:ignore-build`へ変更済みである。production Environment、main、production deploymentは変更していない。
+
+PR #192のmerge SHA `b84667a166c296355dd5a5f98957954b5950b203`で起動したrun [31072094165](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31072094165)は、初回は3 Secret未登録、preflight後のfailed job再実行はPreview探索timeoutでalias更新前に失敗した。再実行でも固定aliasは維持され、安全側で停止した。
+
+Vercel CLIでは`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数としてprojectを固定する。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡してはいけない。project照合用REST APIだけ`teamId`として使用する。PR #192の実装はこの境界を混同していたため、project限定tokenを維持したままCLIの`--scope`指定を除去し、source contract testで回帰を固定する。修正merge後のrunが成功するまで、固定aliasの自動更新を完了扱いにしない。
 
 #### 通常の自動更新
 
