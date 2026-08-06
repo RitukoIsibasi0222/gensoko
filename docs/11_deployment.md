@@ -189,6 +189,14 @@ pending Prisma migrationがない通常経路の追加workflow dispatchは、既
 - 正規118件への再実行は冪等だが、成功runを理由なく再実行しない。
 - workflow成功後はproduction元素一覧で118件を確認し、同じsynthetic Userでgame、ranking、rate limit、security、本人退会、cleanupへ進む。
 
+#### M6完了記録（2026-08-06）
+
+- Prisma Client生成修正をreview・develop/mainへ昇格した後、失敗runを再実行せず、別の明示承認による新規`seed-elements` runでseed stepと別process・別接続の独立118件verifyが成功した。production DBへの直接CLI・SQL seedは行っていない。
+- 公開・認証済み元素一覧118件、game、ranking、mypage、weak、通常password verifier DO、最小429とreset、password resetを確認した。
+- 本人退会workflowのmain/recoveryは固定失敗として終了し、同じrunを再実行しなかった。再認証後の通常UIで予約identityを再確認して本人退会を完了し、削除成功表示、再設定メール非発行、保護画面拒否、ランキング消失を独立確認した。
+- 追加検証Userはlogin拒否と再設定メール非発行で不在を確認した。本人退会用一時Secret 2件・対象Variable・M6専用Email Routingルールを削除し、本人退会flagと`PRODUCTION_SCHEDULED_BATCH_ENABLED`は`false`、BO15は無効、active workflowは0件を維持した。
+- Secret値、email、URL、resource ID、DB URL、token、内部ID、接続文字列、raw errorはrelease記録へ残していない。AuditLogは365日保持方針に従う。
+
 ## staging frontend/API配備runbook
 
 ### コード基盤の現在地点
