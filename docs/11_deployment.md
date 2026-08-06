@@ -288,17 +288,19 @@ docsだけのmerge、quality失敗、Preview timeout、metadata不一致、古�
 
 PR #192のmerge SHA `b84667a166c296355dd5a5f98957954b5950b203`で起動したrun [31072094165](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31072094165)は、初回は3 Secret未登録、preflight後のfailed job再実行はPreview探索timeoutでalias更新前に失敗した。再実行でも固定aliasは維持され、安全側で停止した。
 
-Vercel CLIでは`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数としてprojectを固定する。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡してはいけない。project限定tokenへ追加のProjects REST権限を要求せず、`list gensoko-frontend-staging --format=json`でSHA、ref、URL、target、READY、deployment IDを確認し、同じ候補URLの`inspect --format=json`でID、project name、URL、target、READYを完全一致させる。更新前・更新後・rollbackもinspectのproject nameを検証する。固定aliasの自動run、exact SHA、smokeが成功するまで完了扱いにしない。
+Vercel CLIでは`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数としてprojectを固定する。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡してはいけない。project限定tokenへ追加のProjects REST権限を要求せず、`list gensoko-frontend-staging --format=json`でSHA、ref、URL、target、READYを確認し、同じ候補URLの`inspect --format=json`で初めてdeployment IDを取得してproject name、URL、target、READYを完全一致させる。更新前・更新後・rollbackもinspectのproject nameと取得済みIDを検証する。固定aliasの自動run、exact SHA、smokeが成功するまで完了扱いにしない。
 
 PR #193のmerge SHA `ef97e98d72a6fa159c424c02cc9a0e0523231aaa`で起動したrun [31076459494](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31076459494)は、exact `READY` Preview探索とalias直前のdevelop先端再確認に成功した後、共通alias actionで失敗した。固定aliasは旧CSS bundleを維持し、merge SHA固有Previewのbundleとは一致しなかった。provider raw値をlogへ出さない契約は維持し、次の修正では失敗箇所をcandidate不一致、更新前metadata、alias set、更新後inspect、更新後不一致、smokeの固定メッセージだけで分類する。
 
 PR #194のmerge SHA `0918f9a545276f4fa4973927886055683d78fdeb`で起動したrun [31079563100](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31079563100)は、同じ前段gateの成功後、candidate project metadata不一致でalias更新前に停止した。pinned CLI `50.17.1`ではlistのproject nameがprovider応答次第で省略されるため、listのexact Git metadataと同じcandidateをinspectしたproject metadataをdeployment IDで結ぶ。固定aliasはこの修正のmerge runまで既存参照を維持する。
 
+PR #195のmerge SHA `d40bf3657b806449c0abc5b2bc18bb53cba397e2`で起動したrun [31081222649](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31081222649)は、同じ前段gateの成功後、candidate list metadata不一致でalias更新前に停止した。pinned CLI `50.17.1`ではlistのdeployment IDもprovider応答次第で省略されるため、候補の一意なURLをinspectして初めてIDを取得し、以後の更新後・rollback検証へ一時fileで引き継ぐ。固定aliasはこの修正のmerge runまで既存参照を維持する。
+
 #### 通常の自動更新
 
 1. `frontend/**`を含むreview済みPRを`develop`へmergeする。
 2. `Staging Frontend Deploy`の`frontend-quality`がmerge commitのexact SHAでaudit、test、lint、Svelte check、format check、Preview build検証を通す。
-3. `promote-preview`がVercel Git Integration由来の`READY` Previewを最大5分bounded pollし、listでSHA、ref=`develop`、target=`preview`、URL、ID、候補一意性を確認し、同じ候補のinspectでIDとproject nameを含む境界を構造化JSONで再確認する。
+3. `promote-preview`がVercel Git Integration由来の`READY` Previewを最大5分bounded pollし、listでSHA、ref=`develop`、target=`preview`、URL、候補一意性を確認し、同じ候補のinspectでIDを取得してproject nameを含む境界を構造化JSONで再確認する。
 4. alias更新直前にGitHubの`develop`先端を再確認する。先端が移動していれば旧runを安全に失敗させ、新しいrunへ委譲する。
 5. 共通actionが直前参照を一時fileへ保存し、固定aliasを更新する。更新前・更新後ともproject name、deployment ID、`READY`、`preview`を再確認し、固定URLへ15秒timeoutのread-only HTML smokeを行う。
 6. Summaryにexact SHAと`ALIAS_UPDATED` / `SMOKE_CLEAR`だけが残り、固定URLで最新UIを確認できることを確認する。

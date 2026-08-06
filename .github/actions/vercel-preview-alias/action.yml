@@ -64,17 +64,22 @@ runs:
           local expected_target="$2"
           local deployment_state="$3"
           local expected_url="${4:-}"
-          EXPECTED_ID_FILE="$expected_id_file" EXPECTED_TARGET="$expected_target" EXPECTED_URL="$expected_url" DEPLOYMENT_STATE="$deployment_state" node --input-type=module -e '
-            import { readFileSync } from "node:fs";
-            const expectedId = readFileSync(process.env.EXPECTED_ID_FILE, "utf8").trim();
+          local result_id_file="${5:-}"
+          EXPECTED_ID_FILE="$expected_id_file" EXPECTED_TARGET="$expected_target" EXPECTED_URL="$expected_url" DEPLOYMENT_STATE="$deployment_state" RESULT_ID_FILE="$result_id_file" node --input-type=module -e '
+            import { readFileSync, writeFileSync } from "node:fs";
+            const expectedId = process.env.EXPECTED_ID_FILE
+              ? readFileSync(process.env.EXPECTED_ID_FILE, "utf8").trim()
+              : null;
             const deployment = JSON.parse(readFileSync(process.env.DEPLOYMENT_STATE, "utf8"));
-            if (deployment.id !== expectedId
+            if (typeof deployment.id !== "string"
+              || (expectedId !== null && deployment.id !== expectedId)
               || deployment.name !== "gensoko-frontend-staging"
               || deployment.readyState !== "READY"
               || deployment.target !== process.env.EXPECTED_TARGET
               || typeof deployment.url !== "string"
               || !/^[a-z0-9-]+\.vercel\.app$/.test(deployment.url)
               || (process.env.EXPECTED_URL && deployment.url !== process.env.EXPECTED_URL)) process.exit(1);
+            if (process.env.RESULT_ID_FILE) writeFileSync(process.env.RESULT_ID_FILE, deployment.id);
           ' 2>/dev/null
         }
 
@@ -149,12 +154,10 @@ runs:
                 && target === process.env.EXPECTED_TARGET
                 && deployment.url === process.env.EXPECTED_URL
                 && deployment.meta?.githubCommitSha === process.env.EXPECTED_SHA
-                && deployment.meta?.githubCommitRef === process.env.EXPECTED_REF
-                && typeof deployment.id === "string";
+                && deployment.meta?.githubCommitRef === process.env.EXPECTED_REF;
             });
             if (matches.length !== 1) process.exit(1);
-            process.stdout.write(matches[0].id);
-          ' >"$candidate_id_file" 2>/dev/null; then
+          ' 2>/dev/null; then
           echo "candidate deployment metadataが不一致です"
           exit 1
         fi
@@ -163,7 +166,7 @@ runs:
           echo "candidate deployment project metadataを確認できません"
           exit 1
         fi
-        if ! validate_inspected_deployment "$candidate_id_file" "$INPUT_EXPECTED_TARGET" "$candidate_inspect_state" "$candidate_host"; then
+        if ! validate_inspected_deployment "" "$INPUT_EXPECTED_TARGET" "$candidate_inspect_state" "$candidate_host" "$candidate_id_file"; then
           echo "candidate deployment project metadataが不一致です"
           exit 1
         fi
