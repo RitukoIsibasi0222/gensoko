@@ -73,7 +73,7 @@ jobs:
           rm -f "$candidate_state" "$deployment_ref"
 
           for attempt in $(seq 1 30); do
-            vercel_list=(npx --yes vercel@50.17.1 list --meta "githubCommitSha=$GITHUB_SHA" --status READY --environment preview --format=json --token="$VERCEL_TOKEN")
+            vercel_list=(npx --yes vercel@50.17.1 list gensoko-frontend-staging --meta "githubCommitSha=$GITHUB_SHA" --status READY --environment preview --format=json --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN")
             if "${vercel_list[@]}" >"$candidate_state" 2>/dev/null; then
               if EXPECTED_SHA="$GITHUB_SHA" CANDIDATE_STATE="$candidate_state" node --input-type=module -e '
                 import { readFileSync } from "node:fs";

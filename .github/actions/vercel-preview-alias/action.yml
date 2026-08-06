@@ -60,8 +60,8 @@ runs:
         rollback_alias() {
           trap - ERR
           rollback_ok=false
-          if [ "$alias_update_attempted" = "true" ] && npx --yes vercel@50.17.1 alias set "$(cat "$previous_deployment")" "$INPUT_ALIAS" --token="$INPUT_VERCEL_TOKEN" >/dev/null 2>&1; then
-            if npx --yes vercel@50.17.1 inspect "https://$INPUT_ALIAS" --format=json --token="$INPUT_VERCEL_TOKEN" >"$rollback_state" 2>/dev/null && EXPECTED_ID_FILE="$previous_id_file" DEPLOYMENT_STATE="$rollback_state" node --input-type=module -e '
+          if [ "$alias_update_attempted" = "true" ] && npx --yes vercel@50.17.1 alias set "$(cat "$previous_deployment")" "$INPUT_ALIAS" --scope="$VERCEL_ORG_ID" --token="$INPUT_VERCEL_TOKEN" >/dev/null 2>&1; then
+            if npx --yes vercel@50.17.1 inspect "https://$INPUT_ALIAS" --format=json --scope="$VERCEL_ORG_ID" --token="$INPUT_VERCEL_TOKEN" >"$rollback_state" 2>/dev/null && EXPECTED_ID_FILE="$previous_id_file" DEPLOYMENT_STATE="$rollback_state" node --input-type=module -e '
               import { readFileSync } from "node:fs";
               const expectedId = readFileSync(process.env.EXPECTED_ID_FILE, "utf8").trim();
               const deployment = JSON.parse(readFileSync(process.env.DEPLOYMENT_STATE, "utf8"));
@@ -106,6 +106,23 @@ runs:
           echo "::add-mask::$INPUT_AUTOMATION_BYPASS_SECRET"
         fi
 
+        VERCEL_TOKEN="$INPUT_VERCEL_TOKEN" node --input-type=module -e '
+            try {
+              const projectUrl = new URL(`https://api.vercel.com/v9/projects/${encodeURIComponent(process.env.VERCEL_PROJECT_ID)}`);
+              projectUrl.searchParams.set("teamId", process.env.VERCEL_ORG_ID);
+              const response = await fetch(projectUrl, {
+                headers: { authorization: `Bearer ${process.env.VERCEL_TOKEN}` },
+                signal: AbortSignal.timeout(15000),
+              });
+              if (!response.ok) process.exit(1);
+              const project = await response.json();
+              if (project.id !== process.env.VERCEL_PROJECT_ID
+                || project.name !== "gensoko-frontend-staging") process.exit(1);
+            } catch {
+              process.exit(1);
+            }
+          '
+
         if [ ! -f "$INPUT_DEPLOYMENT_URL_FILE" ]; then
           echo "candidate deployment参照がありません"
           exit 1
@@ -117,7 +134,7 @@ runs:
           exit 1
         fi
 
-        vercel_list=(npx --yes vercel@50.17.1 list --meta "githubCommitSha=$INPUT_EXPECTED_SHA" --status READY --environment "$INPUT_EXPECTED_TARGET" --format=json --token="$INPUT_VERCEL_TOKEN")
+        vercel_list=(npx --yes vercel@50.17.1 list gensoko-frontend-staging --meta "githubCommitSha=$INPUT_EXPECTED_SHA" --status READY --environment "$INPUT_EXPECTED_TARGET" --format=json --scope="$VERCEL_ORG_ID" --token="$INPUT_VERCEL_TOKEN")
         if ! "${vercel_list[@]}" >"$candidate_state" 2>/dev/null; then
           echo "candidate deployment metadataを確認できません"
           exit 1
@@ -139,7 +156,7 @@ runs:
             process.stdout.write(matches[0].id);
           ' >"$candidate_id_file"
 
-        npx --yes vercel@50.17.1 inspect "https://$INPUT_ALIAS" --format=json --token="$INPUT_VERCEL_TOKEN" >"$previous_state" 2>/dev/null
+        npx --yes vercel@50.17.1 inspect "https://$INPUT_ALIAS" --format=json --scope="$VERCEL_ORG_ID" --token="$INPUT_VERCEL_TOKEN" >"$previous_state" 2>/dev/null
         PREVIOUS_STATE="$previous_state" PREVIOUS_DEPLOYMENT="$previous_deployment" PREVIOUS_ID_FILE="$previous_id_file" node --input-type=module -e '
             import { readFileSync, writeFileSync } from "node:fs";
             const deployment = JSON.parse(readFileSync(process.env.PREVIOUS_STATE, "utf8"));
@@ -153,9 +170,9 @@ runs:
 
         alias_update_attempted=true
         trap rollback_alias ERR
-        npx --yes vercel@50.17.1 alias set "$candidate_url" "$INPUT_ALIAS" --token="$INPUT_VERCEL_TOKEN" >/dev/null 2>&1
+        npx --yes vercel@50.17.1 alias set "$candidate_url" "$INPUT_ALIAS" --scope="$VERCEL_ORG_ID" --token="$INPUT_VERCEL_TOKEN" >/dev/null 2>&1
 
-        npx --yes vercel@50.17.1 inspect "https://$INPUT_ALIAS" --format=json --token="$INPUT_VERCEL_TOKEN" >"$alias_state" 2>/dev/null
+        npx --yes vercel@50.17.1 inspect "https://$INPUT_ALIAS" --format=json --scope="$VERCEL_ORG_ID" --token="$INPUT_VERCEL_TOKEN" >"$alias_state" 2>/dev/null
         EXPECTED_ID_FILE="$candidate_id_file" EXPECTED_TARGET="$INPUT_EXPECTED_TARGET" DEPLOYMENT_STATE="$alias_state" node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const expectedId = readFileSync(process.env.EXPECTED_ID_FILE, "utf8").trim();

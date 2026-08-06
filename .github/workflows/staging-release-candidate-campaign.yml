@@ -289,17 +289,17 @@ jobs:
           deployment_ref="$RUNNER_TEMP/m2-vercel-deployment-ref"
           export VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA"
           export VERCEL_GIT_COMMIT_REF="develop"
-          if ! npx --yes vercel@50.17.1 pull --yes --environment=preview --git-branch=develop --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+          if ! npx --yes vercel@50.17.1 pull --yes --environment=preview --git-branch=develop --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
             rm -f "$provider_log" "$deployment_ref"
             echo "staging frontend設定取得に失敗しました"
             exit 1
           fi
-          if ! npx --yes vercel@50.17.1 build --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+          if ! npx --yes vercel@50.17.1 build --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
             rm -f "$provider_log" "$deployment_ref"
             echo "staging frontend buildに失敗しました"
             exit 1
           fi
-          if ! npx --yes vercel@50.17.1 deploy --prebuilt --target preview --meta githubCommitSha="$GITHUB_SHA" --meta githubCommitRef=develop --token="$VERCEL_TOKEN" >"$deployment_ref" 2>"$provider_log"; then
+          if ! npx --yes vercel@50.17.1 deploy --prebuilt --target preview --meta githubCommitSha="$GITHUB_SHA" --meta githubCommitRef=develop --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN" >"$deployment_ref" 2>"$provider_log"; then
             rm -f "$provider_log" "$deployment_ref"
             echo "staging frontend deployに失敗しました"
             exit 1
@@ -396,12 +396,12 @@ jobs:
               rm -f "$worker_state" "$frontend_candidates" "$frontend_alias"
               return 1
             fi
-            vercel_list=(npx --yes vercel@50.17.1 list --meta "githubCommitSha=$GITHUB_SHA" --status READY --environment preview --format=json --token="$VERCEL_TOKEN")
+            vercel_list=(npx --yes vercel@50.17.1 list gensoko-frontend-staging --meta "githubCommitSha=$GITHUB_SHA" --status READY --environment preview --format=json --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN")
             if ! "${vercel_list[@]}" >"$frontend_candidates" 2>/dev/null; then
               rm -f "$worker_state" "$frontend_candidates" "$frontend_alias"
               return 1
             fi
-            if ! npx --yes vercel@50.17.1 inspect https://gensoko-frontend-staging-develop.vercel.app --format=json --token="$VERCEL_TOKEN" >"$frontend_alias" 2>/dev/null; then
+            if ! npx --yes vercel@50.17.1 inspect https://gensoko-frontend-staging-develop.vercel.app --format=json --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN" >"$frontend_alias" 2>/dev/null; then
               rm -f "$worker_state" "$frontend_candidates" "$frontend_alias"
               return 1
             fi

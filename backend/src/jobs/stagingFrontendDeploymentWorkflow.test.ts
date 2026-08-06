@@ -59,6 +59,8 @@ describe("staging frontend deployment workflow", () => {
     const source = workflow();
 
     expect(source).toContain("vercel@50.17.1 list");
+    expect(source).toContain("list gensoko-frontend-staging");
+    expect(source).toContain('--scope="$VERCEL_ORG_ID"');
     expect(source).toMatch(/--meta "?githubCommitSha=/);
     expect(source).toContain("--format=json");
     expect(source).toContain("for attempt in");
