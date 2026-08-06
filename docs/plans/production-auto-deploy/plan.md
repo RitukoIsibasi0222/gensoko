@@ -481,7 +481,7 @@ export async function verifyProductionFrontendContent(options) {}
 - [x] PDA-11: 計画書・進捗を実態へ同期
 - [x] PDA-12: 最終品質gateを実行
 - [x] PDA-13: feature PRを作成しCopilot reviewへ対応
-- [ ] PDA-14: production外部設定を直前承認後に分離
+- [x] PDA-14: production外部設定を直前承認後に分離
 - [ ] PDA-15: develop→main release PRをreview・merge
 - [ ] PDA-16: same main SHAのproduction runを検証
 
@@ -490,8 +490,10 @@ export async function verifyProductionFrontendContent(options) {}
 - `backend/src/lib/production-worker-config.ts`は既存のproduction専用target・resource分離検証をそのまま再利用できたため変更しなかった。deploy側の一時file・provider log・exact SHA・cleanup責務は`production-worker-deployment.ts`へ分離した。
 - Environment承認待ち中のmain更新をDB/provider前で同じ実装により拒否するため、Secret非参照の`.github/actions/validate-live-main/action.yml`を追加した。validation jobはEnvironmentなし・`permissions: {}`を維持するためcheckoutせず、同じfail-closed契約をinline実行する。
 - production releaseのCLI境界としてWorker deploy、health、evidenceのCLIを追加した。各CLIはraw provider/DB値を出さず固定event・status・messageだけを出す。
-- PR #203のreview・develop merge後にPDA-14を開始し、production専用Vercel project、Git非接続、project限定token、Cloudflare最小権限token、production Environment deploy Secret 5件を分離した。baselineはsame `main` SHA・production target・READY・project境界まで一致したが、Vercel Hobby Standard Protectionによりcandidate contentが認証画面となったためcustom domain移管前に停止した。
-- 上記実機差分により`PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET`を公開interfaceへ追加した。repository側はprovider mutation前の6 credential検証とcandidate requestだけへの同一bypass利用をTDDで追加し、custom domain requestはheaderなしとした。外部bypass作成・登録は別承認へ分離する。
+- PR #203のreview・develop merge後にPDA-14を開始し、production専用Vercel project、Git非接続、project限定token、Cloudflare最小権限token、production Environment deploy Secret 5件を分離した。最初のbaselineはsame `main` SHA・production target・READY・project境界まで一致したが、Vercel Hobby Standard Protectionによりcandidate contentが認証画面となったためcustom domain移管前に停止した。
+- 上記実機差分により`PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET`を公開interfaceへ追加した。follow-up PR #205ではprovider mutation前の6 credential検証とcandidate requestだけへの同一bypass利用をTDDで追加し、custom domain requestはheaderなしとした。Copilot指摘対応後のPR #205はdevelopへmerge済みである。
+- 2026-08-07の別承認後、production project限定automation bypassと6件目のproduction Environment Secretを値非表示で登録した。current `main` SHA `2171cf9494d2a6d62ed3262df3c3445fd3b16e2b`のbaselineはref=`main`、target=`production`、READY、project境界、candidateの200・HTML・marker・immutable assetを満たした。
+- candidate gate成功後だけproduction custom domainと既存redirectを旧staging projectからproduction専用projectへ移管した。production側のValid Configuration・Production接続、旧staging側からの分離、custom domainのheaderなし200・marker・candidateとのimmutable asset一致、production projectのGit未接続、production Environmentのrequired reviewer・main限定policy維持を確認した。DB、Cloudflare Worker、release PR、production workflowはこの工程で変更・実行していない。
 - safe evidenceは成功時の8 statusだけでなく、失敗runでも達成済みstatusのcanonical prefixだけを`if: always()`で生成する。schema検証に失敗した場合はArtifactをuploadしない。
 - Vercel candidateはpromote前にmarker・空でないimmutable assetを単体検証し、promote後にcandidateとcustom domainのasset集合・marker一致をbounded pollする二段階へ明確化した。
 - production workflow source contractを通常backend全testだけでなくRepository Integrityにも含めるため、`.github/workflows/repository-integrity.yml`を更新した。

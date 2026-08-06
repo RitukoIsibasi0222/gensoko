@@ -209,6 +209,13 @@ production Environmentへ別承認で追加するdeploy専用Secret名は、`PRO
 
 Vercel HobbyのStandard Protectionではproduction custom domain以外のdeployment URLが認証保護される。production project限定のautomation bypassを使い、candidate単体検証とpromote後比較のcandidate requestだけへ`x-vercel-protection-bypass` headerを渡す。custom domain requestにはSecret headerを送らない。6件のprovider credentialはmigration gate後かつAPI mutation前に非空・空白なしを検証し、値をlog、summary、Artifactへ出さない。
 
+### 外部設定実績（2026-08-07）
+
+- ownerの別承認後にproduction専用Vercel project、Git未接続、project限定Vercel token、Cloudflare最小権限token、production Environment deploy Secret 6件を分離した。
+- production project限定automation bypassを登録し、current `main` exact SHAのbaseline candidateでref=`main`、target=`production`、READY、project境界、200、HTML、marker、immutable assetを値非表示で確認した。
+- candidate gate成功後だけproduction custom domainと既存redirectを旧staging projectからproduction専用projectへ移管した。production側のValid Configuration・Production接続、旧staging側からの分離、custom domainのheaderなし200・marker・candidateとのimmutable asset一致を確認した。
+- production projectのGit未接続、production Environmentのrequired reviewer、main限定branch policyを移管後も維持した。DB、Cloudflare Worker、release PR、production workflowはこの工程で変更・実行していない。
+
 ### 通常release
 
 1. `develop`でstaging確認を完了し、`develop`から`main`へのPRを作成する。mainへの自動mergeは使わない。
