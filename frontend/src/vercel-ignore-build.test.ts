@@ -62,11 +62,11 @@ describe('Vercel Ignored Build Step', () => {
     expect(runScript(frontend, 'develop', docsOnly, frontendChange)).toBe(1);
   });
 
-  it('mainは現行production buildを維持し、feature branchはskipする', () => {
+  it('mainとfeature branchはGit Integration buildをskipする', () => {
     const { frontend, root } = createRepository();
     const sha = git(root, 'rev-parse', 'HEAD');
 
-    expect(runScript(frontend, 'main', sha, sha)).toBe(1);
+    expect(runScript(frontend, 'main', sha, sha)).toBe(0);
     expect(runScript(frontend, 'feature/example', sha, sha)).toBe(0);
   });
 

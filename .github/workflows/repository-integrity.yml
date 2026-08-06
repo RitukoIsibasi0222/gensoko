@@ -32,3 +32,10 @@ jobs:
           src/jobs/batchWorkflow.test.ts
           src/jobs/scheduled.test.ts
           src/jobs/scheduled.cli.test.ts
+          src/jobs/productionDeploymentWorkflow.test.ts
+          src/jobs/productionMigrationGate.test.ts
+          src/lib/production-worker-deployment.test.ts
+          src/jobs/productionReleaseHealth.test.ts
+          src/jobs/productionReleaseEvidence.test.ts
+          src/jobs/productionFrontendContentVerifier.test.ts
+          src/jobs/stagingFrontendContentVerifier.test.ts

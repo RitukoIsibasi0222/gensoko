@@ -1,7 +1,8 @@
 import { pathToFileURL } from 'node:url';
 
+import { verifyFrontendContent } from './frontend-content-verifier.mjs';
+
 const FIXED_STAGING_URL = 'https://gensoko-frontend-staging-develop.vercel.app/';
-const REQUEST_TIMEOUT_MS = 15_000;
 
 function isExpectedUrl(candidateUrl, domainUrl) {
   try {
@@ -23,52 +24,6 @@ function isExpectedUrl(candidateUrl, domainUrl) {
   }
 }
 
-async function fetchHtml(url, headers, fetchImpl) {
-  const response = await fetchImpl(url, {
-    cache: 'no-store',
-    headers,
-    redirect: 'error',
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-  });
-  if (
-    response.status !== 200 ||
-    new URL(response.url).origin !== new URL(url).origin ||
-    !response.headers.get('content-type')?.includes('text/html')
-  ) {
-    return null;
-  }
-  return response.text();
-}
-
-function immutableAssetFingerprint(html, pageUrl) {
-  const pageOrigin = new URL(pageUrl).origin;
-  const assets = new Set();
-
-  for (const match of html.matchAll(/(?:src|href)=["']([^"']+)["']/g)) {
-    try {
-      const asset = new URL(match[1], pageUrl);
-      if (asset.origin === pageOrigin && asset.pathname.startsWith('/_app/immutable/')) {
-        assets.add(`${asset.pathname}${asset.search}`);
-      }
-    } catch {
-      // Ignore malformed asset URLs.
-    }
-  }
-
-  return [...assets].sort();
-}
-
-function hasMatchingImmutableAssets(candidateHtml, domainHtml, candidateUrl, domainUrl) {
-  const candidateAssets = immutableAssetFingerprint(candidateHtml, candidateUrl);
-  const domainAssets = immutableAssetFingerprint(domainHtml, domainUrl);
-
-  return (
-    candidateAssets.length > 0 &&
-    candidateAssets.length === domainAssets.length &&
-    candidateAssets.every((asset, index) => asset === domainAssets[index])
-  );
-}
-
 export async function verifyStagingFrontendContent({
   candidateUrl,
   domainUrl,
@@ -85,26 +40,13 @@ export async function verifyStagingFrontendContent({
     return false;
   }
 
-  const headers = {
-    'cache-control': 'no-cache',
-    ...(bypassSecret ? { 'x-vercel-protection-bypass': bypassSecret } : {})
-  };
-
-  try {
-    const [candidateHtml, domainHtml] = await Promise.all([
-      fetchHtml(candidateUrl, headers, fetchImpl),
-      fetchHtml(domainUrl, headers, fetchImpl)
-    ]);
-    return (
-      candidateHtml !== null &&
-      domainHtml !== null &&
-      candidateHtml.includes(smokeMarker) &&
-      domainHtml.includes(smokeMarker) &&
-      hasMatchingImmutableAssets(candidateHtml, domainHtml, candidateUrl, domainUrl)
-    );
-  } catch {
-    return false;
-  }
+  return verifyFrontendContent({
+    candidateUrl,
+    domainUrl,
+    smokeMarker,
+    bypassSecret,
+    fetchImpl
+  });
 }
 
 const isCli =
