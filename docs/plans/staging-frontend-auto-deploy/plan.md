@@ -46,7 +46,7 @@
 - `develop`のPreview deploymentを作成する責務を持つ。
 - staging projectの固定domainを`develop` Preview branchへ自動割り当てする。
 - deploymentにはGit commit SHA / ref metadataが付与される。
-- GitHub Actionsは同じ成果物を再deployせず、対象SHAの成功Previewと固定domainのHTML完全一致・markerをread-only検証する。
+- GitHub Actionsは同じ成果物を再deployせず、対象SHAの成功Previewと固定domainのSvelteKit immutable asset fingerprint一致・markerをread-only検証する。
 
 ### 重要な制約
 
@@ -73,9 +73,9 @@
 | `backend/src/jobs/stagingFrontendDeploymentWorkflow.test.ts`       | 新規     | 自動workflowとproduction禁止のsource contract test               |
 | `backend/src/jobs/vercelPreviewDomainAction.test.ts`               | 新規     | 共通actionのexact SHA、read-only、秘密非出力contract test        |
 | `backend/src/jobs/stagingReleaseCandidateCampaignWorkflow.test.ts` | 修正     | M2が共通content verifierを使い既存gateを維持する回帰test         |
-| `backend/src/jobs/stagingFrontendContentVerifier.test.ts`          | 新規     | HTML一致・非HTML・不正URLのverifier contract test                |
+| `backend/src/jobs/stagingFrontendContentVerifier.test.ts`          | 新規     | app asset一致・非HTML・不正URLのverifier contract test           |
 | `frontend/scripts/vercel-ignore-build.mjs`                         | 新規     | developのfrontend無変更commitと対象外branchをbuild前にskip       |
-| `frontend/scripts/verify-staging-frontend-content.mjs`             | 新規     | exact Previewと固定domainのHTML・markerをread-only照合           |
+| `frontend/scripts/verify-staging-frontend-content.mjs`             | 新規     | exact Previewと固定domainのapp asset・markerをread-only照合      |
 | `frontend/src/vercel-ignore-build.test.ts`                         | 新規     | develop/main/featureとgit diff結果のcontract test                |
 | `frontend/src/vercel-cli-scope.test.ts`                            | 新規     | Vercel CLIへteam IDをslug用scopeとして渡さない回帰test           |
 | `frontend/package.json`                                            | 修正     | Vercel Ignored Build Step用scriptを追加                          |
@@ -95,7 +95,7 @@ developへfrontend変更をmerge
 → GitHubのdevelop先端SHAを再取得
 → 対象SHAが現在の先端の場合だけ固定domainの自動割り当て完了をbounded poll
 → 対象Previewと固定domainを同じbypass / no-cache条件で取得
-→ 200・同一origin・text/html・HTML完全一致・markerを検証
+→ 200・同一origin・text/html・SvelteKit immutable asset集合一致・両URLのmarkerを検証
 → SHAと固定statusだけをStep Summaryへ記録
 ```
 
@@ -113,7 +113,7 @@ developへfrontend変更をmerge
 | concurrency    | 固定staging frontend group、`cancel-in-progress: true`                      |
 | candidate      | Vercel Git Integrationが作成したPreview、対象`github.sha`完全一致           |
 | provider state | `target=preview`、`ref=develop`、`READY`、同一project                       |
-| domain         | Previewと固定URLのHTML完全一致をGETだけ・有限timeoutでread-only検証         |
+| domain         | Previewと固定URLのimmutable asset集合一致をGETだけ・有限timeoutでread-only検証 |
 | smoke          | 両URLが200・同一origin・`text/html`かつGensoko markerを含む                 |
 | summary        | 対象SHAと固定statusだけ。固有URL・ID・raw responseなし                      |
 | artifact       | 作成しない                                                                  |
@@ -141,7 +141,7 @@ developへfrontend変更をmerge
    - 根拠: project限定tokenで実run上利用できるprovider metadata取得はdeployment listである。`inspect`、`alias ls`、`alias set`が必要とする権限へtokenを広げず、listのGit metadataと公開HTTP contentを組み合わせてfail-closedに検証する。
 
 6. **固定domainの自動更新責務をどこへ置くか**
-   - 選択: Vercel Project SettingsでPreview環境・`develop` branchへdomainを割り当てる。repositoryの共有Node verifierで候補・固定domainのHTML完全一致とmarkerをread-only検証する。
+   - 選択: Vercel Project SettingsでPreview環境・`develop` branchへdomainを割り当てる。repositoryの共有Node verifierで候補・固定domainの同一origin `/_app/immutable/` asset集合一致と両URLのmarkerをread-only検証する。
    - 根拠: provider標準のbranch domain機能ならproject限定tokenの権限を広げず、staging/productionを分離したまま成功Previewへ自動追従できる。
 
 7. **domain content確認失敗をどう扱うか**
@@ -237,7 +237,7 @@ repository変更と外部設定変更は別工程にする。2026-08-06にowner�
 
 ## タスクリスト（進捗管理）
 
-SFA-02・SFA-03・SFA-08B〜SFA-08Dは、PR #192〜#196で試行しSFA-08Iで削除した旧alias mutation方式の実装履歴である。SFA-08E〜SFA-08Iの`alias ls`による参照先検証もproject限定tokenでは実行不能だったため、現行の最終状態はSFA-08J〜SFA-08NのHTML content一致方式を正本とする。
+SFA-02・SFA-03・SFA-08B〜SFA-08Dは、PR #192〜#196で試行しSFA-08Iで削除した旧alias mutation方式の実装履歴である。SFA-08E〜SFA-08Iの`alias ls`による参照先検証もproject限定tokenでは実行不能だった。SFA-08J〜SFA-08NのHTML完全一致はprovider注入markupを誤検知したため、現行の最終状態はSFA-08O〜SFA-08Qのimmutable asset fingerprint方式を正本とする。
 
 | タスクID | 内容                                   | ファイル                                          | 優先度 | 備考          |
 | -------- | -------------------------------------- | ------------------------------------------------- | ------ | ------------- |
@@ -264,6 +264,9 @@ SFA-02・SFA-03・SFA-08B〜SFA-08Dは、PR #192〜#196で試行しSFA-08Iで削
 | SFA-08L  | 日常actionをcontent pollへ移行         | preview domain action / test                      | 高     | Repository    |
 | SFA-08M  | M2 active SHA確認をcontent方式へ移行   | M2 workflow / test                                | 高     | Repository    |
 | SFA-08N  | run失敗記録・文書同期                  | docs                                              | 高     | Repository    |
+| SFA-08O  | provider注入差分のRed contract test    | backend jobs test                                 | 高     | Repository    |
+| SFA-08P  | immutable asset fingerprint比較へ修正  | frontend verifier / action                        | 高     | Repository    |
+| SFA-08Q  | run・UI確認・設計判断の文書同期        | docs                                              | 高     | Repository    |
 | SFA-09   | staging Environment / Vercel preflight | GitHub / Vercel                                   | 高     | 別承認・外部  |
 | SFA-10   | implementation mergeで自動run確認      | GitHub Actions / Vercel                           | 高     | 別承認・外部  |
 | SFA-11   | fixed domain SHA・smoke・旧run除外確認 | staging                                           | 高     | 別承認・外部  |
@@ -292,6 +295,9 @@ SFA-02・SFA-03・SFA-08B〜SFA-08Dは、PR #192〜#196で試行しSFA-08Iで削
 - [x] SFA-08L: 日常actionを候補・固定domainのcontent pollへ移行する
 - [x] SFA-08M: M2 active SHA確認をcontent一致方式へ移行する
 - [x] SFA-08N: run 31086958523の失敗記録と文書を同期する
+- [x] SFA-08O: run 31090151492で判明したprovider注入HTML差分をRed contract testで固定する
+- [x] SFA-08P: verifierをSvelteKit immutable asset fingerprint一致と両URLのmarker確認へ修正する
+- [x] SFA-08Q: run 31090151492、固定URLの最新UI、設計判断を文書へ同期する
 - [x] SFA-09: 別承認でstaging Environment / Vercelをpreflightする
 - [ ] SFA-10: implementation mergeによる自動runを確認する
 - [ ] SFA-11: fixed domainのexact SHA、smoke、旧run除外を確認する
@@ -324,6 +330,9 @@ SFA-08K	共有HTML content verifier実装	frontend/scripts	高
 SFA-08L	日常actionをcontent pollへ移行	preview domain action / test	高
 SFA-08M	M2 active SHA確認をcontent方式へ移行	M2 workflow / test	高
 SFA-08N	run失敗記録・文書同期	docs	高
+SFA-08O	provider注入差分のRed contract test	backend jobs test	高
+SFA-08P	immutable asset fingerprint比較へ修正	frontend verifier / action	高
+SFA-08Q	run・UI確認・設計判断の文書同期	docs	高
 SFA-09	staging Environment / Vercel preflight	GitHub / Vercel	高
 SFA-10	implementation mergeで自動run確認	GitHub Actions / Vercel	高
 SFA-11	fixed domain SHA・smoke・旧run除外確認	staging	高
@@ -343,9 +352,9 @@ SFA-12	Issue #173完了記録	docs / GitHub	中
 | SHA / ref / target / URL不一致        | provider状態を変更せずfailure                         |
 | matching deploymentが0件または曖昧    | provider状態を変更せずfailure                         |
 | domain確認直前にdevelopが進む         | 古いrunはsafe failure                                 |
-| branch domain自動割り当て成功         | fixed domainのHTMLが対象SHAのPreviewと完全一致する    |
+| branch domain自動割り当て成功         | fixed domainのimmutable asset集合が対象Previewと一致する |
 | content一致・marker成功               | `BRANCH_DOMAIN_READY` / `SMOKE_CLEAR`で完了           |
-| redirect・非HTML・content不一致       | provider状態を変更せずfailure                         |
+| redirect・非HTML・asset不一致・asset欠落 | provider状態を変更せずfailure                      |
 | domain content確認timeout             | provider状態を変更せずfailure                         |
 | log / Summary / Artifact              | token、ID、固有URL、raw responseを含まない            |
 | source contract                       | production、API deploy、DB、fixture、M1操作を含まない |
@@ -358,7 +367,7 @@ Repository実装・再レビュー・文書同期後に次を実行する。
 
 ```bash
 cd backend
-npm run test -- --run src/jobs/stagingFrontendDeploymentWorkflow.test.ts src/jobs/vercelPreviewDomainAction.test.ts src/jobs/stagingReleaseCandidateCampaignWorkflow.test.ts
+npm run test -- --run src/jobs/stagingFrontendContentVerifier.test.ts src/jobs/stagingFrontendDeploymentWorkflow.test.ts src/jobs/vercelPreviewDomainAction.test.ts src/jobs/stagingReleaseCandidateCampaignWorkflow.test.ts
 npm run test -- --run
 npm run test:workers
 npm run build
@@ -403,6 +412,10 @@ Repository品質gateではVercel、staging URL、API、DBへ接続せず、workf
 - PR #198は`develop`へmerge済みで、merge SHAは`0091f71342ab07d19684b0f2e5e11b0702f84b63`である。run [31086958523](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31086958523)はfrontend品質gate、exact `READY` Preview探索、develop先端再確認まで成功した後、30回の`alias ls`がすべて失敗し固定domain確認で安全停止した。Node 20 deprecation annotationは失敗原因ではない。
 - SFA-08J〜SFA-08Nはtoken権限を広げず、対象Previewと固定domainを同じbypass / no-cache条件で取得し、200、同一origin、`text/html`、HTML完全一致、markerを確認する共有verifierへ移行した。候補と固定domainの自己比較、redirect、非HTML、content不一致、不正URL、複数のexact SHA候補をfail-closedで扱い、M2の候補URL一時fileには1件でも読める末尾改行を付ける。Redはbackend 7件・frontend 1件、直接影響testはbackend 23件・frontend 2件がGreenである。
 - SFA-08J〜SFA-08Nの最終品質gateはbackend 1325 test、Workers 32 test、frontend 685 test、backend/frontend build、lint、Svelte check、format check、YAML 2件parse、埋め込みBash 24 block構文、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
+- PR #199は`develop`へmerge済みで、merge SHAは`a817d3682acc5732cd01798ed8fcfb8f1c42e40b`である。run [31090151492](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31090151492)はfrontend品質gate、exact `READY` Preview探索、develop先端再確認まで成功し、固定domain content待機だけがtimeoutした。候補Previewと固定domainは同じ14件のSvelteKit `/_app/immutable/` assetを参照しており、候補HTMLだけにVercel Toolbarの外部scriptが注入されていたため、HTML全体比較が最新buildを誤検知していた。
+- SFA-08O〜SFA-08Qでは、同一originの`/_app/immutable/` URLを`pathname + search`へ正規化し、空でない一意な集合の完全一致と両HTMLのmarkerを必須にした。外部provider markup、属性URLの絶対・相対表記差は比較対象外とし、asset不一致・asset欠落・marker欠落はfail-closedにする。Red 2件を意図した失敗として確認後、対象test 3件をGreenにした。
+- ログイン済みbrowserで候補Previewと固定domainを確認し、固定domainが最新トップページUIを表示することを確認した。候補固有originのhydration時API errorはstaging API CORSが固定domainだけを許可する契約によるもので、利用者向けstaging originは固定domainである。production Environment、main、production deploymentは参照・変更していない。SFA-10〜SFA-12はasset fingerprint修正のmerge後run成功後に完了させる。
+- SFA-08O〜SFA-08Qの最終品質gateは直接影響backend 24件・frontend 5件、backend全1326件、Workers 32件、frontend全685件、backend/frontend build、Workers build、lint、Svelte check、format check、YAML 3件parse、埋め込みBash 35 block構文、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
 
 ## 参考資料
 
