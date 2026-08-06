@@ -51,7 +51,7 @@ function immutableAssetFingerprint(html, pageUrl) {
         assets.add(`${asset.pathname}${asset.search}`);
       }
     } catch {
-      // Ignore malformed URLs and provider-injected markup.
+      // Ignore malformed asset URLs.
     }
   }
 
