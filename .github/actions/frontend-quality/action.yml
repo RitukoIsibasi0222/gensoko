@@ -1,0 +1,41 @@
+name: Frontend quality gate
+description: Run the repository frontend quality and Preview build contract.
+
+inputs:
+  git-ref:
+    description: Git ref metadata used by the local Preview build contract.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+        cache-dependency-path: frontend/package-lock.json
+    - shell: bash
+      working-directory: frontend
+      run: npm ci
+    - shell: bash
+      working-directory: frontend
+      run: npm audit --audit-level=moderate
+    - shell: bash
+      working-directory: frontend
+      run: npm run test:run
+    - shell: bash
+      working-directory: frontend
+      run: npm run lint
+    - shell: bash
+      working-directory: frontend
+      run: npm run check
+    - shell: bash
+      working-directory: frontend
+      run: npm run format:check
+    - shell: bash
+      working-directory: frontend
+      env:
+        VERCEL_ENV: preview
+        VERCEL_GIT_COMMIT_REF: ${{ inputs.git-ref }}
+        VITE_API_BASE_URL: https://staging-api.example.invalid/api/v1
+      run: npm run build:preview
