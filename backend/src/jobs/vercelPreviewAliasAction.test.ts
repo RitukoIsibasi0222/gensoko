@@ -23,12 +23,45 @@ describe("Vercel Preview alias action", () => {
     expect(source).toContain("expected-ref");
     expect(source).toContain("expected-target");
     expect(source).toContain("VERCEL_PROJECT_ID");
-    expect(source).toContain("api.vercel.com/v9/projects/");
-    expect(source).toContain("project.id !== process.env.VERCEL_PROJECT_ID");
-    expect(source).toContain('project.name !== "gensoko-frontend-staging"');
+    expect(source).not.toContain("api.vercel.com/v9/projects/");
     expect(source).toContain("list gensoko-frontend-staging");
+    expect(source).toContain('deployment.name === "gensoko-frontend-staging"');
+    expect(
+      source.match(/deployment\.name !== "gensoko-frontend-staging"/g)?.length,
+    ).toBeGreaterThanOrEqual(3);
     expect(source).toMatch(/readyState|READY/);
     expect(source).not.toContain("includes(expected");
+  });
+
+  it("provider失敗を秘密非表示の固定段階へ分類する", () => {
+    const source = action();
+
+    expect(source).toContain("candidate deployment metadataが不一致です");
+    expect(source).toContain("現在のstaging alias metadataを確認できません");
+    expect(source).toContain("staging alias更新に失敗しました");
+    expect(source).toContain("staging alias更新後metadataを確認できません");
+    expect(source).toContain("staging alias更新後metadataが不一致です");
+    expect(source).toContain("staging alias smokeに失敗しました");
+  });
+
+  it("smoke例外をstack traceにせず固定失敗へ寄せる", () => {
+    const source = action();
+    const smokeStart = source.indexOf('alias_failure_message="staging alias smokeに失敗しました"');
+    const smoke = source.slice(smokeStart, source.indexOf("        trap - ERR", smokeStart));
+
+    expect(smoke).toContain("try {");
+    expect(smoke).toContain("} catch {");
+    expect(smoke).toContain("process.exit(1)");
+  });
+
+  it("全Node検証の例外詳細を捨てて固定段階メッセージだけを残す", () => {
+    const commands = action().split("node --input-type=module -e '").slice(1);
+
+    expect(commands).toHaveLength(5);
+    for (const command of commands) {
+      const closingLine = command.split("\n").find((line) => line.trimStart().startsWith("'"));
+      expect(closingLine).toContain("2>/dev/null");
+    }
   });
 
   it("候補確認→直前参照保存→alias更新→post-check→smokeの順に実行する", () => {

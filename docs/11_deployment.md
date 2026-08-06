@@ -288,7 +288,9 @@ docsだけのmerge、quality失敗、Preview timeout、metadata不一致、古�
 
 PR #192のmerge SHA `b84667a166c296355dd5a5f98957954b5950b203`で起動したrun [31072094165](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31072094165)は、初回は3 Secret未登録、preflight後のfailed job再実行はPreview探索timeoutでalias更新前に失敗した。再実行でも固定aliasは維持され、安全側で停止した。
 
-Vercel CLIでは`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数としてprojectを固定する。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡してはいけない。project照合用REST APIだけ`teamId`として使用する。PR #192の実装はこの境界を混同していたため、project限定tokenを維持したままCLIの`--scope`指定を除去し、source contract testで回帰を固定する。修正merge後のrunが成功するまで、固定aliasの自動更新を完了扱いにしない。
+Vercel CLIでは`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数としてprojectを固定する。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡してはいけない。project限定tokenへ追加のProjects REST権限を要求せず、`list gensoko-frontend-staging`と`inspect --format=json`が返すproject nameを候補・更新前・更新後・rollbackの全境界で完全一致検証する。固定aliasの自動run、exact SHA、smokeが成功するまで完了扱いにしない。
+
+PR #193のmerge SHA `ef97e98d72a6fa159c424c02cc9a0e0523231aaa`で起動したrun [31076459494](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31076459494)は、exact `READY` Preview探索とalias直前のdevelop先端再確認に成功した後、共通alias actionで失敗した。固定aliasは旧CSS bundleを維持し、merge SHA固有Previewのbundleとは一致しなかった。provider raw値をlogへ出さない契約は維持し、次の修正では失敗箇所をcandidate不一致、更新前metadata、alias set、更新後inspect、更新後不一致、smokeの固定メッセージだけで分類する。
 
 #### 通常の自動更新
 
@@ -296,7 +298,7 @@ Vercel CLIでは`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数としてp
 2. `Staging Frontend Deploy`の`frontend-quality`がmerge commitのexact SHAでaudit、test、lint、Svelte check、format check、Preview build検証を通す。
 3. `promote-preview`がVercel Git Integration由来の`READY` Previewを最大5分bounded pollし、SHA、ref=`develop`、target=`preview`、project、候補一意性を構造化JSONで確認する。
 4. alias更新直前にGitHubの`develop`先端を再確認する。先端が移動していれば旧runを安全に失敗させ、新しいrunへ委譲する。
-5. 共通actionが直前参照を一時fileへ保存し、固定aliasを更新する。更新後deployment ID、`READY`、`preview`を再確認し、固定URLへ15秒timeoutのread-only HTML smokeを行う。
+5. 共通actionが直前参照を一時fileへ保存し、固定aliasを更新する。更新前・更新後ともproject name、deployment ID、`READY`、`preview`を再確認し、固定URLへ15秒timeoutのread-only HTML smokeを行う。
 6. Summaryにexact SHAと`ALIAS_UPDATED` / `SMOKE_CLEAR`だけが残り、固定URLで最新UIを確認できることを確認する。
 
 同じSHAのPreviewをGitHub Actionsから再deployしない。日常workflowを手動dispatchへ拡張せず、失敗修正後の次のfrontend mergeで再実行する。API、DB、fixture、synthetic campaignを伴う高リスク変更だけ、既存M2を別承認で使う。

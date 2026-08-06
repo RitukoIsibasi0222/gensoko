@@ -131,8 +131,8 @@ developへfrontend変更をmerge
    - 根拠: concurrencyの処理順は保証されないため、provider変更直前の二重確認が必要である。
 
 5. **deployment候補をどう特定するか**
-   - 選択: `VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数として設定したpinned Vercel CLIで`githubCommitSha` metadataを使ってbounded pollし、JSONを構造化parseしてSHA、ref、target、state、projectを完全一致検証する。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡さない。
-   - 根拠: raw JSON文字列への`includes`は別fieldの偶然一致を許すためfail-closedにならない。Vercel CLIの`--scope`はteam slugを受け取るため、IDを渡すとproject-scoped tokenでも対象projectを解決できない。CI環境変数とRESTの`teamId`照合でproject境界を固定する。
+   - 選択: `VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数として設定したpinned Vercel CLIで`githubCommitSha` metadataを使ってbounded pollし、JSONを構造化parseしてSHA、ref、target、state、project nameを完全一致検証する。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡さず、project限定tokenへ追加のProjects REST権限を要求しない。
+   - 根拠: raw JSON文字列への`includes`は別fieldの偶然一致を許すためfail-closedにならない。Vercel CLIの`--scope`はteam slugを受け取り、pinned CLIの`list <project>`と`inspect --format=json`はproject nameを構造化fieldとして返す。候補・更新前・更新後・rollbackの全境界で固定project名を検証すれば、CLIが解決したprojectから逸脱せず、不要なREST権限面も増やさない。
 
 6. **alias更新処理をどこへ置くか**
    - 選択: repository local composite actionへ共通化し、日常workflowとM2の両方から呼ぶ。
@@ -244,6 +244,7 @@ repository実装PRではEnvironment、Secret、Vercel Project Settings、alias�
 | SFA-07   | 対象test・frontend品質gate                | backend / frontend                                | 高     | Repository   |
 | SFA-08   | 全体品質gate                              | repository                                        | 高     | Repository   |
 | SFA-08A  | Vercel CLI scope解決の回帰修正            | workflow / action / test                          | 高     | Repository   |
+| SFA-08B  | project限定tokenのalias検証回帰修正       | alias action / test / docs                        | 高     | Repository   |
 | SFA-09   | staging Environment / Vercel preflight    | GitHub / Vercel                                   | 高     | 別承認・外部 |
 | SFA-10   | implementation mergeで自動run確認         | GitHub Actions / Vercel                           | 高     | 別承認・外部 |
 | SFA-11   | fixed alias SHA・smoke・旧run非上書き確認 | staging                                           | 高     | 別承認・外部 |
@@ -259,6 +260,7 @@ repository実装PRではEnvironment、Secret、Vercel Project Settings、alias�
 - [x] SFA-07: 対象testとfrontend品質gateを通す
 - [x] SFA-08: repository全体の必要な品質gateを通す
 - [x] SFA-08A: Vercel CLIへteam IDをslug用scopeとして渡さない回帰修正を行う
+- [x] SFA-08B: project限定tokenではCLI JSONのproject nameを完全一致検証し、段階別の安全な失敗診断を追加する
 - [x] SFA-09: 別承認でstaging Environment / Vercelをpreflightする
 - [ ] SFA-10: implementation mergeによる自動runを確認する
 - [ ] SFA-11: fixed aliasのexact SHA、smoke、旧run非上書きを確認する
@@ -278,6 +280,7 @@ SFA-06	runbook・進捗・計画同期	docs	高
 SFA-07	対象test・frontend品質gate	backend / frontend	高
 SFA-08	repository全体品質gate	repository	高
 SFA-08A	Vercel CLI scope解決の回帰修正	workflow / action / test	高
+SFA-08B	project限定tokenのalias検証回帰修正	alias action / test / docs	高
 SFA-09	staging Environment / Vercel preflight	GitHub / Vercel	高
 SFA-10	implementation mergeで自動run確認	GitHub Actions / Vercel	高
 SFA-11	fixed alias SHA・smoke・旧run非上書き確認	staging	高
@@ -338,11 +341,14 @@ Repository品質gateではVercel、staging URL、API、DBへ接続せず、workf
 - Vercel Hobby projectでは対象`develop`先端SHAのPreviewが`READY`だが、固定staging aliasはそのdeploymentに付与されていない。固定URLが最新UIへ追従しない問題を再現できた。
 - Vercel Ignored Build Stepは承認後に既存Custom commandから`npm run vercel:ignore-build`へ変更し、保存後の設定表示で反映を確認した。mainの現行build契約は維持している。
 - Node.js `22.23.1`でbackend 1320 test、Workers 32 test、frontend 683 test、build、lint、Svelte check、format check、Preview build contractを通した。frontend auditのmoderate/highは非破壊lockfile更新で解消し、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
-- PR #192のGitHub Copilot reviewでproject identityのfail-closed検証不足を指摘された。Vercel REST `GET /v9/projects/{projectId}`を`teamId`で照合し、project IDと固定project名を完全一致検証したうえで、Vercel CLIの候補探索は固定app名へ限定した。再reviewは新規commentなしだったが、suppressed noteからM2の複数行deploy出力を全行連結する潜在不具合を確認し、最後の非空URL行だけを読む修正をRed 1件→Green 19件で追加した。
+- PR #192のGitHub Copilot reviewでproject identityのfail-closed検証不足を指摘された。当初はVercel REST `GET /v9/projects/{projectId}`を`teamId`で照合し、project IDと固定project名を完全一致検証したうえで、Vercel CLIの候補探索を固定app名へ限定した。再reviewは新規commentなしだったが、suppressed noteからM2の複数行deploy出力を全行連結する潜在不具合を確認し、最後の非空URL行だけを読む修正をRed 1件→Green 19件で追加した。
 - PR #192は`develop`へmerge済みで、merge SHAは`b84667a166c296355dd5a5f98957954b5950b203`である。初回run [31072094165](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31072094165)は3 Secret未登録のためalias更新前に失敗した。承認済みpreflight後のfailed job再実行ではSecretがmaskedで注入されたが、Preview探索がtimeoutし、固定aliasは変更されなかった。
-- 再実行の原因調査で、Vercel CLI `50.17.1`のteam slug用`--scope`へteam IDである`VERCEL_ORG_ID`を渡していたため、project-scoped tokenから対象projectを解決できないことを確認した。project限定tokenは維持し、CLIは`VERCEL_ORG_ID` / `VERCEL_PROJECT_ID`環境変数でprojectを固定、REST照合だけ`teamId`を使う修正を回帰test先行で追加した。SFA-10〜SFA-12はこの修正のmerge後に再確認する。
+- 再実行の原因調査で、Vercel CLI `50.17.1`のteam slug用`--scope`へteam IDである`VERCEL_ORG_ID`を渡していたため、project-scoped tokenから対象projectを解決できないことを確認した。project限定tokenは維持し、CLIは`VERCEL_ORG_ID` / `VERCEL_PROJECT_ID`環境変数でprojectを固定する修正を回帰test先行で追加した。
 - scope回帰修正後はNode.js 22でbackend 1321 test、Workers 32 test、frontend 684 test、backend/frontend build、lint、Svelte check、format check、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
 - PR #193のCopilot reviewで、scope回帰testが`process.cwd()`からrepository rootを推測しており、repo直下の`vitest --root frontend`実行で失敗する指摘を受けた。別cwd実行のRedを再現し、既存source contract testと同じ`import.meta.url` / `fileURLToPath`基準へ修正した。
+- PR #193は`develop`へmerge済みで、merge SHAは`ef97e98d72a6fa159c424c02cc9a0e0523231aaa`である。run [31076459494](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31076459494)ではexact `READY` Preview探索とalias直前のdevelop先端再確認まで成功したが、共通alias actionが失敗し、固定aliasは旧CSS bundleを維持した。project限定tokenに不要なProjects REST権限面を増やさず、pinned CLI JSONのproject nameを候補・更新前・更新後・rollbackで完全一致検証し、秘密やprovider raw値を出さない固定段階メッセージをRed 3件→Green backend 6件・frontend 2件で追加した。SFA-10〜SFA-12はこの修正のmerge後に再確認する。
+- PR #194のCopilot reviewで、smoke内の`fetch`やURL処理が例外を投げるとNode stack traceがstderrへ出て固定段階メッセージ契約から外れる指摘を受けた。意図した挙動ではないため、smoke範囲だけを検査するRed 1件を追加し、処理全体を`try/catch`で囲んで例外内容を出さず`process.exit(1)`へ寄せた。再reviewでは候補・更新前・更新後・rollbackのmetadata検証にも同じ例外露出経路があると確認したため、重複した`try/catch`を増やさず、5つの埋め込みNode検証すべてでstderrを破棄し、shell側の固定段階メッセージだけを残した。直接影響testはRed 1件からbackend 22件・frontend 2件がGreenである。
+- SFA-08Bの最終品質gateはbackend 1324 test、Workers 32 test、frontend 685 test、backend/frontend build、lint、Svelte check、format check、YAML parse、埋め込みBash構文、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
 
 ## 参考資料
 

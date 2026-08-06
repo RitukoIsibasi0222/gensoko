@@ -52,6 +52,7 @@ runs:
         alias_state="$RUNNER_TEMP/vercel-alias-state.json"
         rollback_state="$RUNNER_TEMP/vercel-rollback-state.json"
         alias_update_attempted=false
+        alias_failure_message="staging alias更新に失敗しました"
 
         cleanup_files() {
           rm -f "$candidate_state" "$candidate_id_file" "$previous_state" "$previous_deployment" "$previous_id_file" "$alias_state" "$rollback_state"
@@ -59,14 +60,18 @@ runs:
 
         rollback_alias() {
           trap - ERR
+          echo "$alias_failure_message"
           rollback_ok=false
           if [ "$alias_update_attempted" = "true" ] && npx --yes vercel@50.17.1 alias set "$(cat "$previous_deployment")" "$INPUT_ALIAS" --token="$INPUT_VERCEL_TOKEN" >/dev/null 2>&1; then
-            if npx --yes vercel@50.17.1 inspect "https://$INPUT_ALIAS" --format=json --token="$INPUT_VERCEL_TOKEN" >"$rollback_state" 2>/dev/null && EXPECTED_ID_FILE="$previous_id_file" DEPLOYMENT_STATE="$rollback_state" node --input-type=module -e '
+            if npx --yes vercel@50.17.1 inspect "https://$INPUT_ALIAS" --format=json --token="$INPUT_VERCEL_TOKEN" >"$rollback_state" 2>/dev/null && EXPECTED_ID_FILE="$previous_id_file" EXPECTED_TARGET="$INPUT_EXPECTED_TARGET" DEPLOYMENT_STATE="$rollback_state" node --input-type=module -e '
               import { readFileSync } from "node:fs";
               const expectedId = readFileSync(process.env.EXPECTED_ID_FILE, "utf8").trim();
               const deployment = JSON.parse(readFileSync(process.env.DEPLOYMENT_STATE, "utf8"));
-              if (deployment.id !== expectedId || deployment.readyState !== "READY") process.exit(1);
-            '; then
+              if (deployment.id !== expectedId
+                || deployment.name !== "gensoko-frontend-staging"
+                || deployment.readyState !== "READY"
+                || deployment.target !== process.env.EXPECTED_TARGET) process.exit(1);
+            ' 2>/dev/null; then
               rollback_ok=true
             fi
           fi
@@ -106,23 +111,6 @@ runs:
           echo "::add-mask::$INPUT_AUTOMATION_BYPASS_SECRET"
         fi
 
-        VERCEL_TOKEN="$INPUT_VERCEL_TOKEN" node --input-type=module -e '
-            try {
-              const projectUrl = new URL(`https://api.vercel.com/v9/projects/${encodeURIComponent(process.env.VERCEL_PROJECT_ID)}`);
-              projectUrl.searchParams.set("teamId", process.env.VERCEL_ORG_ID);
-              const response = await fetch(projectUrl, {
-                headers: { authorization: `Bearer ${process.env.VERCEL_TOKEN}` },
-                signal: AbortSignal.timeout(15000),
-              });
-              if (!response.ok) process.exit(1);
-              const project = await response.json();
-              if (project.id !== process.env.VERCEL_PROJECT_ID
-                || project.name !== "gensoko-frontend-staging") process.exit(1);
-            } catch {
-              process.exit(1);
-            }
-          '
-
         if [ ! -f "$INPUT_DEPLOYMENT_URL_FILE" ]; then
           echo "candidate deployment参照がありません"
           exit 1
@@ -139,13 +127,14 @@ runs:
           echo "candidate deployment metadataを確認できません"
           exit 1
         fi
-        EXPECTED_SHA="$INPUT_EXPECTED_SHA" EXPECTED_REF="$INPUT_EXPECTED_REF" EXPECTED_TARGET="$INPUT_EXPECTED_TARGET" EXPECTED_URL="$candidate_host" CANDIDATE_STATE="$candidate_state" node --input-type=module -e '
+        if ! EXPECTED_SHA="$INPUT_EXPECTED_SHA" EXPECTED_REF="$INPUT_EXPECTED_REF" EXPECTED_TARGET="$INPUT_EXPECTED_TARGET" EXPECTED_URL="$candidate_host" CANDIDATE_STATE="$candidate_state" node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const payload = JSON.parse(readFileSync(process.env.CANDIDATE_STATE, "utf8"));
             const deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
             const matches = deployments.filter((deployment) => {
               const target = deployment.target ?? "preview";
               return deployment.state === "READY"
+                && deployment.name === "gensoko-frontend-staging"
                 && target === process.env.EXPECTED_TARGET
                 && deployment.url === process.env.EXPECTED_URL
                 && deployment.meta?.githubCommitSha === process.env.EXPECTED_SHA
@@ -154,50 +143,70 @@ runs:
             });
             if (matches.length !== 1) process.exit(1);
             process.stdout.write(matches[0].id);
-          ' >"$candidate_id_file"
+          ' >"$candidate_id_file" 2>/dev/null; then
+          echo "candidate deployment metadataが不一致です"
+          exit 1
+        fi
 
-        npx --yes vercel@50.17.1 inspect "https://$INPUT_ALIAS" --format=json --token="$INPUT_VERCEL_TOKEN" >"$previous_state" 2>/dev/null
-        PREVIOUS_STATE="$previous_state" PREVIOUS_DEPLOYMENT="$previous_deployment" PREVIOUS_ID_FILE="$previous_id_file" node --input-type=module -e '
+        if ! npx --yes vercel@50.17.1 inspect "https://$INPUT_ALIAS" --format=json --token="$INPUT_VERCEL_TOKEN" >"$previous_state" 2>/dev/null; then
+          echo "現在のstaging alias metadataを確認できません"
+          exit 1
+        fi
+        if ! EXPECTED_TARGET="$INPUT_EXPECTED_TARGET" PREVIOUS_STATE="$previous_state" PREVIOUS_DEPLOYMENT="$previous_deployment" PREVIOUS_ID_FILE="$previous_id_file" node --input-type=module -e '
             import { readFileSync, writeFileSync } from "node:fs";
             const deployment = JSON.parse(readFileSync(process.env.PREVIOUS_STATE, "utf8"));
-            if (deployment.readyState !== "READY"
+            if (deployment.name !== "gensoko-frontend-staging"
+              || deployment.readyState !== "READY"
+              || deployment.target !== process.env.EXPECTED_TARGET
               || typeof deployment.id !== "string"
               || typeof deployment.url !== "string"
               || !/^[a-z0-9-]+\.vercel\.app$/.test(deployment.url)) process.exit(1);
             writeFileSync(process.env.PREVIOUS_DEPLOYMENT, `https://${deployment.url}`);
             writeFileSync(process.env.PREVIOUS_ID_FILE, deployment.id);
-          '
+          ' 2>/dev/null; then
+          echo "現在のstaging alias metadataを確認できません"
+          exit 1
+        fi
 
         alias_update_attempted=true
         trap rollback_alias ERR
+        alias_failure_message="staging alias更新に失敗しました"
         npx --yes vercel@50.17.1 alias set "$candidate_url" "$INPUT_ALIAS" --token="$INPUT_VERCEL_TOKEN" >/dev/null 2>&1
 
+        alias_failure_message="staging alias更新後metadataを確認できません"
         npx --yes vercel@50.17.1 inspect "https://$INPUT_ALIAS" --format=json --token="$INPUT_VERCEL_TOKEN" >"$alias_state" 2>/dev/null
+        alias_failure_message="staging alias更新後metadataが不一致です"
         EXPECTED_ID_FILE="$candidate_id_file" EXPECTED_TARGET="$INPUT_EXPECTED_TARGET" DEPLOYMENT_STATE="$alias_state" node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const expectedId = readFileSync(process.env.EXPECTED_ID_FILE, "utf8").trim();
             const deployment = JSON.parse(readFileSync(process.env.DEPLOYMENT_STATE, "utf8"));
             if (deployment.id !== expectedId
+              || deployment.name !== "gensoko-frontend-staging"
               || deployment.readyState !== "READY"
               || deployment.target !== process.env.EXPECTED_TARGET) process.exit(1);
-          '
+          ' 2>/dev/null
 
+        alias_failure_message="staging alias smokeに失敗しました"
         SMOKE_URL="https://$INPUT_ALIAS/" SMOKE_MARKER="$INPUT_SMOKE_MARKER" AUTOMATION_BYPASS_SECRET="$INPUT_AUTOMATION_BYPASS_SECRET" node --input-type=module -e '
-            const url = new URL(process.env.SMOKE_URL);
-            const headers = process.env.AUTOMATION_BYPASS_SECRET
-              ? { "x-vercel-protection-bypass": process.env.AUTOMATION_BYPASS_SECRET }
-              : {};
-            const response = await fetch(url, {
-              headers,
-              redirect: "error",
-              signal: AbortSignal.timeout(15000),
-            });
-            if (response.status !== 200
-              || new URL(response.url).origin !== url.origin
-              || !response.headers.get("content-type")?.includes("text/html")) process.exit(1);
-            const html = await response.text();
-            if (!html.includes(process.env.SMOKE_MARKER)) process.exit(1);
-          '
+            try {
+              const url = new URL(process.env.SMOKE_URL);
+              const headers = process.env.AUTOMATION_BYPASS_SECRET
+                ? { "x-vercel-protection-bypass": process.env.AUTOMATION_BYPASS_SECRET }
+                : {};
+              const response = await fetch(url, {
+                headers,
+                redirect: "error",
+                signal: AbortSignal.timeout(15000),
+              });
+              if (response.status !== 200
+                || new URL(response.url).origin !== url.origin
+                || !response.headers.get("content-type")?.includes("text/html")) process.exit(1);
+              const html = await response.text();
+              if (!html.includes(process.env.SMOKE_MARKER)) process.exit(1);
+            } catch {
+              process.exit(1);
+            }
+          ' 2>/dev/null
 
         trap - ERR
         printf '%s\n' "- Status: ALIAS_UPDATED" "- Status: SMOKE_CLEAR" >> "$GITHUB_STEP_SUMMARY"
