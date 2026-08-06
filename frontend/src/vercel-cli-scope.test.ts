@@ -1,9 +1,12 @@
+// @vitest-environment node
+
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-const REPOSITORY_ROOT = join(process.cwd(), '..');
+const REPOSITORY_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 function repositoryFile(path: string): string {
   const filePath = join(REPOSITORY_ROOT, path);
