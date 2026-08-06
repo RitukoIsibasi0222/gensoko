@@ -233,34 +233,36 @@ repository変更と外部設定変更は別工程にする。2026-08-06にowner�
 
 ## タスクリスト（進捗管理）
 
-| タスクID | 内容                                   | ファイル                                          | 優先度 | 備考         |
-| -------- | -------------------------------------- | ------------------------------------------------- | ------ | ------------ |
-| SFA-01   | workflow trigger・境界のRed test       | `stagingFrontendDeploymentWorkflow.test.ts`       | 高     | Repository   |
-| SFA-02   | alias actionのRed test                 | `vercelPreviewAliasAction.test.ts`                | 高     | Repository   |
-| SFA-03   | 共通Vercel preview alias action実装    | `.github/actions/vercel-preview-alias/action.yml` | 高     | Repository   |
-| SFA-03A  | Vercel Ignored Build Step scriptとtest | `frontend/scripts` / test / package               | 高     | Repository   |
-| SFA-04   | develop自動workflow実装                | `.github/workflows/staging-frontend-deploy.yml`   | 高     | Repository   |
-| SFA-05   | M2を共通actionへrefactor               | M2 workflow / test                                | 高     | Repository   |
-| SFA-06   | runbook・進捗・計画同期                | docs                                              | 高     | Repository   |
-| SFA-07   | 対象test・frontend品質gate             | backend / frontend                                | 高     | Repository   |
-| SFA-08   | 全体品質gate                           | repository                                        | 高     | Repository   |
-| SFA-08A  | Vercel CLI scope解決の回帰修正         | workflow / action / test                          | 高     | Repository   |
-| SFA-08B  | project限定tokenのalias検証回帰修正    | alias action / test / docs                        | 高     | Repository   |
-| SFA-08C  | list / inspect候補metadataの回帰修正   | alias action / test / docs                        | 高     | Repository   |
-| SFA-08D  | list ID省略時のinspect取得回帰修正     | alias action / test / docs                        | 高     | Repository   |
-| SFA-08E  | branch domain方式のRed contract test   | backend / frontend test                           | 高     | Repository   |
-| SFA-08F  | read-only branch domain action実装     | preview domain action / test                      | 高     | Repository   |
-| SFA-08G  | 日常workflowのdomain検証移行           | staging frontend workflow / test                  | 高     | Repository   |
-| SFA-08H  | M2のdomain検証移行                     | M2 workflow / test                                | 高     | Repository   |
-| SFA-08I  | 旧alias mutation処理の削除             | alias action / docs                               | 高     | Repository   |
-| SFA-09   | staging Environment / Vercel preflight | GitHub / Vercel                                   | 高     | 別承認・外部 |
-| SFA-10   | implementation mergeで自動run確認      | GitHub Actions / Vercel                           | 高     | 別承認・外部 |
-| SFA-11   | fixed domain SHA・smoke・旧run除外確認 | staging                                           | 高     | 別承認・外部 |
-| SFA-12   | Issue #173完了記録                     | docs / GitHub                                     | 中     | 外部証拠後   |
+SFA-02・SFA-03・SFA-08B〜SFA-08Dは、PR #192〜#196で試行しSFA-08Iで削除した旧alias mutation方式の実装履歴である。現行の最終状態はSFA-08E〜SFA-08Iのbranch domain方式を正本とする。
+
+| タスクID | 内容                                   | ファイル                                          | 優先度 | 備考          |
+| -------- | -------------------------------------- | ------------------------------------------------- | ------ | ------------- |
+| SFA-01   | workflow trigger・境界のRed test       | `stagingFrontendDeploymentWorkflow.test.ts`       | 高     | Repository    |
+| SFA-02   | 旧alias actionのRed test（廃止履歴）   | `vercelPreviewAliasAction.test.ts`                | 高     | SFA-08Iで削除 |
+| SFA-03   | 旧preview alias action実装（廃止履歴） | `.github/actions/vercel-preview-alias/action.yml` | 高     | SFA-08Iで削除 |
+| SFA-03A  | Vercel Ignored Build Step scriptとtest | `frontend/scripts` / test / package               | 高     | Repository    |
+| SFA-04   | develop自動workflow実装                | `.github/workflows/staging-frontend-deploy.yml`   | 高     | Repository    |
+| SFA-05   | M2を共通actionへrefactor               | M2 workflow / test                                | 高     | Repository    |
+| SFA-06   | runbook・進捗・計画同期                | docs                                              | 高     | Repository    |
+| SFA-07   | 対象test・frontend品質gate             | backend / frontend                                | 高     | Repository    |
+| SFA-08   | 全体品質gate                           | repository                                        | 高     | Repository    |
+| SFA-08A  | Vercel CLI scope解決の回帰修正         | workflow / action / test                          | 高     | Repository    |
+| SFA-08B  | 旧alias project検証の回帰修正          | 旧alias action / test / docs                      | 高     | 廃止履歴      |
+| SFA-08C  | 旧list / inspect metadataの回帰修正    | 旧alias action / test / docs                      | 高     | 廃止履歴      |
+| SFA-08D  | 旧inspect ID取得の回帰修正             | 旧alias action / test / docs                      | 高     | 廃止履歴      |
+| SFA-08E  | branch domain方式のRed contract test   | backend / frontend test                           | 高     | Repository    |
+| SFA-08F  | read-only branch domain action実装     | preview domain action / test                      | 高     | Repository    |
+| SFA-08G  | 日常workflowのdomain検証移行           | staging frontend workflow / test                  | 高     | Repository    |
+| SFA-08H  | M2のdomain検証移行                     | M2 workflow / test                                | 高     | Repository    |
+| SFA-08I  | 旧alias mutation処理の削除             | alias action / docs                               | 高     | Repository    |
+| SFA-09   | staging Environment / Vercel preflight | GitHub / Vercel                                   | 高     | 別承認・外部  |
+| SFA-10   | implementation mergeで自動run確認      | GitHub Actions / Vercel                           | 高     | 別承認・外部  |
+| SFA-11   | fixed domain SHA・smoke・旧run除外確認 | staging                                           | 高     | 別承認・外部  |
+| SFA-12   | Issue #173完了記録                     | docs / GitHub                                     | 中     | 外部証拠後    |
 
 - [x] SFA-01: workflow trigger・境界のRed testを作成する
-- [x] SFA-02: alias actionのRed testを作成する
-- [x] SFA-03: 共通Vercel preview alias actionを実装する
+- [x] SFA-02: 旧alias actionのRed testを作成する（SFA-08Iで削除）
+- [x] SFA-03: 旧Vercel preview alias actionを実装する（SFA-08Iで削除）
 - [x] SFA-03A: Vercel Ignored Build Step scriptとtestを実装する
 - [x] SFA-04: develop自動workflowを実装する
 - [x] SFA-05: M2のalias処理を共通actionへrefactorする
@@ -268,9 +270,9 @@ repository変更と外部設定変更は別工程にする。2026-08-06にowner�
 - [x] SFA-07: 対象testとfrontend品質gateを通す
 - [x] SFA-08: repository全体の必要な品質gateを通す
 - [x] SFA-08A: Vercel CLIへteam IDをslug用scopeとして渡さない回帰修正を行う
-- [x] SFA-08B: project限定tokenではCLI JSONのproject nameを完全一致検証し、段階別の安全な失敗診断を追加する
-- [x] SFA-08C: listでexact Git metadataを確認し、同じ候補をinspectしてproject境界を完全一致検証する
-- [x] SFA-08D: listのID省略を許容し、同じ候補のinspectからIDを取得して後続検証へ引き継ぐ
+- [x] SFA-08B: 旧alias方式でCLI JSONのproject name完全一致検証と段階別診断を追加する（SFA-08Iで廃止）
+- [x] SFA-08C: 旧alias方式でlist候補をinspectしてproject境界を検証する（SFA-08Iで廃止）
+- [x] SFA-08D: 旧alias方式でinspectからIDを取得して後続検証へ引き継ぐ（SFA-08Iで廃止）
 - [x] SFA-08E: branch domain方式のRed contract testを追加する
 - [x] SFA-08F: exact候補・alias list・smokeだけを行うread-only branch domain actionを実装する
 - [x] SFA-08G: 日常workflowをVercel自動deploy後のdomain検証へ移行する
@@ -286,8 +288,8 @@ repository変更と外部設定変更は別工程にする。2026-08-06にowner�
 ```text
 タスクID	タスク内容	ファイル	優先度
 SFA-01	workflow trigger・境界のRed test	stagingFrontendDeploymentWorkflow.test.ts	高
-SFA-02	alias actionのRed test	vercelPreviewAliasAction.test.ts	高
-SFA-03	共通Vercel preview alias action実装	.github/actions/vercel-preview-alias/action.yml	高
+SFA-02	旧alias actionのRed test（廃止履歴）	vercelPreviewAliasAction.test.ts（SFA-08Iで削除）	高
+SFA-03	旧preview alias action実装（廃止履歴）	.github/actions/vercel-preview-alias/action.yml（SFA-08Iで削除）	高
 SFA-03A	Vercel Ignored Build Step scriptとtest	frontend/scripts / test / package	高
 SFA-04	develop自動workflow実装	.github/workflows/staging-frontend-deploy.yml	高
 SFA-05	M2を共通actionへrefactor	M2 workflow / test	高
@@ -295,9 +297,9 @@ SFA-06	runbook・進捗・計画同期	docs	高
 SFA-07	対象test・frontend品質gate	backend / frontend	高
 SFA-08	repository全体品質gate	repository	高
 SFA-08A	Vercel CLI scope解決の回帰修正	workflow / action / test	高
-SFA-08B	project限定tokenのalias検証回帰修正	alias action / test / docs	高
-SFA-08C	list / inspect候補metadataの回帰修正	alias action / test / docs	高
-SFA-08D	list ID省略時のinspect取得回帰修正	alias action / test / docs	高
+SFA-08B	旧alias project検証の回帰修正（廃止履歴）	旧alias action / test / docs	高
+SFA-08C	旧list / inspect metadataの回帰修正（廃止履歴）	旧alias action / test / docs	高
+SFA-08D	旧inspect ID取得の回帰修正（廃止履歴）	旧alias action / test / docs	高
 SFA-08E	branch domain方式のRed contract test	backend / frontend test	高
 SFA-08F	read-only branch domain action実装	preview domain action / test	高
 SFA-08G	日常workflowのdomain検証移行	staging frontend workflow / test	高
@@ -377,6 +379,7 @@ Repository品質gateではVercel、staging URL、API、DBへ接続せず、workf
 - ownerの包括承認後、Vercel staging projectの固定domain `gensoko-frontend-staging-develop.vercel.app`をPreview環境・`develop` branchへ追加した。設定画面でValid Configurationとdevelop割り当てを確認し、公開URLで最新トップページUIを確認した。project限定token、staging Environment、production project、main、production deploymentは変更していない。
 - branch domain移行はRed backend 11件・frontend 2件から開始し、read-only共通action、日常workflow、M2をGreen backend 21件・frontend 2件へ進めた。旧`inspect`、`alias set`、rollback処理を削除し、Vercel CLIの`list`と`alias ls`、固定domain HTTP smokeだけを残した。
 - SFA-08E〜SFA-08Iの最終品質gateはbackend 1323 test、Workers 32 test、frontend 685 test、backend/frontend build、lint、Svelte check、format check、YAML parse、埋め込みBash構文、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
+- PR #198のCopilot reviewで、候補探索とdomain追従待ちが各最大5分のため日常jobの10分timeoutにはCLI等の余裕がない指摘を受けた。15分を要求する回帰testをRed 1件で追加し、workflowを15分へ変更して直接影響test 21件をGreenとした。また、タスクリストの旧alias action参照を廃止履歴として明示し、現行branch domain方式との区別を同期した。
 
 ## 参考資料
 

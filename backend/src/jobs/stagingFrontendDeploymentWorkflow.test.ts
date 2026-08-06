@@ -57,6 +57,7 @@ describe("staging frontend deployment workflow", () => {
 
   it("exact SHA Previewをbounded pollしdevelop先端再確認後に固定domainを検証する", () => {
     const source = workflow();
+    const verifyJob = source.slice(source.indexOf("  verify-preview:"));
 
     expect(source).toContain("vercel@50.17.1 list");
     expect(source).toContain("list gensoko-frontend-staging");
@@ -70,6 +71,7 @@ describe("staging frontend deployment workflow", () => {
     expect(source).not.toMatch(/vercel@[^\n]+ deploy/);
     expect(source).not.toContain("alias set");
     expect(source).not.toContain(" inspect ");
+    expect(verifyJob).toContain("timeout-minutes: 15");
   });
 
   it("production・API・DB・fixture・artifactを日常経路へ混ぜない", () => {

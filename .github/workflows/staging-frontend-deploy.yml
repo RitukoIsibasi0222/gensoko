@@ -47,7 +47,7 @@ jobs:
     name: Verify exact Preview on fixed staging domain
     needs: frontend-quality
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     environment: staging
     permissions:
       contents: read
