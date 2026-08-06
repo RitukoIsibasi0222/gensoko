@@ -13,8 +13,18 @@ function action(): string {
 }
 
 describe("Vercel Preview alias action", () => {
-  it("candidate metadataを構造化parseしてSHA・ref・target・state・project完全一致で検証する", () => {
+  it("listでexact候補を特定しinspectで同じID・project・URL・target・READYを検証する", () => {
     const source = action();
+    const candidateStart = source.indexOf("        vercel_list=(");
+    const candidateEnd = source.indexOf(
+      '        if ! npx --yes vercel@50.17.1 inspect "https://$INPUT_ALIAS"',
+      candidateStart,
+    );
+    const candidate = source.slice(candidateStart, candidateEnd);
+    const validator = source.slice(
+      source.indexOf("        validate_inspected_deployment()"),
+      source.indexOf("        rollback_alias()"),
+    );
 
     expect(source).toContain("JSON.parse");
     expect(source).toContain("githubCommitSha");
@@ -25,10 +35,15 @@ describe("Vercel Preview alias action", () => {
     expect(source).toContain("VERCEL_PROJECT_ID");
     expect(source).not.toContain("api.vercel.com/v9/projects/");
     expect(source).toContain("list gensoko-frontend-staging");
-    expect(source).toContain('deployment.name === "gensoko-frontend-staging"');
+    expect(candidate).toContain('inspect "$candidate_url"');
+    expect(candidate).not.toContain('deployment.name === "gensoko-frontend-staging"');
+    expect(candidate).toContain('validate_inspected_deployment "$candidate_id_file"');
+    expect(validator).toContain('deployment.name !== "gensoko-frontend-staging"');
+    expect(validator).toContain("deployment.id !== expectedId");
+    expect(validator).toContain("deployment.url !== process.env.EXPECTED_URL");
     expect(
       source.match(/deployment\.name !== "gensoko-frontend-staging"/g)?.length,
-    ).toBeGreaterThanOrEqual(3);
+    ).toBeGreaterThanOrEqual(2);
     expect(source).toMatch(/readyState|READY/);
     expect(source).not.toContain("includes(expected");
   });
@@ -37,6 +52,8 @@ describe("Vercel Preview alias action", () => {
     const source = action();
 
     expect(source).toContain("candidate deployment metadataが不一致です");
+    expect(source).toContain("candidate deployment project metadataを確認できません");
+    expect(source).toContain("candidate deployment project metadataが不一致です");
     expect(source).toContain("現在のstaging alias metadataを確認できません");
     expect(source).toContain("staging alias更新に失敗しました");
     expect(source).toContain("staging alias更新後metadataを確認できません");
@@ -57,7 +74,7 @@ describe("Vercel Preview alias action", () => {
   it("全Node検証の例外詳細を捨てて固定段階メッセージだけを残す", () => {
     const commands = action().split("node --input-type=module -e '").slice(1);
 
-    expect(commands).toHaveLength(5);
+    expect(commands).toHaveLength(4);
     for (const command of commands) {
       const closingLine = command.split("\n").find((line) => line.trimStart().startsWith("'"));
       expect(closingLine).toContain("2>/dev/null");
@@ -68,6 +85,7 @@ describe("Vercel Preview alias action", () => {
     const source = action();
     const main = source.slice(source.indexOf("        vercel_list=("));
     const candidate = main.indexOf("vercel_list=(");
+    const candidateInspect = main.indexOf('inspect "$candidate_url"');
     const previous = main.indexOf('inspect "https://$INPUT_ALIAS"');
     const rollbackTrap = main.indexOf("trap rollback_alias ERR");
     const alias = main.indexOf('alias set "$candidate_url"');
@@ -75,7 +93,8 @@ describe("Vercel Preview alias action", () => {
     const smoke = main.indexOf('SMOKE_URL="https://$INPUT_ALIAS/"');
 
     expect(candidate).toBeGreaterThan(-1);
-    expect(previous).toBeGreaterThan(candidate);
+    expect(candidateInspect).toBeGreaterThan(candidate);
+    expect(previous).toBeGreaterThan(candidateInspect);
     expect(rollbackTrap).toBeGreaterThan(previous);
     expect(alias).toBeGreaterThan(rollbackTrap);
     expect(postCheck).toBeGreaterThan(alias);
