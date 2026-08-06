@@ -107,8 +107,22 @@ describe("M2 staging release candidate workflow", () => {
     expect(apiJob).toContain(
       "M2_FRONTEND_ORIGIN: https://gensoko-frontend-staging-develop.vercel.app",
     );
-    expect(frontendJob).toContain("vercel@50.17.1 inspect");
-    expect(frontendJob).toContain("frontend.includes(expected)");
+    expect(frontendJob).toContain("uses: ./.github/actions/vercel-preview-alias");
+    expect(frontendJob).not.toContain("frontend.includes(expected)");
+  });
+
+  it("frontend deploy後のalias更新とsmokeを共通actionへ委譲する", () => {
+    const source = workflow();
+    const frontendJob = source.slice(
+      source.indexOf("  deploy-frontend:"),
+      source.indexOf("  campaign:"),
+    );
+
+    expect(frontendJob).toContain("uses: ./.github/actions/vercel-preview-alias");
+    expect(frontendJob).toContain("deployment-url-file:");
+    expect(frontendJob).toContain("expected-sha:");
+    expect(frontendJob).toContain("expected-ref: develop");
+    expect(frontendJob).toContain("expected-target: preview");
   });
 
   it("45分campaign・5分cleanup・独立recovery・秘密のstep scopeを固定する", () => {
