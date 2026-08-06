@@ -7,6 +7,9 @@ import { describe, expect, it, vi } from "vitest";
 const VERIFIER_PATH = fileURLToPath(
   new URL("../../../frontend/scripts/verify-staging-frontend-content.mjs", import.meta.url),
 );
+const COMMON_VERIFIER_PATH = fileURLToPath(
+  new URL("../../../frontend/scripts/frontend-content-verifier.mjs", import.meta.url),
+);
 
 type VerifyOptions = {
   candidateUrl: string;
@@ -22,6 +25,7 @@ type VerifierModule = {
 
 async function verifier(): Promise<VerifierModule> {
   expect(existsSync(VERIFIER_PATH)).toBe(true);
+  expect(existsSync(COMMON_VERIFIER_PATH)).toBe(true);
   return (await import(pathToFileURL(VERIFIER_PATH).href)) as VerifierModule;
 }
 
