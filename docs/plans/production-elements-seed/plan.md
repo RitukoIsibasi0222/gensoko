@@ -200,6 +200,14 @@ export function validateProductionDatabaseTarget(
 - Node+tsx直接entrypointをmainへ昇格した後の別承認付き5回目は、production branch・DB target・migration currentの検証成功後、書込前module-load probeで`module_load_failure`へ安全停止した。書込み用CLI本体とDB transactionには未到達で、独立verifyはskip、失敗後の元素一覧は0件のままだった。
 - production接続・Secretなしの一時clean環境で実workflow相当の`npm ci`を実行すると、Prisma Client生成物が存在せず同じmodule importが失敗し、`npx prisma generate`後は生成物が作成され同importが成功した。production workflowへseed時だけ実行する生成stepを`npm ci`直後かつDB target検証・module-load probe前に追加し、生成logは一時fileへ閉じて固定成否だけを表示する。review・develop/main再昇格・さらに別の明示承認まで再実行しない。
 
+## Production実行完了記録
+
+- 完了日: 2026-08-06
+- Prisma Client生成修正をreview・develop/mainへ再昇格し、失敗した5回のworkflowを再実行せず、別の明示承認で新しい`seed-elements` runをdispatchした。
+- production branch、DB target、migration current、seed時限定Prisma Client生成、module-load probe、原子的upsert、別process・別接続の独立verifyが順に成功した。
+- production DBへの直接CLI・SQL seedは行わず、正本118件と公開元素一覧118件を確認した。成功runも再実行していない。
+- Summaryと確認記録は固定statusだけとし、Secret値、DB URL、token、resource ID、内部ID、接続文字列、raw error、生成logを残していない。
+
 ## 実装完了
 
 - 完了日: 2026-08-04
@@ -283,4 +291,4 @@ export function validateProductionDatabaseTarget(
 - Green: 一時logを必ず削除する`npx prisma generate` stepを追加し、対象12 test成功
 - ローカル再現: production接続・Secretなしのfresh `npm ci`直後は生成物不在・module import失敗、`prisma generate`後は生成物存在・同import成功
 - 関連test・最終品質gate: 関連28 test、backend全1306 test・Workers 32 test、build / Workers build / lint / format check / Prisma schema validate、workflow・正本Prettier check成功
-- production再実行: review・develop/main昇格・さらに別の明示承認まで禁止
+- production再実行: review・develop/main昇格後、別の明示承認による新規runでseed・独立118件verifyが成功した。失敗runと成功runはいずれも再実行していない
