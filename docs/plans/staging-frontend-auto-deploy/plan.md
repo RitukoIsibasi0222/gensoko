@@ -299,9 +299,9 @@ SFA-02・SFA-03・SFA-08B〜SFA-08Dは、PR #192〜#196で試行しSFA-08Iで削
 - [x] SFA-08P: verifierをSvelteKit immutable asset fingerprint一致と両URLのmarker確認へ修正する
 - [x] SFA-08Q: run 31090151492、固定URLの最新UI、設計判断を文書へ同期する
 - [x] SFA-09: 別承認でstaging Environment / Vercelをpreflightする
-- [ ] SFA-10: implementation mergeによる自動runを確認する
-- [ ] SFA-11: fixed domainのexact SHA、smoke、旧run除外を確認する
-- [ ] SFA-12: Issue #173の完了記録を同期する
+- [x] SFA-10: implementation mergeによる自動runを確認する
+- [x] SFA-11: fixed domainのexact SHA、smoke、旧run除外を確認する
+- [x] SFA-12: Issue #173の完了記録を同期する
 
 ### タブ区切り出力
 
@@ -414,8 +414,46 @@ Repository品質gateではVercel、staging URL、API、DBへ接続せず、workf
 - SFA-08J〜SFA-08Nの最終品質gateはbackend 1325 test、Workers 32 test、frontend 685 test、backend/frontend build、lint、Svelte check、format check、YAML 2件parse、埋め込みBash 24 block構文、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
 - PR #199は`develop`へmerge済みで、merge SHAは`a817d3682acc5732cd01798ed8fcfb8f1c42e40b`である。run [31090151492](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31090151492)はfrontend品質gate、exact `READY` Preview探索、develop先端再確認まで成功し、固定domain content待機だけがtimeoutした。候補Previewと固定domainは同じ14件のSvelteKit `/_app/immutable/` assetを参照しており、候補HTMLだけにVercel Toolbarの外部scriptが注入されていたため、HTML全体比較が最新buildを誤検知していた。
 - PR #200のSFA-08O〜SFA-08Qでは、同一originの`/_app/immutable/` URLを`pathname + search`へ正規化し、空でない一意な集合の完全一致と両HTMLのmarkerを必須にした。外部provider markup、属性URLの絶対・相対表記差は比較対象外とし、asset不一致・asset欠落・marker欠落はfail-closedにする。Red 2件を意図した失敗として確認後、対象test 3件をGreenにした。
-- ログイン済みbrowserで候補Previewと固定domainを確認し、固定domainが最新トップページUIを表示することを確認した。候補固有originのhydration時API errorはstaging API CORSが固定domainだけを許可する契約によるもので、利用者向けstaging originは固定domainである。production Environment、main、production deploymentは参照・変更していない。SFA-10〜SFA-12はasset fingerprint修正のmerge後run成功後に完了させる。
+- ログイン済みbrowserで候補Previewと固定domainを確認し、固定domainが最新トップページUIを表示することを確認した。候補固有originのhydration時API errorはstaging API CORSが固定domainだけを許可する契約によるもので、利用者向けstaging originは固定domainである。production Environment、main、production deploymentは参照・変更していない。
 - SFA-08O〜SFA-08Qの最終品質gateは直接影響backend 24件・frontend 5件、backend全1326件、Workers 32件、frontend全685件、backend/frontend build、Workers build、lint、Svelte check、format check、YAML 3件parse、埋め込みBash 35 block構文、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
+- PR #200は`develop`へmerge済みで、merge SHAは`97cf7e66395ad59355da3f5bcf99d05bf870f9e3`である。run [31092740154](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31092740154)はfrontend品質jobを1分11秒、exact Preview・develop先端・固定domain・smoke jobを19秒で完了し、`BRANCH_DOMAIN_READY` / `SMOKE_CLEAR`が成立した。固定URLで最新トップページ、認証hydration後のログイン・新規登録導線、ランキングプレビューを確認し、旧runの候補やprovider注入markupを成功証拠へ混入させていない。Node 20 deprecation annotationは既知の通知であり、production Environment、main、production deploymentは参照・変更していない。
+
+## 実装完了
+
+- 完了日: 2026-08-06
+- 実装PR: #192、#193、#194、#195、#196、#198、#199、#200
+- 完了証拠: merge SHA `97cf7e66395ad59355da3f5bcf99d05bf870f9e3` / run [31092740154](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31092740154)
+- 完了記録ブランチ: `docs/staging-frontend-auto-deploy-complete`
+
+### 計画からの変更点
+
+- GitHub Actionsからaliasを直接更新・rollbackする初期案は、project限定tokenで必要なprovider APIを利用できないため廃止した。
+- 固定domainの更新責務はVercel Git IntegrationとPreview branch domainへ置き、GitHub Actionsはexact SHA、develop先端、公開HTTP contentをread-onlyでfail-closed検証する構成へ変更した。
+- HTML全体一致はVercel Toolbarのprovider注入markupを誤検知したため、同一originのSvelteKit `/_app/immutable/` asset集合一致と両URLのmarkerを正本にした。
+- M2は日常更新経路から分離し、API・認証・DB・provider設定を伴う高リスク変更用の手動総合試験として維持した。
+- Issue #174のproduction自動化は、production Environment承認、API → health → frontend → smokeの順序設計が必要なため別タスクとして残した。
+
+### 実際の変更ファイル
+
+| ファイル | 変更種別 | 内容 |
+| --- | --- | --- |
+| `.github/workflows/staging-frontend-deploy.yml` | 新規 | develop frontend変更の品質gate、exact Preview、固定domain、smoke検証 |
+| `.github/actions/vercel-preview-domain/action.yml` | 新規 | project限定token対応のread-only共通検証 |
+| `.github/actions/vercel-preview-alias/action.yml` | 削除 | project限定tokenで実行不能なalias mutation・rollback処理を廃止 |
+| `.github/workflows/staging-release-candidate-campaign.yml` | 修正 | M2のactive SHA確認を共通content verifierへ統合 |
+| `backend/src/jobs/stagingFrontendDeploymentWorkflow.test.ts` | 新規 | trigger・権限・production禁止・古いrun除外のcontract test |
+| `backend/src/jobs/vercelPreviewDomainAction.test.ts` | 新規 | exact metadata・秘密非出力・read-only action test |
+| `backend/src/jobs/vercelPreviewAliasAction.test.ts` | 削除 | 廃止したalias mutation actionのcontract testを削除 |
+| `backend/src/jobs/stagingFrontendContentVerifier.test.ts` | 新規 | immutable asset fingerprint・marker・fail-closed test |
+| `backend/src/jobs/stagingReleaseCandidateCampaignWorkflow.test.ts` | 修正 | M2 manual gate・順序・共通verifier回帰test |
+| `frontend/scripts/vercel-ignore-build.mjs` | 新規 | develop frontend無変更と対象外branchのbuild skip |
+| `frontend/scripts/verify-staging-frontend-content.mjs` | 新規 | immutable asset fingerprintとmarkerのread-only検証 |
+| `frontend/src/vercel-ignore-build.test.ts` | 新規 | Ignored Build Step contract test |
+| `frontend/src/vercel-cli-scope.test.ts` | 新規 | team IDをCLI slug scopeへ渡さない回帰test |
+| `frontend/package.json` / `frontend/package-lock.json` | 修正 | Ignored Build Step scriptと安全な依存更新 |
+| `docs/05_progress.md` | 修正 | Issue #173の進捗・完了証拠 |
+| `docs/11_deployment.md` | 修正 | 日常staging更新、失敗時復旧、M2境界runbook |
+| `docs/plans/staging-frontend-auto-deploy/plan.md` | 修正 | 設計判断、試行履歴、実装結果、完了記録 |
 
 ## 参考資料
 

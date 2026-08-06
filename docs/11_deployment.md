@@ -219,7 +219,7 @@ Issue #174が完了するまでは、mainへmergeしただけでproduction API�
 - frontend: `@sveltejs/adapter-vercel`、Node.js 22、公開API URL fail-fast、Vercel Build Output/secret contract、frontend PR CIを固定
 - 実環境確認済み: Vercel Hobby `develop` Preview、staging Worker、SQLite-backed DO、Hyperdrive、7件のWorker secret、Supabase migration current、health/CORS/OPTIONS、元素118件
 - synthetic確認済み: 登録・メール認証・login・ゲーム10問/score 500・password reset・本人退会・削除後login拒否・Admin強制退会・旧credential拒否。Resendはallowlist宛の確認メール2通・resetメール1通だけを送信
-- 未実施: staging API rollback実確認、immutable asset fingerprint方式のmerge後run、T35 legacy cleanup
+- 未実施: staging API rollback実確認、T35 legacy cleanup。日常staging frontend自動更新はrun 31092740154と固定URLの最新UI確認で完了した。
 
 コード基盤のローカル再確認は外部serviceへ接続せず、次で行う。
 
@@ -301,6 +301,8 @@ PR #196のmerge SHA `2fa65d4c5857a2a048e56d60062309091af369db`で起動したrun
 PR #198のmerge SHA `0091f71342ab07d19684b0f2e5e11b0702f84b63`で起動したrun [31086958523](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31086958523)は、frontend品質gate、exact `READY` Preview探索、develop先端再確認まで成功した後、project限定tokenで`alias ls`を利用できず固定domain確認で安全停止した。token権限を広げずstaging / production分離を維持するため、固定domainのprovider metadataではなく対象PreviewとのHTML content一致をread-only検証する方式へ変更した。
 
 PR #199のmerge SHA `a817d3682acc5732cd01798ed8fcfb8f1c42e40b`で起動したrun [31090151492](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31090151492)は、frontend品質gate、exact `READY` Preview探索、develop先端再確認まで成功し、固定domain content待機だけがtimeoutした。ログイン済みbrowserで固定domainの最新トップページUIを確認し、候補Previewと固定domainが同じ14件のSvelteKit `/_app/immutable/` assetを参照していることを確認した。候補HTMLだけにVercel Toolbarの外部scriptが注入されていたため、HTML全体比較は同じapplication buildを誤検知する。候補固有originのhydration時API errorはstaging API CORSが固定domainだけを許可する契約によるもので、固定domainの動作確認結果には影響しない。
+
+PR #200のmerge SHA `97cf7e66395ad59355da3f5bcf99d05bf870f9e3`で起動したrun [31092740154](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31092740154)は、frontend品質jobを1分11秒、exact Preview・develop先端・固定domain・smoke jobを19秒で完了した。対象Previewと固定domainのimmutable asset fingerprint、両URLのmarker、固定status `BRANCH_DOMAIN_READY` / `SMOKE_CLEAR`が成立し、固定URLでは最新トップページ「元素を、遊んで覚える。」、アプリ概要、認証hydration後のログイン・新規登録導線、ランキングプレビューを確認した。Node 20 deprecation annotationは既知の通知であり失敗原因ではない。production Environment、main、production deploymentは参照・変更していない。
 
 #### 通常の自動更新
 
