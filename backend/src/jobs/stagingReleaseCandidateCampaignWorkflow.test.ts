@@ -128,21 +128,21 @@ describe("M2 staging release candidate workflow", () => {
     expect(frontendJob).not.toContain(" inspect ");
   });
 
-  it("campaign前後のactive SHA確認もalias listだけを使う", () => {
+  it("campaign前後のactive SHA確認も共通content verifierだけを使う", () => {
     const source = workflow();
     const campaignJob = source.slice(
       source.indexOf("  campaign:"),
       source.indexOf("  recovery-cleanup:"),
     );
 
-    expect(campaignJob).toContain("alias ls --limit=100 --format=json");
-    expect(campaignJob).toContain("alias.alias ===");
+    expect(campaignJob).toContain("verify-staging-frontend-content.mjs");
+    expect(campaignJob).toContain('STAGING_CANDIDATE_URL="$candidate_url"');
     expect(campaignJob).toContain(
-      "exactDeployments.some((deployment) => alias.url === deployment.url)",
+      "STAGING_DOMAIN_URL=https://gensoko-frontend-staging-develop.vercel.app/",
     );
-    expect(campaignJob).toContain(
-      "exactDeployments.filter((deployment) => deployment.url === domainMatches[0].url)",
-    );
+    expect(campaignJob).toContain("while IFS= read -r candidate_url");
+    expect(campaignJob).toContain('.join("\\n") + "\\n"');
+    expect(campaignJob).not.toContain("alias ls");
     expect(campaignJob).not.toContain(" inspect ");
   });
 
