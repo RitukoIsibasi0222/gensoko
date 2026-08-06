@@ -422,6 +422,7 @@ Repository品質gateではVercel、staging URL、API、DBへ接続せず、workf
 
 - 完了日: 2026-08-06
 - 実装PR: #192、#193、#194、#195、#196、#198、#199、#200
+- 完了記録PR: #201
 - 完了証拠: merge SHA `97cf7e66395ad59355da3f5bcf99d05bf870f9e3` / run [31092740154](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31092740154)
 - 完了記録ブランチ: `docs/staging-frontend-auto-deploy-complete`
 
