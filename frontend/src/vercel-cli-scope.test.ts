@@ -29,14 +29,15 @@ describe('Vercel CLI CI scope contract', () => {
     }
   });
 
-  it('project限定tokenではCLI JSONのproject nameを完全一致検証する', () => {
+  it('project限定tokenではlist候補をinspectしてproject nameを完全一致検証する', () => {
     const action = repositoryFile('.github/actions/vercel-preview-alias/action.yml');
 
     expect(action).not.toContain('api.vercel.com/v9/projects/');
     expect(action).toContain('list gensoko-frontend-staging');
-    expect(action).toContain('deployment.name === "gensoko-frontend-staging"');
+    expect(action).toContain('inspect "$candidate_url"');
+    expect(action).toContain('validate_inspected_deployment "$candidate_id_file"');
     expect(
       action.match(/deployment\.name !== "gensoko-frontend-staging"/g)?.length
-    ).toBeGreaterThanOrEqual(3);
+    ).toBeGreaterThanOrEqual(2);
   });
 });
