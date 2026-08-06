@@ -46,7 +46,7 @@
 - `develop`のPreview deploymentを作成する責務を持つ。
 - staging projectの固定domainを`develop` Preview branchへ自動割り当てする。
 - deploymentにはGit commit SHA / ref metadataが付与される。
-- GitHub Actionsは同じ成果物を再deployせず、対象SHAの成功Preview、固定domainの参照先、公開HTMLをread-only検証する。
+- GitHub Actionsは同じ成果物を再deployせず、対象SHAの成功Previewと固定domainのHTML完全一致・markerをread-only検証する。
 
 ### 重要な制約
 
@@ -58,7 +58,7 @@
 - Secret、token、provider内部ID、固有deployment URL、raw provider responseをlog、Summary、Artifactへ出さない。
 - Vercel CLIは既存M2と同じversionへ固定し、`@latest`を使わない。
 - Vercel Git Integrationが作成したPreviewを再利用し、日常workflowから`vercel deploy`を重複実行しない。
-- 固定domainのread-only検証をM2と重複実装しない。共有composite actionへ切り出す。
+- 固定domainのHTTP content検証をM2と重複実装しない。共有Node verifierへ切り出す。
 - project限定tokenで許可されないdeployment detail API、`vercel inspect`、`vercel alias set`を使用しない。
 - M2のmanual-only、M1 gate、API→frontend→campaign順序は変更しない。
 
@@ -67,13 +67,15 @@
 | ファイル                                                           | 変更種別 | 内容                                                             |
 | ------------------------------------------------------------------ | -------- | ---------------------------------------------------------------- |
 | `.github/workflows/staging-frontend-deploy.yml`                    | 新規     | `develop` frontend変更の品質確認、Preview探索、domain確認、smoke |
-| `.github/actions/vercel-preview-domain/action.yml`                 | 新規     | exact metadata、branch domain、smokeのread-only共通action        |
+| `.github/actions/vercel-preview-domain/action.yml`                 | 新規     | exact metadata、branch domain contentのread-only共通action       |
 | `.github/actions/vercel-preview-alias/action.yml`                  | 削除     | project限定tokenで実行不能なalias mutation actionを廃止          |
-| `.github/workflows/staging-release-candidate-campaign.yml`         | 修正     | Vercel branch domain確認を共通actionへ置換しM2の重複を除去       |
+| `.github/workflows/staging-release-candidate-campaign.yml`         | 修正     | M2のactive SHA確認を共通content verifierへ移行                   |
 | `backend/src/jobs/stagingFrontendDeploymentWorkflow.test.ts`       | 新規     | 自動workflowとproduction禁止のsource contract test               |
 | `backend/src/jobs/vercelPreviewDomainAction.test.ts`               | 新規     | 共通actionのexact SHA、read-only、秘密非出力contract test        |
-| `backend/src/jobs/stagingReleaseCandidateCampaignWorkflow.test.ts` | 修正     | M2が共通actionを使い既存gateを維持する回帰test                   |
+| `backend/src/jobs/stagingReleaseCandidateCampaignWorkflow.test.ts` | 修正     | M2が共通content verifierを使い既存gateを維持する回帰test         |
+| `backend/src/jobs/stagingFrontendContentVerifier.test.ts`          | 新規     | HTML一致・非HTML・不正URLのverifier contract test                |
 | `frontend/scripts/vercel-ignore-build.mjs`                         | 新規     | developのfrontend無変更commitと対象外branchをbuild前にskip       |
+| `frontend/scripts/verify-staging-frontend-content.mjs`             | 新規     | exact Previewと固定domainのHTML・markerをread-only照合           |
 | `frontend/src/vercel-ignore-build.test.ts`                         | 新規     | develop/main/featureとgit diff結果のcontract test                |
 | `frontend/src/vercel-cli-scope.test.ts`                            | 新規     | Vercel CLIへteam IDをslug用scopeとして渡さない回帰test           |
 | `frontend/package.json`                                            | 修正     | Vercel Ignored Build Step用scriptを追加                          |
@@ -92,8 +94,8 @@ developへfrontend変更をmerge
 → target=preview・ref=develop・SHA完全一致・READYを検証
 → GitHubのdevelop先端SHAを再取得
 → 対象SHAが現在の先端の場合だけ固定domainの自動割り当て完了をbounded poll
-→ alias listで固定domainの参照先URLと対象Preview URLを完全一致検証
-→ 固定domainへread-only軽量smoke
+→ 対象Previewと固定domainを同じbypass / no-cache条件で取得
+→ 200・同一origin・text/html・HTML完全一致・markerを検証
 → SHAと固定statusだけをStep Summaryへ記録
 ```
 
@@ -111,8 +113,8 @@ developへfrontend変更をmerge
 | concurrency    | 固定staging frontend group、`cancel-in-progress: true`                      |
 | candidate      | Vercel Git Integrationが作成したPreview、対象`github.sha`完全一致           |
 | provider state | `target=preview`、`ref=develop`、`READY`、同一project                       |
-| domain         | Vercel側でPreview環境・`develop`へ固定したstaging URLをread-only検証        |
-| smoke          | GETだけ、有限timeout、200、同一origin、Gensoko HTML marker                  |
+| domain         | Previewと固定URLのHTML完全一致をGETだけ・有限timeoutでread-only検証         |
+| smoke          | 両URLが200・同一origin・`text/html`かつGensoko markerを含む                 |
 | summary        | 対象SHAと固定statusだけ。固有URL・ID・raw responseなし                      |
 | artifact       | 作成しない                                                                  |
 
@@ -135,19 +137,19 @@ developへfrontend変更をmerge
    - 根拠: concurrencyの処理順は保証されない。provider状態は変更しないが、古いrunを成功証拠として残さないため二重確認する。
 
 5. **deployment候補をどう特定するか**
-   - 選択: `VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数として設定したpinned Vercel CLIで`githubCommitSha` metadataを使ってbounded pollする。`list <project> --format=json`でSHA、ref、target、state、URLを完全一致させ、`alias ls --format=json`で固定domainの参照先URLが同じ候補URLであることを確認する。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡さない。
-   - 根拠: project限定tokenはdeployment listとalias listを読み取れる一方、`inspect`と`alias set`が内部利用するdeployment detail APIを利用できない。権限をteamへ広げず、実出力に存在するGit metadataとURLだけでread-only検証する。
+   - 選択: `VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数として設定したpinned Vercel CLIで`githubCommitSha` metadataを使ってbounded pollする。`list <project> --format=json`でSHA、ref、target、state、URLを完全一致させる。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡さない。
+   - 根拠: project限定tokenで実run上利用できるprovider metadata取得はdeployment listである。`inspect`、`alias ls`、`alias set`が必要とする権限へtokenを広げず、listのGit metadataと公開HTTP contentを組み合わせてfail-closedに検証する。
 
 6. **固定domainの自動更新責務をどこへ置くか**
-   - 選択: Vercel Project SettingsでPreview環境・`develop` branchへdomainを割り当てる。repository local composite actionはread-only検証だけを日常workflowとM2で共用する。
+   - 選択: Vercel Project SettingsでPreview環境・`develop` branchへdomainを割り当てる。repositoryの共有Node verifierで候補・固定domainのHTML完全一致とmarkerをread-only検証する。
    - 根拠: provider標準のbranch domain機能ならproject限定tokenの権限を広げず、staging/productionを分離したまま成功Previewへ自動追従できる。
 
-7. **domain確認またはsmoke失敗をどう扱うか**
+7. **domain content確認失敗をどう扱うか**
    - 選択: GitHub Actionsからprovider状態を変更せずfailureにする。branch domainは最後の成功deploymentを維持し、Vercel dashboardで原因を確認する。
    - 根拠: read-only検証であれば誤ったrollbackやproduction projectへの権限波及がなく、providerの成功deployment保持契約を利用できる。
 
 8. **M2をどう扱うか**
-   - 選択: 廃止しない。共通actionを使う範囲だけrefactorし、手動総合試験として残す。
+   - 選択: 廃止しない。複数のexact SHA候補のうち固定domainとcontent一致する候補があることを共有verifierで確認し、手動総合試験として残す。
    - 根拠: API、認証、DB、provider設定などの高リスク変更には日常frontend更新より強いgateが必要である。
 
 ## 公開インターフェース案
@@ -181,14 +183,14 @@ Summaryへ出せる値は上記固定statusと対象SHAだけとする。
 
 ## エラー・復旧契約
 
-| 失敗箇所                        | domainへの操作 | workflow結果                | 復旧                             |
-| ------------------------------- | -------------- | --------------------------- | -------------------------------- |
-| quality                         | なし           | failure                     | code修正後の次merge              |
-| Preview timeout / failure       | なし           | failure                     | Vercel状態確認後の次merge        |
-| SHA / ref / target / URL不一致  | なし           | failure                     | provider metadataと設定を確認    |
-| develop先端移動                 | なし           | cancelled相当のsafe failure | 新しいrunへ委譲                  |
-| branch domain確認失敗 / timeout | なし           | failure                     | Vercel domain / Git設定を確認    |
-| smoke失敗                       | なし           | failure                     | 直前成功deploymentを維持して調査 |
+| 失敗箇所                         | domainへの操作 | workflow結果                | 復旧                          |
+| -------------------------------- | -------------- | --------------------------- | ----------------------------- |
+| quality                          | なし           | failure                     | code修正後の次merge           |
+| Preview timeout / failure        | なし           | failure                     | Vercel状態確認後の次merge     |
+| SHA / ref / target / URL不一致   | なし           | failure                     | provider metadataと設定を確認 |
+| develop先端移動                  | なし           | cancelled相当のsafe failure | 新しいrunへ委譲               |
+| domain content確認失敗 / timeout | なし           | failure                     | Vercel domain / Git設定を確認 |
+| redirect / 非HTML / marker不一致 | なし           | failure                     | HTTP応答を値非表示で切り分け  |
 
 失敗時もraw provider response、固有deployment URL、tokenを出力しない。調査が必要な場合はVercel dashboardの権限内表示を人間が確認し、値をIssueやArtifactへ転記しない。
 
@@ -215,6 +217,7 @@ repository変更と外部設定変更は別工程にする。2026-08-06にowner�
 3. 共通actionが未作成で失敗するmetadata完全一致、read-only、秘密非出力testを追加する。
 4. M2が共通actionを未使用で失敗する回帰testを追加する。
 5. developのfrontend無変更時skip、frontend変更時build、main現行維持、feature skipのIgnored Build Step testを追加する。
+6. 共有content verifier未作成、日常actionとM2が`alias ls`へ依存する状態をRedで固定する。
 
 ### Green
 
@@ -223,6 +226,7 @@ repository変更と外部設定変更は別工程にする。2026-08-06にowner�
 3. M2のalias mutationをread-only共通actionへ置き換える。
 4. repository管理のVercel Ignored Build Step scriptとpackage scriptを実装する。
 5. 対象testを通す。
+6. 共有content verifierを実装し、日常actionとM2をHTML content一致方式へ移行する。
 
 ### Refactor
 
@@ -233,7 +237,7 @@ repository変更と外部設定変更は別工程にする。2026-08-06にowner�
 
 ## タスクリスト（進捗管理）
 
-SFA-02・SFA-03・SFA-08B〜SFA-08Dは、PR #192〜#196で試行しSFA-08Iで削除した旧alias mutation方式の実装履歴である。現行の最終状態はSFA-08E〜SFA-08Iのbranch domain方式を正本とする。
+SFA-02・SFA-03・SFA-08B〜SFA-08Dは、PR #192〜#196で試行しSFA-08Iで削除した旧alias mutation方式の実装履歴である。SFA-08E〜SFA-08Iの`alias ls`による参照先検証もproject限定tokenでは実行不能だったため、現行の最終状態はSFA-08J〜SFA-08NのHTML content一致方式を正本とする。
 
 | タスクID | 内容                                   | ファイル                                          | 優先度 | 備考          |
 | -------- | -------------------------------------- | ------------------------------------------------- | ------ | ------------- |
@@ -255,6 +259,11 @@ SFA-02・SFA-03・SFA-08B〜SFA-08Dは、PR #192〜#196で試行しSFA-08Iで削
 | SFA-08G  | 日常workflowのdomain検証移行           | staging frontend workflow / test                  | 高     | Repository    |
 | SFA-08H  | M2のdomain検証移行                     | M2 workflow / test                                | 高     | Repository    |
 | SFA-08I  | 旧alias mutation処理の削除             | alias action / docs                               | 高     | Repository    |
+| SFA-08J  | content verifierのRed test             | backend jobs test                                 | 高     | Repository    |
+| SFA-08K  | 共有HTML content verifier実装          | `frontend/scripts`                                | 高     | Repository    |
+| SFA-08L  | 日常actionをcontent pollへ移行         | preview domain action / test                      | 高     | Repository    |
+| SFA-08M  | M2 active SHA確認をcontent方式へ移行   | M2 workflow / test                                | 高     | Repository    |
+| SFA-08N  | run失敗記録・文書同期                  | docs                                              | 高     | Repository    |
 | SFA-09   | staging Environment / Vercel preflight | GitHub / Vercel                                   | 高     | 別承認・外部  |
 | SFA-10   | implementation mergeで自動run確認      | GitHub Actions / Vercel                           | 高     | 別承認・外部  |
 | SFA-11   | fixed domain SHA・smoke・旧run除外確認 | staging                                           | 高     | 別承認・外部  |
@@ -278,6 +287,11 @@ SFA-02・SFA-03・SFA-08B〜SFA-08Dは、PR #192〜#196で試行しSFA-08Iで削
 - [x] SFA-08G: 日常workflowをVercel自動deploy後のdomain検証へ移行する
 - [x] SFA-08H: M2の手動frontend deploy後検証とactive SHA確認をdomain方式へ移行する
 - [x] SFA-08I: project限定tokenで実行不能なinspect・alias set・rollback処理を削除する
+- [x] SFA-08J: content一致検証のRed contract testを追加する
+- [x] SFA-08K: 共有HTML content verifierを実装する
+- [x] SFA-08L: 日常actionを候補・固定domainのcontent pollへ移行する
+- [x] SFA-08M: M2 active SHA確認をcontent一致方式へ移行する
+- [x] SFA-08N: run 31086958523の失敗記録と文書を同期する
 - [x] SFA-09: 別承認でstaging Environment / Vercelをpreflightする
 - [ ] SFA-10: implementation mergeによる自動runを確認する
 - [ ] SFA-11: fixed domainのexact SHA、smoke、旧run除外を確認する
@@ -305,6 +319,11 @@ SFA-08F	read-only branch domain action実装	preview domain action / test	高
 SFA-08G	日常workflowのdomain検証移行	staging frontend workflow / test	高
 SFA-08H	M2のdomain検証移行	M2 workflow / test	高
 SFA-08I	旧alias mutation処理の削除	alias action / docs	高
+SFA-08J	content verifierのRed test	backend jobs test	高
+SFA-08K	共有HTML content verifier実装	frontend/scripts	高
+SFA-08L	日常actionをcontent pollへ移行	preview domain action / test	高
+SFA-08M	M2 active SHA確認をcontent方式へ移行	M2 workflow / test	高
+SFA-08N	run失敗記録・文書同期	docs	高
 SFA-09	staging Environment / Vercel preflight	GitHub / Vercel	高
 SFA-10	implementation mergeで自動run確認	GitHub Actions / Vercel	高
 SFA-11	fixed domain SHA・smoke・旧run除外確認	staging	高
@@ -324,9 +343,10 @@ SFA-12	Issue #173完了記録	docs / GitHub	中
 | SHA / ref / target / URL不一致        | provider状態を変更せずfailure                         |
 | matching deploymentが0件または曖昧    | provider状態を変更せずfailure                         |
 | domain確認直前にdevelopが進む         | 古いrunはsafe failure                                 |
-| branch domain自動割り当て成功         | fixed domainが対象SHAのURLを示す                      |
-| smoke成功                             | `SMOKE_CLEAR`で完了                                   |
-| domain確認timeoutまたはsmoke失敗      | provider状態を変更せずfailure                         |
+| branch domain自動割り当て成功         | fixed domainのHTMLが対象SHAのPreviewと完全一致する    |
+| content一致・marker成功               | `BRANCH_DOMAIN_READY` / `SMOKE_CLEAR`で完了           |
+| redirect・非HTML・content不一致       | provider状態を変更せずfailure                         |
+| domain content確認timeout             | provider状態を変更せずfailure                         |
 | log / Summary / Artifact              | token、ID、固有URL、raw responseを含まない            |
 | source contract                       | production、API deploy、DB、fixture、M1操作を含まない |
 | Vercel CLI scope contract             | team IDを`--scope`へ渡さずCI環境IDでprojectを固定する |
@@ -377,9 +397,12 @@ Repository品質gateではVercel、staging URL、API、DBへ接続せず、workf
 - SFA-08Dの最終品質gateはbackend 1324 test、Workers 32 test、frontend 685 test、backend/frontend build、lint、Svelte check、format check、YAML parse、埋め込みBash構文、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
 - PR #196は`develop`へmerge済みで、merge SHAは`2fa65d4c5857a2a048e56d60062309091af369db`である。run [31082530994](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31082530994)とfailed job再実行は、品質gate、exact `READY` Preview探索、develop先端再確認まで成功した後、candidate inspectが利用するdeployment detail APIの権限制約で同じ固定段階へ安全停止した。Vercel CLI最新版でも同API依存は残るため、CLI更新では解消しない。
 - ownerの包括承認後、Vercel staging projectの固定domain `gensoko-frontend-staging-develop.vercel.app`をPreview環境・`develop` branchへ追加した。設定画面でValid Configurationとdevelop割り当てを確認し、公開URLで最新トップページUIを確認した。project限定token、staging Environment、production project、main、production deploymentは変更していない。
-- branch domain移行はRed backend 11件・frontend 2件から開始し、read-only共通action、日常workflow、M2をGreen backend 21件・frontend 2件へ進めた。旧`inspect`、`alias set`、rollback処理を削除し、Vercel CLIの`list`と`alias ls`、固定domain HTTP smokeだけを残した。
+- branch domain移行はRed backend 11件・frontend 2件から開始し、read-only共通action、日常workflow、M2をGreen backend 21件・frontend 2件へ進めた。旧`inspect`、`alias set`、rollback処理を削除し、当時はVercel CLIの`list`と`alias ls`、固定domain HTTP smokeだけを残したが、PR #198のmerge runで`alias ls`もproject限定tokenでは実行不能と確定した。
 - SFA-08E〜SFA-08Iの最終品質gateはbackend 1323 test、Workers 32 test、frontend 685 test、backend/frontend build、lint、Svelte check、format check、YAML parse、埋め込みBash構文、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
 - PR #198のCopilot reviewで、候補探索とdomain追従待ちが各最大5分のため日常jobの10分timeoutにはCLI等の余裕がない指摘を受けた。15分を要求する回帰testをRed 1件で追加し、workflowを15分へ変更して直接影響test 21件をGreenとした。また、タスクリストの旧alias action参照を廃止履歴として明示し、現行branch domain方式との区別を同期した。
+- PR #198は`develop`へmerge済みで、merge SHAは`0091f71342ab07d19684b0f2e5e11b0702f84b63`である。run [31086958523](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31086958523)はfrontend品質gate、exact `READY` Preview探索、develop先端再確認まで成功した後、30回の`alias ls`がすべて失敗し固定domain確認で安全停止した。Node 20 deprecation annotationは失敗原因ではない。
+- SFA-08J〜SFA-08Nはtoken権限を広げず、対象Previewと固定domainを同じbypass / no-cache条件で取得し、200、同一origin、`text/html`、HTML完全一致、markerを確認する共有verifierへ移行した。候補と固定domainの自己比較、redirect、非HTML、content不一致、不正URL、複数のexact SHA候補をfail-closedで扱い、M2の候補URL一時fileには1件でも読める末尾改行を付ける。Redはbackend 7件・frontend 1件、直接影響testはbackend 23件・frontend 2件がGreenである。
+- SFA-08J〜SFA-08Nの最終品質gateはbackend 1325 test、Workers 32 test、frontend 685 test、backend/frontend build、lint、Svelte check、format check、YAML 2件parse、埋め込みBash 24 block構文、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
 
 ## 参考資料
 
@@ -394,4 +417,4 @@ Repository品質gateではVercel、staging URL、API、DBへ接続せず、workf
 
 Issue #173完了後に[#174 通常リリースをmain merge後の承認付き自動デプロイへ簡略化する](https://github.com/RitukoIsibasi0222/gensoko/issues/174)へ着手する。
 
-#174では、現在のVercel Git Integrationによるmain frontend自動deployをそのまま完成形とみなさない。production Environment承認、pending migration停止、API deploy、health、frontend deploy、smoke、same SHA evidenceを順序固定するため、Vercel production deployの所有権をGit IntegrationとGitHub Actionsのどちらに置くかを最初に決定する。Issue #173の共通metadata / alias検証を再利用するが、staging Secretとproduction Secretは共用しない。
+#174では、現在のVercel Git Integrationによるmain frontend自動deployをそのまま完成形とみなさない。production Environment承認、pending migration停止、API deploy、health、frontend deploy、smoke、same SHA evidenceを順序固定するため、Vercel production deployの所有権をGit IntegrationとGitHub Actionsのどちらに置くかを最初に決定する。Issue #173の共通metadata / content検証を再利用するが、staging Secretとproduction Secretは共用しない。

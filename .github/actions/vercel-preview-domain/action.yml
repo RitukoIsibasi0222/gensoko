@@ -1,5 +1,5 @@
 name: Validate Vercel Preview branch domain
-description: Validate an exact staging Preview, its read-only branch domain mapping, and the public HTML.
+description: Validate an exact staging Preview and compare its HTML with the fixed branch domain.
 
 inputs:
   deployment-url-file:
@@ -45,10 +45,9 @@ runs:
       run: |
         set -Eeuo pipefail
         candidate_state="$RUNNER_TEMP/vercel-candidate-state.json"
-        domain_state="$RUNNER_TEMP/vercel-domain-state.json"
 
         cleanup_files() {
-          rm -f "$candidate_state" "$domain_state"
+          rm -f "$candidate_state"
         }
 
         trap cleanup_files EXIT
@@ -113,26 +112,11 @@ runs:
           exit 1
         fi
 
-        domain_list_succeeded=false
         domain_ready=false
         for attempt in $(seq 1 30); do
-          if npx --yes vercel@50.17.1 alias ls --limit=100 --format=json --token="$INPUT_VERCEL_TOKEN" >"$domain_state" 2>/dev/null; then
-            domain_list_succeeded=true
-            if EXPECTED_DOMAIN="$INPUT_DOMAIN" EXPECTED_URL="$candidate_host" DOMAIN_STATE="$domain_state" node --input-type=module -e '
-              import { readFileSync } from "node:fs";
-              const payload = JSON.parse(readFileSync(process.env.DOMAIN_STATE, "utf8"));
-              const aliases = Array.isArray(payload.aliases) ? payload.aliases : [];
-              const matches = aliases.filter((domain) =>
-                domain.alias === process.env.EXPECTED_DOMAIN
-                && domain.url === process.env.EXPECTED_URL
-                && typeof domain.deploymentId === "string"
-                && domain.deploymentId.length > 0
-              );
-              if (matches.length !== 1) process.exit(1);
-            ' 2>/dev/null; then
-              domain_ready=true
-              break
-            fi
+          if STAGING_CANDIDATE_URL="$candidate_url" STAGING_DOMAIN_URL="https://$INPUT_DOMAIN/" STAGING_SMOKE_MARKER="$INPUT_SMOKE_MARKER" VERCEL_AUTOMATION_BYPASS_SECRET="$INPUT_AUTOMATION_BYPASS_SECRET" node frontend/scripts/verify-staging-frontend-content.mjs 2>/dev/null; then
+            domain_ready=true
+            break
           fi
 
           if [ "$attempt" -lt 30 ]; then
@@ -141,35 +125,7 @@ runs:
         done
 
         if [ "$domain_ready" != "true" ]; then
-          if [ "$domain_list_succeeded" != "true" ]; then
-            echo "staging branch domainを確認できません"
-          else
-            echo "staging branch domainが対象deploymentへ更新される前にtimeoutしました"
-          fi
-          exit 1
-        fi
-
-        if ! SMOKE_URL="https://$INPUT_DOMAIN/" SMOKE_MARKER="$INPUT_SMOKE_MARKER" AUTOMATION_BYPASS_SECRET="$INPUT_AUTOMATION_BYPASS_SECRET" node --input-type=module -e '
-          try {
-            const url = new URL(process.env.SMOKE_URL);
-            const headers = process.env.AUTOMATION_BYPASS_SECRET
-              ? { "x-vercel-protection-bypass": process.env.AUTOMATION_BYPASS_SECRET }
-              : {};
-            const response = await fetch(url, {
-              headers,
-              redirect: "error",
-              signal: AbortSignal.timeout(15000),
-            });
-            if (response.status !== 200
-              || new URL(response.url).origin !== url.origin
-              || !response.headers.get("content-type")?.includes("text/html")) process.exit(1);
-            const html = await response.text();
-            if (!html.includes(process.env.SMOKE_MARKER)) process.exit(1);
-          } catch {
-            process.exit(1);
-          }
-        ' 2>/dev/null; then
-          echo "staging branch domain smokeに失敗しました"
+          echo "staging branch domainが対象deployment contentへ更新される前にtimeoutしました"
           exit 1
         fi
 

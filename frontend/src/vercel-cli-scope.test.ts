@@ -29,11 +29,12 @@ describe('Vercel CLI CI scope contract', () => {
     }
   });
 
-  it('project限定tokenではlistとalias listだけを使いprovider状態を変更しない', () => {
+  it('project限定tokenではlistとread-only content照合だけを使いprovider状態を変更しない', () => {
     const action = repositoryFile('.github/actions/vercel-preview-domain/action.yml');
 
     expect(action).toContain('list gensoko-frontend-staging');
-    expect(action).toContain('alias ls --limit=100 --format=json');
+    expect(action).toContain('frontend/scripts/verify-staging-frontend-content.mjs');
+    expect(action).not.toContain('alias ls');
     expect(action).not.toContain(' inspect ');
     expect(action).not.toContain('alias set');
     expect(action).not.toContain('alias rm');

@@ -13,7 +13,7 @@ function action(): string {
 }
 
 describe("Vercel Preview branch domain action", () => {
-  it("listでexact候補を再確認しalias listで固定domainの参照先を照合する", () => {
+  it("listでexact候補を再確認し共通verifierで固定domainのcontentを照合する", () => {
     const source = action();
 
     expect(source).toContain("JSON.parse");
@@ -24,11 +24,12 @@ describe("Vercel Preview branch domain action", () => {
     expect(source).toContain("expected-target");
     expect(source).toContain("VERCEL_PROJECT_ID");
     expect(source).toContain("list gensoko-frontend-staging");
-    expect(source).toContain("alias ls --limit=100 --format=json");
-    expect(source).toContain("domain.alias === process.env.EXPECTED_DOMAIN");
-    expect(source).toContain("domain.url === process.env.EXPECTED_URL");
+    expect(source).toContain("frontend/scripts/verify-staging-frontend-content.mjs");
+    expect(source).toContain('STAGING_CANDIDATE_URL="$candidate_url"');
+    expect(source).toContain('STAGING_DOMAIN_URL="https://$INPUT_DOMAIN/"');
     expect(source).toContain("matches.length !== 1");
     expect(source).toContain("for attempt in");
+    expect(source).not.toContain("alias ls");
     expect(source).not.toContain(" inspect ");
     expect(source).not.toContain("/v13/deployments/");
   });
@@ -38,11 +39,9 @@ describe("Vercel Preview branch domain action", () => {
 
     expect(source).toContain("candidate deployment metadataを確認できません");
     expect(source).toContain("candidate deployment metadataが不一致です");
-    expect(source).toContain("staging branch domainを確認できません");
     expect(source).toContain(
-      "staging branch domainが対象deploymentへ更新される前にtimeoutしました",
+      "staging branch domainが対象deployment contentへ更新される前にtimeoutしました",
     );
-    expect(source).toContain("staging branch domain smokeに失敗しました");
   });
 
   it("domainの変更・deploy・rollbackを行わない", () => {
@@ -56,15 +55,13 @@ describe("Vercel Preview branch domain action", () => {
     expect(source).not.toContain('method: "DELETE"');
   });
 
-  it("smoke例外をstack traceにせず固定失敗へ寄せる", () => {
+  it("content verifier失敗をstack traceにせず固定失敗へ寄せる", () => {
     const source = action();
-    const smokeStart = source.indexOf('SMOKE_URL="https://$INPUT_DOMAIN/"');
-    const smoke = source.slice(smokeStart);
+    const verifierStart = source.indexOf('STAGING_CANDIDATE_URL="$candidate_url"');
+    const verifier = source.slice(verifierStart);
 
-    expect(smoke).toContain("try {");
-    expect(smoke).toContain("} catch {");
-    expect(smoke).toContain("process.exit(1)");
-    expect(smoke).toContain("2>/dev/null");
+    expect(verifier).toContain("verify-staging-frontend-content.mjs");
+    expect(verifier).toContain("2>/dev/null");
   });
 
   it("秘密・固有URL・provider JSONをoutputやArtifactへ残さない", () => {
