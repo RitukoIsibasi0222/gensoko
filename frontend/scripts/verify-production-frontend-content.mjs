@@ -86,6 +86,7 @@ export async function verifyProductionFrontendContent({
     domainUrl,
     smokeMarker,
     bypassSecret,
+    domainBypassSecret: '',
     fetchImpl
   });
 }

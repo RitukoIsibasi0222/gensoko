@@ -112,6 +112,24 @@ describe("production frontend content verifier", () => {
       }),
     ).resolves.toBe(true);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      "https://gensoko-production-candidate.vercel.app/",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-vercel-protection-bypass": "production-bypass-secret",
+        }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      "https://www.gensoko.example.co/",
+      expect.objectContaining({
+        headers: expect.not.objectContaining({
+          "x-vercel-protection-bypass": expect.anything(),
+        }),
+      }),
+    );
   });
 
   it("staging domain・同一URL・asset不一致・redirectを拒否する", async () => {
