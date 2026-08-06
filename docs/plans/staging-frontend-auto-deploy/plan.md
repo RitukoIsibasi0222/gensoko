@@ -71,6 +71,7 @@
 | `backend/src/jobs/stagingReleaseCandidateCampaignWorkflow.test.ts` | 修正     | M2が共通actionを使い既存gateを維持する回帰test                     |
 | `frontend/scripts/vercel-ignore-build.mjs`                         | 新規     | developのfrontend無変更commitと対象外branchをbuild前にskip         |
 | `frontend/src/vercel-ignore-build.test.ts`                         | 新規     | develop/main/featureとgit diff結果のcontract test                  |
+| `frontend/src/vercel-cli-scope.test.ts`                            | 新規     | Vercel CLIへteam IDをslug用scopeとして渡さない回帰test             |
 | `frontend/package.json`                                            | 修正     | Vercel Ignored Build Step用scriptを追加                            |
 | `frontend/package-lock.json`                                       | 修正     | auditで検出したmoderate/high transitive依存を安全なversionへ更新   |
 | `docs/11_deployment.md`                                            | 修正     | 日常staging、M2、高リスク、rollbackのrunbook                       |
@@ -130,8 +131,8 @@ developへfrontend変更をmerge
    - 根拠: concurrencyの処理順は保証されないため、provider変更直前の二重確認が必要である。
 
 5. **deployment候補をどう特定するか**
-   - 選択: pinned Vercel CLIで`githubCommitSha` metadataを使ってbounded pollし、JSONを構造化parseしてSHA、ref、target、state、projectを完全一致検証する。
-   - 根拠: raw JSON文字列への`includes`は別fieldの偶然一致を許すためfail-closedにならない。
+   - 選択: `VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数として設定したpinned Vercel CLIで`githubCommitSha` metadataを使ってbounded pollし、JSONを構造化parseしてSHA、ref、target、state、projectを完全一致検証する。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡さない。
+   - 根拠: raw JSON文字列への`includes`は別fieldの偶然一致を許すためfail-closedにならない。Vercel CLIの`--scope`はteam slugを受け取るため、IDを渡すとproject-scoped tokenでも対象projectを解決できない。CI環境変数とRESTの`teamId`照合でproject境界を固定する。
 
 6. **alias更新処理をどこへ置くか**
    - 選択: repository local composite actionへ共通化し、日常workflowとM2の両方から呼ぶ。
@@ -242,6 +243,7 @@ repository実装PRではEnvironment、Secret、Vercel Project Settings、alias�
 | SFA-06   | runbook・進捗・計画同期                   | docs                                              | 高     | Repository   |
 | SFA-07   | 対象test・frontend品質gate                | backend / frontend                                | 高     | Repository   |
 | SFA-08   | 全体品質gate                              | repository                                        | 高     | Repository   |
+| SFA-08A  | Vercel CLI scope解決の回帰修正            | workflow / action / test                          | 高     | Repository   |
 | SFA-09   | staging Environment / Vercel preflight    | GitHub / Vercel                                   | 高     | 別承認・外部 |
 | SFA-10   | implementation mergeで自動run確認         | GitHub Actions / Vercel                           | 高     | 別承認・外部 |
 | SFA-11   | fixed alias SHA・smoke・旧run非上書き確認 | staging                                           | 高     | 別承認・外部 |
@@ -256,7 +258,8 @@ repository実装PRではEnvironment、Secret、Vercel Project Settings、alias�
 - [x] SFA-06: runbook・進捗・計画を同期する
 - [x] SFA-07: 対象testとfrontend品質gateを通す
 - [x] SFA-08: repository全体の必要な品質gateを通す
-- [ ] SFA-09: 別承認でstaging Environment / Vercelをpreflightする
+- [x] SFA-08A: Vercel CLIへteam IDをslug用scopeとして渡さない回帰修正を行う
+- [x] SFA-09: 別承認でstaging Environment / Vercelをpreflightする
 - [ ] SFA-10: implementation mergeによる自動runを確認する
 - [ ] SFA-11: fixed aliasのexact SHA、smoke、旧run非上書きを確認する
 - [ ] SFA-12: Issue #173の完了記録を同期する
@@ -274,6 +277,7 @@ SFA-05	M2を共通actionへrefactor	M2 workflow / test	高
 SFA-06	runbook・進捗・計画同期	docs	高
 SFA-07	対象test・frontend品質gate	backend / frontend	高
 SFA-08	repository全体品質gate	repository	高
+SFA-08A	Vercel CLI scope解決の回帰修正	workflow / action / test	高
 SFA-09	staging Environment / Vercel preflight	GitHub / Vercel	高
 SFA-10	implementation mergeで自動run確認	GitHub Actions / Vercel	高
 SFA-11	fixed alias SHA・smoke・旧run非上書き確認	staging	高
@@ -300,6 +304,7 @@ SFA-12	Issue #173完了記録	docs / GitHub	中
 | rollback失敗                          | 不明状態として停止し手動runbookを案内する             |
 | log / Summary / Artifact              | token、ID、固有URL、raw responseを含まない            |
 | source contract                       | production、API deploy、DB、fixture、M1操作を含まない |
+| Vercel CLI scope contract             | team IDを`--scope`へ渡さずCI環境IDでprojectを固定する |
 | M2回帰                                | manual-only、M1 gate、API→frontend→campaignを維持する |
 
 ## 品質チェック
@@ -329,18 +334,23 @@ Repository品質gateではVercel、staging URL、API、DBへ接続せず、workf
 
 - Vercel CLI `50.17.1`のJSON出力は`--format=json`を使用する。既存M2の`inspect --json`は同versionの公開optionと一致しなかったため、共通actionとM2を`--format=json`へ統一した。
 - GitHub `staging` Environmentは`develop`限定branch policyを維持しており、自動runを止めるrequired reviewerは設定されていない。
-- `VERCEL_AUTOMATION_BYPASS_SECRET`は存在するが、`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`は`staging` Environmentに未登録である。値は読み取っていない。
+- read-only確認時点では`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`が未登録だった。承認後、project限定・1年有効のautomation tokenを作成し、3 Secretを`staging` Environmentへ値非表示で登録した。token値とprovider内部IDは記録していない。
 - Vercel Hobby projectでは対象`develop`先端SHAのPreviewが`READY`だが、固定staging aliasはそのdeploymentに付与されていない。固定URLが最新UIへ追従しない問題を再現できた。
-- Vercel Ignored Build Stepは`develop`と`main`を常にbuildする既存Custom commandのままで、`npm run vercel:ignore-build`へ未変更である。
+- Vercel Ignored Build Stepは承認後に既存Custom commandから`npm run vercel:ignore-build`へ変更し、保存後の設定表示で反映を確認した。mainの現行build契約は維持している。
 - Node.js `22.23.1`でbackend 1320 test、Workers 32 test、frontend 683 test、build、lint、Svelte check、format check、Preview build contractを通した。frontend auditのmoderate/highは非破壊lockfile更新で解消し、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
-- PR #192のGitHub Copilot reviewでproject identityのfail-closed検証不足を指摘された。Vercel REST `GET /v9/projects/{projectId}`を`teamId` scopeで照合し、project IDと固定project名を完全一致検証したうえで、Vercel CLIの全候補探索・alias操作も固定app名と`--scope`へ限定する修正をRed 2件→Green 18件で追加した。再reviewは新規commentなしだったが、suppressed noteからM2の複数行deploy出力を全行連結する潜在不具合を確認し、最後の非空URL行だけを読む修正をRed 1件→Green 19件で追加した。
-- 上記3 Secretの登録、Ignored Build Step変更、PR merge、alias更新は外部変更を伴うため、対象project、費用・影響、rollbackを提示した直前承認後にSFA-09〜SFA-11として実施する。
+- PR #192のGitHub Copilot reviewでproject identityのfail-closed検証不足を指摘された。Vercel REST `GET /v9/projects/{projectId}`を`teamId`で照合し、project IDと固定project名を完全一致検証したうえで、Vercel CLIの候補探索は固定app名へ限定した。再reviewは新規commentなしだったが、suppressed noteからM2の複数行deploy出力を全行連結する潜在不具合を確認し、最後の非空URL行だけを読む修正をRed 1件→Green 19件で追加した。
+- PR #192は`develop`へmerge済みで、merge SHAは`b84667a166c296355dd5a5f98957954b5950b203`である。初回run [31072094165](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31072094165)は3 Secret未登録のためalias更新前に失敗した。承認済みpreflight後のfailed job再実行ではSecretがmaskedで注入されたが、Preview探索がtimeoutし、固定aliasは変更されなかった。
+- 再実行の原因調査で、Vercel CLI `50.17.1`のteam slug用`--scope`へteam IDである`VERCEL_ORG_ID`を渡していたため、project-scoped tokenから対象projectを解決できないことを確認した。project限定tokenは維持し、CLIは`VERCEL_ORG_ID` / `VERCEL_PROJECT_ID`環境変数でprojectを固定、REST照合だけ`teamId`を使う修正を回帰test先行で追加した。SFA-10〜SFA-12はこの修正のmerge後に再確認する。
+- scope回帰修正後はNode.js 22でbackend 1321 test、Workers 32 test、frontend 684 test、backend/frontend build、lint、Svelte check、format check、Preview build contractを通した。frontend auditはmoderate以上0件で、破壊的な`--force`を要するupstream由来のlow 3件だけを残した。
+- PR #193のCopilot reviewで、scope回帰testが`process.cwd()`からrepository rootを推測しており、repo直下の`vitest --root frontend`実行で失敗する指摘を受けた。別cwd実行のRedを再現し、既存source contract testと同じ`import.meta.url` / `fileURLToPath`基準へ修正した。
 
 ## 参考資料
 
 - [Vercel: Ignored Build Step](https://vercel.com/kb/guide/how-do-i-use-the-ignored-build-step-field-on-vercel)
 - [Vercel CLI: deploy](https://vercel.com/docs/cli/deploy)
 - [Vercel CLI: list / metadata filter](https://vercel.com/docs/cli/list)
+- [Vercel CLI: Global Options](https://vercel.com/docs/cli/global-options)
+- [Vercel REST API](https://vercel.com/docs/rest-api)
 - [GitHub Actions workflow syntax / concurrency](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax)
 
 ## Issue #174への引き継ぎ
