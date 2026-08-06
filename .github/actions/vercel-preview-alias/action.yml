@@ -188,20 +188,24 @@ runs:
 
         alias_failure_message="staging alias smokeに失敗しました"
         SMOKE_URL="https://$INPUT_ALIAS/" SMOKE_MARKER="$INPUT_SMOKE_MARKER" AUTOMATION_BYPASS_SECRET="$INPUT_AUTOMATION_BYPASS_SECRET" node --input-type=module -e '
-            const url = new URL(process.env.SMOKE_URL);
-            const headers = process.env.AUTOMATION_BYPASS_SECRET
-              ? { "x-vercel-protection-bypass": process.env.AUTOMATION_BYPASS_SECRET }
-              : {};
-            const response = await fetch(url, {
-              headers,
-              redirect: "error",
-              signal: AbortSignal.timeout(15000),
-            });
-            if (response.status !== 200
-              || new URL(response.url).origin !== url.origin
-              || !response.headers.get("content-type")?.includes("text/html")) process.exit(1);
-            const html = await response.text();
-            if (!html.includes(process.env.SMOKE_MARKER)) process.exit(1);
+            try {
+              const url = new URL(process.env.SMOKE_URL);
+              const headers = process.env.AUTOMATION_BYPASS_SECRET
+                ? { "x-vercel-protection-bypass": process.env.AUTOMATION_BYPASS_SECRET }
+                : {};
+              const response = await fetch(url, {
+                headers,
+                redirect: "error",
+                signal: AbortSignal.timeout(15000),
+              });
+              if (response.status !== 200
+                || new URL(response.url).origin !== url.origin
+                || !response.headers.get("content-type")?.includes("text/html")) process.exit(1);
+              const html = await response.text();
+              if (!html.includes(process.env.SMOKE_MARKER)) process.exit(1);
+            } catch {
+              process.exit(1);
+            }
           '
 
         trap - ERR

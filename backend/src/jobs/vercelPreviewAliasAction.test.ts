@@ -44,6 +44,16 @@ describe("Vercel Preview alias action", () => {
     expect(source).toContain("staging alias smokeに失敗しました");
   });
 
+  it("smoke例外をstack traceにせず固定失敗へ寄せる", () => {
+    const source = action();
+    const smokeStart = source.indexOf('alias_failure_message="staging alias smokeに失敗しました"');
+    const smoke = source.slice(smokeStart, source.indexOf("        trap - ERR", smokeStart));
+
+    expect(smoke).toContain("try {");
+    expect(smoke).toContain("} catch {");
+    expect(smoke).toContain("process.exit(1)");
+  });
+
   it("候補確認→直前参照保存→alias更新→post-check→smokeの順に実行する", () => {
     const source = action();
     const main = source.slice(source.indexOf("        vercel_list=("));
