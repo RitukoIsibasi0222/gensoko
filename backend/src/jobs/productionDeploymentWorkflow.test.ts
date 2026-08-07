@@ -83,7 +83,8 @@ describe("production deployment workflow", () => {
     expect(source).not.toContain("prisma migrate deploy");
     expect(source).toContain("Production Database Operations");
     expect(source).toContain("--skip-domain");
-    expect(source).toContain("vercel@56.3.2 promote");
+    const promoteCommand = commandContaining(source, "vercel@56.3.2 promote");
+    expect(promoteCommand).toContain('--scope "$VERCEL_ORG_ID"');
   });
 
   it("stagingとproductionのcredential・target・concurrencyを分離する", () => {
@@ -185,6 +186,7 @@ describe("production deployment workflow", () => {
       "--prebuilt",
       "--prod",
       "--skip-domain",
+      '--scope "$VERCEL_ORG_ID"',
       '--meta githubCommitSha="$EXPECTED_SHA"',
       "--meta githubCommitRef=main",
     ]) {
@@ -201,6 +203,7 @@ describe("production deployment workflow", () => {
       "--status READY",
       "--environment production",
       "--format=json",
+      '--scope "$VERCEL_ORG_ID"',
     ]) {
       expect(listCommand).toContain(argument);
     }
