@@ -20,6 +20,13 @@ function liveMainAction(): string {
   return readFileSync(LIVE_MAIN_ACTION_PATH, "utf8");
 }
 
+function commandContaining(source: string, marker: string): string {
+  const normalized = source.replace(/\\\r?\n\s*/g, " ");
+  const command = normalized.split(/\r?\n/).find((line) => line.includes(marker));
+  expect(command).toBeDefined();
+  return command ?? "";
+}
+
 describe("production deployment workflow", () => {
   it("deploy対象のmain pushと入力なしmanual再開だけを許可する", () => {
     const source = workflow();
@@ -164,16 +171,46 @@ describe("production deployment workflow", () => {
     expect(frontendCandidate).not.toMatch(/vercel@\S+ pull/);
     expect(frontendCandidate).not.toMatch(/vercel@\S+ build/);
     expect(frontendCandidate).toContain("VERCEL_ENV: production");
+    expect(frontendCandidate).toContain("VERCEL_ORG_ID: ${{ secrets.PRODUCTION_VERCEL_ORG_ID }}");
+    expect(frontendCandidate).toContain(
+      "VERCEL_PROJECT_ID: ${{ secrets.PRODUCTION_VERCEL_PROJECT_ID }}",
+    );
     expect(frontendCandidate).toContain("npm run build");
     expect(frontendCandidate).toContain("node scripts/check-vercel-build-output.mjs");
-    expect(frontendCandidate).toContain(
-      'vercel@56.3.2 deploy --yes --non-interactive --no-color --project="$VERCEL_PROJECT_ID" --prebuilt --prod --skip-domain',
+    const deployCommand = commandContaining(frontendCandidate, "vercel@56.3.2 deploy");
+    for (const argument of [
+      "--yes",
+      "--non-interactive",
+      "--no-color",
+      "--prebuilt",
+      "--prod",
+      "--skip-domain",
+      '--meta githubCommitSha="$EXPECTED_SHA"',
+      "--meta githubCommitRef=main",
+    ]) {
+      expect(deployCommand).toContain(argument);
+    }
+    expect(deployCommand).not.toContain("--project");
+
+    const listCommand = commandContaining(frontendCandidate, "vercel@56.3.2 list");
+    for (const argument of [
+      "--yes",
+      "--non-interactive",
+      "--no-color",
+      '--meta "githubCommitSha=$EXPECTED_SHA"',
+      "--status READY",
+      "--environment production",
+      "--format=json",
+    ]) {
+      expect(listCommand).toContain(argument);
+    }
+    expect(listCommand).not.toContain("--project");
+    expect(listCommand).not.toContain('list "$VERCEL_PROJECT_ID"');
+
+    expect(frontendCandidate).toContain('VERCEL_PROJECT_ID="$VERCEL_PROJECT_ID"');
+    expect(frontendCandidate).toMatch(
+      /deployment\.projectId\s*===\s*process\.env\.VERCEL_PROJECT_ID/,
     );
-    expect(frontendCandidate).toContain(
-      'vercel@56.3.2 list "$VERCEL_PROJECT_ID" --yes --non-interactive --no-color',
-    );
-    expect(frontendCandidate).toContain('--meta githubCommitSha="$EXPECTED_SHA"');
-    expect(frontendCandidate).toContain("--meta githubCommitRef=main");
   });
 
   it("classifies Vercel CLI failures without printing raw provider output", () => {

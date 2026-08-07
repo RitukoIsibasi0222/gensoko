@@ -315,25 +315,26 @@ jobs:
             echo "production frontend build契約が不正です"
             exit 1
           fi
-          if ! npx --yes vercel@56.3.2 deploy --yes --non-interactive --no-color --project="$VERCEL_PROJECT_ID" --prebuilt --prod --skip-domain --meta githubCommitSha="$EXPECTED_SHA" --meta githubCommitRef=main --token="$VERCEL_TOKEN" >"$candidate_ref" 2>"$provider_log"; then
+          if ! npx --yes vercel@56.3.2 deploy --yes --non-interactive --no-color --prebuilt --prod --skip-domain --meta githubCommitSha="$EXPECTED_SHA" --meta githubCommitRef=main --token="$VERCEL_TOKEN" >"$candidate_ref" 2>"$provider_log"; then
             category=$(classify_vercel_failure "$provider_log")
             echo "vercel_failure_category=$category"
             echo "production frontend候補deployに失敗しました"
             exit 1
           fi
-          if ! npx --yes vercel@56.3.2 list "$VERCEL_PROJECT_ID" --yes --non-interactive --no-color --meta "githubCommitSha=$EXPECTED_SHA" --status READY --environment production --format=json --token="$VERCEL_TOKEN" >"$candidate_state" 2>"$provider_log"; then
+          if ! npx --yes vercel@56.3.2 list --yes --non-interactive --no-color --meta "githubCommitSha=$EXPECTED_SHA" --status READY --environment production --format=json --token="$VERCEL_TOKEN" >"$candidate_state" 2>"$provider_log"; then
             category=$(classify_vercel_failure "$provider_log")
             echo "vercel_failure_category=$category"
             echo "production frontend候補metadataを確認できません"
             exit 1
           fi
-          if ! EXPECTED_SHA="$EXPECTED_SHA" CANDIDATE_REF="$candidate_ref" CANDIDATE_STATE="$candidate_state" node --input-type=module -e '
+          if ! EXPECTED_SHA="$EXPECTED_SHA" VERCEL_PROJECT_ID="$VERCEL_PROJECT_ID" CANDIDATE_REF="$candidate_ref" CANDIDATE_STATE="$candidate_state" node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const candidateUrl = readFileSync(process.env.CANDIDATE_REF, "utf8").trim();
             const candidateHost = candidateUrl.replace(/^https:\/\//, "").replace(/\/$/, "");
             const payload = JSON.parse(readFileSync(process.env.CANDIDATE_STATE, "utf8"));
             const deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
-            const matches = deployments.filter((deployment) => deployment.state === "READY"
+            const matches = deployments.filter((deployment) => deployment.projectId === process.env.VERCEL_PROJECT_ID
+              && deployment.state === "READY"
               && deployment.target === "production"
               && deployment.url === candidateHost
               && deployment.meta?.githubCommitSha === process.env.EXPECTED_SHA
