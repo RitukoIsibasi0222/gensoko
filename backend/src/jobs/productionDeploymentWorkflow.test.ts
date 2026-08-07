@@ -115,6 +115,26 @@ describe("production deployment workflow", () => {
     expect(source.match(/PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET:/g)).toHaveLength(3);
   });
 
+  it("Git未接続production projectの設定をbranch scopeなしで取得しexact SHA metadataを維持する", () => {
+    const source = workflow();
+    const frontendCandidateStart = source.indexOf("Deploy staged production frontend");
+    const frontendCandidateEnd = source.indexOf("Revalidate live main before frontend promotion");
+
+    expect(frontendCandidateStart).toBeGreaterThanOrEqual(0);
+    expect(frontendCandidateEnd).toBeGreaterThan(frontendCandidateStart);
+    const frontendCandidate = source.slice(frontendCandidateStart, frontendCandidateEnd);
+    const pullLine = frontendCandidate
+      .split("\n")
+      .find((line) => line.includes("vercel@50.17.1 pull"));
+
+    expect(pullLine).toBeDefined();
+    expect(pullLine).toContain("--environment=production");
+    expect(pullLine).not.toContain("--git-branch");
+    expect(pullLine).toContain('--token="$VERCEL_TOKEN"');
+    expect(frontendCandidate).toContain('--meta githubCommitSha="$EXPECTED_SHA"');
+    expect(frontendCandidate).toContain("--meta githubCommitRef=main");
+  });
+
   it("provider raw responseを一時fileへ閉じtrap cleanupしsafe evidenceだけを短期保存する", () => {
     const source = workflow();
     expect(source).toContain("$RUNNER_TEMP");
