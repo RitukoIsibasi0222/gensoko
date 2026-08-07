@@ -507,7 +507,7 @@ export async function verifyProductionFrontendContent(options) {}
 - 初回実装ではproduction一時Wrangler configを`RUNNER_TEMP`へ置いたため、config内の相対`main`と`$schema`の解決基準がbackend外へずれた。PDA-17では`RUNNER_TEMP`と`workingDirectory`を分離したRed testを追加し、configだけをbackend working directory内へmode `0600`で生成・cleanupし、provider logとstateは引き続き`RUNNER_TEMP`へ隔離する形へ修正した。follow-up PR #208はCopilot review指摘なしでmerge SHA `4ff6439c2c25215961e8e64a9cc63d8ad58fc9c4`としてdevelopへowner merge済みで、release PR #209でmain昇格を進める。
 - docs同期PR #210を取り込んだrelease PR #209はowner mergeされ、merge SHA `27d8b3e3849c0b3eff3ded764500ba5228b3ecf2`のproduction run [31145881782](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31145881782)でbranch・SHA・quality・DB target・migration・credential・API deploy・API healthまで成功した。frontendはproduction設定取得時に固定errorで停止し、candidate deploy、promote、smokeは未実行、DB mutationはなく既存frontendを維持した。
 - production専用Vercel projectは意図どおりGit未接続であり、`vercel pull --environment=production`へPreview branch用の`--git-branch=main`を併用したことが停止原因だった。PDA-18ではproduction environment scopeだけで設定を取得し、deploy metadataのexact SHAとref=`main`は既存の環境変数・`--meta`で維持するRed testを追加して最小修正した。
-- PDA-18のfollow-up PR #211はlocal/PR品質gateを通過し、Copilotが変更5ファイルをreviewして指摘なし、owner merge待ちである。Codexはmergeせず、develop merge後に新しいdevelop→main release PRとproduction runでPDA-16を再開する。
+- PDA-18のfollow-up PR #211はlocal/PR品質gateとCopilot reviewを通過し、merge SHA `e197449c564ba68d71d6cd11f9279e34eea3f28e`としてdevelopへowner merge済みである。release PR #212でmain昇格を進め、owner merge後のproduction runでPDA-16を再開する。CodexはどちらのPRもmergeしない。
 
 ### スプレッドシート貼り付け用（v4確定）
 
