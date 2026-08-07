@@ -216,6 +216,13 @@ Vercel HobbyのStandard Protectionではproduction custom domain以外のdeploym
 - candidate gate成功後だけproduction custom domainと既存redirectを旧staging projectからproduction専用projectへ移管した。production側のValid Configuration・Production接続、旧staging側からの分離、custom domainのheaderなし200・marker・candidateとのimmutable asset一致を確認した。
 - production projectのGit未接続、production Environmentのrequired reviewer、main限定branch policyを移管後も維持した。DB、Cloudflare Worker、release PR、production workflowはこの工程で変更・実行していない。
 
+### 初回production runのfail-closed記録（2026-08-07）
+
+- release PR #207のowner merge SHAで起動したrunは、branch・SHA・backend/frontend quality・production DB target・migration current・provider credential・mutation直前live main gateを通過した。
+- production Worker deployはprovider受理前に固定errorで停止し、API health以降、frontend candidate、promote、smoke、DB mutationは実行されなかった。safe evidenceには達成済みの固定statusだけを記録した。
+- 原因は一時Wrangler configを`RUNNER_TEMP`へ置き、相対`main`と`$schema`の解決基準をbackend working directory外へ移したことだった。configはbackend working directory内へmode `0600`で生成・削除し、provider stdout/stderrとstateだけを`RUNNER_TEMP`へ隔離する。
+- credentialとaccount targetの検証過程でも再実行はすべてAPI deployで停止し、Cloudflareに新versionは作成されなかった。追加runを重ねず、PDA-17のTDD修正・review・develop/main昇格後に再検証する。
+
 ### 通常release
 
 1. `develop`でstaging確認を完了し、`develop`から`main`へのPRを作成する。mainへの自動mergeは使わない。
@@ -226,7 +233,7 @@ Vercel HobbyのStandard Protectionではproduction custom domain以外のdeploym
 6. required reviewer付き`production` Environmentの単一release jobを承認する。required reviewerと`main`限定branch policyは削除・迂回しない。
 7. protected job開始時にlive `main`を再確認し、production DB targetを値非表示で検証する。
 8. `prisma migrate status`をread-only実行し、`current`だけを許可する。`pending`または`unknown`はAPI deploy前に停止する。
-9. provider mutation直前にもlive `main`を再確認し、production専用一時Wrangler configでAPIをdeployする。deployment metadataのexact SHAが一致しない場合はfrontendへ進まない。
+9. provider mutation直前にもlive `main`を再確認し、production専用一時Wrangler configをbackend working directory内へmode `0600`で生成してAPIをdeployする。相対`main`と`$schema`の解決基準を維持し、provider出力とstateだけを`RUNNER_TEMP`へ隔離する。deployment metadataのexact SHAが一致しない場合はfrontendへ進まない。
 10. API health、CORS、security headerをGETだけで確認する。失敗時はfrontend build/deployを行わない。
 11. production専用Vercel projectへ`--prod --skip-domain`で候補をdeployし、project境界、SHA、ref=`main`、target=`production`、READY、automation bypass header経由のcandidate marker・immutable assetを検証する。
 12. 検証済みcandidateだけを`vercel promote`し、custom domainが同じasset集合とmarkerを参照するまで有限回pollする。

@@ -1,6 +1,6 @@
-import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -13,16 +13,22 @@ const SHA = "1234567890abcdef1234567890abcdef12345678";
 
 function setup() {
   const root = mkdtempSync(join(tmpdir(), "gensoko-production-worker-"));
-  const stagingConfigPath = join(root, "wrangler.jsonc");
+  const workingDirectory = join(root, "backend");
+  const runnerTemp = join(root, "runner-temp");
+  mkdirSync(workingDirectory);
+  mkdirSync(runnerTemp);
+  const stagingConfigPath = join(workingDirectory, "wrangler.jsonc");
   writeFileSync(
     stagingConfigPath,
     JSON.stringify({ env: { staging: { hyperdrive: [{ id: "b".repeat(32) }] } } }),
   );
   return {
     root,
+    runnerTemp,
     stagingConfigPath,
+    workingDirectory,
     environment: {
-      RUNNER_TEMP: root,
+      RUNNER_TEMP: runnerTemp,
       PRODUCTION_WORKER_NAME: "gensoko-api-production",
       PRODUCTION_API_HOSTNAME: "api.gensoko.example.co",
       PRODUCTION_FRONTEND_ORIGIN: "https://www.gensoko.example.co",
@@ -33,13 +39,14 @@ function setup() {
 }
 
 describe("production Worker deployment", () => {
-  it("mode 0600のproduction configでdeployしexact SHA metadataを確認後cleanupする", () => {
+  it("working directory内のmode 0600 production configでdeployしexact SHA metadataを確認後cleanupする", () => {
     const fixture = setup();
     let generatedConfigPath = "";
     const runner = vi.fn((command: string, args: readonly string[]) => {
       expect(command).toBe("npx");
       const configIndex = args.indexOf("--config");
       generatedConfigPath = String(args[configIndex + 1]);
+      expect(dirname(generatedConfigPath)).toBe(fixture.workingDirectory);
       expect(statSync(generatedConfigPath).mode & 0o777).toBe(0o600);
       expect(readFileSync(generatedConfigPath, "utf8")).not.toContain("b".repeat(32));
       if (args.includes("deploy"))
@@ -56,32 +63,36 @@ describe("production Worker deployment", () => {
         expectedSha: SHA,
         environment: fixture.environment,
         stagingConfigPath: fixture.stagingConfigPath,
-        workingDirectory: fixture.root,
+        workingDirectory: fixture.workingDirectory,
         runner,
       }),
     ).toEqual({ status: "deployed" });
     expect(runner).toHaveBeenCalledTimes(2);
     expect(existsSync(generatedConfigPath)).toBe(false);
-    expect(existsSync(join(fixture.root, "production-worker-provider.log"))).toBe(false);
+    expect(existsSync(join(fixture.runnerTemp, "production-worker-provider.log"))).toBe(false);
   });
 
   it("metadata不一致とprovider raw errorを固定errorへ縮約してtemp fileを削除する", () => {
     const fixture = setup();
-    const runner = vi
-      .fn()
-      .mockReturnValueOnce({ status: 0, stdout: "raw deploy", stderr: "" })
-      .mockReturnValueOnce({ status: 0, stdout: '{"raw":"wrong sha"}', stderr: "secret detail" });
+    let generatedConfigPath = "";
+    const runner = vi.fn((_command: string, args: readonly string[]) => {
+      const configIndex = args.indexOf("--config");
+      generatedConfigPath = String(args[configIndex + 1]);
+      if (args.includes("deploy")) return { status: 0, stdout: "raw deploy", stderr: "" };
+      return { status: 0, stdout: '{"raw":"wrong sha"}', stderr: "secret detail" };
+    });
 
     expect(() =>
       runProductionWorkerDeployment({
         expectedSha: SHA,
         environment: fixture.environment,
         stagingConfigPath: fixture.stagingConfigPath,
-        workingDirectory: fixture.root,
+        workingDirectory: fixture.workingDirectory,
         runner,
       }),
     ).toThrow(PRODUCTION_WORKER_DEPLOYMENT_ERROR_MESSAGE);
-    expect(existsSync(join(fixture.root, "production-worker-provider.log"))).toBe(false);
-    expect(existsSync(join(fixture.root, "production-worker-state.json"))).toBe(false);
+    expect(existsSync(generatedConfigPath)).toBe(false);
+    expect(existsSync(join(fixture.runnerTemp, "production-worker-provider.log"))).toBe(false);
+    expect(existsSync(join(fixture.runnerTemp, "production-worker-state.json"))).toBe(false);
   });
 });
