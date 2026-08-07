@@ -467,6 +467,7 @@ export async function verifyProductionFrontendContent(options) {}
 | PDA-14   | production外部設定を直前承認後に分離                     | GitHub/Vercel/Cloudflare                                | 高     | 対象・影響・費用・rollback提示               |
 | PDA-15   | develop→main release PRをreview・merge                   | GitHub PR                                               | 高     | ownerがmerge、main自動merge禁止              |
 | PDA-16   | same main SHAのproduction runを検証                      | GitHub Actions/providers                                | 高     | API→health→frontend→smoke→evidence           |
+| PDA-17   | production Worker一時configの相対path基準をTDD修正       | `backend/src/lib/production-worker-deployment*`         | 高     | configはbackend内、provider logはRUNNER_TEMP |
 
 - [x] PDA-01: production workflow境界のRed contract test
 - [x] PDA-02: backend/frontend共有quality actionをTDD実装
@@ -482,8 +483,9 @@ export async function verifyProductionFrontendContent(options) {}
 - [x] PDA-12: 最終品質gateを実行
 - [x] PDA-13: feature PRを作成しCopilot reviewへ対応
 - [x] PDA-14: production外部設定を直前承認後に分離
-- [ ] PDA-15: develop→main release PRをreview・merge
+- [x] PDA-15: develop→main release PRをreview・merge
 - [ ] PDA-16: same main SHAのproduction runを検証
+- [x] PDA-17: production Worker一時configの相対path基準をTDD修正
 
 ## Repository実装時の計画差分
 
@@ -499,6 +501,8 @@ export async function verifyProductionFrontendContent(options) {}
 - production workflow source contractを通常backend全testだけでなくRepository Integrityにも含めるため、`.github/workflows/repository-integrity.yml`を更新した。
 - exact SHA checkout後の`git rev-parse HEAD`とlive `main`先端を同じ共通actionで照合し、backend/frontend quality jobとprovider mutation前の全境界でfail-closedにした。
 - Vercel CLIがrunnerへ生成するproduction project link・環境設定・build outputはrelease中だけ利用し、`if: always()`の最終stepで`.vercel`全体を削除する。
+- release PR #207のowner merge SHAで起動したproduction runは、branch・SHA・quality・migration・credential gateを通過後、API deployでfail-closed停止した。API health以降、frontend、smoke、DB mutationは未実行で、Cloudflareにも新versionは作成されなかった。
+- 初回実装ではproduction一時Wrangler configを`RUNNER_TEMP`へ置いたため、config内の相対`main`と`$schema`の解決基準がbackend外へずれた。PDA-17では`RUNNER_TEMP`と`workingDirectory`を分離したRed testを追加し、configだけをbackend working directory内へmode `0600`で生成・cleanupし、provider logとstateは引き続き`RUNNER_TEMP`へ隔離する形へ修正した。
 
 ### スプレッドシート貼り付け用（v4確定）
 
@@ -520,6 +524,7 @@ PDA-13	feature PRを作成しCopilot reviewへ対応	GitHub PR	高
 PDA-14	production外部設定を直前承認後に分離	GitHub/Vercel/Cloudflare	高
 PDA-15	develop→main release PRをreview・merge	GitHub PR	高
 PDA-16	same main SHAのproduction runを検証	GitHub Actions/providers	高
+PDA-17	production Worker一時configの相対path基準をTDD修正	backend/src/lib/production-worker-deployment*	高
 ```
 
 ## テストケース一覧
@@ -617,6 +622,19 @@ repository品質gateではproduction/staging provider、DB、URLへ接続せず�
 - verifierの`node --check`、`git diff --check`成功
 - production Worker dry-runは必須変数なしでは意図どおりfail-closedとなり、実在値を使わないproduction形状の検証専用値を明示した再実行で成功
 - Copilot reviewのSecret露出面指摘に対し、candidateだけにbypass headerを付けcustom domainには送らないRed 1件を確認後、production/staging直接影響test 2 files・7 tests成功
+
+### Production初回run follow-up修正の品質ゲート実績（2026-08-07）
+
+- Red: `RUNNER_TEMP`とbackend working directoryを分離したfixtureで、一時configがbackend外へ生成される意図したfailure 1件を確認
+- Green: 一時configだけをbackend working directory内へ生成する最小修正後、対象2 tests成功
+- Refactor: production Worker configとの直接影響test 2 files・12 tests成功
+- backend通常test: 137 files成功、4 files skip、1359 tests成功、10 tests skip
+- backend Workers test: 4 files・32 tests成功
+- backend TypeScript build、Workers typecheck/build、実在値を使わないproduction Worker dry-run、ESLint、Prettier、Prisma validate成功
+- frontend test: 66 files・685 tests成功
+- frontend ESLint、Svelte check（error 0 / warning 0）、Prettier、Preview build output contract成功
+- GitHub Actions / composite action YAML 22件をparserで検証し、埋め込みBash 174 blockを`bash -n`で検証
+- `git diff --check`成功。provider、DB、URLへの接続、workflow dispatch、Environment・Secret変更、実deploymentは実行していない
 
 ## コミット方針
 
