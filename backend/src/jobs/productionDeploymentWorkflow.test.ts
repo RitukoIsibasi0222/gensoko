@@ -164,14 +164,18 @@ describe("production deployment workflow", () => {
     expect(frontendCandidate).not.toMatch(/vercel@\S+ pull/);
     expect(frontendCandidate).not.toMatch(/vercel@\S+ build/);
     expect(frontendCandidate).toContain("VERCEL_ENV: production");
+    expect(frontendCandidate).toContain("VERCEL_ORG_ID: ${{ secrets.PRODUCTION_VERCEL_ORG_ID }}");
+    expect(frontendCandidate).toContain(
+      "VERCEL_PROJECT_ID: ${{ secrets.PRODUCTION_VERCEL_PROJECT_ID }}",
+    );
     expect(frontendCandidate).toContain("npm run build");
     expect(frontendCandidate).toContain("node scripts/check-vercel-build-output.mjs");
     expect(frontendCandidate).toContain(
-      'vercel@56.3.2 deploy --yes --non-interactive --no-color --project="$VERCEL_PROJECT_ID" --prebuilt --prod --skip-domain',
+      "vercel@56.3.2 deploy --yes --non-interactive --no-color --prebuilt --prod --skip-domain",
     );
-    expect(frontendCandidate).toContain(
-      'vercel@56.3.2 list "$VERCEL_PROJECT_ID" --yes --non-interactive --no-color',
-    );
+    expect(frontendCandidate).toContain("vercel@56.3.2 list --yes --non-interactive --no-color");
+    expect(frontendCandidate).not.toContain('--project="$VERCEL_PROJECT_ID"');
+    expect(frontendCandidate).not.toContain('list "$VERCEL_PROJECT_ID"');
     expect(frontendCandidate).toContain('--meta githubCommitSha="$EXPECTED_SHA"');
     expect(frontendCandidate).toContain("--meta githubCommitRef=main");
   });
