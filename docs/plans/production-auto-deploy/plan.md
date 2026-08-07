@@ -469,6 +469,7 @@ export async function verifyProductionFrontendContent(options) {}
 | PDA-16   | same main SHAのproduction runを検証                      | GitHub Actions/providers                                | 高     | API→health→frontend→smoke→evidence           |
 | PDA-17   | production Worker一時configの相対path基準をTDD修正       | `backend/src/lib/production-worker-deployment*`         | 高     | configはbackend内、provider logはRUNNER_TEMP |
 | PDA-18   | Git未接続production Vercel設定取得scopeをTDD修正         | `.github/workflows/production-deploy.yml`、workflow test | 高     | production scopeのみ、exact SHA metadata維持 |
+| PDA-19   | production frontendをprovider env pullなしのprebuilt buildへTDD修正 | `.github/workflows/production-deploy.yml`、workflow test | 高     | 公開API URL明示、project固定、exact SHA metadata維持 |
 
 - [x] PDA-01: production workflow境界のRed contract test
 - [x] PDA-02: backend/frontend共有quality actionをTDD実装
@@ -488,6 +489,7 @@ export async function verifyProductionFrontendContent(options) {}
 - [ ] PDA-16: same main SHAのproduction runを検証
 - [x] PDA-17: production Worker一時configの相対path基準をTDD修正
 - [x] PDA-18: Git未接続production Vercel設定取得scopeをTDD修正
+- [x] PDA-19: production frontendをprovider env pullなしのprebuilt buildへTDD修正
 
 ## Repository実装時の計画差分
 
@@ -506,8 +508,10 @@ export async function verifyProductionFrontendContent(options) {}
 - release PR #207のowner merge SHAで起動したproduction runは、branch・SHA・quality・migration・credential gateを通過後、API deployでfail-closed停止した。API health以降、frontend、smoke、DB mutationは未実行で、Cloudflareにも新versionは作成されなかった。
 - 初回実装ではproduction一時Wrangler configを`RUNNER_TEMP`へ置いたため、config内の相対`main`と`$schema`の解決基準がbackend外へずれた。PDA-17では`RUNNER_TEMP`と`workingDirectory`を分離したRed testを追加し、configだけをbackend working directory内へmode `0600`で生成・cleanupし、provider logとstateは引き続き`RUNNER_TEMP`へ隔離する形へ修正した。follow-up PR #208はCopilot review指摘なしでmerge SHA `4ff6439c2c25215961e8e64a9cc63d8ad58fc9c4`としてdevelopへowner merge済みで、release PR #209でmain昇格を進める。
 - docs同期PR #210を取り込んだrelease PR #209はowner mergeされ、merge SHA `27d8b3e3849c0b3eff3ded764500ba5228b3ecf2`のproduction run [31145881782](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31145881782)でbranch・SHA・quality・DB target・migration・credential・API deploy・API healthまで成功した。frontendはproduction設定取得時に固定errorで停止し、candidate deploy、promote、smokeは未実行、DB mutationはなく既存frontendを維持した。
-- production専用Vercel projectは意図どおりGit未接続であり、`vercel pull --environment=production`へPreview branch用の`--git-branch=main`を併用したことが停止原因だった。PDA-18ではproduction environment scopeだけで設定を取得し、deploy metadataのexact SHAとref=`main`は既存の環境変数・`--meta`で維持するRed testを追加して最小修正した。
-- PDA-18のfollow-up PR #211はlocal/PR品質gateとCopilot reviewを通過し、merge SHA `e197449c564ba68d71d6cd11f9279e34eea3f28e`としてdevelopへowner merge済みである。release PR #212でmain昇格を進め、owner merge後のproduction runでPDA-16を再開する。CodexはどちらのPRもmergeしない。
+- production専用Vercel projectは意図どおりGit未接続である。PDA-18では`vercel pull`からPreview branch用の`--git-branch=main`だけを除去し、deploy metadataのexact SHAとref=`main`は既存の環境変数・`--meta`で維持した。
+- PDA-18のfollow-up PR #211はlocal/PR品質gateとCopilot reviewを通過し、merge SHA `e197449c564ba68d71d6cd11f9279e34eea3f28e`としてdevelopへowner merge済みである。release review follow-up PR #213もowner mergeされ、release PR #212はmerge SHA `dbfb7d2021ec1a5be29bcc0ecb6fe1a54d200346`としてmainへowner mergeされた。CodexはいずれのPRもmergeしていない。
+- release PR #212のproduction run [31149586816](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31149586816)はbranch・SHA・quality・DB target・migration・credential・API deploy・API healthまで同じSHAで成功したが、branch scopeを除去した`vercel pull`もproduction設定取得で固定error停止した。candidate build/deploy、promote、smokeは未実行で、safe evidenceとcleanupは成功し、DB mutationはなく公開frontendは直前版を維持した。
+- 実機結果から、production project限定・最小権限tokenへproduction環境変数とproject settingsの読み取りを要求する`vercel pull`自体を不要とする。PDA-19ではworkflowが明示する公開`VITE_API_BASE_URL`、`VERCEL_ENV=production`、exact SHA/ref metadataを使ってrepositoryの`npm run build`を実行し、Vercel Build Output contract検証後にCI環境変数で固定したproduction projectへ`deploy --prebuilt --prod --skip-domain`する。Secretとprovider内部IDは出力しない。
 
 ### スプレッドシート貼り付け用（v4確定）
 
@@ -531,6 +535,7 @@ PDA-15	develop→main release PRをreview・merge	GitHub PR	高
 PDA-16	same main SHAのproduction runを検証	GitHub Actions/providers	高
 PDA-17	production Worker一時configの相対path基準をTDD修正	backend/src/lib/production-worker-deployment*	高
 PDA-18	Git未接続production Vercel設定取得scopeをTDD修正	.github/workflows/production-deploy.yml、workflow test	高
+PDA-19	production frontendをprovider env pullなしのprebuilt buildへTDD修正	.github/workflows/production-deploy.yml、workflow test	高
 ```
 
 ## テストケース一覧
@@ -654,6 +659,18 @@ repository品質gateではproduction/staging provider、DB、URLへ接続せず�
 - frontend ESLint、Svelte check（error 0 / warning 0）、Prettier、Preview build output contract成功
 - GitHub Actions / composite action YAML 22件をparserで検証し、埋め込みBash 174 blockを`bash -n`で検証
 - `git diff --check`成功。provider、DB、URLへの接続、workflow dispatch、Environment・Secret変更、実deploymentは実行していない
+
+### Production frontend prebuilt build follow-up修正の品質ゲート実績（2026-08-07）
+
+- Red: provider env pullを使わずrepository build・Build Output検証・prebuilt deployを要求するcontractを追加し、`vercel pull`が残る意図したfailure 1件を確認
+- Green / Refactor: `vercel pull`と`vercel build`を除去し、`VERCEL_ENV=production`・公開API URL・exact SHA/ref metadata・`npm run build`・Build Output検証・prebuilt deployを固定する対象7 tests成功
+- backend通常test: 137 files成功、4 files skip、1360 tests成功、10 tests skip
+- backend Workers test: 4 files・32 tests成功
+- backend TypeScript build、Workers typecheck/build、実在値を使わないproduction Worker dry-run、ESLint、Prettier、Prisma validate成功
+- frontend test: 66 files・685 tests成功
+- frontend ESLint、Svelte check（error 0 / warning 0）、Prettier、実在値を使わないproduction形状の公開API URLによるbuildとVercel Build Output contract成功
+- GitHub Actions / composite action YAML 22件をparserで検証し、埋め込みBash 174 blockを`bash -n`で検証
+- `git diff --check`とproduction/staging分離・provider env pull不使用source contract成功。provider、DB、URLへの接続、workflow dispatch、Environment・Secret変更、実deploymentは実行していない
 
 ## コミット方針
 
