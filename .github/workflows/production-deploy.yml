@@ -220,6 +220,7 @@ jobs:
           EXPECTED_SHA: ${{ needs.validate-release.outputs.expected_sha }}
           PRODUCTION_API_BASE_URL: https://${{ vars.PRODUCTION_API_HOSTNAME }}/api/v1
           PRODUCTION_DOMAIN_URL: ${{ vars.PRODUCTION_FRONTEND_ORIGIN }}
+          VERCEL_ENV: production
           VERCEL_TOKEN: ${{ secrets.PRODUCTION_VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.PRODUCTION_VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.PRODUCTION_VERCEL_PROJECT_ID }}
@@ -239,19 +240,7 @@ jobs:
           export VERCEL_GIT_COMMIT_SHA="$EXPECTED_SHA"
           export VERCEL_GIT_COMMIT_REF="main"
           export VITE_API_BASE_URL="$PRODUCTION_API_BASE_URL"
-          if ! npx --yes vercel@50.17.1 pull --yes --environment=production --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
-            echo "production frontend設定を取得できませんでした"
-            exit 1
-          fi
-          if ! EXPECTED_ORG="$VERCEL_ORG_ID" EXPECTED_PROJECT="$VERCEL_PROJECT_ID" node --input-type=module -e '
-            import { readFileSync } from "node:fs";
-            const link = JSON.parse(readFileSync(".vercel/project.json", "utf8"));
-            if (link.orgId !== process.env.EXPECTED_ORG || link.projectId !== process.env.EXPECTED_PROJECT) process.exit(1);
-          ' 2>/dev/null; then
-            echo "production Vercel project境界が不正です"
-            exit 1
-          fi
-          if ! npx --yes vercel@50.17.1 build --prod --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+          if ! npm run build >"$provider_log" 2>&1; then
             echo "production frontend buildに失敗しました"
             exit 1
           fi
