@@ -512,6 +512,7 @@ export async function verifyProductionFrontendContent(options) {}
 - PDA-18のfollow-up PR #211はlocal/PR品質gateとCopilot reviewを通過し、merge SHA `e197449c564ba68d71d6cd11f9279e34eea3f28e`としてdevelopへowner merge済みである。release review follow-up PR #213もowner mergeされ、release PR #212はmerge SHA `dbfb7d2021ec1a5be29bcc0ecb6fe1a54d200346`としてmainへowner mergeされた。CodexはいずれのPRもmergeしていない。
 - release PR #212のproduction run [31149586816](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31149586816)はbranch・SHA・quality・DB target・migration・credential・API deploy・API healthまで同じSHAで成功したが、branch scopeを除去した`vercel pull`もproduction設定取得で固定error停止した。candidate build/deploy、promote、smokeは未実行で、safe evidenceとcleanupは成功し、DB mutationはなく公開frontendは直前版を維持した。
 - 実機結果から、production project限定・最小権限tokenへproduction環境変数とproject settingsの読み取りを要求する`vercel pull`自体を不要とする。PDA-19ではworkflowが明示する公開`VITE_API_BASE_URL`、`VERCEL_ENV=production`、exact SHA/ref metadataを使ってrepositoryの`npm run build`を実行し、Vercel Build Output contract検証後にCI環境変数で固定したproduction projectへ`deploy --prebuilt --prod --skip-domain`する。Secretとprovider内部IDは出力しない。
+- PDA-19の実装・TDD・local品質gateを完了し、develop向けfollow-up PR [#214](https://github.com/RitukoIsibasi0222/gensoko/pull/214)を作成した。review・owner merge・main昇格前にproduction runを再実行しない。
 
 ### スプレッドシート貼り付け用（v4確定）
 
