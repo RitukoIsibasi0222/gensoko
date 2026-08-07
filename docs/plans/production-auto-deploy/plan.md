@@ -449,27 +449,28 @@ export async function verifyProductionFrontendContent(options) {}
 
 ## タスクリスト（進捗管理）
 
-| タスクID | 内容                                                     | ファイル                                                | 優先度 | 備考                                         |
-| -------- | -------------------------------------------------------- | ------------------------------------------------------- | ------ | -------------------------------------------- |
-| PDA-01   | production workflow境界のRed contract test               | `backend/src/jobs/productionDeploymentWorkflow.test.ts` | 高     | event/branch/SHA/permission/Environment/順序 |
-| PDA-02   | backend/frontend共有quality actionをTDD実装              | `.github/actions/*-quality/action.yml`、PR workflows    | 高     | main exact SHA gateと共用                    |
-| PDA-03   | migration gateをTDD実装                                  | `backend/src/jobs/productionMigrationGate*`             | 高     | current/pending/unknown、raw非出力           |
-| PDA-04   | production Worker deploy・exact SHA確認をTDD実装         | `backend/src/lib/production-worker-deployment*`         | 高     | temp config/log cleanup                      |
-| PDA-05   | production API healthをTDD実装                           | `backend/src/jobs/productionReleaseHealth*`             | 高     | GET/CORS/header/timeout                      |
-| PDA-06   | frontend content verifierを安全に共通化                  | `frontend/scripts/*frontend-content*`、関連test         | 高     | URL/project/Secretは非共通                   |
-| PDA-07   | production Vercel staged deploy・promote・smokeをTDD実装 | `.github/workflows/production-deploy.yml`、verifier     | 高     | API health後だけ実行                         |
-| PDA-08   | Git Integration main buildを停止                         | `frontend/scripts/vercel-ignore-build.mjs`、test        | 高     | develop Preview契約維持                      |
-| PDA-09   | safe evidence generatorをTDD実装                         | `backend/src/jobs/productionReleaseEvidence*`           | 高     | exact schema、禁止値test                     |
-| PDA-10   | failure/rollback/runbookを同期                           | `docs/11_deployment.md`                                 | 高     | DB rollback自動化なし                        |
-| PDA-11   | 計画書・進捗を実態へ同期                                 | `docs/05_progress.md`、本計画書                         | 高     | 対象ファイル・task完了記録                   |
-| PDA-12   | 最終品質gateを実行                                       | backend/frontend/workflow/config                        | 高     | test/build/Workers/lint/format/YAML/Bash     |
-| PDA-13   | feature PRを作成しCopilot reviewへ対応                   | GitHub PR                                               | 高     | Codexはmergeしない                           |
-| PDA-14   | production外部設定を直前承認後に分離                     | GitHub/Vercel/Cloudflare                                | 高     | 対象・影響・費用・rollback提示               |
-| PDA-15   | develop→main release PRをreview・merge                   | GitHub PR                                               | 高     | ownerがmerge、main自動merge禁止              |
-| PDA-16   | same main SHAのproduction runを検証                      | GitHub Actions/providers                                | 高     | API→health→frontend→smoke→evidence           |
-| PDA-17   | production Worker一時configの相対path基準をTDD修正       | `backend/src/lib/production-worker-deployment*`         | 高     | configはbackend内、provider logはRUNNER_TEMP |
-| PDA-18   | Git未接続production Vercel設定取得scopeをTDD修正         | `.github/workflows/production-deploy.yml`、workflow test | 高     | production scopeのみ、exact SHA metadata維持 |
+| タスクID | 内容                                                                | ファイル                                                 | 優先度 | 備考                                                 |
+| -------- | ------------------------------------------------------------------- | -------------------------------------------------------- | ------ | ---------------------------------------------------- |
+| PDA-01   | production workflow境界のRed contract test                          | `backend/src/jobs/productionDeploymentWorkflow.test.ts`  | 高     | event/branch/SHA/permission/Environment/順序         |
+| PDA-02   | backend/frontend共有quality actionをTDD実装                         | `.github/actions/*-quality/action.yml`、PR workflows     | 高     | main exact SHA gateと共用                            |
+| PDA-03   | migration gateをTDD実装                                             | `backend/src/jobs/productionMigrationGate*`              | 高     | current/pending/unknown、raw非出力                   |
+| PDA-04   | production Worker deploy・exact SHA確認をTDD実装                    | `backend/src/lib/production-worker-deployment*`          | 高     | temp config/log cleanup                              |
+| PDA-05   | production API healthをTDD実装                                      | `backend/src/jobs/productionReleaseHealth*`              | 高     | GET/CORS/header/timeout                              |
+| PDA-06   | frontend content verifierを安全に共通化                             | `frontend/scripts/*frontend-content*`、関連test          | 高     | URL/project/Secretは非共通                           |
+| PDA-07   | production Vercel staged deploy・promote・smokeをTDD実装            | `.github/workflows/production-deploy.yml`、verifier      | 高     | API health後だけ実行                                 |
+| PDA-08   | Git Integration main buildを停止                                    | `frontend/scripts/vercel-ignore-build.mjs`、test         | 高     | develop Preview契約維持                              |
+| PDA-09   | safe evidence generatorをTDD実装                                    | `backend/src/jobs/productionReleaseEvidence*`            | 高     | exact schema、禁止値test                             |
+| PDA-10   | failure/rollback/runbookを同期                                      | `docs/11_deployment.md`                                  | 高     | DB rollback自動化なし                                |
+| PDA-11   | 計画書・進捗を実態へ同期                                            | `docs/05_progress.md`、本計画書                          | 高     | 対象ファイル・task完了記録                           |
+| PDA-12   | 最終品質gateを実行                                                  | backend/frontend/workflow/config                         | 高     | test/build/Workers/lint/format/YAML/Bash             |
+| PDA-13   | feature PRを作成しCopilot reviewへ対応                              | GitHub PR                                                | 高     | Codexはmergeしない                                   |
+| PDA-14   | production外部設定を直前承認後に分離                                | GitHub/Vercel/Cloudflare                                 | 高     | 対象・影響・費用・rollback提示                       |
+| PDA-15   | develop→main release PRをreview・merge                              | GitHub PR                                                | 高     | ownerがmerge、main自動merge禁止                      |
+| PDA-16   | same main SHAのproduction runを検証                                 | GitHub Actions/providers                                 | 高     | API→health→frontend→smoke→evidence                   |
+| PDA-17   | production Worker一時configの相対path基準をTDD修正                  | `backend/src/lib/production-worker-deployment*`          | 高     | configはbackend内、provider logはRUNNER_TEMP         |
+| PDA-18   | Git未接続production Vercel設定取得scopeをTDD修正                    | `.github/workflows/production-deploy.yml`、workflow test | 高     | production scopeのみ、exact SHA metadata維持         |
 | PDA-19   | production frontendをprovider env pullなしのprebuilt buildへTDD修正 | `.github/workflows/production-deploy.yml`、workflow test | 高     | 公開API URL明示、project固定、exact SHA metadata維持 |
+| PDA-20   | production Vercel CLI境界・safe失敗分類をTDD修正                    | `.github/workflows/production-deploy.yml`、workflow test | 高     | CLI 56.3.2、非対話project固定、raw非出力             |
 
 - [x] PDA-01: production workflow境界のRed contract test
 - [x] PDA-02: backend/frontend共有quality actionをTDD実装
@@ -490,6 +491,7 @@ export async function verifyProductionFrontendContent(options) {}
 - [x] PDA-17: production Worker一時configの相対path基準をTDD修正
 - [x] PDA-18: Git未接続production Vercel設定取得scopeをTDD修正
 - [x] PDA-19: production frontendをprovider env pullなしのprebuilt buildへTDD修正
+- [x] PDA-20: production Vercel CLI境界・safe失敗分類をTDD修正
 
 ## Repository実装時の計画差分
 
@@ -513,6 +515,10 @@ export async function verifyProductionFrontendContent(options) {}
 - release PR #212のproduction run [31149586816](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31149586816)はbranch・SHA・quality・DB target・migration・credential・API deploy・API healthまで同じSHAで成功したが、branch scopeを除去した`vercel pull`もproduction設定取得で固定error停止した。candidate build/deploy、promote、smokeは未実行で、safe evidenceとcleanupは成功し、DB mutationはなく公開frontendは直前版を維持した。
 - 実機結果から、production project限定・最小権限tokenへproduction環境変数とproject settingsの読み取りを要求する`vercel pull`自体を不要とする。PDA-19ではworkflowが明示する公開`VITE_API_BASE_URL`、`VERCEL_ENV=production`、exact SHA/ref metadataを使ってrepositoryの`npm run build`を実行し、Vercel Build Output contract検証後にCI環境変数で固定したproduction projectへ`deploy --prebuilt --prod --skip-domain`する。Secretとprovider内部IDは出力しない。
 - PDA-19の実装・TDD・local品質gateを完了し、develop向けfollow-up PR [#214](https://github.com/RitukoIsibasi0222/gensoko/pull/214)を作成した。review・owner merge・main昇格前にproduction runを再実行しない。
+- PR #214はdevelopへowner mergeされ、release PR [#215](https://github.com/RitukoIsibasi0222/gensoko/pull/215)もmerge SHA `0b6076687bad5ff42f11c76a16afe272a4c8f1ee`としてmainへowner mergeされた。production run [31151482177](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31151482177)はbranch・SHA・quality・DB target・migration・credential・API deploy・API health・live main再確認・repository build・Build Output contractまで成功し、prebuilt candidate deployで固定error停止した。promote・smokeは未実行、safe evidence・cleanupは成功、DB mutationはなく、APIだけ同SHAへ更新され公開frontendは直前版を維持した。
+- 4回目runではprovider stderrを一時fileへ隔離後に削除する既存方針により、token・内部ID・raw responseは漏えいしなかった一方、project access拒否とprebuilt API拒否を区別できなかった。旧Vercel CLI `50.17.1`の公開helpにはdeployの`--project`がなく、配布コードはprebuilt output検証前にproject情報を取得する。PDA-20ではproductionだけを`56.3.2`へ更新し、`--project`、`--yes`、`--non-interactive`、`--no-color`を明示する。provider logは引き続き出力せず、許可リストの固定categoryだけを記録する。
+- PDA-20はworkflow contractのRed 3件を確認後にGreen 8件、safe category実行5件、YAML parse、埋め込みBash 12件を通過した。最終gateはbackend 1361件、Workers 32件、frontend 685件、backend/frontend build・lint・format、Workers build、Svelte check、Prisma validateが成功した。
+- PDA-20のdevelop向けfollow-up PR [#216](https://github.com/RitukoIsibasi0222/gensoko/pull/216)を作成した。PR品質gateとCopilot reviewへ対応し、Codexはmergeしない。
 
 ### スプレッドシート貼り付け用（v4確定）
 
@@ -537,6 +543,7 @@ PDA-16	same main SHAのproduction runを検証	GitHub Actions/providers	高
 PDA-17	production Worker一時configの相対path基準をTDD修正	backend/src/lib/production-worker-deployment*	高
 PDA-18	Git未接続production Vercel設定取得scopeをTDD修正	.github/workflows/production-deploy.yml、workflow test	高
 PDA-19	production frontendをprovider env pullなしのprebuilt buildへTDD修正	.github/workflows/production-deploy.yml、workflow test	高
+PDA-20	production Vercel CLI境界・safe失敗分類をTDD修正	.github/workflows/production-deploy.yml、workflow test	高
 ```
 
 ## テストケース一覧
