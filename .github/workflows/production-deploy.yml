@@ -327,13 +327,14 @@ jobs:
             echo "production frontend候補metadataを確認できません"
             exit 1
           fi
-          if ! EXPECTED_SHA="$EXPECTED_SHA" CANDIDATE_REF="$candidate_ref" CANDIDATE_STATE="$candidate_state" node --input-type=module -e '
+          if ! EXPECTED_SHA="$EXPECTED_SHA" VERCEL_PROJECT_ID="$VERCEL_PROJECT_ID" CANDIDATE_REF="$candidate_ref" CANDIDATE_STATE="$candidate_state" node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const candidateUrl = readFileSync(process.env.CANDIDATE_REF, "utf8").trim();
             const candidateHost = candidateUrl.replace(/^https:\/\//, "").replace(/\/$/, "");
             const payload = JSON.parse(readFileSync(process.env.CANDIDATE_STATE, "utf8"));
             const deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
-            const matches = deployments.filter((deployment) => deployment.state === "READY"
+            const matches = deployments.filter((deployment) => deployment.projectId === process.env.VERCEL_PROJECT_ID
+              && deployment.state === "READY"
               && deployment.target === "production"
               && deployment.url === candidateHost
               && deployment.meta?.githubCommitSha === process.env.EXPECTED_SHA
