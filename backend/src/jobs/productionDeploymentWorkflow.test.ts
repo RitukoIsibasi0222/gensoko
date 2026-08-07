@@ -117,10 +117,12 @@ describe("production deployment workflow", () => {
 
   it("Git未接続production projectの設定をbranch scopeなしで取得しexact SHA metadataを維持する", () => {
     const source = workflow();
-    const frontendCandidate = source.slice(
-      source.indexOf("Deploy staged production frontend"),
-      source.indexOf("Revalidate live main before frontend promotion"),
-    );
+    const frontendCandidateStart = source.indexOf("Deploy staged production frontend");
+    const frontendCandidateEnd = source.indexOf("Revalidate live main before frontend promotion");
+
+    expect(frontendCandidateStart).toBeGreaterThanOrEqual(0);
+    expect(frontendCandidateEnd).toBeGreaterThan(frontendCandidateStart);
+    const frontendCandidate = source.slice(frontendCandidateStart, frontendCandidateEnd);
     const pullLine = frontendCandidate
       .split("\n")
       .find((line) => line.includes("vercel@50.17.1 pull"));
