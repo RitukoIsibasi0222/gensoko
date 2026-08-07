@@ -474,6 +474,7 @@ export async function verifyProductionFrontendContent(options) {}
 | PDA-21   | production Vercel credential preflightをTDD実装                     | `.github/workflows/production-deploy.yml`、workflow test | 高     | HTTP statusだけでtoken・team・projectを段階判定      |
 | PDA-22   | production Vercel CI project bindingをTDD修正                       | `.github/workflows/production-deploy.yml`、workflow test | 高     | org/project環境IDへ一本化、重複selectorを除去        |
 | PDA-23   | candidate project境界とworkflow contractをTDD補強                   | `.github/workflows/production-deploy.yml`、workflow test | 高     | projectId完全一致、引数単位contract test             |
+| PDA-24   | Vercel CLI owner lookupを既存Team IDで安全に解決                    | `.github/workflows/production-deploy.yml`、workflow test | 高     | deploy/list/promoteの明示scope、Secret追加なし       |
 
 - [x] PDA-01: production workflow境界のRed contract test
 - [x] PDA-02: backend/frontend共有quality actionをTDD実装
@@ -498,6 +499,7 @@ export async function verifyProductionFrontendContent(options) {}
 - [x] PDA-21: production Vercel credential preflightをTDD実装
 - [x] PDA-22: production Vercel CI project bindingをTDD修正
 - [x] PDA-23: candidate project境界とworkflow contractをTDD補強
+- [x] PDA-24: Vercel CLI owner lookupを既存Team IDで安全に解決
 
 ## Repository実装時の計画差分
 
@@ -531,6 +533,8 @@ export async function verifyProductionFrontendContent(options) {}
 - PR #218とrelease PR #219のowner merge後、main SHA `7156bdf1bb8a9edd9f15b069d56084acbec87f72`のproduction run [31162801870](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31162801870)を検証した。Vercel team/project preflight、API deploy、API healthは成功し、candidate deployだけが固定category`project_not_found`で停止した。promote・smokeは未実行、safe evidence・cleanupは成功、DB変更はなく既存frontendを維持した。
 - run #6では`teamId`付きread-only APIがprojectを取得できる一方、CLIの明示`--project`経路だけが失敗した。PDA-22ではVercel公式custom CI手順に合わせ、既存のproduction専用`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`環境変数を唯一のproject bindingとし、deployの`--project`とlistのproject位置引数を除去する。Secret追加、scope拡張、CLI更新、provider設定変更は行わない。
 - release PR #221のCopilot reviewでは、project位置引数を除去した`vercel list`結果へ別projectのdeploymentが混入する可能性と、workflow contract testの文字列表現依存が指摘された。Vercel公式CLIは`VERCEL_PROJECT_ID`をproject bindingとして扱い、`list`は現在のprojectを対象とするが、PDA-23では防御を追加して各候補の`projectId`完全一致を必須化した。testはdeploy/listコマンド全体の完全一致から、必須・禁止引数の個別検証へ変更した。
+- PR #221のowner merge SHA `4e7c16436c27468bd676c74394ba3bcb30820312`で起動したproduction run [31167516423](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31167516423)は、Vercel read-only preflight、API deploy、API health、repository build、Build Output contractまで成功し、candidate deployだけが`project_not_found`で安全停止した。promote・smokeは未実行、safe evidence・cleanup成功、DB変更なし、公開frontendを維持した。
+- run #7のsafe logとVercel CLI `56.3.2`配布コードを照合した結果、CI環境IDによるproject取得と並行して旧`/teams/{teamId}` owner lookupを行い、ownerが取得できない場合もprojectとまとめて`Project not found`へ分類することを確認した。CLIは明示`--scope`解決時に`/v1/teams`を取得して同じteam cacheを事前投入するため、PDA-24では既存`VERCEL_ORG_ID`を明示scopeとしてdeploy/list/promoteへ渡す。Secret・scope権限・provider設定は変更せず、project ID完全一致とraw非出力を維持する。
 
 ### スプレッドシート貼り付け用（v4確定）
 
@@ -559,6 +563,7 @@ PDA-20	production Vercel CLI境界・safe失敗分類をTDD修正	.github/workfl
 PDA-21	production Vercel credential preflightをTDD実装	.github/workflows/production-deploy.yml、workflow test	高
 PDA-22	production Vercel CI project bindingをTDD修正	.github/workflows/production-deploy.yml、workflow test	高
 PDA-23	candidate project境界とworkflow contractをTDD補強	.github/workflows/production-deploy.yml、workflow test	高
+PDA-24	Vercel CLI owner lookupを既存Team IDで安全に解決	.github/workflows/production-deploy.yml、workflow test	高
 ```
 
 ## テストケース一覧
@@ -717,6 +722,15 @@ repository品質gateではproduction/staging provider、DB、URLへ接続せず�
 - backend通常testは137 files・1362 tests成功（4 files・10 tests skip）、Workersは4 files・32 tests成功。TypeScript build、Workers staging/production dry-run、ESLint、Prettier、Prisma validate成功
 - frontendは66 files・685 tests、ESLint、Svelte check（error 0 / warning 0）、Prettier、非実在URLによるPreview/Production形状buildとVercel Build Output contract成功
 - GitHub Actions / composite action YAML 22件をparserで検証し、埋め込みBash 175 blockを`bash -n`で検証。外部provider・DB・production URLへの接続、workflow dispatch、Environment・Secret変更、実deploymentは追加実行していない
+
+### Production Vercel owner lookup follow-up品質ゲート実績（2026-08-07）
+
+- Red: deploy/list/promoteへ既存Team IDの明示scopeを要求し、scope欠落による意図したworkflow contract 1件のfailureを確認
+- Green / Refactor: `VERCEL_ORG_ID`を3コマンドの`--scope`へ渡し、production project binding、project ID完全一致、raw provider output非出力を維持した。対象backend 9 tests、関連frontend 2 tests成功
+- backend通常testは137 files・1362 tests成功（4 files・10 tests skip）、Workersは4 files・32 tests成功。TypeScript build、Workers staging/production dry-run、ESLint、Prettier、Prisma validate成功
+- frontendは66 files・685 tests、ESLint、Svelte check（error 0 / warning 0）、Prettier、非実在URLによるProduction形状buildとVercel Build Output contract成功
+- GitHub Actions / composite action YAML 22件をparserで検証し、埋め込みBash 175 blockを`bash -n`で検証。`git diff --check`成功。外部provider・DB・production URLへの接続、workflow dispatch、Environment・Secret変更、実deploymentは実行していない
+- develop向けfollow-up PR [#222](https://github.com/RitukoIsibasi0222/gensoko/pull/222)を作成し、backend/frontend/repository integrity/Vercel checkは全成功、Copilot reviewは5ファイルすべて指摘なし。Codexはmergeせずownerへ依頼する
 
 ## コミット方針
 
