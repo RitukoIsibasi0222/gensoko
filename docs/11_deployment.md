@@ -237,6 +237,14 @@ Vercel HobbyのStandard Protectionではproduction custom domain以外のdeploym
 - branch scopeを除去した`vercel pull`もproduction設定取得で固定error停止した。frontend candidate build/deploy、promote、read-only smokeは未実行で、safe evidence生成・uploadとcleanupは成功した。DB mutationはなく、APIは同SHAへ更新済み、公開frontendは直前版を維持した。
 - production workflowは公開API URLを明示しているためprovider環境変数の取得は不要である。`vercel pull`とprovider側buildを使わず、`VERCEL_ENV=production`、exact SHA/ref metadata、明示した公開API URLでrepository buildを行い、Build Output contract検証後にCI環境変数で固定したproduction projectへprebuilt candidateをdeployする。修正のreview・develop/main昇格前にrunを再実行しない。
 
+### 4回目production runのfail-closed記録（2026-08-07）
+
+- PDA-19を含むrelease PR #215のowner merge SHA `0b6076687bad5ff42f11c76a16afe272a4c8f1ee`でrun [31151482177](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31151482177)を開始した。
+- branch・SHA・backend/frontend quality・production DB target・migration current・provider credential・production API deploy・API health・frontend mutation直前のlive main・repository build・Vercel Build Output contractは同じSHAで成功した。
+- `deploy --prebuilt --prod --skip-domain`は固定errorで停止し、candidate URLは得られず、promote・read-only smokeは未実行だった。safe evidence生成・uploadとcleanupは成功した。DB mutationはなく、APIは同SHAへ更新済み、公開frontendは直前版を維持した。
+- provider stderrはtoken・内部ID・raw response非出力のため一時file削除後に残らず、project access拒否とprebuilt API拒否を区別できなかった。read-only auditではproduction projectのGit未接続、project限定tokenのscopeと直近利用、stagingとのproject分離を維持していることを確認した。
+- Vercel CLI `50.17.1`のhelpにはdeployの`--project`がなく、配布コードはprebuilt output検証前にproject情報を取得する。production workflowだけを`56.3.2`へ更新し、`--project`、`--yes`、`--non-interactive`、`--no-color`を明示する。provider raw responseは引き続き出さず、project access、project not found、prebuilt contract、deployment API、unknownの固定categoryだけを記録する。token scopeを広げる外部変更は行わない。
+
 ### 通常release
 
 1. `develop`でstaging確認を完了し、`develop`から`main`へのPRを作成する。mainへの自動mergeは使わない。
@@ -249,7 +257,7 @@ Vercel HobbyのStandard Protectionではproduction custom domain以外のdeploym
 8. `prisma migrate status`をread-only実行し、`current`だけを許可する。`pending`または`unknown`はAPI deploy前に停止する。
 9. provider mutation直前にもlive `main`を再確認し、production専用一時Wrangler configをbackend working directory内へmode `0600`で生成してAPIをdeployする。相対`main`と`$schema`の解決基準を維持し、provider出力とstateだけを`RUNNER_TEMP`へ隔離する。deployment metadataのexact SHAが一致しない場合はfrontendへ進まない。
 10. API health、CORS、security headerをGETだけで確認する。失敗時はfrontend build/deployを行わない。
-11. Git未接続のproduction専用Vercel projectはCI環境変数で固定する。provider env pullは行わず、`VERCEL_ENV=production`、`VERCEL_GIT_COMMIT_REF=main`、exact SHA、明示したproduction API公開URLでrepositoryの`npm run build`を実行する。Vercel Build Output contractを検証後、`deploy --prebuilt --prod --skip-domain`で候補をdeployし、project境界、SHA、ref=`main`、target=`production`、READY、automation bypass header経由のcandidate marker・immutable assetを検証する。
+11. Git未接続のproduction専用Vercel projectはCI環境変数とVercel CLI `56.3.2`の`--project`で固定し、`--yes --non-interactive --no-color`を明示する。provider env pullは行わず、`VERCEL_ENV=production`、`VERCEL_GIT_COMMIT_REF=main`、exact SHA、明示したproduction API公開URLでrepositoryの`npm run build`を実行する。Vercel Build Output contractを検証後、`deploy --prebuilt --prod --skip-domain`で候補をdeployし、project境界、SHA、ref=`main`、target=`production`、READY、automation bypass header経由のcandidate marker・immutable assetを検証する。失敗時はraw provider outputを出さず、許可リストの固定categoryだけを記録する。
 12. 検証済みcandidateだけを`vercel promote`し、custom domainが同じasset集合とmarkerを参照するまで有限回pollする。
 13. production frontendとAPIをread-only smokeし、SHA、run ID、run attempt、固定status、UTC時刻だけのJSON Artifactを7日保持する。
 
