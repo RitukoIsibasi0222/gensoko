@@ -115,7 +115,7 @@ describe("production deployment workflow", () => {
     expect(source.match(/PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET:/g)).toHaveLength(3);
   });
 
-  it("Git未接続production projectの設定をbranch scopeなしで取得しexact SHA metadataを維持する", () => {
+  it("Git未接続production projectでprovider envをpullせずprebuilt成果物とexact SHA metadataを使う", () => {
     const source = workflow();
     const frontendCandidateStart = source.indexOf("Deploy staged production frontend");
     const frontendCandidateEnd = source.indexOf("Revalidate live main before frontend promotion");
@@ -123,14 +123,12 @@ describe("production deployment workflow", () => {
     expect(frontendCandidateStart).toBeGreaterThanOrEqual(0);
     expect(frontendCandidateEnd).toBeGreaterThan(frontendCandidateStart);
     const frontendCandidate = source.slice(frontendCandidateStart, frontendCandidateEnd);
-    const pullLine = frontendCandidate
-      .split("\n")
-      .find((line) => line.includes("vercel@50.17.1 pull"));
-
-    expect(pullLine).toBeDefined();
-    expect(pullLine).toContain("--environment=production");
-    expect(pullLine).not.toContain("--git-branch");
-    expect(pullLine).toContain('--token="$VERCEL_TOKEN"');
+    expect(frontendCandidate).not.toContain("vercel@50.17.1 pull");
+    expect(frontendCandidate).not.toContain("vercel@50.17.1 build");
+    expect(frontendCandidate).toContain("VERCEL_ENV: production");
+    expect(frontendCandidate).toContain("npm run build");
+    expect(frontendCandidate).toContain("node scripts/check-vercel-build-output.mjs");
+    expect(frontendCandidate).toContain("vercel@50.17.1 deploy --prebuilt --prod --skip-domain");
     expect(frontendCandidate).toContain('--meta githubCommitSha="$EXPECTED_SHA"');
     expect(frontendCandidate).toContain("--meta githubCommitRef=main");
   });
