@@ -468,6 +468,7 @@ export async function verifyProductionFrontendContent(options) {}
 | PDA-15   | develop→main release PRをreview・merge                   | GitHub PR                                               | 高     | ownerがmerge、main自動merge禁止              |
 | PDA-16   | same main SHAのproduction runを検証                      | GitHub Actions/providers                                | 高     | API→health→frontend→smoke→evidence           |
 | PDA-17   | production Worker一時configの相対path基準をTDD修正       | `backend/src/lib/production-worker-deployment*`         | 高     | configはbackend内、provider logはRUNNER_TEMP |
+| PDA-18   | Git未接続production Vercel設定取得scopeをTDD修正         | `.github/workflows/production-deploy.yml`、workflow test | 高     | production scopeのみ、exact SHA metadata維持 |
 
 - [x] PDA-01: production workflow境界のRed contract test
 - [x] PDA-02: backend/frontend共有quality actionをTDD実装
@@ -486,6 +487,7 @@ export async function verifyProductionFrontendContent(options) {}
 - [x] PDA-15: develop→main release PRをreview・merge
 - [ ] PDA-16: same main SHAのproduction runを検証
 - [x] PDA-17: production Worker一時configの相対path基準をTDD修正
+- [x] PDA-18: Git未接続production Vercel設定取得scopeをTDD修正
 
 ## Repository実装時の計画差分
 
@@ -503,6 +505,8 @@ export async function verifyProductionFrontendContent(options) {}
 - Vercel CLIがrunnerへ生成するproduction project link・環境設定・build outputはrelease中だけ利用し、`if: always()`の最終stepで`.vercel`全体を削除する。
 - release PR #207のowner merge SHAで起動したproduction runは、branch・SHA・quality・migration・credential gateを通過後、API deployでfail-closed停止した。API health以降、frontend、smoke、DB mutationは未実行で、Cloudflareにも新versionは作成されなかった。
 - 初回実装ではproduction一時Wrangler configを`RUNNER_TEMP`へ置いたため、config内の相対`main`と`$schema`の解決基準がbackend外へずれた。PDA-17では`RUNNER_TEMP`と`workingDirectory`を分離したRed testを追加し、configだけをbackend working directory内へmode `0600`で生成・cleanupし、provider logとstateは引き続き`RUNNER_TEMP`へ隔離する形へ修正した。follow-up PR #208はCopilot review指摘なしでmerge SHA `4ff6439c2c25215961e8e64a9cc63d8ad58fc9c4`としてdevelopへowner merge済みで、release PR #209でmain昇格を進める。
+- docs同期PR #210を取り込んだrelease PR #209はowner mergeされ、merge SHA `27d8b3e3849c0b3eff3ded764500ba5228b3ecf2`のproduction run [31145881782](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31145881782)でbranch・SHA・quality・DB target・migration・credential・API deploy・API healthまで成功した。frontendはproduction設定取得時に固定errorで停止し、candidate deploy、promote、smokeは未実行、DB mutationはなく既存frontendを維持した。
+- production専用Vercel projectは意図どおりGit未接続であり、`vercel pull --environment=production`へPreview branch用の`--git-branch=main`を併用したことが停止原因だった。PDA-18ではproduction environment scopeだけで設定を取得し、deploy metadataのexact SHAとref=`main`は既存の環境変数・`--meta`で維持するRed testを追加して最小修正した。
 
 ### スプレッドシート貼り付け用（v4確定）
 
@@ -525,6 +529,7 @@ PDA-14	production外部設定を直前承認後に分離	GitHub/Vercel/Cloudflar
 PDA-15	develop→main release PRをreview・merge	GitHub PR	高
 PDA-16	same main SHAのproduction runを検証	GitHub Actions/providers	高
 PDA-17	production Worker一時configの相対path基準をTDD修正	backend/src/lib/production-worker-deployment*	高
+PDA-18	Git未接続production Vercel設定取得scopeをTDD修正	.github/workflows/production-deploy.yml、workflow test	高
 ```
 
 ## テストケース一覧
@@ -629,6 +634,18 @@ repository品質gateではproduction/staging provider、DB、URLへ接続せず�
 - Green: 一時configだけをbackend working directory内へ生成する最小修正後、対象2 tests成功
 - Refactor: production Worker configとの直接影響test 2 files・12 tests成功
 - backend通常test: 137 files成功、4 files skip、1359 tests成功、10 tests skip
+- backend Workers test: 4 files・32 tests成功
+- backend TypeScript build、Workers typecheck/build、実在値を使わないproduction Worker dry-run、ESLint、Prettier、Prisma validate成功
+- frontend test: 66 files・685 tests成功
+- frontend ESLint、Svelte check（error 0 / warning 0）、Prettier、Preview build output contract成功
+- GitHub Actions / composite action YAML 22件をparserで検証し、埋め込みBash 174 blockを`bash -n`で検証
+- `git diff --check`成功。provider、DB、URLへの接続、workflow dispatch、Environment・Secret変更、実deploymentは実行していない
+
+### Production frontend設定取得follow-up修正の品質ゲート実績（2026-08-07）
+
+- Red: Git未接続production projectの`vercel pull`に`--git-branch=main`が残る意図したfailure 1件を確認
+- Green / Refactor: branch scopeだけを除去し、production environment scope・token境界・exact SHA/ref metadataを固定する対象7 tests成功
+- backend通常test: 137 files成功、4 files skip、1360 tests成功、10 tests skip
 - backend Workers test: 4 files・32 tests成功
 - backend TypeScript build、Workers typecheck/build、実在値を使わないproduction Worker dry-run、ESLint、Prettier、Prisma validate成功
 - frontend test: 66 files・685 tests成功
