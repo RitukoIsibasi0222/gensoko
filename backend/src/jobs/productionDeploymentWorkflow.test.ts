@@ -131,6 +131,9 @@ describe("production deployment workflow", () => {
     expect(frontendCandidate).toContain(
       'vercel@56.3.2 deploy --yes --non-interactive --no-color --project="$VERCEL_PROJECT_ID" --prebuilt --prod --skip-domain',
     );
+    expect(frontendCandidate).toContain(
+      'vercel@56.3.2 list "$VERCEL_PROJECT_ID" --yes --non-interactive --no-color',
+    );
     expect(frontendCandidate).toContain('--meta githubCommitSha="$EXPECTED_SHA"');
     expect(frontendCandidate).toContain("--meta githubCommitRef=main");
   });

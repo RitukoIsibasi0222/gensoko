@@ -268,7 +268,7 @@ jobs:
             echo "production frontend候補deployに失敗しました"
             exit 1
           fi
-          if ! npx --yes vercel@56.3.2 list --yes --non-interactive --no-color --meta "githubCommitSha=$EXPECTED_SHA" --status READY --environment production --format=json --token="$VERCEL_TOKEN" >"$candidate_state" 2>"$provider_log"; then
+          if ! npx --yes vercel@56.3.2 list "$VERCEL_PROJECT_ID" --yes --non-interactive --no-color --meta "githubCommitSha=$EXPECTED_SHA" --status READY --environment production --format=json --token="$VERCEL_TOKEN" >"$candidate_state" 2>"$provider_log"; then
             category=$(classify_vercel_failure "$provider_log")
             echo "vercel_failure_category=$category"
             echo "production frontend候補metadataを確認できません"
