@@ -697,6 +697,7 @@ repository品質gateではproduction/staging provider、DB、URLへ接続せず�
 - frontend test: 66 files・685 tests成功
 - frontend ESLint、Svelte check（error 0 / warning 0）、Prettier、`.invalid`の公開API URLを使うproduction形状buildとVercel Build Output contract成功
 - `git diff --check`成功。外部provider・DB・production URLへの接続、workflow dispatch、Environment・Secret変更、実deploymentは実行していない
+- PR #218のCopilot review 1件に対応し、preflightの`Authorization: Bearer $VERCEL_TOKEN`組み立てをsource contractへ追加した。対象9 tests、Prettier、`git diff --check`成功
 
 ## コミット方針
 
