@@ -75,7 +75,7 @@ describe("production deployment workflow", () => {
     expect(source).not.toContain("prisma migrate deploy");
     expect(source).toContain("Production Database Operations");
     expect(source).toContain("--skip-domain");
-    expect(source).toContain("vercel@50.17.1 promote");
+    expect(source).toContain("vercel@56.3.2 promote");
   });
 
   it("stagingとproductionのcredential・target・concurrencyを分離する", () => {
@@ -123,14 +123,36 @@ describe("production deployment workflow", () => {
     expect(frontendCandidateStart).toBeGreaterThanOrEqual(0);
     expect(frontendCandidateEnd).toBeGreaterThan(frontendCandidateStart);
     const frontendCandidate = source.slice(frontendCandidateStart, frontendCandidateEnd);
-    expect(frontendCandidate).not.toContain("vercel@50.17.1 pull");
-    expect(frontendCandidate).not.toContain("vercel@50.17.1 build");
+    expect(frontendCandidate).not.toMatch(/vercel@\S+ pull/);
+    expect(frontendCandidate).not.toMatch(/vercel@\S+ build/);
     expect(frontendCandidate).toContain("VERCEL_ENV: production");
     expect(frontendCandidate).toContain("npm run build");
     expect(frontendCandidate).toContain("node scripts/check-vercel-build-output.mjs");
-    expect(frontendCandidate).toContain("vercel@50.17.1 deploy --prebuilt --prod --skip-domain");
+    expect(frontendCandidate).toContain(
+      'vercel@56.3.2 deploy --yes --non-interactive --no-color --project="$VERCEL_PROJECT_ID" --prebuilt --prod --skip-domain',
+    );
+    expect(frontendCandidate).toContain(
+      'vercel@56.3.2 list "$VERCEL_PROJECT_ID" --yes --non-interactive --no-color',
+    );
     expect(frontendCandidate).toContain('--meta githubCommitSha="$EXPECTED_SHA"');
     expect(frontendCandidate).toContain("--meta githubCommitRef=main");
+  });
+
+  it("classifies Vercel CLI failures without printing raw provider output", () => {
+    const source = workflow();
+    const frontendCandidateStart = source.indexOf("Deploy staged production frontend");
+    const frontendCandidateEnd = source.indexOf("Revalidate live main before frontend promotion");
+    const frontendCandidate = source.slice(frontendCandidateStart, frontendCandidateEnd);
+
+    expect(frontendCandidate).toContain("classify_vercel_failure()");
+    expect(frontendCandidate).toContain("project_access_denied");
+    expect(frontendCandidate).toContain("project_not_found");
+    expect(frontendCandidate).toContain("prebuilt_contract_rejected");
+    expect(frontendCandidate).toContain("deployment_api_rejected");
+    expect(frontendCandidate).toContain("unknown");
+    expect(frontendCandidate).toContain('category=$(classify_vercel_failure "$provider_log")');
+    expect(frontendCandidate).toContain('echo "vercel_failure_category=$category"');
+    expect(frontendCandidate).not.toMatch(/cat\s+"?\$provider_log/);
   });
 
   it("provider raw responseを一時fileへ閉じtrap cleanupしsafe evidenceだけを短期保存する", () => {
