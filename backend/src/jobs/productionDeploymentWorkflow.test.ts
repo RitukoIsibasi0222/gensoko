@@ -131,6 +131,7 @@ describe("production deployment workflow", () => {
     expect(preflight).toContain("/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID");
     expect(preflight.match(/--output \/dev\/null/g)).toHaveLength(1);
     expect(preflight.match(/--write-out "%\{http_code\}"/g)).toHaveLength(1);
+    expect(preflight).toContain("Authorization: Bearer $VERCEL_TOKEN");
     expect(preflight).toContain('if [ "$team_status" != "200" ]');
     expect(preflight).toContain('if [ "$project_status" != "200" ]');
     for (const category of [
