@@ -239,7 +239,7 @@ jobs:
           export VERCEL_GIT_COMMIT_SHA="$EXPECTED_SHA"
           export VERCEL_GIT_COMMIT_REF="main"
           export VITE_API_BASE_URL="$PRODUCTION_API_BASE_URL"
-          if ! npx --yes vercel@50.17.1 pull --yes --environment=production --git-branch=main --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+          if ! npx --yes vercel@50.17.1 pull --yes --environment=production --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
             echo "production frontend設定を取得できませんでした"
             exit 1
           fi

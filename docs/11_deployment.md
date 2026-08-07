@@ -223,6 +223,13 @@ Vercel HobbyのStandard Protectionではproduction custom domain以外のdeploym
 - 原因は一時Wrangler configを`RUNNER_TEMP`へ置き、相対`main`と`$schema`の解決基準をbackend working directory外へ移したことだった。configはbackend working directory内へmode `0600`で生成・削除し、provider stdout/stderrとstateだけを`RUNNER_TEMP`へ隔離する。
 - credentialとaccount targetの検証過程でも再実行はすべてAPI deployで停止し、Cloudflareに新versionは作成されなかった。追加runを重ねず、PDA-17のTDD修正・review・develop/main昇格後に再検証する。
 
+### 2回目production runのfail-closed記録（2026-08-07）
+
+- PR #208とdocs同期PR #210を含むrelease PR #209のowner merge SHA `27d8b3e3849c0b3eff3ded764500ba5228b3ecf2`でrun [31145881782](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31145881782)を開始した。
+- branch・SHA・backend/frontend quality・production DB target・migration current・provider credential・production API deploy・API healthは同じSHAで成功した。
+- frontendは`vercel pull`によるproduction設定取得で固定error停止し、candidate build/deploy、promote、read-only smokeは未実行だった。DB mutationはなく、APIは同SHAへ更新済み、公開frontendは直前版を維持した。
+- production projectはGit未接続のため、production environment scopeへPreview branch用の`--git-branch=main`を併用しない。`vercel pull --environment=production`でproject設定を取得し、exact SHAとref=`main`はdeploy時の環境変数とmetadataで固定する。修正のreview・develop/main昇格前にrunを再実行しない。
+
 ### 通常release
 
 1. `develop`でstaging確認を完了し、`develop`から`main`へのPRを作成する。mainへの自動mergeは使わない。
@@ -235,7 +242,7 @@ Vercel HobbyのStandard Protectionではproduction custom domain以外のdeploym
 8. `prisma migrate status`をread-only実行し、`current`だけを許可する。`pending`または`unknown`はAPI deploy前に停止する。
 9. provider mutation直前にもlive `main`を再確認し、production専用一時Wrangler configをbackend working directory内へmode `0600`で生成してAPIをdeployする。相対`main`と`$schema`の解決基準を維持し、provider出力とstateだけを`RUNNER_TEMP`へ隔離する。deployment metadataのexact SHAが一致しない場合はfrontendへ進まない。
 10. API health、CORS、security headerをGETだけで確認する。失敗時はfrontend build/deployを行わない。
-11. production専用Vercel projectへ`--prod --skip-domain`で候補をdeployし、project境界、SHA、ref=`main`、target=`production`、READY、automation bypass header経由のcandidate marker・immutable assetを検証する。
+11. Git未接続のproduction専用Vercel projectはCI環境変数で固定し、branch scopeを付けず`vercel pull --environment=production`で設定を取得する。その後`--prod --skip-domain`で候補をdeployし、project境界、SHA、ref=`main`、target=`production`、READY、automation bypass header経由のcandidate marker・immutable assetを検証する。
 12. 検証済みcandidateだけを`vercel promote`し、custom domainが同じasset集合とmarkerを参照するまで有限回pollする。
 13. production frontendとAPIをread-only smokeし、SHA、run ID、run attempt、固定status、UTC時刻だけのJSON Artifactを7日保持する。
 
