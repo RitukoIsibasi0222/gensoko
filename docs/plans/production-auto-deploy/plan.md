@@ -473,6 +473,7 @@ export async function verifyProductionFrontendContent(options) {}
 | PDA-20   | production Vercel CLI境界・safe失敗分類をTDD修正                    | `.github/workflows/production-deploy.yml`、workflow test | 高     | CLI 56.3.2、非対話project固定、raw非出力             |
 | PDA-21   | production Vercel credential preflightをTDD実装                     | `.github/workflows/production-deploy.yml`、workflow test | 高     | HTTP statusだけでtoken・team・projectを段階判定      |
 | PDA-22   | production Vercel CI project bindingをTDD修正                       | `.github/workflows/production-deploy.yml`、workflow test | 高     | org/project環境IDへ一本化、重複selectorを除去        |
+| PDA-23   | candidate project境界とworkflow contractをTDD補強                   | `.github/workflows/production-deploy.yml`、workflow test | 高     | projectId完全一致、引数単位contract test             |
 
 - [x] PDA-01: production workflow境界のRed contract test
 - [x] PDA-02: backend/frontend共有quality actionをTDD実装
@@ -496,6 +497,7 @@ export async function verifyProductionFrontendContent(options) {}
 - [x] PDA-20: production Vercel CLI境界・safe失敗分類をTDD修正
 - [x] PDA-21: production Vercel credential preflightをTDD実装
 - [x] PDA-22: production Vercel CI project bindingをTDD修正
+- [x] PDA-23: candidate project境界とworkflow contractをTDD補強
 
 ## Repository実装時の計画差分
 
@@ -528,6 +530,7 @@ export async function verifyProductionFrontendContent(options) {}
 - PDA-21はworkflow contractのRed 2件を確認後にGreen 9件、YAML/format、追加Bashの`bash -n`、偽curlによるsuccess・team access denied・project not foundの3実行caseを通過した。preflightはAPI mutation前にread-only GETだけを使い、response bodyを常に破棄する。
 - PR #218とrelease PR #219のowner merge後、main SHA `7156bdf1bb8a9edd9f15b069d56084acbec87f72`のproduction run [31162801870](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31162801870)を検証した。Vercel team/project preflight、API deploy、API healthは成功し、candidate deployだけが固定category`project_not_found`で停止した。promote・smokeは未実行、safe evidence・cleanupは成功、DB変更はなく既存frontendを維持した。
 - run #6では`teamId`付きread-only APIがprojectを取得できる一方、CLIの明示`--project`経路だけが失敗した。PDA-22ではVercel公式custom CI手順に合わせ、既存のproduction専用`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`環境変数を唯一のproject bindingとし、deployの`--project`とlistのproject位置引数を除去する。Secret追加、scope拡張、CLI更新、provider設定変更は行わない。
+- release PR #221のCopilot reviewでは、project位置引数を除去した`vercel list`結果へ別projectのdeploymentが混入する可能性と、workflow contract testの文字列表現依存が指摘された。Vercel公式CLIは`VERCEL_PROJECT_ID`をproject bindingとして扱い、`list`は現在のprojectを対象とするが、PDA-23では防御を追加して各候補の`projectId`完全一致を必須化した。testはdeploy/listコマンド全体の完全一致から、必須・禁止引数の個別検証へ変更した。
 
 ### スプレッドシート貼り付け用（v4確定）
 
@@ -555,6 +558,7 @@ PDA-19	production frontendをprovider env pullなしのprebuilt buildへTDD修�
 PDA-20	production Vercel CLI境界・safe失敗分類をTDD修正	.github/workflows/production-deploy.yml、workflow test	高
 PDA-21	production Vercel credential preflightをTDD実装	.github/workflows/production-deploy.yml、workflow test	高
 PDA-22	production Vercel CI project bindingをTDD修正	.github/workflows/production-deploy.yml、workflow test	高
+PDA-23	candidate project境界とworkflow contractをTDD補強	.github/workflows/production-deploy.yml、workflow test	高
 ```
 
 ## テストケース一覧
