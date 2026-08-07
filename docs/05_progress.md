@@ -1,6 +1,6 @@
 # Gensoko 実装タスク一覧
 
-> 更新日: 2026-07-31
+> 更新日: 2026-08-06
 > ステータス: `[ ]` 未実装 / `[-]` 実装中 / `[x]` 完了
 
 ---
@@ -179,7 +179,7 @@
   - [ ] 実環境運用確認: schedule/manualのqueue動作、Actions失敗通知の受信、retention変更前dry-run
   - [ ] 本番アプリ公開後の監査回帰・実負荷baseline: LOGIN success/failure、password change/reset、admin操作、本人・管理者退会、API status/body/Cookie
   - [x] T22: 7日baselineと残課題を記録したdocs PR #95が2026-07-22にdevelopへmerge済み
-- [-] 退会時の個人情報・学習データ完全削除方針（本人退会・管理者強制退会・既存soft-deleted userの移行） — 計画書: [docs/plans/account-data-complete-deletion/plan.md](plans/account-data-complete-deletion/plan.md) — 監査ログ保持とは分離した本番公開前ブロッカー（実装中・本番公開gate未完了）
+- [-] 退会時の個人情報・学習データ完全削除方針（本人退会・管理者強制退会・既存soft-deleted userの移行） — 計画書: [docs/plans/account-data-complete-deletion/plan.md](plans/account-data-complete-deletion/plan.md) — v0.1ではM6のsynthetic本人退会と物理削除を確認済み。legacy cleanup、managed DB性能証拠、restore drillなど旧全体計画の公開後項目は完了扱いにせず継続する
   - [x] 実装計画・現行soft delete・User配下のcascade対象・不足indexを確認
   - [-] Phase 0: privacy・監査内部ID・backup・再登録・削除replay・性能基準・本番cleanup体制を決定（T1A確定、T1B継続）
     - [x] T1A: 物理削除、監査成功action、再登録、backup境界、replay block、同期削除性能基準の実装契約を確定
@@ -247,17 +247,18 @@
 ## フェーズ12: デプロイ
 
 - [x] Supabase staging・production project作成、東京region・Session pooler接続設定
-- [-] 定期バッチ運用再設計（GameQuestionSet cleanup日次化・scheduled専用production境界・kill switch・滞留run解消） — PR #166のrepository実装とPR #168の外部設定記録はmerge済み。BO1〜BO14完了（旧run #804/#868はstep 0件確認後にcancel、active run 0件）。非作成者レビュー・required check・14日baselineは個人ポートフォリオの完了条件から除外した。`production-batch`最小設定は完了し、kill switchは無効を維持している。次工程はdevelop→main直接PR・merge、確定main SHAのM3、production Environmentだけのmain切替、同じSHAのM1R、production-batch・default branchの後段切替、M5、M6であり、その完了後に別承認でBO15を有効化する。stagingはdevelop限定、kill switchは`false`を維持する。BO15、自然発生run確認のBO16、最終同期のBO18は未実施 — 計画書: [`batch-operations-redesign`](plans/batch-operations-redesign/plan.md)
+- [-] 定期バッチ運用再設計（GameQuestionSet cleanup日次化・scheduled専用production境界・kill switch・滞留run解消） — PR #166のrepository実装とPR #168の外部設定記録はmerge済み。BO1〜BO14完了（旧run #804/#868はstep 0件確認後にcancel）。M1R・M3・M5・M6とdefault branchの`main`切替は完了した。`production-batch`最小設定は維持し、BO15は別承認まで無効、kill switchは`false`、自然発生run確認のBO16と最終同期のBO18は未実施 — 計画書: [`batch-operations-redesign`](plans/batch-operations-redesign/plan.md)
   - [x] `Production Database Operations`のscheduled run滞留を恒久修正。Environment前に`disabled / skipped / failure / ready`を固定分類し、kill switch無効時はSecret・依存導入・DB接続・concurrency取得前に終了する。scheduledは`production-batch`＋専用concurrency、manualはrequired reviewer付き`production`＋既存manual concurrencyへ分離し、capacity/backupのraw error非露出をTDD固定した。production状態変更、BO15有効化、run操作、M6ユーザー・メールルーティング変更は行っていない
 - [x] 本番DBバックアップ・Prismaマイグレーション運用（Free plan容量確認・暗号化backup・migration gateをproductionで確認済み） — 計画書: [`docs/plans/audit-log-production-operations/plan.md`](plans/audit-log-production-operations/plan.md)
 - [-] 本番DBバックアップ耐障害性強化 — M1Rが成立するv0.1はpending Prisma migrationがある場合だけ24時間以内の暗号化済み1世代とchecksumを必須とし、migration不要時のbackup、日次schedule確認、2世代目以降、最大3回retry・recovery・36時間鮮度監視・通常7世代・四半期隔離restoreは公開後に継続 — 計画書: [`docs/plans/backup-resilience/plan.md`](plans/backup-resilience/plan.md)
-- [-] staging frontend/API配備基盤（Workers専用entrypoint・Prisma/mail runtime境界・Wrangler・Vercel Preview・T34実機確認） — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md) / PR: #117 — SD1〜SD13・SD15完了。Vercel `develop` Preview、Cloudflare staging Worker/DO/Hyperdrive/secret、Supabase migration、health/CORS/OPTIONS、元素118件、synthetic登録・認証・ゲーム・password reset・本人退会を確認済み。production resource・deploy・DB操作は未実施
+- [-] staging frontend/API配備基盤（Workers専用entrypoint・Prisma/mail runtime境界・Wrangler・Vercel Preview・T34実機確認） — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md) / PR: #117 — SD1〜SD13・SD15完了。Vercel `develop` Preview、Cloudflare staging Worker/DO/Hyperdrive/secret、Supabase migration、health/CORS/OPTIONS、元素118件、synthetic登録・認証・ゲーム・password reset・本人退会を確認済み。production baselineはM5/M6で別途完了した。固定staging alias自動更新はIssue #173、staging API rollback実確認は継続する
   - [x] SD16実環境検証: PR #125で管理者linkのSPA遷移をTDD固定し、run 29802327100でAdmin login、`/admin` dashboard、強制退会、旧credential 401、main cleanupが成功した。flagは`false`へ復旧済み。production・migration・実メール・再配備・追加の直接DB queryは未実行
-- [-] Cloudflare Workers Wrangler + Prisma `@prisma/adapter-pg`/接続binding設定・デプロイ — stagingはHyperdrive方式で設定・配備・実機確認済み。production resource・binding・deployは未実施
-- [-] APIレート制限の本番適用継続（Workers専用entrypoint・SQLite-backed Durable Object・WAF・staging/production実機確認） — 実装履歴: [`api-rate-limit-production`](plans/api-rate-limit-production/plan.md) / R7実環境gate正本: [`r7-rate-limit-environment-gates`](plans/r7-rate-limit-environment-gates/plan.md) — T13/T14のDO test・store adapterとstaging namespace/binding稼働は確認済み。server-side診断run 30059544533はauth 1〜4回目の200後、5回目の503だけmain stateless Workerの`exceededCpu`を観測した。無料枠のローカルworkerd隔離診断ではcost 12の`bcrypt.compare`中央値209msに対し、HMAC 3回・JWT・token・app構築は分解能未満で`BCRYPT_DOMINANT`へ分類した。fixture cleanupとflag復旧済みで追加の実環境runは行っていない。auth 11回目429成功証拠、安全な無料枠修正、制御された503契約、WAF、監視、production resource/preflight/smokeは未完了
+- [x] Cloudflare Workers Wrangler + Prisma `@prisma/adapter-pg`/接続binding設定・デプロイ — stagingはHyperdrive方式で設定・配備・実機確認済み。productionもM5でresource・binding分離、通常password verifier DOを含むAPI deploy、healthを確認済み。WAF・監視・R7の全境界確認は別タスクで継続する
+- [-] APIレート制限の本番適用継続（Workers専用entrypoint・SQLite-backed Durable Object・WAF・staging/production実機確認） — 実装履歴: [`api-rate-limit-production`](plans/api-rate-limit-production/plan.md) / R7実環境gate正本: [`r7-rate-limit-environment-gates`](plans/r7-rate-limit-environment-gates/plan.md) — T13/T14のDO test・store adapterとstaging namespace/binding稼働は確認済み。server-side診断run 30059544533はauth 1〜4回目の200後、5回目の503だけmain stateless Workerの`exceededCpu`を観測した。無料枠のローカルworkerd隔離診断ではcost 12の`bcrypt.compare`中央値209msに対し、HMAC 3回・JWT・token・app構築は分解能未満で`BCRYPT_DOMINANT`へ分類した。M5/M6でbaseline production resource・preflight、通常password verifier DO、valid login、最小429とresetは確認済み。auth 11回目429の個別証拠、安全な無料枠修正、制御された503契約、WAF、監視、R7全境界caseは未完了
 - [x] Vercel SvelteKit `develop` Previewデプロイ・branch scoped環境変数設定 — 計画書: [`docs/plans/staging-app-deployment/plan.md`](plans/staging-app-deployment/plan.md)
-- [ ] GitHub Actions CI/CD 設定（本番マイグレーション → APIデプロイ → フロントデプロイ）
-- [ ] npm audit・本番環境動作確認（ログイン/ゲーム/メール）
+- [x] develop merge後に固定staging frontendを自動更新する — Issue [#173](https://github.com/RitukoIsibasi0222/gensoko/issues/173) / PR: [#192](https://github.com/RitukoIsibasi0222/gensoko/pull/192), [#193](https://github.com/RitukoIsibasi0222/gensoko/pull/193), [#194](https://github.com/RitukoIsibasi0222/gensoko/pull/194), [#195](https://github.com/RitukoIsibasi0222/gensoko/pull/195), [#196](https://github.com/RitukoIsibasi0222/gensoko/pull/196), [#198](https://github.com/RitukoIsibasi0222/gensoko/pull/198), [#199](https://github.com/RitukoIsibasi0222/gensoko/pull/199), [#200](https://github.com/RitukoIsibasi0222/gensoko/pull/200), [#201](https://github.com/RitukoIsibasi0222/gensoko/pull/201) / 計画書: [`staging-frontend-auto-deploy`](plans/staging-frontend-auto-deploy/plan.md) — PR #200のmerge SHA `97cf7e66395ad59355da3f5bcf99d05bf870f9e3`で起動したrun [31092740154](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31092740154)は、frontend品質gate、exact `READY` Preview、develop先端再確認、immutable asset fingerprint、固定domain smokeをすべて通過した。固定URLで最新トップページ、認証hydration、ランキング表示を確認済み。production設定・deploymentは変更していない
+- [-] main merge後に承認付きでAPI → health → frontend → smokeを自動化する — Issue [#174](https://github.com/RitukoIsibasi0222/gensoko/issues/174) / 計画書: [`production-auto-deploy`](plans/production-auto-deploy/plan.md) / 計画PR: [#202](https://github.com/RitukoIsibasi0222/gensoko/pull/202) / 実装PR: [#203](https://github.com/RitukoIsibasi0222/gensoko/pull/203) / bypass修正PR: [#205](https://github.com/RitukoIsibasi0222/gensoko/pull/205) — repository実装・review・develop mergeとPDA-14外部設定を完了。production専用Vercel project、Git未接続、専用credential 6件、automation bypass、custom domain・redirect移管を分離し、current `main` exact SHAのcandidateとcustom domainでmarker・immutable asset一致を確認した。required reviewer・main限定policyを維持し、develop→main release PRとproduction run検証を継続する
+- [x] npm audit・本番環境動作確認（M3でproduction依存監査、M6で登録・メール・認証・ゲーム・本人退会を確認）
 
 ## ポートフォリオ版 v0.1 公開計画
 
@@ -347,7 +348,8 @@
 - [ ] backup最大3回retry・2時間後recovery・36時間鮮度監視・通常7世代・四半期隔離restore — 計画: [`backup-resilience`](plans/backup-resilience/plan.md)
 - [ ] 日次backupの2世代目以降を確認する
 - [ ] staging T35 legacy cleanupを実演する（M1でlegacy row 0件を確認できない場合は公開前へ戻す）
-- [ ] 完全自動CI/CD
+- [x] develop frontend自動更新 — Issue [#173](https://github.com/RitukoIsibasi0222/gensoko/issues/173) / PR: [#192](https://github.com/RitukoIsibasi0222/gensoko/pull/192), [#198](https://github.com/RitukoIsibasi0222/gensoko/pull/198), [#199](https://github.com/RitukoIsibasi0222/gensoko/pull/199), [#200](https://github.com/RitukoIsibasi0222/gensoko/pull/200), [#201](https://github.com/RitukoIsibasi0222/gensoko/pull/201) / 計画書: [`staging-frontend-auto-deploy`](plans/staging-frontend-auto-deploy/plan.md) — run [31092740154](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31092740154)と固定URLの最新UI確認で完了
+- [-] main承認付き通常release自動化 — Issue [#174](https://github.com/RitukoIsibasi0222/gensoko/issues/174) / 計画書: [`production-auto-deploy`](plans/production-auto-deploy/plan.md) / 計画PR: [#202](https://github.com/RitukoIsibasi0222/gensoko/pull/202) / 実装PR: [#203](https://github.com/RitukoIsibasi0222/gensoko/pull/203) / bypass修正PR: [#205](https://github.com/RitukoIsibasi0222/gensoko/pull/205) — repository実装・review・develop mergeとPDA-14外部設定を完了。release PRのreview・owner mergeとsame main SHAのproduction run検証は未実施
 - [ ] 管理画面Playwright網羅
 - [ ] 複数screen reader/browserの高度検証
 - [ ] 本番公開後の追加運用自動化

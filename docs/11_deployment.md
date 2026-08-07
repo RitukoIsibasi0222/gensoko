@@ -197,17 +197,81 @@ pending Prisma migrationがない通常経路の追加workflow dispatchは、既
 - 追加検証Userはlogin拒否と再設定メール非発行で不在を確認した。本人退会用一時Secret 2件・対象Variable・M6専用Email Routingルールを削除し、本人退会flagと`PRODUCTION_SCHEDULED_BATCH_ENABLED`は`false`、BO15は無効、active workflowは0件を維持した。
 - Secret値、email、URL、resource ID、DB URL、token、内部ID、接続文字列、raw errorはrelease記録へ残していない。AuditLogは365日保持方針に従う。
 
+## main merge後のproduction承認付き自動release
+
+Issue [#174](https://github.com/RitukoIsibasi0222/gensoko/issues/174)の設計・実装正本は
+[`production-auto-deploy`](plans/production-auto-deploy/plan.md)とする。repositoryには
+`.github/workflows/production-deploy.yml`を置き、production frontendのdeploy所有権をGitHub Actionsへ一本化する。Vercel Git Integrationはstaging Preview専用projectだけに残し、production専用projectからはGit連携によるProduction deployを発生させない。
+
+repository実装のmergeだけでは自動releaseを有効化しない。production専用Vercel project、Git Integration停止、Protection Bypass for Automation、custom domain移行、production専用credential登録、Cloudflare最小権限credential登録は、実行直前に対象・影響・費用・rollbackを提示し、ownerの明示承認後に別工程で行う。移行完了前に`develop`から`main`へのrelease PRをmergeしない。
+
+production Environmentへ別承認で追加するdeploy専用Secret名は、`PRODUCTION_CLOUDFLARE_API_TOKEN`、`PRODUCTION_CLOUDFLARE_ACCOUNT_ID`、`PRODUCTION_VERCEL_TOKEN`、`PRODUCTION_VERCEL_ORG_ID`、`PRODUCTION_VERCEL_PROJECT_ID`、`PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET`とする。既存のproduction Variables `PRODUCTION_WORKER_NAME`、`PRODUCTION_API_HOSTNAME`、`PRODUCTION_FRONTEND_ORIGIN`、`PRODUCTION_REGISTRABLE_DOMAIN`、`PRODUCTION_HYPERDRIVE_ID`は値を表示せず再検証する。`DATABASE_URL`と`PRODUCTION_SUPABASE_PROJECT_REF`はmigration gate専用であり、provider stepやfrontendへ渡さない。
+
+Vercel HobbyのStandard Protectionではproduction custom domain以外のdeployment URLが認証保護される。production project限定のautomation bypassを使い、candidate単体検証とpromote後比較のcandidate requestだけへ`x-vercel-protection-bypass` headerを渡す。custom domain requestにはSecret headerを送らない。6件のprovider credentialはmigration gate後かつAPI mutation前に非空・空白なしを検証し、値をlog、summary、Artifactへ出さない。
+
+### 外部設定実績（2026-08-07）
+
+- ownerの別承認後にproduction専用Vercel project、Git未接続、project限定Vercel token、Cloudflare最小権限token、production Environment deploy Secret 6件を分離した。
+- production project限定automation bypassを登録し、current `main` exact SHAのbaseline candidateでref=`main`、target=`production`、READY、project境界、200、HTML、marker、immutable assetを値非表示で確認した。
+- candidate gate成功後だけproduction custom domainと既存redirectを旧staging projectからproduction専用projectへ移管した。production側のValid Configuration・Production接続、旧staging側からの分離、custom domainのheaderなし200・marker・candidateとのimmutable asset一致を確認した。
+- production projectのGit未接続、production Environmentのrequired reviewer、main限定branch policyを移管後も維持した。DB、Cloudflare Worker、release PR、production workflowはこの工程で変更・実行していない。
+
+### 通常release
+
+1. `develop`でstaging確認を完了し、`develop`から`main`へのPRを作成する。mainへの自動mergeは使わない。
+2. Backend / Frontend PR QualityとRepository Integrityをexact PR SHAで通し、人間がreviewしてmergeする。
+3. deploy対象pathを含む`main` pushから`github.sha`を自動取得する。docs-only mergeではworkflowを起動しない。
+4. Environmentなし・Secretなし・`permissions: {}`のvalidationでevent、branch、40文字SHA、live `main`先端を完全一致確認する。
+5. backend / frontend共有quality actionをexact SHAで並列実行する。どちらかが失敗した場合はproduction Environmentへ進まない。
+6. required reviewer付き`production` Environmentの単一release jobを承認する。required reviewerと`main`限定branch policyは削除・迂回しない。
+7. protected job開始時にlive `main`を再確認し、production DB targetを値非表示で検証する。
+8. `prisma migrate status`をread-only実行し、`current`だけを許可する。`pending`または`unknown`はAPI deploy前に停止する。
+9. provider mutation直前にもlive `main`を再確認し、production専用一時Wrangler configでAPIをdeployする。deployment metadataのexact SHAが一致しない場合はfrontendへ進まない。
+10. API health、CORS、security headerをGETだけで確認する。失敗時はfrontend build/deployを行わない。
+11. production専用Vercel projectへ`--prod --skip-domain`で候補をdeployし、project境界、SHA、ref=`main`、target=`production`、READY、automation bypass header経由のcandidate marker・immutable assetを検証する。
+12. 検証済みcandidateだけを`vercel promote`し、custom domainが同じasset集合とmarkerを参照するまで有限回pollする。
+13. production frontendとAPIをread-only smokeし、SHA、run ID、run attempt、固定status、UTC時刻だけのJSON Artifactを7日保持する。
+
+concurrencyは`gensoko-production-release`、`cancel-in-progress: false`とする。承認待ちや直列待ちの間に`main`が進んだ古いrunは、live head再確認でprovider mutation前に停止する。stagingのEnvironment、Secret、URL、project、Worker、DB、concurrencyは共有しない。
+
+### pending migrationがあるrelease
+
+通常release workflowからmigrationを適用しない。`pending`の場合は次の順序で再開する。
+
+1. deploy runをAPI前のfailureで終了させる。同じrunでmigrationへ進めない。
+2. `Production Database Operations`のrunbookに従い、必要な24時間以内の暗号化backup証拠を確認し、別のproduction承認で`migrate-deploy`を実行する。
+3. migration名、DB URL、接続先、provider raw responseをIssue、Summary、Artifactへ残さない。
+4. `main`が同じSHAのままであることを確認し、元runのfailed job再実行、または入力なし`workflow_dispatch`を`main`から実行する。
+5. validation、quality、production approval、DB target、migration current、live mainをすべて再評価する。DB workflow成功からdeployを自動連鎖させない。
+
+`unknown`は接続失敗、timeout、marker不一致、parse不能を含む。原因を安全に解消して`current`を確認できるまでdeployを再開しない。
+
+### failure・rollback判断
+
+自動rollbackは行わない。DB rollbackは常に対象外とし、Cloudflare / Vercelも直前正常deploymentと互換性を人間が確認してから、別承認でrollbackまたはfix-forwardを選ぶ。
+
+| 失敗箇所                            | 自動停止        | 判断・復旧                                                                   |
+| ----------------------------------- | --------------- | ---------------------------------------------------------------------------- |
+| validation / quality / approval拒否 | provider・DB前  | codeまたは設定を修正し、最新mainで最初から再評価                             |
+| migration `pending` / `unknown`     | API前           | pendingは承認付きDB workflow、unknownは原因解消まで停止                      |
+| API deploy / metadata / health      | frontend禁止    | deployment履歴を値非表示確認し、互換APIへの手動rollbackかfix-forwardを別承認 |
+| frontend build / candidate検証      | promote禁止     | 旧frontendを維持し、API後方互換性を確認してから次の判断                      |
+| promote / domain poll               | release failure | 参照先を値非表示確認し、再実行を重ねず旧frontend維持可否を確定               |
+| read-only smoke                     | release failure | frontendを先に旧正常版へ戻す判断後、必要な場合だけ互換APIを判断              |
+
+token、Secret、DB URL、内部resource/deployment/project ID、固有deployment URL、provider raw response、stack traceをlog、Summary、Artifactへ出さない。一時provider outputは`RUNNER_TEMP`へmode `0600`で閉じ、成功・失敗とも削除する。
+
 ## staging frontend/API配備runbook
 
 ### コード基盤の現在地点
 
-2026-07-21時点で、staging API/frontendは配備・基本smoke済みであり、PR #125 merge後のSD16 synthetic Admin Playwrightも成功した。staging配備計画はAPI rollback実確認、完全削除計画はT33/T35以降を残している。
+2026-08-06時点で、staging API/frontendは配備・基本smoke済みであり、PR #125 merge後のSD16 synthetic Admin Playwrightも成功した。production baselineはM5/M6で別途配備・smoke済みである。staging配備計画はAPI rollback実確認と完全削除計画のT33/T35以降を残し、固定frontend domainは`develop` Preview branchへ割り当て済みである。
 
 - API: Workers専用entrypoint、request-scoped Prisma/mail/DO adapter、`wrangler.jsonc` staging設定、生成binding型、dry-run、bundle contract、production相当Workers runtime test
 - frontend: `@sveltejs/adapter-vercel`、Node.js 22、公開API URL fail-fast、Vercel Build Output/secret contract、frontend PR CIを固定
 - 実環境確認済み: Vercel Hobby `develop` Preview、staging Worker、SQLite-backed DO、Hyperdrive、7件のWorker secret、Supabase migration current、health/CORS/OPTIONS、元素118件
 - synthetic確認済み: 登録・メール認証・login・ゲーム10問/score 500・password reset・本人退会・削除後login拒否・Admin強制退会・旧credential拒否。Resendはallowlist宛の確認メール2通・resetメール1通だけを送信
-- 未実施: staging API rollback実確認、T35 legacy cleanup、production resource・deploy・DB操作
+- 未実施: staging API rollback実確認、T35 legacy cleanup。日常staging frontend自動更新はrun 31092740154と固定URLの最新UI確認で完了した。
 
 コード基盤のローカル再確認は外部serviceへ接続せず、次で行う。
 
@@ -246,13 +310,68 @@ env \
 
 branch scoped値は新しいdeploymentのbuild時に反映される。設定変更後は既存deploymentを合格扱いにせず、承認後に新しい`develop` Previewを作成して成果物を確認する。固定branch URLだけをAPIの`FRONTEND_URL`に使い、commit URLやwildcard CORSは使わない。
 
-Vercel Project Settings → Build and Deployment → Ignored Build StepはCustomとし、次のcommandで`develop`だけをbuildする。Vercelの契約どおりexit code 1はbuild、0はskipを表す。`VITE_API_BASE_URL`を持たないfeature branchの不要なPreview buildと、`main`のProduction buildを作成しない。
+初回公開前のSD15では、Vercel Project Settings → Build and Deployment → Ignored Build StepをCustomとし、`develop`だけをbuildする契約だった。2026-08-06のread-only再確認では、外部設定は次の既存commandへ変わっており、`develop`と`main`を常にbuildしていた。
 
 ```bash
-if [ "$VERCEL_GIT_COMMIT_REF" = "develop" ]; then exit 1; else exit 0; fi
+if [ "$VERCEL_GIT_COMMIT_REF" = "develop" ] || [ "$VERCEL_GIT_COMMIT_REF" = "main" ]; then exit 1; else exit 0; fi
 ```
 
-rollback時はIgnored Build Stepを`Only build pre-production`へ戻す。feature branchへstaging API URLを広げて失敗を回避してはいけない。
+Vercelの契約どおりexit code 1はbuild、0はskipを表す。Issue #173の承認済み外部設定で`npm run vercel:ignore-build`へ変更し、保存後の設定表示で反映を確認した。Issue #174のrepository scriptは`main`を常にskipし、`develop`は前後SHA間の`frontend`差分がある場合だけbuildし、差分判定不能時はfail-openでbuildする。他branchもskipする。これによりproduction frontendの所有権をGitHub Actionsへ一本化するが、production専用project分離・custom domain移行・credential登録を完了する前に同変更を`main`へ昇格しない。feature branchへstaging API URLを広げて失敗を回避してはいけない。上記の旧Custom commandは、production workflowを無効化し旧projectのGit Integrationへ戻すことを別承認したrollback時だけ使用する。
+
+### 日常staging frontend自動更新（Issue #173）
+
+実装計画の正本は[`docs/plans/staging-frontend-auto-deploy/plan.md`](plans/staging-frontend-auto-deploy/plan.md)とする。Vercel Git Integrationが`develop`のfrontend変更からPreviewを作成し、Vercel Project Settingsのbranch domainが成功Previewを固定URLへ自動反映する。GitHub Actionsはfrontend品質gate、exact SHA / ref / preview / READY確認、develop先端再確認、対象Previewと固定domainのread-only immutable asset fingerprint・marker検証だけを実行する。
+
+docsなどfrontend成果物へ影響しないdevelop変更は、GitHub Actionsの`paths`とrepository管理のVercel Ignored Build Step scriptの両方でskipする。Ignored Build Stepの外部設定は対象project・影響・rollbackを確認した承認後に反映済みである。stagingの`develop` Preview契約はIssue #174後も変更しない。
+
+docsだけのmergeではworkflowとVercel buildをskipする。quality失敗、Preview timeout、metadata不一致、古いdevelop SHA、domain content追従timeoutではGitHub Actionsからprovider状態を変更せずfailureにする。固有deployment URL、provider ID、raw response、tokenをlog・Summary・Artifactへ残さない。
+
+#### 外部設定preflight
+
+自動更新を有効化する前に、値を表示せず次を確認する。
+
+1. GitHub `staging` Environmentのdeployment branch policyが`develop`限定で、日常自動runを止めるrequired reviewerがないこと。
+2. `staging` Environment Secretにproject限定`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`、必要な場合は`VERCEL_AUTOMATION_BYPASS_SECRET`が存在すること。repository secretやproduction Environmentと共用しない。
+3. Vercel projectがHobby `gensoko-frontend-staging`で、Git Integrationが`develop`のfrontend変更からPreviewを作成し、Previewの`VITE_API_BASE_URL`がstaging APIへbranch scopeされていること。
+4. Vercel Ignored Build Stepを`npm run vercel:ignore-build`へ変更すること。repository側scriptのmerge前に先行変更しない。
+5. 固定domain `gensoko-frontend-staging-develop.vercel.app`がPreview環境・`develop` branchへ割り当てられていること。
+
+2026-08-06のread-only確認では対象`develop`先端のPreviewが`READY`でも固定URLが古いdeploymentを参照する問題を再現した。承認後、対象Hobby project限定・1年有効のautomation tokenを作成し、`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`を`staging` Environmentへ値非表示で登録した。Ignored Build Stepは`npm run vercel:ignore-build`へ変更済みである。PR #196の失敗確定後、ownerの包括承認に基づき固定domainをPreview環境・`develop` branchへ追加し、Valid Configurationと最新UIを確認した。production Environment、main、production deploymentは変更していない。
+
+PR #192のmerge SHA `b84667a166c296355dd5a5f98957954b5950b203`で起動したrun [31072094165](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31072094165)は、初回は3 Secret未登録、preflight後のfailed job再実行はPreview探索timeoutでalias更新前に失敗した。再実行でも固定aliasは維持され、安全側で停止した。
+
+Vercel CLIでは`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`をCI環境変数としてprojectを固定する。team IDである`VERCEL_ORG_ID`をteam slug用の`--scope`へ渡してはいけない。project限定tokenのまま`list gensoko-frontend-staging --format=json`でSHA、ref、URL、target、READYを確認する。固定domain追従は、同じbypass / no-cache条件で対象Previewと固定domainを取得し、200、同一origin、`text/html`、同一originの`/_app/immutable/` asset集合一致、両URLのmarkerを確認する。外部provider markupは比較対象にせず、asset集合は空を許可しない。`inspect`、`alias ls`、`alias set`、deployment detail API、provider状態を変更するREST methodは使用しない。
+
+PR #193のmerge SHA `ef97e98d72a6fa159c424c02cc9a0e0523231aaa`で起動したrun [31076459494](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31076459494)は、exact `READY` Preview探索とalias直前のdevelop先端再確認に成功した後、共通alias actionで失敗した。固定aliasは旧CSS bundleを維持し、merge SHA固有Previewのbundleとは一致しなかった。provider raw値をlogへ出さない契約は維持し、次の修正では失敗箇所をcandidate不一致、更新前metadata、alias set、更新後inspect、更新後不一致、smokeの固定メッセージだけで分類する。
+
+PR #194のmerge SHA `0918f9a545276f4fa4973927886055683d78fdeb`で起動したrun [31079563100](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31079563100)は、同じ前段gateの成功後、candidate project metadata不一致でalias更新前に停止した。pinned CLI `50.17.1`ではlistのproject nameがprovider応答次第で省略されるため、listのexact Git metadataと同じcandidateをinspectしたproject metadataをdeployment IDで結ぶ。固定aliasはこの修正のmerge runまで既存参照を維持する。
+
+PR #195のmerge SHA `d40bf3657b806449c0abc5b2bc18bb53cba397e2`で起動したrun [31081222649](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31081222649)は、同じ前段gateの成功後、candidate list metadata不一致でalias更新前に停止した。pinned CLI `50.17.1`ではlistのdeployment IDもprovider応答次第で省略されるため、候補の一意なURLをinspectして初めてIDを取得し、以後の更新後・rollback検証へ一時fileで引き継ぐ。固定aliasはこの修正のmerge runまで既存参照を維持する。
+
+PR #196のmerge SHA `2fa65d4c5857a2a048e56d60062309091af369db`で起動したrun [31082530994](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31082530994)とfailed job再実行は、品質gate、exact `READY` Preview探索、develop先端再確認まで成功した後、candidate inspectが内部利用するdeployment detail APIの権限制約で同じ固定段階へ安全停止した。Vercel CLI最新版でも同API依存が残るため、tokenをteam scopeへ広げずbranch domain方式へ移行した。
+
+PR #198のmerge SHA `0091f71342ab07d19684b0f2e5e11b0702f84b63`で起動したrun [31086958523](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31086958523)は、frontend品質gate、exact `READY` Preview探索、develop先端再確認まで成功した後、project限定tokenで`alias ls`を利用できず固定domain確認で安全停止した。token権限を広げずstaging / production分離を維持するため、固定domainのprovider metadataではなく対象PreviewとのHTML content一致をread-only検証する方式へ変更した。
+
+PR #199のmerge SHA `a817d3682acc5732cd01798ed8fcfb8f1c42e40b`で起動したrun [31090151492](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31090151492)は、frontend品質gate、exact `READY` Preview探索、develop先端再確認まで成功し、固定domain content待機だけがtimeoutした。ログイン済みbrowserで固定domainの最新トップページUIを確認し、候補Previewと固定domainが同じ14件のSvelteKit `/_app/immutable/` assetを参照していることを確認した。候補HTMLだけにVercel Toolbarの外部scriptが注入されていたため、HTML全体比較は同じapplication buildを誤検知する。候補固有originのhydration時API errorはstaging API CORSが固定domainだけを許可する契約によるもので、固定domainの動作確認結果には影響しない。
+
+PR #200のmerge SHA `97cf7e66395ad59355da3f5bcf99d05bf870f9e3`で起動したrun [31092740154](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31092740154)は、frontend品質jobを1分11秒、exact Preview・develop先端・固定domain・smoke jobを19秒で完了した。対象Previewと固定domainのimmutable asset fingerprint、両URLのmarker、固定status `BRANCH_DOMAIN_READY` / `SMOKE_CLEAR`が成立し、固定URLでは最新トップページ「元素を、遊んで覚える。」、アプリ概要、認証hydration後のログイン・新規登録導線、ランキングプレビューを確認した。Node 20 deprecation annotationは既知の通知であり失敗原因ではない。production Environment、main、production deploymentは参照・変更していない。
+
+#### 通常の自動更新
+
+1. `frontend/**`を含むreview済みPRを`develop`へmergeする。
+2. `Staging Frontend Deploy`の`frontend-quality`がmerge commitのexact SHAでaudit、test、lint、Svelte check、format check、Preview build検証を通す。
+3. `verify-preview`がVercel Git Integration由来の`READY` Previewを最大5分bounded pollし、listでSHA、ref=`develop`、target=`preview`、URL、候補一意性を構造化JSONで確認する。
+4. domain確認直前にGitHubの`develop`先端を再確認する。先端が移動していれば旧runを安全に失敗させ、新しいrunへ委譲する。
+5. 共通actionが候補metadataを再確認し、対象Previewと固定domainを同じbypass / no-cache条件で取得する。200、同一origin、`text/html`、空でないSvelteKit immutable asset集合一致、両URLのmarkerを最大5分bounded pollし、redirect・非HTML・asset不一致・asset欠落・marker欠落は安全に失敗させる。外部provider markupとabsolute / relative URL表記差は比較対象外にする。
+6. Summaryにexact SHAと`BRANCH_DOMAIN_READY` / `SMOKE_CLEAR`だけが残り、固定URLで対象Previewと同じ最新UIを確認できることを確認する。
+
+同じSHAのPreviewをGitHub Actionsから再deployしない。日常workflowを手動dispatchへ拡張せず、失敗修正後の次のfrontend mergeで再実行する。API、DB、fixture、synthetic campaignを伴う高リスク変更だけ、既存M2を別承認で使う。
+
+#### 失敗時の復旧
+
+- Preview / domain確認前の失敗: provider状態を変更せず、quality、Vercel Preview、metadata、develop先端、Environment Secret名、branch domain設定を値非表示で確認する。
+- domain content追従timeout: 新しいrunやM2を重ねず、Vercel dashboardで固定domainの`develop`割り当てと直前の正常deploymentを確認する。候補・固定domainのHTTP status、同一origin、content type、immutable asset集合、markerを値非表示で切り分け、固有URLやprovider JSONをworkflow logへ出さない。
+- 自動更新の緊急停止: Vercel staging projectのbranch domain割り当てを外すか、Git Integrationを停止する。GitHub検証だけを止める場合はworkflowを無効化する。production project、main、production domainは変更しない。
 
 ### SD13以降の承認境界
 
@@ -414,7 +533,7 @@ Cloudflare Workersは`DATABASE_URL`を直接受けず、staging専用Hyperdrive 
 ### 基本方針
 
 - 本番DBの変更は `prisma migrate deploy` でのみ適用する
-- `prisma migrate deploy` は GitHub Actions の本番デプロイ中、Cloudflare Workers への API デプロイ前に実行する
+- `prisma migrate deploy` は通常のproduction deployへ含めず、required reviewer付き`Production Database Operations`の手動`migrate-deploy`だけで実行する
 - 実行前に24時間以内の暗号化backup workflowが成功し、Artifactが期限内であることを確認する
 - `DATABASE_URL`はmigration/batch用のGitHub Environment Secretとして管理する。Workers runtimeへ`DATABASE_URL`を渡さず、DB接続はCloudflare resource側でcredentialを管理する`HYPERDRIVE` bindingを使う。いずれの値もリポジトリへ書かない
 
@@ -469,7 +588,7 @@ backup workflowはSupabase公式手順に従い、次を作成する。
 初回migration前と、破壊的変更を含むmigration前は次の順序を守る。
 
 1. Actions > Production Database Operations > Run workflowを開く。
-2. branchは`develop`、operationは`backup`を選択する。
+2. branchは`main`、operationは`backup`を選択する。
 3. 成功後、run IDと`production-db-backup-{run ID}`Artifactの存在を確認する。
 4. 24時間以内にoperation `migrate-deploy`を選び、`confirmed_backup_run_id`へrun IDだけを入力する。
 5. backup確認stepと`prisma migrate deploy`の両方が成功したことを確認する。
@@ -675,60 +794,19 @@ guard SQLは`backend/prisma/contract-migrations`へ隔離され、通常の`pris
 
 ## GitHub Actions による自動デプロイ（CI/CD）
 
-> backend変更を含む`develop`または`main`向けPRでは、`.github/workflows/backend-pr-quality.yml`が通常test、ESLint、Prettier、TypeScript build、Prisma generate/validateを自動実行する。staging/productionのDB・batch workflowは手動gate付きで運用する。アプリケーションdeploy workflowは未実装であり、以下はフェーズ12で追加する`.github/workflows/deploy.yml`のサンプル。
+backend/frontend品質手順は`.github/actions/backend-quality/action.yml`と
+`.github/actions/frontend-quality/action.yml`を正本とし、PR workflowとproduction exact SHA gateから共用する。PR workflowへcommandを複製しない。
 
-```yaml
-name: Deploy
+| workflow                      | trigger                                         | Environment / mutation                                                          |
+| ----------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------- |
+| `backend-pr-quality.yml`      | `develop` / `main`向け関連PR                    | Environmentなし。test、Workers test/build、lint、format、build、Prisma validate |
+| `frontend-pr-quality.yml`     | `develop` / `main`向け関連PR                    | Environmentなし。audit、test、lint、check、format、Preview build contract       |
+| `repository-integrity.yml`    | `develop` / `main`向け全PR                      | Environmentなし。workflow/source境界test                                        |
+| `staging-frontend-deploy.yml` | `develop`のfrontend push                        | `staging`。Git Integration由来Previewと固定domainをread-only検証                |
+| `production-deploy.yml`       | deploy対象を含む`main` push、入力なしmanual再開 | 単一`production`承認。API→health→staged frontend→promote→smoke→safe evidence    |
+| `production-database.yml`     | manual、許可済みschedule                        | DB操作の唯一の承認付き経路。通常deployからmigrationを呼ばない                   |
 
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy-frontend:
-    name: Deploy SvelteKit to Vercel
-    runs-on: ubuntu-latest
-    needs: deploy-backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: frontend
-          vercel-args: "--prod"
-
-  deploy-backend:
-    name: Deploy Hono to Cloudflare Workers
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Install dependencies
-        working-directory: backend
-        run: npm install
-      - name: Deploy database migrations
-        working-directory: backend
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: npx prisma migrate deploy
-      - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          workingDirectory: backend
-```
-
-> `secrets.VERCEL_TOKEN` などは GitHub の「Settings > Secrets and variables > Actions」に登録します。
-
-> `secrets.DATABASE_URL`はGitHub Actionsの`prisma migrate deploy`とNode batch用です。Workers runtimeへ`DATABASE_URL`を設定せず、Cloudflare側で接続先credentialを管理する`HYPERDRIVE` bindingを使います。
+production deploy専用credentialは`production` Environmentだけへ登録し、Secret参照stepの`env`に限定する。既存M1証拠収集用credential、staging credential、repository Secretを流用しない。Workers runtimeへ`DATABASE_URL`を設定せず、production Workerはproduction専用Hyperdrive bindingを使う。
 
 ---
 

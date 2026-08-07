@@ -1,0 +1,32 @@
+name: Validate live main SHA
+description: Fail closed unless the expected SHA is the current remote main head.
+
+inputs:
+  expected-sha:
+    description: Exact lowercase commit SHA expected at refs/heads/main.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        EXPECTED_SHA: ${{ inputs.expected-sha }}
+      run: |
+        set -euo pipefail
+        if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "production対象SHAの形式が不正です"
+          exit 1
+        fi
+        if ! checkout_sha="$(git rev-parse HEAD 2>/dev/null)" || [ "$checkout_sha" != "$EXPECTED_SHA" ]; then
+          echo "checkoutしたproduction対象SHAが不一致です"
+          exit 1
+        fi
+        if ! live_main="$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main 2>/dev/null | awk 'NR == 1 { print $1 }')"; then
+          echo "main先端を確認できません"
+          exit 1
+        fi
+        if [ "$live_main" != "$EXPECTED_SHA" ]; then
+          echo "production対象SHAは現在のmain先端ではありません"
+          exit 1
+        fi

@@ -1,0 +1,132 @@
+name: Validate Vercel Preview branch domain
+description: Validate an exact staging Preview and compare its app assets with the fixed branch domain.
+
+inputs:
+  deployment-url-file:
+    description: Temporary file containing the candidate deployment URL.
+    required: true
+  expected-sha:
+    description: Exact lowercase Git commit SHA.
+    required: true
+  expected-ref:
+    description: Exact Git ref metadata.
+    required: true
+  expected-target:
+    description: Exact Vercel target.
+    required: true
+  domain:
+    description: Fixed staging branch domain hostname.
+    required: true
+  vercel-token:
+    description: Staging project-scoped Vercel token.
+    required: true
+  automation-bypass-secret:
+    description: Optional staging Deployment Protection bypass secret.
+    required: false
+    default: ""
+  smoke-marker:
+    description: Stable marker required in the staging HTML.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Validate candidate, branch domain and smoke
+      shell: bash
+      env:
+        INPUT_DEPLOYMENT_URL_FILE: ${{ inputs.deployment-url-file }}
+        INPUT_EXPECTED_SHA: ${{ inputs.expected-sha }}
+        INPUT_EXPECTED_REF: ${{ inputs.expected-ref }}
+        INPUT_EXPECTED_TARGET: ${{ inputs.expected-target }}
+        INPUT_DOMAIN: ${{ inputs.domain }}
+        INPUT_VERCEL_TOKEN: ${{ inputs.vercel-token }}
+        INPUT_AUTOMATION_BYPASS_SECRET: ${{ inputs.automation-bypass-secret }}
+        INPUT_SMOKE_MARKER: ${{ inputs.smoke-marker }}
+      run: |
+        set -Eeuo pipefail
+        candidate_state="$RUNNER_TEMP/vercel-candidate-state.json"
+
+        cleanup_files() {
+          rm -f "$candidate_state"
+        }
+
+        trap cleanup_files EXIT
+        cleanup_files
+
+        if [[ ! "$INPUT_EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || [ "$INPUT_EXPECTED_REF" != "develop" ] || [ "$INPUT_EXPECTED_TARGET" != "preview" ]; then
+          echo "staging Preview domain入力が不正です"
+          exit 1
+        fi
+        if [ "$INPUT_DOMAIN" != "gensoko-frontend-staging-develop.vercel.app" ] || [ -z "$INPUT_SMOKE_MARKER" ]; then
+          echo "staging Preview domain入力が不正です"
+          exit 1
+        fi
+        if [ -z "$VERCEL_PROJECT_ID" ] || [[ "$VERCEL_PROJECT_ID" =~ [[:space:]] ]] || [ -z "$VERCEL_ORG_ID" ] || [[ "$VERCEL_ORG_ID" =~ [[:space:]] ]]; then
+          echo "staging Vercel project設定が不正です"
+          exit 1
+        fi
+        if [ -z "$INPUT_VERCEL_TOKEN" ] || [[ "$INPUT_VERCEL_TOKEN" =~ [[:space:]] ]]; then
+          echo "staging Vercel認証設定が不正です"
+          exit 1
+        fi
+        if [ -n "$INPUT_AUTOMATION_BYPASS_SECRET" ] && [[ "$INPUT_AUTOMATION_BYPASS_SECRET" =~ [[:space:]] ]]; then
+          echo "staging automation bypass設定が不正です"
+          exit 1
+        fi
+        echo "::add-mask::$INPUT_VERCEL_TOKEN"
+        if [ -n "$INPUT_AUTOMATION_BYPASS_SECRET" ]; then
+          echo "::add-mask::$INPUT_AUTOMATION_BYPASS_SECRET"
+        fi
+
+        if [ ! -f "$INPUT_DEPLOYMENT_URL_FILE" ]; then
+          echo "candidate deployment参照がありません"
+          exit 1
+        fi
+        candidate_url="$(awk 'NF { line=$0 } END { print line }' "$INPUT_DEPLOYMENT_URL_FILE" | tr -d '\r')"
+        candidate_host="${candidate_url#https://}"
+        if [ "$candidate_url" != "https://$candidate_host" ] || [[ ! "$candidate_host" =~ ^[a-z0-9-]+\.vercel\.app$ ]]; then
+          echo "candidate deployment参照が不正です"
+          exit 1
+        fi
+
+        vercel_list=(npx --yes vercel@50.17.1 list gensoko-frontend-staging --meta "githubCommitSha=$INPUT_EXPECTED_SHA" --status READY --environment "$INPUT_EXPECTED_TARGET" --format=json --token="$INPUT_VERCEL_TOKEN")
+        if ! "${vercel_list[@]}" >"$candidate_state" 2>/dev/null; then
+          echo "candidate deployment metadataを確認できません"
+          exit 1
+        fi
+        if ! EXPECTED_SHA="$INPUT_EXPECTED_SHA" EXPECTED_REF="$INPUT_EXPECTED_REF" EXPECTED_TARGET="$INPUT_EXPECTED_TARGET" EXPECTED_URL="$candidate_host" CANDIDATE_STATE="$candidate_state" node --input-type=module -e '
+          import { readFileSync } from "node:fs";
+          const payload = JSON.parse(readFileSync(process.env.CANDIDATE_STATE, "utf8"));
+          const deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
+          const matches = deployments.filter((deployment) => {
+            const target = deployment.target ?? "preview";
+            return deployment.state === "READY"
+              && target === process.env.EXPECTED_TARGET
+              && deployment.url === process.env.EXPECTED_URL
+              && deployment.meta?.githubCommitSha === process.env.EXPECTED_SHA
+              && deployment.meta?.githubCommitRef === process.env.EXPECTED_REF;
+          });
+          if (matches.length !== 1) process.exit(1);
+        ' 2>/dev/null; then
+          echo "candidate deployment metadataが不一致です"
+          exit 1
+        fi
+
+        domain_ready=false
+        for attempt in $(seq 1 30); do
+          if STAGING_CANDIDATE_URL="$candidate_url" STAGING_DOMAIN_URL="https://$INPUT_DOMAIN/" STAGING_SMOKE_MARKER="$INPUT_SMOKE_MARKER" VERCEL_AUTOMATION_BYPASS_SECRET="$INPUT_AUTOMATION_BYPASS_SECRET" node frontend/scripts/verify-staging-frontend-content.mjs 2>/dev/null; then
+            domain_ready=true
+            break
+          fi
+
+          if [ "$attempt" -lt 30 ]; then
+            sleep 10
+          fi
+        done
+
+        if [ "$domain_ready" != "true" ]; then
+          echo "staging branch domainが対象deployment contentへ更新される前にtimeoutしました"
+          exit 1
+        fi
+
+        printf '%s\n' "- Status: BRANCH_DOMAIN_READY" "- Status: SMOKE_CLEAR" >> "$GITHUB_STEP_SUMMARY"

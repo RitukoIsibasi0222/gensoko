@@ -1,0 +1,42 @@
+name: Backend quality gate
+description: Run the repository backend quality contract without external services.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+        cache-dependency-path: backend/package-lock.json
+    - shell: bash
+      working-directory: backend
+      run: npm ci
+    - shell: bash
+      working-directory: backend
+      env:
+        DATABASE_URL: postgresql://gensoko:secret@localhost:5432/gensoko_ci
+      run: npx prisma generate
+    - shell: bash
+      working-directory: backend
+      run: npm test -- --run
+    - shell: bash
+      working-directory: backend
+      run: npm run test:workers
+    - shell: bash
+      working-directory: backend
+      run: npm run workers:build
+    - shell: bash
+      working-directory: backend
+      run: npm run lint
+    - shell: bash
+      working-directory: backend
+      run: npm run format:check
+    - shell: bash
+      working-directory: backend
+      run: npm run build
+    - shell: bash
+      working-directory: backend
+      env:
+        DATABASE_URL: postgresql://gensoko:secret@localhost:5432/gensoko_ci
+      run: npx prisma validate

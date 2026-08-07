@@ -5,7 +5,9 @@ on:
     branches: [develop, main]
     paths:
       - "frontend/**"
+      - ".github/actions/frontend-quality/**"
       - ".github/workflows/frontend-pr-quality.yml"
+      - ".github/workflows/production-deploy.yml"
 
 permissions:
   contents: read
@@ -18,24 +20,10 @@ jobs:
   frontend-quality:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: frontend
-    env:
-      VERCEL_ENV: preview
-      VERCEL_GIT_COMMIT_REF: ${{ github.base_ref }}
-      VITE_API_BASE_URL: https://staging-api.example.invalid/api/v1
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm audit --audit-level=moderate
-      - run: npm run test:run
-      - run: npm run lint
-      - run: npm run check
-      - run: npm run format:check
-      - run: npm run build:preview
+          persist-credentials: false
+      - uses: ./.github/actions/frontend-quality
+        with:
+          git-ref: ${{ github.base_ref }}

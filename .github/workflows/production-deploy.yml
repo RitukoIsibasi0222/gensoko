@@ -1,0 +1,387 @@
+name: Production Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/actions/backend-quality/**"
+      - ".github/actions/frontend-quality/**"
+      - ".github/actions/validate-live-main/**"
+      - ".github/workflows/production-deploy.yml"
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: gensoko-production-release
+  cancel-in-progress: false
+
+jobs:
+  validate-release:
+    name: Validate production release without protected access
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      expected_sha: ${{ steps.validate.outputs.expected_sha }}
+    steps:
+      - name: Validate event, branch, SHA and live main
+        id: validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" != "push" ] && [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]; then
+            echo "production deploy eventが不正です"
+            exit 1
+          fi
+          if [ "$GITHUB_REF" != "refs/heads/main" ] || [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "production deployはmain branchだけ許可されています"
+            exit 1
+          fi
+          if [[ ! "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "production対象SHAの形式が不正です"
+            exit 1
+          fi
+          if ! live_main="$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main 2>/dev/null | awk 'NR == 1 { print $1 }')"; then
+            echo "main先端を確認できません"
+            exit 1
+          fi
+          if [ "$live_main" != "$GITHUB_SHA" ]; then
+            echo "production対象SHAは現在のmain先端ではありません"
+            exit 1
+          fi
+          echo "expected_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "- SHA: $GITHUB_SHA" "- Status: VALIDATION_CLEAR" >> "$GITHUB_STEP_SUMMARY"
+
+  backend-quality:
+    name: Validate exact main backend
+    needs: validate-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-release.outputs.expected_sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/validate-live-main
+        with:
+          expected-sha: ${{ needs.validate-release.outputs.expected_sha }}
+      - uses: ./.github/actions/backend-quality
+
+  frontend-quality:
+    name: Validate exact main frontend
+    needs: validate-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-release.outputs.expected_sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/validate-live-main
+        with:
+          expected-sha: ${{ needs.validate-release.outputs.expected_sha }}
+      - uses: ./.github/actions/frontend-quality
+        with:
+          git-ref: main
+
+  production-release:
+    name: Release exact main SHA to production
+    needs: [validate-release, backend-quality, frontend-quality]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-release.outputs.expected_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Validate live main head before protected access
+        uses: ./.github/actions/validate-live-main
+        with:
+          expected-sha: ${{ needs.validate-release.outputs.expected_sha }}
+
+      - name: Install protected release dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix backend ci
+          npm --prefix frontend ci
+
+      - name: Validate production database target
+        working-directory: backend
+        env:
+          BATCH_ENVIRONMENT: production
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PRODUCTION_SUPABASE_PROJECT_REF: ${{ secrets.PRODUCTION_SUPABASE_PROJECT_REF }}
+        run: |
+          set -euo pipefail
+          umask 077
+          npm run production:validate-database-target
+          generation_log="$RUNNER_TEMP/production-prisma-generate.log"
+          trap 'rm -f "$generation_log"' EXIT
+          if ! npx prisma generate >"$generation_log" 2>&1; then
+            echo "production Prisma Clientを準備できませんでした"
+            exit 1
+          fi
+
+      - name: Check production migration status
+        id: migration
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if ! npm run production:migration-gate; then
+            echo "deployを停止しました。pendingの場合はProduction Database Operationsを使用してください"
+            exit 1
+          fi
+
+      - name: Validate production provider credentials
+        shell: bash
+        env:
+          PRODUCTION_CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUCTION_CLOUDFLARE_API_TOKEN }}
+          PRODUCTION_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.PRODUCTION_CLOUDFLARE_ACCOUNT_ID }}
+          PRODUCTION_VERCEL_TOKEN: ${{ secrets.PRODUCTION_VERCEL_TOKEN }}
+          PRODUCTION_VERCEL_ORG_ID: ${{ secrets.PRODUCTION_VERCEL_ORG_ID }}
+          PRODUCTION_VERCEL_PROJECT_ID: ${{ secrets.PRODUCTION_VERCEL_PROJECT_ID }}
+          PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          set -euo pipefail
+          credentials=(
+            PRODUCTION_CLOUDFLARE_API_TOKEN
+            PRODUCTION_CLOUDFLARE_ACCOUNT_ID
+            PRODUCTION_VERCEL_TOKEN
+            PRODUCTION_VERCEL_ORG_ID
+            PRODUCTION_VERCEL_PROJECT_ID
+            PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET
+          )
+          for credential_name in "${credentials[@]}"; do
+            credential="${!credential_name-}"
+            if [ -z "$credential" ] || [[ "$credential" =~ [[:space:]] ]]; then
+              echo "production provider credentialが不正です: $credential_name"
+              exit 1
+            fi
+          done
+
+      - name: Revalidate live main before API mutation
+        uses: ./.github/actions/validate-live-main
+        with:
+          expected-sha: ${{ needs.validate-release.outputs.expected_sha }}
+
+      - name: Deploy exact production API
+        id: api-deploy
+        working-directory: backend
+        env:
+          GITHUB_SHA: ${{ needs.validate-release.outputs.expected_sha }}
+          PRODUCTION_WORKER_NAME: ${{ vars.PRODUCTION_WORKER_NAME }}
+          PRODUCTION_API_HOSTNAME: ${{ vars.PRODUCTION_API_HOSTNAME }}
+          PRODUCTION_FRONTEND_ORIGIN: ${{ vars.PRODUCTION_FRONTEND_ORIGIN }}
+          PRODUCTION_REGISTRABLE_DOMAIN: ${{ vars.PRODUCTION_REGISTRABLE_DOMAIN }}
+          PRODUCTION_HYPERDRIVE_ID: ${{ vars.PRODUCTION_HYPERDRIVE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUCTION_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.PRODUCTION_CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run workers:production:deploy
+
+      - name: Validate production API health
+        id: api-health
+        working-directory: backend
+        env:
+          PRODUCTION_API_BASE_URL: https://${{ vars.PRODUCTION_API_HOSTNAME }}/api/v1
+          PRODUCTION_FRONTEND_ORIGIN: ${{ vars.PRODUCTION_FRONTEND_ORIGIN }}
+        run: npm run production:release-health
+
+      - name: Revalidate live main before frontend mutation
+        uses: ./.github/actions/validate-live-main
+        with:
+          expected-sha: ${{ needs.validate-release.outputs.expected_sha }}
+
+      - name: Deploy staged production frontend
+        id: frontend-candidate
+        working-directory: frontend
+        env:
+          EXPECTED_SHA: ${{ needs.validate-release.outputs.expected_sha }}
+          PRODUCTION_API_BASE_URL: https://${{ vars.PRODUCTION_API_HOSTNAME }}/api/v1
+          PRODUCTION_DOMAIN_URL: ${{ vars.PRODUCTION_FRONTEND_ORIGIN }}
+          VERCEL_TOKEN: ${{ secrets.PRODUCTION_VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.PRODUCTION_VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.PRODUCTION_VERCEL_PROJECT_ID }}
+          PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          set -euo pipefail
+          umask 077
+          provider_log="$RUNNER_TEMP/production-vercel-provider.log"
+          candidate_ref="$RUNNER_TEMP/production-vercel-candidate-url"
+          candidate_state="$RUNNER_TEMP/production-vercel-candidate-state.json"
+          cleanup_release_files() {
+            rm -f "$provider_log" "$candidate_state"
+          }
+          trap cleanup_release_files EXIT
+          rm -f "$provider_log" "$candidate_ref" "$candidate_state"
+
+          export VERCEL_GIT_COMMIT_SHA="$EXPECTED_SHA"
+          export VERCEL_GIT_COMMIT_REF="main"
+          export VITE_API_BASE_URL="$PRODUCTION_API_BASE_URL"
+          if ! npx --yes vercel@50.17.1 pull --yes --environment=production --git-branch=main --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+            echo "production frontend設定を取得できませんでした"
+            exit 1
+          fi
+          if ! EXPECTED_ORG="$VERCEL_ORG_ID" EXPECTED_PROJECT="$VERCEL_PROJECT_ID" node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const link = JSON.parse(readFileSync(".vercel/project.json", "utf8"));
+            if (link.orgId !== process.env.EXPECTED_ORG || link.projectId !== process.env.EXPECTED_PROJECT) process.exit(1);
+          ' 2>/dev/null; then
+            echo "production Vercel project境界が不正です"
+            exit 1
+          fi
+          if ! npx --yes vercel@50.17.1 build --prod --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+            echo "production frontend buildに失敗しました"
+            exit 1
+          fi
+          if ! node scripts/check-vercel-build-output.mjs >"$provider_log" 2>&1; then
+            echo "production frontend build契約が不正です"
+            exit 1
+          fi
+          if ! npx --yes vercel@50.17.1 deploy --prebuilt --prod --skip-domain --meta githubCommitSha="$EXPECTED_SHA" --meta githubCommitRef=main --token="$VERCEL_TOKEN" >"$candidate_ref" 2>"$provider_log"; then
+            echo "production frontend候補deployに失敗しました"
+            exit 1
+          fi
+          if ! npx --yes vercel@50.17.1 list --meta "githubCommitSha=$EXPECTED_SHA" --status READY --environment production --format=json --token="$VERCEL_TOKEN" >"$candidate_state" 2>"$provider_log"; then
+            echo "production frontend候補metadataを確認できません"
+            exit 1
+          fi
+          if ! EXPECTED_SHA="$EXPECTED_SHA" CANDIDATE_REF="$candidate_ref" CANDIDATE_STATE="$candidate_state" node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const candidateUrl = readFileSync(process.env.CANDIDATE_REF, "utf8").trim();
+            const candidateHost = candidateUrl.replace(/^https:\/\//, "").replace(/\/$/, "");
+            const payload = JSON.parse(readFileSync(process.env.CANDIDATE_STATE, "utf8"));
+            const deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
+            const matches = deployments.filter((deployment) => deployment.state === "READY"
+              && deployment.target === "production"
+              && deployment.url === candidateHost
+              && deployment.meta?.githubCommitSha === process.env.EXPECTED_SHA
+              && deployment.meta?.githubCommitRef === "main");
+            if (!/^https:\/\/[a-z0-9-]+\.vercel\.app\/?$/.test(candidateUrl) || matches.length !== 1) process.exit(1);
+          ' 2>/dev/null; then
+            echo "production frontend候補metadataが不一致です"
+            exit 1
+          fi
+          if ! PRODUCTION_VERIFY_MODE=candidate PRODUCTION_CANDIDATE_URL="$(tr -d '\r\n' < "$candidate_ref")" PRODUCTION_SMOKE_MARKER=Gensoko node scripts/verify-production-frontend-content.mjs 2>/dev/null; then
+            echo "production frontend候補contentが不正です"
+            exit 1
+          fi
+          echo "candidate_ref=$candidate_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Revalidate live main before frontend promotion
+        uses: ./.github/actions/validate-live-main
+        with:
+          expected-sha: ${{ needs.validate-release.outputs.expected_sha }}
+
+      - name: Promote verified production frontend
+        id: frontend-promote
+        working-directory: frontend
+        env:
+          CANDIDATE_REF: ${{ steps.frontend-candidate.outputs.candidate_ref }}
+          VERCEL_TOKEN: ${{ secrets.PRODUCTION_VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.PRODUCTION_VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.PRODUCTION_VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          umask 077
+          provider_log="$RUNNER_TEMP/production-vercel-promote.log"
+          trap 'rm -f "$provider_log"' EXIT
+          if [ ! -f "$CANDIDATE_REF" ]; then
+            echo "production frontend候補参照がありません"
+            exit 1
+          fi
+          if ! npx --yes vercel@50.17.1 promote "$(tr -d '\r\n' < "$CANDIDATE_REF")" --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+            echo "production frontend promoteに失敗しました"
+            exit 1
+          fi
+
+      - name: Run read-only production smoke
+        id: smoke
+        working-directory: frontend
+        env:
+          CANDIDATE_REF: ${{ steps.frontend-candidate.outputs.candidate_ref }}
+          PRODUCTION_DOMAIN_URL: ${{ vars.PRODUCTION_FRONTEND_ORIGIN }}
+          PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          set -euo pipefail
+          domain_ready=false
+          for attempt in $(seq 1 30); do
+            if PRODUCTION_CANDIDATE_URL="$(tr -d '\r\n' < "$CANDIDATE_REF")" PRODUCTION_DOMAIN_URL="$PRODUCTION_DOMAIN_URL" PRODUCTION_SMOKE_MARKER=Gensoko node scripts/verify-production-frontend-content.mjs 2>/dev/null; then
+              domain_ready=true
+              break
+            fi
+            if [ "$attempt" -lt 30 ]; then sleep 10; fi
+          done
+          if [ "$domain_ready" != "true" ]; then
+            echo "production custom domainの反映確認がtimeoutしました"
+            exit 1
+          fi
+          PRODUCTION_API_BASE_URL="https://${{ vars.PRODUCTION_API_HOSTNAME }}/api/v1" PRODUCTION_FRONTEND_ORIGIN="$PRODUCTION_DOMAIN_URL" npm --prefix ../backend run production:release-health
+
+      - name: Build safe production release evidence
+        id: evidence
+        if: ${{ always() }}
+        working-directory: backend
+        env:
+          GITHUB_SHA: ${{ needs.validate-release.outputs.expected_sha }}
+          PRODUCTION_RELEASE_EVIDENCE_PATH: ${{ runner.temp }}/production-release-evidence.json
+          MIGRATION_OUTCOME: ${{ steps.migration.outcome }}
+          API_DEPLOY_OUTCOME: ${{ steps.api-deploy.outcome }}
+          API_HEALTH_OUTCOME: ${{ steps.api-health.outcome }}
+          FRONTEND_PROMOTE_OUTCOME: ${{ steps.frontend-promote.outcome }}
+          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+        run: |
+          set -euo pipefail
+          statuses=(VALIDATION_CLEAR BACKEND_QUALITY_CLEAR FRONTEND_QUALITY_CLEAR)
+          if [ "$MIGRATION_OUTCOME" = "success" ]; then statuses+=(MIGRATION_CURRENT); fi
+          if [ "$API_DEPLOY_OUTCOME" = "success" ]; then statuses+=(API_DEPLOYED); fi
+          if [ "$API_HEALTH_OUTCOME" = "success" ]; then statuses+=(API_HEALTH_CLEAR); fi
+          if [ "$FRONTEND_PROMOTE_OUTCOME" = "success" ]; then statuses+=(FRONTEND_DEPLOYED); fi
+          if [ "$SMOKE_OUTCOME" = "success" ]; then statuses+=(SMOKE_CLEAR); fi
+          PRODUCTION_RELEASE_STATUSES_CSV="$(IFS=,; echo "${statuses[*]}")"
+          export PRODUCTION_RELEASE_STATUSES_CSV
+          npm run production:release-evidence
+          echo "path=$PRODUCTION_RELEASE_EVIDENCE_PATH" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "- SHA: $GITHUB_SHA" "- Run ID: $GITHUB_RUN_ID" "- Run attempt: $GITHUB_RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
+          for status in "${statuses[@]}"; do
+            printf '%s\n' "- Status: $status" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Upload safe production release evidence
+        if: ${{ always() && steps.evidence.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-release-evidence
+          path: ${{ steps.evidence.outputs.path }}
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
+
+      - name: Remove release temporary references
+        if: ${{ always() }}
+        run: |
+          rm -f \
+            "$RUNNER_TEMP/production-vercel-candidate-url" \
+            "$RUNNER_TEMP/production-release-evidence.json"
+          rm -rf "$GITHUB_WORKSPACE/frontend/.vercel"

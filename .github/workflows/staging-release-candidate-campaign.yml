@@ -252,7 +252,7 @@ jobs:
           npm run staging:release-candidate-health
 
   deploy-frontend:
-    name: Deploy and alias frontend candidate
+    name: Deploy and verify frontend candidate
     needs: deploy-api
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -277,7 +277,7 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Build and deploy reviewed frontend to staging alias
+      - name: Build and deploy reviewed frontend candidate
         working-directory: frontend
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -299,32 +299,31 @@ jobs:
             echo "staging frontend buildに失敗しました"
             exit 1
           fi
-          if ! npx --yes vercel@50.17.1 deploy --prebuilt --target preview --meta githubCommitSha="$GITHUB_SHA" --token="$VERCEL_TOKEN" >"$deployment_ref" 2>"$provider_log"; then
+          if ! npx --yes vercel@50.17.1 deploy --prebuilt --target preview --meta githubCommitSha="$GITHUB_SHA" --meta githubCommitRef=develop --token="$VERCEL_TOKEN" >"$deployment_ref" 2>"$provider_log"; then
             rm -f "$provider_log" "$deployment_ref"
             echo "staging frontend deployに失敗しました"
             exit 1
           fi
-          if ! npx --yes vercel@50.17.1 alias set "$(tail -n 1 "$deployment_ref")" gensoko-frontend-staging-develop.vercel.app --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
-            rm -f "$provider_log" "$deployment_ref"
-            echo "staging frontend alias更新に失敗しました"
-            exit 1
-          fi
-          if ! npx --yes vercel@50.17.1 inspect https://gensoko-frontend-staging-develop.vercel.app --json --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
-            rm -f "$provider_log" "$deployment_ref"
-            echo "staging frontend deployment状態を確認できません"
-            exit 1
-          fi
-          if ! EXPECTED_SHA="$GITHUB_SHA" FRONTEND_STATE="$provider_log" node --input-type=module -e '
-            import { readFileSync } from "node:fs";
-            const expected = process.env.EXPECTED_SHA;
-            const frontend = readFileSync(process.env.FRONTEND_STATE, "utf8");
-            if (!frontend.includes(expected)) process.exit(1);
-          '; then
-            rm -f "$provider_log" "$deployment_ref"
-            echo "staging frontend deployment SHAが一致しません"
-            exit 1
-          fi
-          rm -f "$provider_log" "$deployment_ref"
+          rm -f "$provider_log"
+
+      - name: Verify fixed staging branch domain and smoke
+        uses: ./.github/actions/vercel-preview-domain
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        with:
+          deployment-url-file: ${{ runner.temp }}/m2-vercel-deployment-ref
+          expected-sha: ${{ github.sha }}
+          expected-ref: develop
+          expected-target: preview
+          domain: gensoko-frontend-staging-develop.vercel.app
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          automation-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          smoke-marker: Gensoko
+
+      - name: Remove temporary frontend deployment reference
+        if: ${{ always() }}
+        run: rm -f "$RUNNER_TEMP/m2-vercel-deployment-ref"
 
   campaign:
     name: Run one M2 synthetic campaign and main cleanup
@@ -391,26 +390,55 @@ jobs:
           set -euo pipefail
           verify_active_sha() {
             worker_state="$RUNNER_TEMP/m2-worker-state.json"
-            frontend_state="$RUNNER_TEMP/m2-frontend-state.json"
+            frontend_candidates="$RUNNER_TEMP/m2-frontend-candidates.json"
+            frontend_urls="$RUNNER_TEMP/m2-frontend-urls"
             if ! npx wrangler deployments status --config wrangler.jsonc --env staging --json >"$worker_state" 2>/dev/null; then
-              rm -f "$worker_state" "$frontend_state"
+              rm -f "$worker_state" "$frontend_candidates" "$frontend_urls"
               return 1
             fi
-            if ! npx --yes vercel@50.17.1 inspect https://gensoko-frontend-staging-develop.vercel.app --json --token="$VERCEL_TOKEN" >"$frontend_state" 2>/dev/null; then
-              rm -f "$worker_state" "$frontend_state"
+            vercel_list=(npx --yes vercel@50.17.1 list gensoko-frontend-staging --meta "githubCommitSha=$GITHUB_SHA" --status READY --environment preview --format=json --token="$VERCEL_TOKEN")
+            if ! "${vercel_list[@]}" >"$frontend_candidates" 2>/dev/null; then
+              rm -f "$worker_state" "$frontend_candidates" "$frontend_urls"
               return 1
             fi
-            if ! EXPECTED_SHA="$GITHUB_SHA" WORKER_STATE="$worker_state" FRONTEND_STATE="$frontend_state" node --input-type=module -e '
+            if ! EXPECTED_SHA="$GITHUB_SHA" WORKER_STATE="$worker_state" FRONTEND_CANDIDATES="$frontend_candidates" node --input-type=module -e '
               import { readFileSync } from "node:fs";
               const expected = process.env.EXPECTED_SHA;
               const worker = readFileSync(process.env.WORKER_STATE, "utf8");
-              const frontend = readFileSync(process.env.FRONTEND_STATE, "utf8");
-              if (!worker.includes(expected) || !frontend.includes(expected)) process.exit(1);
-            '; then
-              rm -f "$worker_state" "$frontend_state"
+              const payload = JSON.parse(readFileSync(process.env.FRONTEND_CANDIDATES, "utf8"));
+              const deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
+              const exactDeployments = deployments.filter((deployment) => {
+                const target = deployment.target ?? "preview";
+                return deployment.state === "READY"
+                  && target === "preview"
+                  && deployment.meta?.githubCommitSha === expected
+                  && deployment.meta?.githubCommitRef === "develop"
+                  && typeof deployment.url === "string"
+                  && /^[a-z0-9-]+\.vercel\.app$/.test(deployment.url);
+              });
+              if (!worker.includes(expected)
+                || exactDeployments.length === 0) process.exit(1);
+              process.stdout.write(
+                exactDeployments.map((deployment) => "https://" + deployment.url + "/").join("\n") + "\n"
+              );
+            ' >"$frontend_urls" 2>/dev/null; then
+              rm -f "$worker_state" "$frontend_candidates" "$frontend_urls"
               return 1
             fi
-            rm -f "$worker_state" "$frontend_state"
+            content_match=false
+            while IFS= read -r candidate_url; do
+              if [ -z "$candidate_url" ]; then
+                continue
+              fi
+              if STAGING_CANDIDATE_URL="$candidate_url" STAGING_DOMAIN_URL=https://gensoko-frontend-staging-develop.vercel.app/ STAGING_SMOKE_MARKER=Gensoko node ../frontend/scripts/verify-staging-frontend-content.mjs 2>/dev/null; then
+                content_match=true
+                break
+              fi
+            done <"$frontend_urls"
+            rm -f "$worker_state" "$frontend_candidates" "$frontend_urls"
+            if [ "$content_match" != "true" ]; then
+              return 1
+            fi
           }
 
           if ! verify_active_sha; then

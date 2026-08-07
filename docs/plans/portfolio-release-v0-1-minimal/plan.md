@@ -335,9 +335,9 @@ pending Prisma migrationがある場合は`migrate-deploy`のdispatchと承認�
 
 ## 完了条件
 
-- M1R・M3・M5・M6と、必要な場合だけM4が完了している。
-- 一般登録から本人退会までのproduction smokeが成功している。
-- synthetic User、credential、User所有rowは残存せず、AuditLogは365日保持方針に従う内部IDだけを保持している。
-- 基本セキュリティ要件を弱めていない。
-- 対象外項目を完了扱いにせず、残余リスクと再着手条件を記録している。
-- production操作は各工程の別承認でのみ実行している。
+- [x] M1R・M3・M5・M6と、必要な場合だけM4が完了している。
+- [x] 一般登録から本人退会までのproduction smokeが成功している。
+- [x] synthetic User、credential、User所有rowは残存せず、AuditLogは365日保持方針に従う内部IDだけを保持している。
+- [x] 基本セキュリティ要件を弱めていない。
+- [x] 対象外項目を完了扱いにせず、残余リスクと再着手条件を記録している。
+- [x] production操作は各工程の別承認でのみ実行している。
