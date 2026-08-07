@@ -73,7 +73,7 @@ export function runProductionWorkerDeployment({
   const runnerTemp = environment.RUNNER_TEMP;
   if (!runnerTemp) failDeployment();
 
-  const configPath = join(runnerTemp, `wrangler.production.${process.pid}.json`);
+  const configPath = join(workingDirectory, `.wrangler.production.${process.pid}.json`);
   const providerLogPath = join(runnerTemp, "production-worker-provider.log");
   const statePath = join(runnerTemp, "production-worker-state.json");
   const releaseMarker = `production-release:${expectedSha}`;
