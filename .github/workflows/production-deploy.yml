@@ -181,6 +181,59 @@ jobs:
             fi
           done
 
+      - name: Preflight production Vercel credential scope
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.PRODUCTION_VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.PRODUCTION_VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.PRODUCTION_VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          classify_vercel_http_status() {
+            local resource="$1"
+            local status="$2"
+            case "$status" in
+              401) echo "token_invalid" ;;
+              403) echo "${resource}_access_denied" ;;
+              404) echo "${resource}_not_found" ;;
+              429) echo "rate_limited" ;;
+              5??) echo "provider_unavailable" ;;
+              *) echo "unexpected_status" ;;
+            esac
+          }
+          request_vercel_status() {
+            local url="$1"
+            curl \
+              --silent \
+              --output /dev/null \
+              --write-out "%{http_code}" \
+              --connect-timeout 10 \
+              --max-time 20 \
+              --header "Authorization: Bearer $VERCEL_TOKEN" \
+              "$url" 2>/dev/null
+          }
+
+          if ! team_status="$(request_vercel_status "https://api.vercel.com/v2/teams/$VERCEL_ORG_ID")"; then
+            echo "vercel_preflight_category=network_unknown"
+            exit 1
+          fi
+          if [ "$team_status" != "200" ]; then
+            category="$(classify_vercel_http_status team "$team_status")"
+            echo "vercel_preflight_category=$category"
+            exit 1
+          fi
+
+          if ! project_status="$(request_vercel_status "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID")"; then
+            echo "vercel_preflight_category=network_unknown"
+            exit 1
+          fi
+          if [ "$project_status" != "200" ]; then
+            category="$(classify_vercel_http_status project "$project_status")"
+            echo "vercel_preflight_category=$category"
+            exit 1
+          fi
+          echo "vercel_preflight_status=clear"
+
       - name: Revalidate live main before API mutation
         uses: ./.github/actions/validate-live-main
         with:
