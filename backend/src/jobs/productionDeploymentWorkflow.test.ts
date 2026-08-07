@@ -59,6 +59,7 @@ describe("production deployment workflow", () => {
       "Validate production database target",
       "Check production migration status",
       "Validate production provider credentials",
+      "Preflight production Vercel credential scope",
       "Deploy exact production API",
       "Validate production API health",
       "Deploy staged production frontend",
@@ -113,6 +114,43 @@ describe("production deployment workflow", () => {
     expect(credentials).toContain('[ -z "$credential" ]');
     expect(credentials).toContain('[[ "$credential" =~ [[:space:]] ]]');
     expect(source.match(/PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET:/g)).toHaveLength(3);
+  });
+
+  it("Vercel token・team・projectをresponse body非出力でAPI mutation前にfail-closed検証する", () => {
+    const source = workflow();
+    const preflightStart = source.indexOf("Preflight production Vercel credential scope");
+    const preflightEnd = source.indexOf("Revalidate live main before API mutation");
+
+    expect(preflightStart).toBeGreaterThanOrEqual(0);
+    expect(preflightEnd).toBeGreaterThan(preflightStart);
+    const preflight = source.slice(preflightStart, preflightEnd);
+    expect(preflight).toContain("VERCEL_TOKEN: ${{ secrets.PRODUCTION_VERCEL_TOKEN }}");
+    expect(preflight).toContain("VERCEL_ORG_ID: ${{ secrets.PRODUCTION_VERCEL_ORG_ID }}");
+    expect(preflight).toContain("VERCEL_PROJECT_ID: ${{ secrets.PRODUCTION_VERCEL_PROJECT_ID }}");
+    expect(preflight).toContain("/v2/teams/$VERCEL_ORG_ID");
+    expect(preflight).toContain("/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID");
+    expect(preflight.match(/--output \/dev\/null/g)).toHaveLength(1);
+    expect(preflight.match(/--write-out "%\{http_code\}"/g)).toHaveLength(1);
+    expect(preflight).toContain("Authorization: Bearer $VERCEL_TOKEN");
+    expect(preflight).toContain('if [ "$team_status" != "200" ]');
+    expect(preflight).toContain('if [ "$project_status" != "200" ]');
+    for (const category of [
+      "token_invalid",
+      "rate_limited",
+      "provider_unavailable",
+      "unexpected_status",
+      "network_unknown",
+    ]) {
+      expect(preflight).toContain(category);
+    }
+    expect(preflight).toContain('echo "${resource}_access_denied"');
+    expect(preflight).toContain('echo "${resource}_not_found"');
+    expect(preflight).toContain('classify_vercel_http_status team "$team_status"');
+    expect(preflight).toContain('classify_vercel_http_status project "$project_status"');
+    expect(preflight).toContain('echo "vercel_preflight_category=$category"');
+    expect(preflight).not.toMatch(/cat\s+|response[_ -]?body|provider raw/i);
+    expect(preflight).not.toContain('echo "$team_status"');
+    expect(preflight).not.toContain('echo "$project_status"');
   });
 
   it("Git未接続production projectでprovider envをpullせずprebuilt成果物とexact SHA metadataを使う", () => {

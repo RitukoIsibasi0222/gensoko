@@ -471,6 +471,7 @@ export async function verifyProductionFrontendContent(options) {}
 | PDA-18   | Git未接続production Vercel設定取得scopeをTDD修正                    | `.github/workflows/production-deploy.yml`、workflow test | 高     | production scopeのみ、exact SHA metadata維持         |
 | PDA-19   | production frontendをprovider env pullなしのprebuilt buildへTDD修正 | `.github/workflows/production-deploy.yml`、workflow test | 高     | 公開API URL明示、project固定、exact SHA metadata維持 |
 | PDA-20   | production Vercel CLI境界・safe失敗分類をTDD修正                    | `.github/workflows/production-deploy.yml`、workflow test | 高     | CLI 56.3.2、非対話project固定、raw非出力             |
+| PDA-21   | production Vercel credential preflightをTDD実装                     | `.github/workflows/production-deploy.yml`、workflow test | 高     | HTTP statusだけでtoken・team・projectを段階判定      |
 
 - [x] PDA-01: production workflow境界のRed contract test
 - [x] PDA-02: backend/frontend共有quality actionをTDD実装
@@ -492,6 +493,7 @@ export async function verifyProductionFrontendContent(options) {}
 - [x] PDA-18: Git未接続production Vercel設定取得scopeをTDD修正
 - [x] PDA-19: production frontendをprovider env pullなしのprebuilt buildへTDD修正
 - [x] PDA-20: production Vercel CLI境界・safe失敗分類をTDD修正
+- [x] PDA-21: production Vercel credential preflightをTDD実装
 
 ## Repository実装時の計画差分
 
@@ -519,6 +521,9 @@ export async function verifyProductionFrontendContent(options) {}
 - 4回目runではprovider stderrを一時fileへ隔離後に削除する既存方針により、token・内部ID・raw responseは漏えいしなかった一方、project access拒否とprebuilt API拒否を区別できなかった。旧Vercel CLI `50.17.1`の公開helpにはdeployの`--project`がなく、配布コードはprebuilt output検証前にproject情報を取得する。PDA-20ではproductionだけを`56.3.2`へ更新し、`--project`、`--yes`、`--non-interactive`、`--no-color`を明示する。provider logは引き続き出力せず、許可リストの固定categoryだけを記録する。
 - PDA-20はworkflow contractのRed 3件を確認後にGreen 8件、safe category実行5件、YAML parse、埋め込みBash 12件を通過した。最終gateはbackend 1361件、Workers 32件、frontend 685件、backend/frontend build・lint・format、Workers build、Svelte check、Prisma validateが成功した。
 - PDA-20のdevelop向けfollow-up PR [#216](https://github.com/RitukoIsibasi0222/gensoko/pull/216)を作成した。PR品質gateとCopilot reviewへ対応し、Codexはmergeしない。
+- PR #216とrelease PR #217のowner merge後、main SHAのproduction run [31154972851](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31154972851)を5 attempt検証した。全attemptはAPI health、repository build、Build Output contractまで成功し、candidate deployで固定category`project_not_found`としてfail-closed停止した。promote・smokeは未実行、safe evidence・cleanup成功、DB変更なし、旧frontend維持である。
+- production専用project、公式Team ID、team scope tokenを値非表示で再確認・再同期してもcategoryが変わらなかったため、同条件rerunを停止した。PDA-21ではVercel team・projectのread-only endpointをresponse body破棄・HTTP status allowlistでAPI mutation前に検証し、token・team・project境界を固定categoryへ段階分類する。provider raw response、token、内部IDは出力しない。
+- PDA-21はworkflow contractのRed 2件を確認後にGreen 9件、YAML/format、追加Bashの`bash -n`、偽curlによるsuccess・team access denied・project not foundの3実行caseを通過した。preflightはAPI mutation前にread-only GETだけを使い、response bodyを常に破棄する。
 
 ### スプレッドシート貼り付け用（v4確定）
 
@@ -544,6 +549,7 @@ PDA-17	production Worker一時configの相対path基準をTDD修正	backend/src/
 PDA-18	Git未接続production Vercel設定取得scopeをTDD修正	.github/workflows/production-deploy.yml、workflow test	高
 PDA-19	production frontendをprovider env pullなしのprebuilt buildへTDD修正	.github/workflows/production-deploy.yml、workflow test	高
 PDA-20	production Vercel CLI境界・safe失敗分類をTDD修正	.github/workflows/production-deploy.yml、workflow test	高
+PDA-21	production Vercel credential preflightをTDD実装	.github/workflows/production-deploy.yml、workflow test	高
 ```
 
 ## テストケース一覧
@@ -565,6 +571,7 @@ PDA-20	production Vercel CLI境界・safe失敗分類をTDD修正	.github/workfl
 | API deploy metadata SHA不一致                       | frontendを実行しない                                |
 | API health timeout / 非200 / body・CORS・header異常 | frontendを実行しない                                |
 | Vercel production projectがstagingと一致            | frontend deploy前にfailure                          |
+| Vercel tokenからproduction team/projectを参照不可   | API deploy前に固定categoryでfailure                 |
 | Vercel metadata ref/target/SHA/state不一致          | promoteせず旧domainを維持                           |
 | candidate marker/asset欠落                          | promoteせず旧domainを維持                           |
 | custom domainが旧assetを参照                        | bounded timeout後にfailure                          |
@@ -679,6 +686,18 @@ repository品質gateではproduction/staging provider、DB、URLへ接続せず�
 - frontend ESLint、Svelte check（error 0 / warning 0）、Prettier、実在値を使わないproduction形状の公開API URLによるbuildとVercel Build Output contract成功
 - GitHub Actions / composite action YAML 22件をparserで検証し、埋め込みBash 174 blockを`bash -n`で検証
 - `git diff --check`とproduction/staging分離・provider env pull不使用source contract成功。provider、DB、URLへの接続、workflow dispatch、Environment・Secret変更、実deploymentは実行していない
+
+### Production Vercel credential preflight follow-up品質ゲート実績（2026-08-07）
+
+- Red: provider credential形式確認後・API mutation前のVercel team/project preflight、response body破棄、HTTP status allowlist、固定categoryを要求し、意図した2 testsのfailureを確認
+- Green / Refactor: HTTP requestとstatus分類を各1 helperへ共通化し、対象9 tests成功。偽curl 3 caseと追加Bashの`bash -n`、production workflowのYAML/Prettier検証成功
+- backend通常test: 137 files成功、4 files skip、1362 tests成功、10 tests skip
+- backend Workers test: 4 files・32 tests成功
+- backend TypeScript build、Workers typecheck/build/dry-run、ESLint、Prettier、Prisma validate成功
+- frontend test: 66 files・685 tests成功
+- frontend ESLint、Svelte check（error 0 / warning 0）、Prettier、`.invalid`の公開API URLを使うproduction形状buildとVercel Build Output contract成功
+- `git diff --check`成功。外部provider・DB・production URLへの接続、workflow dispatch、Environment・Secret変更、実deploymentは実行していない
+- PR #218のCopilot review 1件に対応し、preflightの`Authorization: Bearer $VERCEL_TOKEN`組み立てをsource contractへ追加した。対象9 tests、Prettier、`git diff --check`成功
 
 ## コミット方針
 
