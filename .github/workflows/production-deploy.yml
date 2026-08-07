@@ -234,6 +234,20 @@ jobs:
           cleanup_release_files() {
             rm -f "$provider_log" "$candidate_state"
           }
+          classify_vercel_failure() {
+            local log_path="$1"
+            if grep -Eiq 'Could not retrieve Project Settings|PROJECT_UNAUTHORIZED|team_unauthorized|forbidden|unauthorized|invalid token|not authorized' "$log_path"; then
+              echo "project_access_denied"
+            elif grep -Eiq 'Project not found|project_not_found|does not exist' "$log_path"; then
+              echo "project_not_found"
+            elif grep -Eiq 'prebuilt.*(output|deployment)|Build Output|prebuilt-environment-mismatch|no prebuilt output' "$log_path"; then
+              echo "prebuilt_contract_rejected"
+            elif grep -Eiq 'deployment.*(failed|error|rejected)|DEPLOYMENT_FAILED|api.*error' "$log_path"; then
+              echo "deployment_api_rejected"
+            else
+              echo "unknown"
+            fi
+          }
           trap cleanup_release_files EXIT
           rm -f "$provider_log" "$candidate_ref" "$candidate_state"
 
@@ -248,11 +262,15 @@ jobs:
             echo "production frontend build契約が不正です"
             exit 1
           fi
-          if ! npx --yes vercel@50.17.1 deploy --prebuilt --prod --skip-domain --meta githubCommitSha="$EXPECTED_SHA" --meta githubCommitRef=main --token="$VERCEL_TOKEN" >"$candidate_ref" 2>"$provider_log"; then
+          if ! npx --yes vercel@56.3.2 deploy --yes --non-interactive --no-color --project="$VERCEL_PROJECT_ID" --prebuilt --prod --skip-domain --meta githubCommitSha="$EXPECTED_SHA" --meta githubCommitRef=main --token="$VERCEL_TOKEN" >"$candidate_ref" 2>"$provider_log"; then
+            category=$(classify_vercel_failure "$provider_log")
+            echo "vercel_failure_category=$category"
             echo "production frontend候補deployに失敗しました"
             exit 1
           fi
-          if ! npx --yes vercel@50.17.1 list --meta "githubCommitSha=$EXPECTED_SHA" --status READY --environment production --format=json --token="$VERCEL_TOKEN" >"$candidate_state" 2>"$provider_log"; then
+          if ! npx --yes vercel@56.3.2 list --yes --non-interactive --no-color --meta "githubCommitSha=$EXPECTED_SHA" --status READY --environment production --format=json --token="$VERCEL_TOKEN" >"$candidate_state" 2>"$provider_log"; then
+            category=$(classify_vercel_failure "$provider_log")
+            echo "vercel_failure_category=$category"
             echo "production frontend候補metadataを確認できません"
             exit 1
           fi
@@ -300,7 +318,7 @@ jobs:
             echo "production frontend候補参照がありません"
             exit 1
           fi
-          if ! npx --yes vercel@50.17.1 promote "$(tr -d '\r\n' < "$CANDIDATE_REF")" --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+          if ! npx --yes vercel@56.3.2 promote --yes --non-interactive --no-color "$(tr -d '\r\n' < "$CANDIDATE_REF")" --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
             echo "production frontend promoteに失敗しました"
             exit 1
           fi
