@@ -518,6 +518,7 @@ export async function verifyProductionFrontendContent(options) {}
 - PR #214はdevelopへowner mergeされ、release PR [#215](https://github.com/RitukoIsibasi0222/gensoko/pull/215)もmerge SHA `0b6076687bad5ff42f11c76a16afe272a4c8f1ee`としてmainへowner mergeされた。production run [31151482177](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31151482177)はbranch・SHA・quality・DB target・migration・credential・API deploy・API health・live main再確認・repository build・Build Output contractまで成功し、prebuilt candidate deployで固定error停止した。promote・smokeは未実行、safe evidence・cleanupは成功、DB mutationはなく、APIだけ同SHAへ更新され公開frontendは直前版を維持した。
 - 4回目runではprovider stderrを一時fileへ隔離後に削除する既存方針により、token・内部ID・raw responseは漏えいしなかった一方、project access拒否とprebuilt API拒否を区別できなかった。旧Vercel CLI `50.17.1`の公開helpにはdeployの`--project`がなく、配布コードはprebuilt output検証前にproject情報を取得する。PDA-20ではproductionだけを`56.3.2`へ更新し、`--project`、`--yes`、`--non-interactive`、`--no-color`を明示する。provider logは引き続き出力せず、許可リストの固定categoryだけを記録する。
 - PDA-20はworkflow contractのRed 3件を確認後にGreen 8件、safe category実行5件、YAML parse、埋め込みBash 12件を通過した。最終gateはbackend 1361件、Workers 32件、frontend 685件、backend/frontend build・lint・format、Workers build、Svelte check、Prisma validateが成功した。
+- PDA-20のdevelop向けfollow-up PR [#216](https://github.com/RitukoIsibasi0222/gensoko/pull/216)を作成した。PR品質gateとCopilot reviewへ対応し、Codexはmergeしない。
 
 ### スプレッドシート貼り付け用（v4確定）
 
