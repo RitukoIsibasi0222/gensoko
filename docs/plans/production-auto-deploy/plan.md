@@ -8,7 +8,7 @@
 
 `develop`から`main`へのreview済みPRを人間がmergeした後、GitHub Actionsが確定した`main` SHAを入力なしで取得し、Secret非参照のbranch・event・SHA・品質gate、production Environment承認、pending migration gateを順に通す。合格した同じSHAだけをproduction API、API health、production frontend、read-only smokeへ順序固定し、安全な固定statusだけを証拠へ残す。
 
-production frontendのdeploy所有権はGitHub Actionsへ一本化する。Vercel Git Integrationによる`main`自動deployは停止し、API・health成功前にfrontendが公開される二重deployを作らない。現在同一Vercel project内にあるstaging Previewとproduction deploymentは、production専用projectへ分離してから自動releaseを有効化する。repository実装と外部設定移行・実deploymentは別工程・別承認にする。
+production frontendの公開所有権はGitHub Actionsへ一本化する。production専用Vercel projectのGit Integrationは`main`のProduction deploymentを`STAGED`として作るだけに限定し、custom domainの自動割当を無効化する。GitHub ActionsはAPI・health成功後にexact `main` SHA、project、branch、target、`READY / STAGED`、Git由来、contentを検証し、合格したdeploymentだけをREST APIでpromoteする。repository実装、外部設定、実deploymentは別工程・別承認にする。
 
 ## 現状確認（2026-08-06）
 
@@ -75,8 +75,8 @@ production frontendのdeploy所有権はGitHub Actionsへ一本化する。Verce
 
 **`frontend/scripts/vercel-ignore-build.mjs`**
 
-- 現在は`main`を常にbuildし、`develop`はfrontend差分がある場合だけbuildする。
-- production所有権移行時に`main`のGit Integration buildをskipへ変更する。
+- staging projectでは`main`と対象外branchをskipし、`develop`はfrontend差分がある場合だけbuildする。
+- production projectでは外部のIgnored Build Stepをmain-onlyに分離し、staging projectのdevelop契約を変更しない。
 
 ### 重要な制約
 
@@ -87,8 +87,8 @@ production frontendのdeploy所有権はGitHub Actionsへ一本化する。Verce
 - production Environment内でもDB接続前・各provider mutation前にlive `main`先端が同じSHAか再確認する。
 - pending migrationがある場合はAPI deploy前に停止し、`Production Database Operations`の承認付き`migrate-deploy`へ案内する。通常releaseから`prisma migrate deploy`を実行しない。
 - migration後の再開はSHA入力を持たない`workflow_dispatch`を`main`から実行するか、同じrunのfailed jobs再実行を使う。どちらもlive `main`先端完全一致を再検証する。
-- API deployまたはhealthが失敗した場合、frontend build/deployを実行しない。
-- Vercel Git IntegrationとGitHub Actionsの二重production deployを作らない。
+- API deployまたはhealthが失敗した場合、既に作成済みのSTAGED frontendをpromoteせず、production custom domainを変更しない。
+- Vercel Git Integrationは候補buildだけ、GitHub Actionsは検証とpromoteだけを所有し、同じSHAの二重production deploymentを作らない。
 - staging / productionでGitHub Environment、Secretのscope・値、Vercel project、Worker、接続resource、URL、concurrency group、deployment targetを分離する。deploy credentialはproduction専用名にする。
 - Secret値、token、DB URL、内部resource ID、固有deployment URL、provider raw response、stack traceをlog、Summary、Artifactへ出さない。
 - provider commandのstdout/stderrは`RUNNER_TEMP`へ閉じ、成功・失敗の両方で削除する。`cat`やshell traceで表示しない。
@@ -100,25 +100,25 @@ production frontendのdeploy所有権はGitHub Actionsへ一本化する。Verce
 
 ### 決定
 
-production frontendの唯一のdeploy所有者をGitHub Actionsにする。
+Vercel Git IntegrationをSTAGED production候補のbuild所有者、GitHub Actionsをproduction custom domainへ公開する唯一の所有者にする。
 
 ### 根拠
 
-Vercel Git Integrationを所有者のままにすると、`main` merge直後にVercelがAPI gateと並行してProduction deploymentを開始する。GitHub Actionsから後でexact SHAを確認しても、API deploy・healthより前のfrontend公開を取り消せず、「APIまたはhealth失敗時はfrontendをdeployしない」を満たせない。
+custom domain自動割当が有効なGit Integrationでは、`main` merge直後にAPI gateと並行してfrontendが公開されるため不採用とする。一方、Vercel公式のStaged Production Deploymentsはcustom domain自動割当を無効にすれば、Git IntegrationがbuildしたProduction deploymentを公開前に検証し、後からpromoteできる。
 
-GitHub ActionsがAPI・health成功後にVercel CLIでproduction build / deployを行えば、1回のproduction Environment承認内で順序を固定できる。Git Integrationはstaging Preview専用projectに残し、production専用projectはGitHub Actionsからだけdeployする。
+Vercel CLIのcandidate deployはread-only team/project preflight成功後も`project_not_found`で再現性をもって停止した。Git Integrationが作るexact SHAのSTAGED候補をVercel REST APIで取得し、GitHub ActionsのAPI・health gate後にだけ検証・promoteすることで、CLI依存を除去しつつ公開順序を維持する。
 
 Vercel Hobbyのproduction専用projectではStandard Protectionによりproduction custom domain以外のdeployment URLが認証保護される。候補deployをpromote前に検証するため、production project限定のProtection Bypass for Automationを作成し、同じ値をproduction Environmentの`PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET`へ登録する。verifierは空・空白入りのbypass Secretをfetch前に拒否し、値をlog・evidenceへ出さずcandidate requestの`x-vercel-protection-bypass` headerだけへ渡す。custom domain requestにはSecret headerを送らない。
 
 ### 二重deploy防止
 
-1. repositoryのIgnored Build StepをTDDで変更し、既存staging projectの`main` Git buildをskipする。
-2. production専用Vercel projectを作成し、Git接続によるProduction deployを無効にするか接続しない。
-3. production custom domainとproduction環境変数を専用projectへ移す。
-4. production GitHub Environmentの専用token / project情報 / automation bypassだけでCLI deploy・候補検証する。
-5. 移行後に同じmain SHAでGit Integration由来の二重Production deploymentがないことをread-only確認する。
+1. staging projectのIgnored Build Stepはrepositoryの既存scriptを使い、`main`をskipして`develop` Preview契約を維持する。
+2. production projectのSettings → Environments → Productionで、Auto-assign Custom Production DomainsをOFFにした表示をGit接続前に確認する。
+3. production projectだけをGitHub repositoryへ接続し、Production Branchを`main`、Root Directoryを`frontend`、Ignored Build Stepをmain-onlyにする。
+4. `main` pushで生成されたdeploymentがcustom domain未割当の`READY / STAGED`であることを確認する。STAGEDでなければGitHub Actionsはpromoteしない。
+5. production GitHub Environmentの専用token / project情報 / automation bypassだけでexact SHA候補をREST取得・content検証し、REST promoteする。
 
-外部設定1〜4はrepository実装・review・merge後、対象、影響、費用、rollbackを提示した別承認で実行する。
+外部設定2〜3はrepository実装・review・developでのstaging確認後、対象、影響、費用、rollbackを提示した別承認で実行する。Auto-assign OFFを確認できない状態ではGit接続・release PR mergeを行わない。
 
 ## 目標フロー
 
@@ -137,8 +137,8 @@ developで確認
 → production API deploy
 → Cloudflare deployment metadataのexact SHAを検証
 → API health / CORS / security header確認
-→ production frontend build / staged deploy（custom domain未反映）
-→ Vercel metadataのexact SHA・ref=main・target=production・READYを検証
+→ Vercel Git Integrationが作るproduction frontend候補をSTAGEDのまま待機
+→ Vercel metadataのexact SHA・ref=main・target=production・source=git・READY/STAGEDを検証
 → candidateのimmutable asset・markerをread-only検証
 → 検証済みcandidateだけをproductionへpromote
 → production custom domainが対象buildを参照するまでbounded poll
@@ -161,8 +161,8 @@ developで確認
 | migration         | DB target確認後にread-only status。`current`以外はdeploy禁止                              |
 | API               | production一時Wrangler config、production専用credential、message metadataにexact SHA      |
 | health            | API deploy・exact SHA確認成功後だけ。GET、有限timeout、body/CORS/header契約               |
-| frontend          | health成功後だけ。`--prod --skip-domain`でstaged deployし、検証済みcandidateだけをpromote |
-| frontend metadata | exact SHA、ref=`main`、target=`production`、state=`READY`、project境界を完全一致          |
+| frontend          | Git IntegrationはSTAGED候補だけをbuild。health成功後に検証済みcandidateだけをREST promote |
+| frontend metadata | exact SHA、ref=`main`、target=`production`、source=`git`、`READY/STAGED`、project境界     |
 | smoke             | custom domainとcandidateのimmutable asset集合・marker、API healthをGETだけで確認          |
 | evidence          | SHA、run ID、固定status、UTC時刻だけ。URL・ID・raw responseなし                           |
 | artifact          | schema固定JSON 1件、短期retention。source、provider log、HTML、response bodyは保存しない  |
@@ -174,9 +174,9 @@ developで確認
 3. validation jobでevent、`github.ref`、`github.ref_name`、SHA形式、live main先端を検証する。
 4. quality jobとproduction jobは`ref: expected_sha`をcheckoutし、checkout後の`git rev-parse HEAD`を完全一致確認する。
 5. Environment承認待ちの間にmainが進んだ場合を除外するため、production job開始時と各provider mutation直前にlive main先端を再確認する。
-6. Cloudflare deploy message / deployment metadataとVercel metadataへ同じSHAを記録し、完全一致を検証する。
-7. frontend buildは同じcheckoutから作成し、production API URL contractをbuild outputで検証する。
-8. evidence generatorはworkflow SHA、Cloudflare確認SHA、Vercel確認SHAの一致がないとArtifactを生成しない。
+6. Cloudflare deploy message / deployment metadataとVercel Git metadataが同じSHAを指すことを完全一致検証する。
+7. Vercelはproduction branchのexact SHAからSTAGED候補をbuildし、GitHub Actionsはproject・source・SHA・ref・target・stateを再検証する。
+8. evidence generatorは各gateが成功した場合だけcanonical statusを追加し、URL・deployment ID・provider responseを保存しない。
 
 ## Environment承認とSecret境界
 
@@ -270,7 +270,7 @@ type ProductionReleaseStatus =
 | M5                                       | 初回provider/resource作成・手動deployを通常手順から外す。production設定変更時だけ高リスクpreflightへ戻る |
 | M6                                       | 初回synthetic登録〜本人退会は通常releaseから外す。通常はread-only smokeだけ                              |
 | Production Auth / Account Deletion Smoke | destructive・synthetic確認が必要な高リスク変更時だけ別承認                                               |
-| Vercel Git Integration production        | 無効化し、GitHub Actionsへ所有権移行。staging Previewでは維持                                            |
+| Vercel Git Integration production        | mainのSTAGED候補buildだけを所有。custom domain公開はGitHub ActionsのREST promoteだけ                     |
 
 ## 外部設定移行
 
@@ -278,15 +278,15 @@ repository実装PRのmerge前には変更しない。実行直前にplan・quota
 
 ### Vercel
 
-1. production専用projectを作成し、root directory・framework・Node.js・production環境変数を既存production contractへ合わせる。
-2. Git IntegrationによるProduction deployを無効にし、GitHub Actions CLIだけをdeploy所有者にする。
-3. production専用・最小権限tokenを作成し、production GitHub Environmentへ値非表示で登録する。
-4. custom domainを付ける前に、現在のreview済み`main` SHAを`--prod --skip-domain`でproduction専用projectへ一度だけbaseline deployし、exact SHA・production API build contract・candidate smokeを確認する。
-5. custom domainを既存混在projectからproduction専用projectへ移し、baseline candidateとimmutable asset集合が一致することを確認する。
+1. production専用project、root directory・framework・Node.js・production環境変数、custom domain、automation bypass、専用tokenを既存contractどおり維持する。
+2. `develop`のstaging品質・固定domainを確認後、ProductionのAuto-assign Custom Production DomainsをOFFにし、保存後の表示を確認する。
+3. Auto-assign OFF確認後だけGitHub repositoryへ接続し、Production Branch=`main`、Root Directory=`frontend`を設定する。Ignored Build StepはCustomの`if [ "$VERCEL_GIT_COMMIT_REF" = "main" ]; then exit 1; else exit 0; fi`とし、exit 1で`main`だけをbuild、exit 0で他branchをskipする。staging projectの`npm run vercel:ignore-build`とは共用しない。
+4. custom domainを変えず、同じmain SHAの新deploymentが`READY / STAGED`かつcustom domain未割当であることをread-only確認する。
+5. GitHub ActionsはAPI health後にexact SHA候補をREST取得・content検証し、検証済みdeployment IDだけをREST promoteする。
 6. production projectのbuild outputがproduction API URLだけを参照することを確認する。
 7. staging projectのPreview branch domain、staging token、develop設定が変わっていないことを確認する。
 
-baseline deployとcustom domain切替は一回限りの外部production変更であり、実行直前の明示承認なしに行わない。影響はcustom domain切替時の短時間の参照先変更と、初回production project buildによるHobby quota消費である。追加費用は実行時の現行planで再確認する。rollbackはcustom domainを直前正常deploymentが残る旧projectへ戻し、production workflowを無効化する。Git Integrationを再有効化する場合も別承認とする。
+Git接続とSTAGED buildは外部production変更であり、実行直前の明示承認なしに行わない。影響はVercel build quotaの消費で、Auto-assign OFFのためcustom domainは変わらない。rollbackはproduction Git Integrationを切断し、production workflowを無効化して直前Current deploymentを維持する。custom domainを動かすrollbackは別承認とする。
 
 ### Cloudflare
 
@@ -407,7 +407,7 @@ export async function verifyProductionFrontendContent(options) {}
 4. production Worker一時config、deploy、exact SHA metadata確認、log cleanupを実装する。
 5. production API health validatorを実装する。
 6. frontend content verifierを純粋helperへ共通化し、staging wrapperを回帰させる。
-7. production専用Vercel CLI staged deploy、exact metadata、candidate検証、promote、domain propagation、read-only smokeを実装する。
+7. production Git IntegrationのSTAGED候補待機、exact metadata、candidate検証、REST promote、domain propagation、read-only smokeを実装する。
 8. Vercel Ignored Build Stepのmain skipを実装する。
 9. safe Summary / Artifact generatorを実装する。
 
@@ -477,6 +477,10 @@ export async function verifyProductionFrontendContent(options) {}
 | PDA-24   | Vercel CLI owner lookupを既存Team IDで安全に解決                    | `.github/workflows/production-deploy.yml`、workflow test | 高     | deploy/list/promoteの明示scope、Secret追加なし       |
 | PDA-25   | Vercel CLI scopeを検証済みTeam slugで解決                           | `.github/workflows/production-deploy.yml`、workflow test | 高     | Team IDはbinding専用、slugは一時参照・raw非出力      |
 | PDA-26   | 現行Vercel CLIでproduction projectを明示解決                        | `.github/workflows/production-deploy.yml`、workflow test | 高     | CLI 58.9.0、project ID・Team slugを明示              |
+| PDA-27   | Git Integration由来STAGED候補のexact SHA待機をTDD実装               | `.github/workflows/production-deploy.yml`、workflow test | 高     | project/branch/target/source/READY/STAGED完全一致    |
+| PDA-28   | 検証済みcandidateのVercel REST promoteをTDD実装                     | `.github/workflows/production-deploy.yml`、workflow test | 高     | deployment ID形式、201/202、raw非出力                |
+| PDA-29   | production Git接続の安全な外部設定順序をrunbookへ同期               | `docs/11_deployment.md`、本計画書                        | 高     | Auto-assign OFF確認後だけGit接続                     |
+| PDA-30   | develop staging確認・PR・production実runを検証                      | GitHub/Vercel                                            | 高     | PDA-16完了条件を満たすまで未完了                     |
 
 - [x] PDA-01: production workflow境界のRed contract test
 - [x] PDA-02: backend/frontend共有quality actionをTDD実装
@@ -504,6 +508,10 @@ export async function verifyProductionFrontendContent(options) {}
 - [x] PDA-24: Vercel CLI owner lookupを既存Team IDで安全に解決
 - [x] PDA-25: Vercel CLI scopeを検証済みTeam slugで解決
 - [x] PDA-26: 現行Vercel CLIでproduction projectを明示解決
+- [x] PDA-27: Git Integration由来STAGED候補のexact SHA待機をTDD実装
+- [x] PDA-28: 検証済みcandidateのVercel REST promoteをTDD実装
+- [x] PDA-29: production Git接続の安全な外部設定順序をrunbookへ同期
+- [ ] PDA-30: develop staging確認・PR・production実runを検証
 
 ## Repository実装時の計画差分
 
@@ -544,6 +552,8 @@ export async function verifyProductionFrontendContent(options) {}
 - Vercel CLIの`--scope`はTeam IDではなくTeam slugを受け取る一方、`VERCEL_ORG_ID`はCI project binding用のTeam IDである。PDA-25ではread-only team responseの`id`完全一致を確認してからslugを検証し、mode `0600`の一時参照へだけ保存する。deploy/list/promoteはこのslugを`--scope`へ渡し、raw response・Team ID・slugをlog、step output、Artifactへ出力しない。
 - PDA-25とrelease PR #227を含むmain SHA `e6ffe5b0b5baf3b3cbaa9acffad3465b447a9b77`のrun [31260704440](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31260704440)は、Team slug preflight、production API deploy、API health、repository build、Build Output contractまで成功した。candidate deployは引き続き`project_not_found`で安全停止し、promote・smokeは未実行、旧production frontendを維持した。
 - Vercel公式の現行CLIは`--project`によるproject name/ID明示をサポートし、CIでは`VERCEL_ORG_ID`・`VERCEL_PROJECT_ID`も利用できる。PDA-26では安定版`58.9.0`へ固定し、deployの`--project`とlistのproject位置引数で、read-only preflight済みproduction project IDを明示する。Team slug scope、projectId完全一致、raw非出力、staged deploy→promote境界は維持する。
+- PDA-26を含むPR #228とrelease PR #229のmain SHA `86d5d2625ed0158dfd0b2cf42f2bbe1a8246fc6c`で起動したrun [31261605275](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31261605275)も、Vercel preflight、production API、API health、repository build、Build Output contractまで成功し、CLI candidate deployだけが`project_not_found`で安全停止した。
+- 同じmain SHAはVercel DashboardのGit reference指定による手動Production deploymentでbuild成功し、custom domainのCurrentへ切替後にトップページ文言、2行の挨拶、4px radius、shadow削除を確認した。API・DBの追加mutationは行っていない。手動成功とCLI失敗の差から、PDA-27〜PDA-30ではproduction projectのGit IntegrationをSTAGED build専用として利用し、GitHub Actionsがexact SHA候補をREST取得・検証・promoteする方式へ移行する。
 
 ### スプレッドシート貼り付け用（v4確定）
 
@@ -575,6 +585,10 @@ PDA-23	candidate project境界とworkflow contractをTDD補強	.github/workflows
 PDA-24	Vercel CLI owner lookupを既存Team IDで安全に解決	.github/workflows/production-deploy.yml、workflow test	高
 PDA-25	Vercel CLI scopeを検証済みTeam slugで解決	.github/workflows/production-deploy.yml、workflow test	高
 PDA-26	現行Vercel CLIでproduction projectを明示解決	.github/workflows/production-deploy.yml、workflow test	高
+PDA-27	Git Integration由来STAGED候補のexact SHA待機をTDD実装	.github/workflows/production-deploy.yml、workflow test	高
+PDA-28	検証済みcandidateのVercel REST promoteをTDD実装	.github/workflows/production-deploy.yml、workflow test	高
+PDA-29	production Git接続の安全な外部設定順序をrunbookへ同期	docs/11_deployment.md、plan.md	高
+PDA-30	develop staging確認・PR・production実runを検証	GitHub/Vercel	高
 ```
 
 ## テストケース一覧
@@ -598,6 +612,8 @@ PDA-26	現行Vercel CLIでproduction projectを明示解決	.github/workflows/pr
 | Vercel production projectがstagingと一致            | frontend deploy前にfailure                          |
 | Vercel tokenからproduction team/projectを参照不可   | API deploy前に固定categoryでfailure                 |
 | Vercel metadata ref/target/SHA/state不一致          | promoteせず旧domainを維持                           |
+| Vercel candidateがGit由来・READY・STAGEDでない      | promoteせず旧domainを維持                           |
+| Auto-assign OFFをGit接続前に確認できない            | Git接続・release PR mergeを行わない                 |
 | candidate marker/asset欠落                          | promoteせず旧domainを維持                           |
 | custom domainが旧assetを参照                        | bounded timeout後にfailure                          |
 | marker/asset欠落、redirect、非HTML                  | smoke failure                                       |
@@ -758,6 +774,16 @@ repository品質gateではproduction/staging provider、DB、URLへ接続せず�
 - backend通常testは137 files・1362 tests成功（4 files・10 tests skip）、Workersは4 files・32 tests成功。TypeScript build、Workers staging/production dry-run、ESLint、Prettier、Prisma validateが成功した。
 - frontendは68 files・692 tests、ESLint、Svelte check（error 0 / warning 0）、Prettier、非実在URLによるPreview形状buildとVercel Build Output contractが成功した。
 - production workflowのYAML parse、埋め込みBash 13 blockの`bash -n`、`git diff --check`が成功した。外部provider・DB・production URLへの接続、workflow dispatch、Environment・Secret変更、実deploymentは追加実行していない。
+
+### Production Vercel Git STAGED / REST promote follow-up品質ゲート実績（2026-08-09）
+
+- Red: CLI candidate deploy/list/promoteを禁止し、Git Integration由来のexact `main`、production、`READY / STAGED`候補待機と検証済みdeployment IDのREST promoteを要求した。意図した3 testsのfailureを確認した。
+- Green / Refactor: `GET /v7/deployments`のbounded pollと`POST /v10/projects/{projectId}/promote/{deploymentId}`へ移行した。project、SHA、branch、target、source、state、候補一意性、ID/URL形式をfail-closed検証し、provider response bodyをlogへ出さない。RESTで不要になったTeam slug一時参照も削除した。
+- 対象workflow contractは9 tests、直接影響7 files・39 testsが最終成功した。
+- backend通常testは137 files・1362 tests成功（4 files・10 tests skip）、Workersは4 files・32 tests成功。TypeScript build、Workers typecheck/build/dry-run、ESLint、Prettier、Prisma validateが成功した。
+- frontendは68 files・692 tests、ESLint、Svelte check（error 0 / warning 0）、Prettier、非実在URLによるPreview形状buildとVercel Build Output contractが成功した。
+- production workflowのYAML parse、埋め込みBash 13 blockの`bash -n`、`git diff --check`が成功した。production専用Ignored Build Stepのexact commandとAuto-assign OFF確認順序をrunbookへ同期した。
+- 外部provider・DB・production URLへの追加接続、workflow dispatch、Vercel Git接続、Environment・Secret変更、実deploymentは実行していない。PDA-30とPDA-16はdevelop/staging確認とproduction実runが完了するまで未完了を維持する。
 
 ## コミット方針
 
