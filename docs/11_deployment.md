@@ -265,6 +265,13 @@ Vercel HobbyのStandard Protectionではproduction custom domain以外のdeploym
 - candidate deployは固定category`project_not_found`で停止し、promote・read-only smokeは未実行だった。safe evidence生成・uploadとcleanupは成功し、DB mutationはなく、APIは同SHAへ更新済み、公開frontendは直前版を維持した。
 - Vercel CLI `56.3.2`はCI環境IDでprojectを取得するとき、旧`/teams/{teamId}` owner lookupも並行実行し、ownerが取得できない場合をproject不存在と同じ固定文言へまとめる。CLIの明示scope解決は`/v1/teams`取得時に同じteam cacheを事前投入するため、既存`VERCEL_ORG_ID`をdeploy/list/promoteの`--scope`へ渡す。production project bindingは引き続き`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`環境変数で固定し、Secret追加・権限拡張・provider設定変更は行わない。
 
+### 8〜10回目production runのfail-closed記録（2026-08-08）
+
+- PR #224のUI変更を含むrelease PR #225のmerge SHA `543b3850c068577dca858f67bbfad9769a43a096`でrun [31258867516](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31258867516)を開始した。Vercel team preflightが`team_access_denied`となり、API・frontend・DB mutation前に安全停止した。
+- production project限定tokenへ更新したrun [31259360381](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31259360381)も同じpreflightで停止した。tokenをAll Projects scopeへ更新したrun [31259602415](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31259602415)では、team/project preflight、production API deploy、API health、repository build、Build Output contractまで成功した。
+- run 31259602415のcandidate deployは`project_not_found`で安全停止し、promote・read-only smokeは未実行だった。safe evidenceとcleanupは成功し、APIは同SHAへ更新済み、公開frontendは直前版を維持した。
+- Vercel CLIの`--scope`はTeam slugを受け取り、CI project bindingの`VERCEL_ORG_ID`はTeam IDである。read-only preflightでTeam ID完全一致を確認したresponseからslugを抽出・形式検証し、mode `0600`の一時参照へ保存する。deploy/list/promoteだけがこのslugを読み取り、raw response・Team ID・slugをlog、step output、Artifactへ出力しない。
+
 ### 通常release
 
 1. `develop`でstaging確認を完了し、`develop`から`main`へのPRを作成する。mainへの自動mergeは使わない。
@@ -277,7 +284,7 @@ Vercel HobbyのStandard Protectionではproduction custom domain以外のdeploym
 8. `prisma migrate status`をread-only実行し、`current`だけを許可する。`pending`または`unknown`はAPI deploy前に停止する。
 9. Vercel production tokenからproduction team・projectをread-only参照できることをresponse body非出力・HTTP status allowlistでpreflightする。clear以外は固定categoryだけを出してAPI deploy前に停止する。その後provider mutation直前にもlive `main`を再確認し、production専用一時Wrangler configをbackend working directory内へmode `0600`で生成してAPIをdeployする。相対`main`と`$schema`の解決基準を維持し、provider出力とstateだけを`RUNNER_TEMP`へ隔離する。deployment metadataのexact SHAが一致しない場合はfrontendへ進まない。
 10. API health、CORS、security headerをGETだけで確認する。失敗時はfrontend build/deployを行わない。
-11. Git未接続のproduction専用Vercel projectはproduction Environmentの`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`環境変数だけで固定し、Vercel CLI `56.3.2`へ`--yes --non-interactive --no-color`を明示する。CLI owner lookup用team cacheを解決するためdeploy/list/promoteへ既存`VERCEL_ORG_ID`を`--scope`として渡すが、deployの`--project`やlistのproject位置引数は重ねない。provider env pullは行わず、`VERCEL_ENV=production`、`VERCEL_GIT_COMMIT_REF=main`、exact SHA、明示したproduction API公開URLでrepositoryの`npm run build`を実行する。Vercel Build Output contractを検証後、`deploy --prebuilt --prod --skip-domain`で候補をdeployし、list結果の`projectId`がproduction専用`VERCEL_PROJECT_ID`と完全一致する単一候補について、SHA、ref=`main`、target=`production`、READY、candidate URL、automation bypass header経由のmarker・immutable assetを検証する。不一致・欠落・複数一致はfail-closed停止する。失敗時はraw provider outputを出さず、許可リストの固定categoryだけを記録する。
+11. Git未接続のproduction専用Vercel projectはproduction Environmentの`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`環境変数だけで固定し、Vercel CLI `56.3.2`へ`--yes --non-interactive --no-color`を明示する。read-only preflight responseのTeam ID完全一致を確認後、形式検証済みTeam slugをmode `0600`の一時参照へ保存し、deploy/list/promoteの`--scope`にはこのslugだけを渡す。Team IDを`--scope`へ渡さず、deployの`--project`やlistのproject位置引数も重ねない。provider env pullは行わず、`VERCEL_ENV=production`、`VERCEL_GIT_COMMIT_REF=main`、exact SHA、明示したproduction API公開URLでrepositoryの`npm run build`を実行する。Vercel Build Output contractを検証後、`deploy --prebuilt --prod --skip-domain`で候補をdeployし、list結果の`projectId`がproduction専用`VERCEL_PROJECT_ID`と完全一致する単一候補について、SHA、ref=`main`、target=`production`、READY、candidate URL、automation bypass header経由のmarker・immutable assetを検証する。不一致・欠落・複数一致はfail-closed停止する。失敗時はraw provider outputを出さず、許可リストの固定categoryだけを記録する。
 12. 検証済みcandidateだけを`vercel promote`し、custom domainが同じasset集合とmarkerを参照するまで有限回pollする。
 13. production frontendとAPIをread-only smokeし、SHA、run ID、run attempt、固定status、UTC時刻だけのJSON Artifactを7日保持する。
 
