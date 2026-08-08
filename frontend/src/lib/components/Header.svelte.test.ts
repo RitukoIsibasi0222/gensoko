@@ -71,6 +71,22 @@ afterEach(async () => {
 });
 
 describe('Header admin navigation', () => {
+  it('ログイン済みの挨拶をdesktopとmobileの両方で句読点なしの2段表示にする', async () => {
+    const target = await renderFor('authenticated', 'USER');
+    const greetings = target.querySelectorAll<HTMLElement>('[data-user-greeting]');
+
+    expect(greetings).toHaveLength(2);
+    for (const greeting of greetings) {
+      expect(greeting.children).toHaveLength(2);
+      expect(greeting.children[0]?.textContent).toBe('こんにちは');
+      expect(greeting.children[1]?.textContent).toBe('userさん');
+      expect(greeting.children[0]?.classList.contains('block')).toBe(true);
+      expect(greeting.children[1]?.classList.contains('block')).toBe(true);
+      expect(greeting.textContent).not.toContain('、');
+      expect(greeting.textContent).not.toContain(' さん');
+    }
+  });
+
   it('theme toggleをdesktopとmobile menuの両方から操作可能にする', async () => {
     const target = renderHeader();
     await tick();

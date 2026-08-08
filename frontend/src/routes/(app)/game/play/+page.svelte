@@ -581,7 +581,7 @@
         <GameTimerBar {remainingSec} timeLimitSec={QUESTION_TIME_LIMIT_SEC} />
       </div>
 
-      <div class="border-border-muted bg-surface rounded border p-5 shadow-sm">
+      <div class="border-border-muted bg-surface rounded border p-5">
         <p class="text-text-subtle text-sm font-semibold">問題</p>
         <p class="text-text mt-3 text-center text-5xl font-bold break-words">
           {currentQuestion.prompt}

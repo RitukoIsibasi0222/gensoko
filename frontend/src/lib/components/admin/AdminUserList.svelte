@@ -131,7 +131,7 @@
 <section
   aria-labelledby="admin-user-list-heading"
   aria-busy={isLoading || isPageLoading}
-  class="border-border-muted bg-surface rounded-2xl border shadow-sm"
+  class="border-border-muted bg-surface rounded-2xl border"
 >
   <div
     class="border-border-muted flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4"
@@ -256,7 +256,7 @@
                 登録日 {new Date(user.createdAt).toLocaleDateString('ja-JP')}
               </p>
             </div>
-            <span class="bg-surface-subtle text-text rounded-full px-2 py-1 text-xs font-semibold">
+            <span class="bg-surface-subtle text-text rounded px-2 py-1 text-xs font-semibold">
               {user.role}
             </span>
           </div>

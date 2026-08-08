@@ -32,7 +32,7 @@
   }
 </script>
 
-<div class="border-border-muted bg-surface flex h-full flex-col rounded border p-5 shadow-sm">
+<div class="border-border-muted bg-surface flex h-full flex-col rounded border p-5">
   <div class="flex flex-wrap gap-2">
     <span class="bg-info-surface text-action rounded px-2 py-1 text-xs font-semibold">
       {config.formatLabel}

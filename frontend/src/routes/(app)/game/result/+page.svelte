@@ -224,7 +224,7 @@
         <div class="mt-2 flex items-center gap-3">
           {#if isRestoreLoading}
             <span
-              class="border-brand inline-block h-5 w-5 animate-spin rounded-full border-2 border-t-transparent"
+              class="border-brand inline-block h-5 w-5 animate-spin rounded border-2 border-t-transparent"
               aria-hidden="true"
             ></span>
           {/if}
