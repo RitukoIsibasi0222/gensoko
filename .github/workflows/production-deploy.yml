@@ -190,9 +190,8 @@ jobs:
         run: |
           set -euo pipefail
           team_state="$RUNNER_TEMP/production-vercel-team.json"
-          team_slug_ref="$RUNNER_TEMP/production-vercel-team-slug"
           trap 'rm -f "$team_state"' EXIT
-          rm -f "$team_state" "$team_slug_ref"
+          rm -f "$team_state"
           classify_vercel_http_status() {
             local resource="$1"
             local status="$2"
@@ -231,16 +230,11 @@ jobs:
           if ! VERCEL_ORG_ID="$VERCEL_ORG_ID" TEAM_STATE="$team_state" node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const state = JSON.parse(readFileSync(process.env.TEAM_STATE, "utf8"));
-            if (state.id !== process.env.VERCEL_ORG_ID
-              || typeof state.slug !== "string"
-              || !/^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/.test(state.slug)) process.exit(1);
-            process.stdout.write(state.slug);
-          ' >"$team_slug_ref" 2>/dev/null; then
-            rm -f "$team_slug_ref"
+            if (state.id !== process.env.VERCEL_ORG_ID) process.exit(1);
+          ' 2>/dev/null; then
             echo "vercel_preflight_category=team_metadata_invalid"
             exit 1
           fi
-          chmod 600 "$team_slug_ref"
 
           project_url="https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID"
           if ! project_status="$(request_vercel_status "$project_url" /dev/null)"; then
@@ -286,14 +280,11 @@ jobs:
         with:
           expected-sha: ${{ needs.validate-release.outputs.expected_sha }}
 
-      - name: Deploy staged production frontend
+      - name: Wait for exact staged production frontend
         id: frontend-candidate
         working-directory: frontend
         env:
           EXPECTED_SHA: ${{ needs.validate-release.outputs.expected_sha }}
-          PRODUCTION_API_BASE_URL: https://${{ vars.PRODUCTION_API_HOSTNAME }}/api/v1
-          PRODUCTION_DOMAIN_URL: ${{ vars.PRODUCTION_FRONTEND_ORIGIN }}
-          VERCEL_ENV: production
           VERCEL_TOKEN: ${{ secrets.PRODUCTION_VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.PRODUCTION_VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.PRODUCTION_VERCEL_PROJECT_ID }}
@@ -301,77 +292,52 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          provider_log="$RUNNER_TEMP/production-vercel-provider.log"
           candidate_ref="$RUNNER_TEMP/production-vercel-candidate-url"
+          deployment_id_ref="$RUNNER_TEMP/production-vercel-candidate-id"
           candidate_state="$RUNNER_TEMP/production-vercel-candidate-state.json"
           cleanup_release_files() {
-            rm -f "$provider_log" "$candidate_state"
-          }
-          classify_vercel_failure() {
-            local log_path="$1"
-            if grep -Eiq 'Could not retrieve Project Settings|PROJECT_UNAUTHORIZED|team_unauthorized|forbidden|unauthorized|invalid token|not authorized' "$log_path"; then
-              echo "project_access_denied"
-            elif grep -Eiq 'Project not found|project_not_found|does not exist' "$log_path"; then
-              echo "project_not_found"
-            elif grep -Eiq 'prebuilt.*(output|deployment)|Build Output|prebuilt-environment-mismatch|no prebuilt output' "$log_path"; then
-              echo "prebuilt_contract_rejected"
-            elif grep -Eiq 'deployment.*(failed|error|rejected)|DEPLOYMENT_FAILED|api.*error' "$log_path"; then
-              echo "deployment_api_rejected"
-            else
-              echo "unknown"
-            fi
+            rm -f "$candidate_state"
           }
           trap cleanup_release_files EXIT
-          rm -f "$provider_log" "$candidate_ref" "$candidate_state"
-          team_slug_ref="$RUNNER_TEMP/production-vercel-team-slug"
-          if [ ! -f "$team_slug_ref" ]; then
-            echo "production Vercel team scope参照がありません"
-            exit 1
-          fi
-          VERCEL_TEAM_SLUG="$(tr -d '\r\n' < "$team_slug_ref")"
-          if [[ ! "$VERCEL_TEAM_SLUG" =~ ^[a-z0-9]([a-z0-9-]{0,98}[a-z0-9])?$ ]]; then
-            echo "production Vercel team scopeが不正です"
-            exit 1
-          fi
-
-          export VERCEL_GIT_COMMIT_SHA="$EXPECTED_SHA"
-          export VERCEL_GIT_COMMIT_REF="main"
-          export VITE_API_BASE_URL="$PRODUCTION_API_BASE_URL"
-          if ! npm run build >"$provider_log" 2>&1; then
-            echo "production frontend buildに失敗しました"
-            exit 1
-          fi
-          if ! node scripts/check-vercel-build-output.mjs >"$provider_log" 2>&1; then
-            echo "production frontend build契約が不正です"
-            exit 1
-          fi
-          if ! npx --yes vercel@58.9.0 deploy --yes --non-interactive --no-color --prebuilt --prod --skip-domain --project "$VERCEL_PROJECT_ID" --scope "$VERCEL_TEAM_SLUG" --meta githubCommitSha="$EXPECTED_SHA" --meta githubCommitRef=main --token="$VERCEL_TOKEN" >"$candidate_ref" 2>"$provider_log"; then
-            category=$(classify_vercel_failure "$provider_log")
-            echo "vercel_failure_category=$category"
-            echo "production frontend候補deployに失敗しました"
-            exit 1
-          fi
-          if ! npx --yes vercel@58.9.0 list "$VERCEL_PROJECT_ID" --yes --non-interactive --no-color --scope "$VERCEL_TEAM_SLUG" --meta "githubCommitSha=$EXPECTED_SHA" --status READY --environment production --format=json --token="$VERCEL_TOKEN" >"$candidate_state" 2>"$provider_log"; then
-            category=$(classify_vercel_failure "$provider_log")
-            echo "vercel_failure_category=$category"
-            echo "production frontend候補metadataを確認できません"
-            exit 1
-          fi
-          if ! EXPECTED_SHA="$EXPECTED_SHA" VERCEL_PROJECT_ID="$VERCEL_PROJECT_ID" CANDIDATE_REF="$candidate_ref" CANDIDATE_STATE="$candidate_state" node --input-type=module -e '
-            import { readFileSync } from "node:fs";
-            const candidateUrl = readFileSync(process.env.CANDIDATE_REF, "utf8").trim();
-            const candidateHost = candidateUrl.replace(/^https:\/\//, "").replace(/\/$/, "");
-            const payload = JSON.parse(readFileSync(process.env.CANDIDATE_STATE, "utf8"));
-            const deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
-            const matches = deployments.filter((deployment) => deployment.projectId === process.env.VERCEL_PROJECT_ID
-              && deployment.state === "READY"
-              && deployment.target === "production"
-              && deployment.url === candidateHost
-              && deployment.meta?.githubCommitSha === process.env.EXPECTED_SHA
-              && deployment.meta?.githubCommitRef === "main");
-            if (!/^https:\/\/[a-z0-9-]+\.vercel\.app\/?$/.test(candidateUrl) || matches.length !== 1) process.exit(1);
-          ' 2>/dev/null; then
-            echo "production frontend候補metadataが不一致です"
+          rm -f "$candidate_ref" "$deployment_id_ref" "$candidate_state"
+          deployments_url="https://api.vercel.com/v7/deployments?teamId=$VERCEL_ORG_ID&projectId=$VERCEL_PROJECT_ID&sha=$EXPECTED_SHA&branch=main&target=production&state=READY&limit=10"
+          candidate_ready=false
+          for attempt in $(seq 1 60); do
+            if candidate_status="$(curl \
+              --silent \
+              --output "$candidate_state" \
+              --write-out "%{http_code}" \
+              --connect-timeout 10 \
+              --max-time 20 \
+              --header "Authorization: Bearer $VERCEL_TOKEN" \
+              "$deployments_url" 2>/dev/null)" && [ "$candidate_status" = "200" ]; then
+              if EXPECTED_SHA="$EXPECTED_SHA" VERCEL_PROJECT_ID="$VERCEL_PROJECT_ID" CANDIDATE_REF="$candidate_ref" DEPLOYMENT_ID_REF="$deployment_id_ref" CANDIDATE_STATE="$candidate_state" node --input-type=module -e '
+                import { readFileSync, writeFileSync } from "node:fs";
+                const payload = JSON.parse(readFileSync(process.env.CANDIDATE_STATE, "utf8"));
+                const deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
+                const matches = deployments.filter((deployment) =>
+                  deployment.projectId === process.env.VERCEL_PROJECT_ID
+                  && deployment.readyState === "READY"
+                  && deployment.readySubstate === "STAGED"
+                  && deployment.target === "production"
+                  && deployment.source === "git"
+                  && deployment.meta?.githubCommitSha === process.env.EXPECTED_SHA
+                  && deployment.meta?.githubCommitRef === "main");
+                if (matches.length !== 1) process.exit(1);
+                const [deployment] = matches;
+                if (!/^dpl_[A-Za-z0-9]+$/.test(deployment.uid)
+                  || !/^[a-z0-9-]+\.vercel\.app$/.test(deployment.url)) process.exit(1);
+                writeFileSync(process.env.CANDIDATE_REF, `https://${deployment.url}\n`, { mode: 0o600 });
+                writeFileSync(process.env.DEPLOYMENT_ID_REF, `${deployment.uid}\n`, { mode: 0o600 });
+              ' 2>/dev/null; then
+                candidate_ready=true
+                break
+              fi
+            fi
+            if [ "$attempt" -lt 60 ]; then sleep 10; fi
+          done
+          if [ "$candidate_ready" != "true" ]; then
+            echo "vercel_candidate_category=exact_staged_deployment_unavailable"
             exit 1
           fi
           if ! PRODUCTION_VERIFY_MODE=candidate PRODUCTION_CANDIDATE_URL="$(tr -d '\r\n' < "$candidate_ref")" PRODUCTION_SMOKE_MARKER=Gensoko node scripts/verify-production-frontend-content.mjs 2>/dev/null; then
@@ -402,17 +368,31 @@ jobs:
             echo "production frontend候補参照がありません"
             exit 1
           fi
-          team_slug_ref="$RUNNER_TEMP/production-vercel-team-slug"
-          if [ ! -f "$team_slug_ref" ]; then
-            echo "production Vercel team scope参照がありません"
+          deployment_id_ref="$RUNNER_TEMP/production-vercel-candidate-id"
+          if [ ! -f "$deployment_id_ref" ]; then
+            echo "production frontend候補ID参照がありません"
             exit 1
           fi
-          VERCEL_TEAM_SLUG="$(tr -d '\r\n' < "$team_slug_ref")"
-          if [[ ! "$VERCEL_TEAM_SLUG" =~ ^[a-z0-9]([a-z0-9-]{0,98}[a-z0-9])?$ ]]; then
-            echo "production Vercel team scopeが不正です"
+          DEPLOYMENT_ID="$(tr -d '\r\n' < "$deployment_id_ref")"
+          if [[ ! "$DEPLOYMENT_ID" =~ ^dpl_[A-Za-z0-9]+$ ]]; then
+            echo "production frontend候補IDが不正です"
             exit 1
           fi
-          if ! npx --yes vercel@58.9.0 promote --yes --non-interactive --no-color --scope "$VERCEL_TEAM_SLUG" "$(tr -d '\r\n' < "$CANDIDATE_REF")" --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+          promote_url="https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/$DEPLOYMENT_ID?teamId=$VERCEL_ORG_ID"
+          if ! promote_status="$(curl \
+            --silent \
+            --output "$provider_log" \
+            --write-out "%{http_code}" \
+            --request POST \
+            --connect-timeout 10 \
+            --max-time 30 \
+            --header "Authorization: Bearer $VERCEL_TOKEN" \
+            "$promote_url" 2>/dev/null)"; then
+            echo "vercel_promote_category=network_unknown"
+            exit 1
+          fi
+          if [ "$promote_status" != "201" ] && [ "$promote_status" != "202" ]; then
+            echo "vercel_promote_category=request_rejected"
             echo "production frontend promoteに失敗しました"
             exit 1
           fi
@@ -484,7 +464,7 @@ jobs:
         run: |
           rm -f \
             "$RUNNER_TEMP/production-vercel-candidate-url" \
+            "$RUNNER_TEMP/production-vercel-candidate-id" \
             "$RUNNER_TEMP/production-vercel-team.json" \
-            "$RUNNER_TEMP/production-vercel-team-slug" \
             "$RUNNER_TEMP/production-release-evidence.json"
           rm -rf "$GITHUB_WORKSPACE/frontend/.vercel"
