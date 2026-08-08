@@ -12,7 +12,7 @@
   const caption = $derived(period === 'weekly' ? '週間ランキング' : '全期間ランキング');
 </script>
 
-<div class="border-border-muted bg-surface overflow-hidden rounded border shadow-sm">
+<div class="border-border-muted bg-surface overflow-hidden rounded border">
   <div class="overflow-x-auto">
     <table class="divide-border min-w-full divide-y text-sm">
       <caption class="sr-only">{caption}</caption>

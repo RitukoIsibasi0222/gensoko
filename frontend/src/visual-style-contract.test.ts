@@ -39,4 +39,12 @@ describe('visual style contract', () => {
 
     expect(violations).toEqual([]);
   });
+
+  it('カードにshadow-smを付与しない', () => {
+    const violations = collectFiles(sourceRoot, '.svelte')
+      .filter((path) => readFileSync(path, 'utf8').includes('shadow-sm'))
+      .map((path) => path.replace(`${frontendRoot}/`, ''));
+
+    expect(violations).toEqual([]);
+  });
 });

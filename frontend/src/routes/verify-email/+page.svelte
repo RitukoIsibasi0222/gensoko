@@ -235,7 +235,7 @@
 <div class="mx-auto max-w-md px-4 py-8">
   <h1 class="text-text text-2xl font-bold">メール認証</h1>
 
-  <div class="border-border-muted bg-surface mt-6 rounded-lg border p-6 shadow-sm">
+  <div class="border-border-muted bg-surface mt-6 rounded-lg border p-6">
     {#if status === 'verifying'}
       <div role="status" aria-live="polite" class="flex flex-col items-center gap-4 py-8">
         <!-- スピナー -->

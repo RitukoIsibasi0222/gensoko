@@ -12,7 +12,7 @@
   let { description, items }: Props = $props();
 </script>
 
-<section class="border-border-muted bg-surface rounded-2xl border p-6 shadow-sm sm:p-8">
+<section class="border-border-muted bg-surface rounded-2xl border p-6 sm:p-8">
   <h2 class="text-text text-2xl font-bold">アプリ概要</h2>
   <p class="text-text-muted mt-2 text-sm">{description}</p>
 

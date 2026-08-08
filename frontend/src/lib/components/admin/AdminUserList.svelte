@@ -131,7 +131,7 @@
 <section
   aria-labelledby="admin-user-list-heading"
   aria-busy={isLoading || isPageLoading}
-  class="border-border-muted bg-surface rounded-2xl border shadow-sm"
+  class="border-border-muted bg-surface rounded-2xl border"
 >
   <div
     class="border-border-muted flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4"

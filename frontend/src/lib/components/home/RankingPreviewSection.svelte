@@ -30,7 +30,7 @@
 </script>
 
 <section
-  class="border-border-muted bg-surface rounded-2xl border p-6 shadow-sm sm:p-8"
+  class="border-border-muted bg-surface rounded-2xl border p-6 sm:p-8"
   aria-labelledby="home-ranking-preview-heading"
   aria-busy={isLoading ? 'true' : undefined}
 >

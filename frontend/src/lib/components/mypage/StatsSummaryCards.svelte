@@ -44,7 +44,7 @@
 
 <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
   {#each summaryItems as item (item.label)}
-    <article class="border-border-muted bg-surface rounded border p-4 shadow-sm">
+    <article class="border-border-muted bg-surface rounded border p-4">
       <p class="text-text-subtle text-sm font-semibold">{item.label}</p>
       <p class="text-text mt-2 text-2xl font-bold">{item.value}</p>
       <p class="text-text-muted mt-1 text-sm">{item.description}</p>
