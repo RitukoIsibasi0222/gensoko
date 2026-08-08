@@ -292,6 +292,15 @@ Vercel HobbyのStandard Protectionではproduction custom domain以外のdeploym
 - 同じmain SHAをVercel DashboardのGit referenceから手動Production deploymentし、Ready / Currentとcustom domainを確認した。トップページ文言、2行の挨拶、4px border radius、card shadow削除を公開画面で確認した。Git Integrationは確認後に再切断し、公開済みdeploymentとdomainは維持した。
 - DashboardのGit reference buildが成功しCLIだけが失敗するため、次の通常releaseはAuto-assign Custom Production DomainsをOFFにしたproduction Git Integrationでexact mainのSTAGED候補だけを作り、GitHub ActionsがAPI health後にREST取得・検証・promoteする。Auto-assign OFFをGit接続前に確認できない場合は外部設定とrelease PR mergeを停止する。
 
+### 13回目production自動公開成功記録（2026-08-09）
+
+- follow-up PR [#230](https://github.com/RitukoIsibasi0222/gensoko/pull/230)はbackend/frontend/repository integrity/Vercel checkをすべて通過してdevelopへmergeした。固定stagingはVercel認証済み画面でキャッチコピー・アプリ概要4文を確認し、staging API healthは200 JSONだった。
+- production projectはAuto-assign Custom Production DomainsをOFFで保存し、Root Directory=`frontend`、Ignored Build Step=`if [ "$VERCEL_GIT_COMMIT_REF" = "main" ]; then exit 1; else exit 0; fi`を保存してからGitHub repositoryへ接続した。Production Branch=`main`を確認し、既存Currentと`www.gensoko.app`はこの時点で変更されなかった。
+- release PR [#231](https://github.com/RitukoIsibasi0222/gensoko/pull/231)のmain SHA `e413d83170bd776e05afc24f4f453a5dff9f84eb`からGit Integration由来のProduction deploymentが作成され、Environment承認前は`Ready / Staged`、exact `main` SHA、custom domain未割当だった。
+- run [31265196631](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31265196631)はexact SHA backend/frontend quality、production DB target、migration current、provider credential、Vercel team/project preflight、production API deploy/health、STAGED候補content、live main再確認、REST promote、custom domain/API read-only smoke、safe evidence、cleanupをすべて成功した。
+- Vercel詳細で同SHAが`Ready / Current`かつ`www.gensoko.app`割当済みであることを確認した。公開画面ではキャッチコピー・アプリ概要、句点なし2行挨拶、ランキング/API hydrationを確認し、概要カード3件はcomputed `border-radius: 4px`、`box-shadow: none`、キャッチコピーpは`w-full`・`max-width: none`で親content幅と一致した。
+- `production-release-evidence` Artifactは428 bytes、未失効で生成された。provider raw response、内部ID、固有deployment URL、Secret値、DB URLはSummary・Artifactへ保存していない。
+
 ### 通常release
 
 1. `develop`でstaging確認を完了し、`develop`から`main`へのPRを作成する。mainへの自動mergeは使わない。
