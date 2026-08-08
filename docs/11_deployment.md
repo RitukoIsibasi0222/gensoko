@@ -201,9 +201,15 @@ pending Prisma migrationがない通常経路の追加workflow dispatchは、既
 
 Issue [#174](https://github.com/RitukoIsibasi0222/gensoko/issues/174)の設計・実装正本は
 [`production-auto-deploy`](plans/production-auto-deploy/plan.md)とする。repositoryには
-`.github/workflows/production-deploy.yml`を置き、production frontendのdeploy所有権をGitHub Actionsへ一本化する。Vercel Git Integrationはstaging Preview専用projectだけに残し、production専用projectからはGit連携によるProduction deployを発生させない。
+`.github/workflows/production-deploy.yml`を置き、production custom domainへの公開所有権をGitHub Actionsへ一本化する。production専用Vercel projectのGit Integrationはexact `main` SHAのSTAGED Production候補をbuildするだけとし、GitHub ActionsがAPI health後に候補を検証してREST promoteする。
 
-repository実装のmergeだけでは自動releaseを有効化しない。production専用Vercel project、Git Integration停止、Protection Bypass for Automation、custom domain移行、production専用credential登録、Cloudflare最小権限credential登録は、実行直前に対象・影響・費用・rollbackを提示し、ownerの明示承認後に別工程で行う。移行完了前に`develop`から`main`へのrelease PRをmergeしない。
+repository実装のmergeだけでは自動releaseを有効化しない。production Git接続は、`develop` staging確認後にProductionのAuto-assign Custom Production DomainsがOFFであることを画面で確認してから行う。Production Branch=`main`、Root Directory=`frontend`、Ignored Build Step=main-onlyを値非表示で再確認し、STAGED候補以外はpromoteしない。設定確認完了前に`develop`から`main`へのrelease PRをmergeしない。
+
+production専用projectのIgnored Build StepはCustomで次のcommandとする。Vercelではexit code 1がbuild、0がskipであるため、`main`だけをbuildし、`develop`を含む他branchはskipする。staging projectの`npm run vercel:ignore-build`とは共用しない。
+
+```bash
+if [ "$VERCEL_GIT_COMMIT_REF" = "main" ]; then exit 1; else exit 0; fi
+```
 
 production Environmentへ別承認で追加するdeploy専用Secret名は、`PRODUCTION_CLOUDFLARE_API_TOKEN`、`PRODUCTION_CLOUDFLARE_ACCOUNT_ID`、`PRODUCTION_VERCEL_TOKEN`、`PRODUCTION_VERCEL_ORG_ID`、`PRODUCTION_VERCEL_PROJECT_ID`、`PRODUCTION_VERCEL_AUTOMATION_BYPASS_SECRET`とする。既存のproduction Variables `PRODUCTION_WORKER_NAME`、`PRODUCTION_API_HOSTNAME`、`PRODUCTION_FRONTEND_ORIGIN`、`PRODUCTION_REGISTRABLE_DOMAIN`、`PRODUCTION_HYPERDRIVE_ID`は値を表示せず再検証する。`DATABASE_URL`と`PRODUCTION_SUPABASE_PROJECT_REF`はmigration gate専用であり、provider stepやfrontendへ渡さない。
 
@@ -279,6 +285,13 @@ Vercel HobbyのStandard Protectionではproduction custom domain以外のdeploym
 - candidate deployは`project_not_found`で安全停止し、promote・read-only smokeは未実行だった。safe evidence・cleanupは成功し、APIは同SHAへ更新済み、公開frontendは直前版を維持した。
 - Vercel現行CLIは`--project`でproject name/IDを明示できる。安定版`58.9.0`へ固定し、deployの`--project`とlistのproject位置引数へread-only preflight済みproduction project IDを渡す。Team slug scope、projectId完全一致、raw非出力、staged deploy境界は維持し、review・develop/main昇格前にrunを再実行しない。
 
+### 12回目production runと手動公開記録（2026-08-08）
+
+- PDA-26を含むPR #228とrelease PR #229のmain SHA `86d5d2625ed0158dfd0b2cf42f2bbe1a8246fc6c`でrun [31261605275](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31261605275)を開始した。
+- Vercel team/project preflight、production API deploy、API health、repository build、Build Output contractまで成功し、CLI candidate deployだけが`project_not_found`で安全停止した。promote・smokeは未実行で、既存custom domainは変更されなかった。
+- 同じmain SHAをVercel DashboardのGit referenceから手動Production deploymentし、Ready / Currentとcustom domainを確認した。トップページ文言、2行の挨拶、4px border radius、card shadow削除を公開画面で確認した。Git Integrationは確認後に再切断し、公開済みdeploymentとdomainは維持した。
+- DashboardのGit reference buildが成功しCLIだけが失敗するため、次の通常releaseはAuto-assign Custom Production DomainsをOFFにしたproduction Git Integrationでexact mainのSTAGED候補だけを作り、GitHub ActionsがAPI health後にREST取得・検証・promoteする。Auto-assign OFFをGit接続前に確認できない場合は外部設定とrelease PR mergeを停止する。
+
 ### 通常release
 
 1. `develop`でstaging確認を完了し、`develop`から`main`へのPRを作成する。mainへの自動mergeは使わない。
@@ -291,8 +304,8 @@ Vercel HobbyのStandard Protectionではproduction custom domain以外のdeploym
 8. `prisma migrate status`をread-only実行し、`current`だけを許可する。`pending`または`unknown`はAPI deploy前に停止する。
 9. Vercel production tokenからproduction team・projectをread-only参照できることをresponse body非出力・HTTP status allowlistでpreflightする。clear以外は固定categoryだけを出してAPI deploy前に停止する。その後provider mutation直前にもlive `main`を再確認し、production専用一時Wrangler configをbackend working directory内へmode `0600`で生成してAPIをdeployする。相対`main`と`$schema`の解決基準を維持し、provider出力とstateだけを`RUNNER_TEMP`へ隔離する。deployment metadataのexact SHAが一致しない場合はfrontendへ進まない。
 10. API health、CORS、security headerをGETだけで確認する。失敗時はfrontend build/deployを行わない。
-11. Git未接続のproduction専用Vercel projectはproduction Environmentの`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`環境変数で固定し、Vercel CLI `58.9.0`へ`--yes --non-interactive --no-color`を明示する。read-only preflight responseのTeam ID完全一致を確認後、形式検証済みTeam slugをmode `0600`の一時参照へ保存し、deploy/list/promoteの`--scope`にはこのslugだけを渡す。deployは`--project`、listはproject位置引数へ同じproduction project IDを明示し、provider env pullは行わない。`VERCEL_ENV=production`、`VERCEL_GIT_COMMIT_REF=main`、exact SHA、明示したproduction API公開URLでrepositoryの`npm run build`を実行する。Vercel Build Output contractを検証後、`deploy --prebuilt --prod --skip-domain`で候補をdeployし、list結果の`projectId`がproduction専用`VERCEL_PROJECT_ID`と完全一致する単一候補について、SHA、ref=`main`、target=`production`、READY、candidate URL、automation bypass header経由のmarker・immutable assetを検証する。不一致・欠落・複数一致はfail-closed停止する。失敗時はraw provider outputを出さず、許可リストの固定categoryだけを記録する。
-12. 検証済みcandidateだけを`vercel promote`し、custom domainが同じasset集合とmarkerを参照するまで有限回pollする。
+11. production専用Vercel projectのGit Integrationが作った候補をVercel REST `GET /v7/deployments`で最大10分bounded pollする。`projectId`、exact SHA、ref=`main`、target=`production`、source=`git`、`READY / STAGED`が完全一致する単一候補だけを許可し、deployment URLとIDをmode `0600`の一時参照へ保存する。automation bypass経由のmarker・immutable asset検証が失敗した場合はpromoteしない。provider response body、内部ID、固有URLはlog、Summary、Artifactへ出さない。
+12. frontend公開直前にlive `main`を再確認し、検証済みdeployment IDだけをVercel REST `POST /v10/projects/{projectId}/promote/{deploymentId}`でpromoteする。201/202以外は固定categoryで停止し、custom domainが同じasset集合とmarkerを参照するまで有限回pollする。
 13. production frontendとAPIをread-only smokeし、SHA、run ID、run attempt、固定status、UTC時刻だけのJSON Artifactを7日保持する。
 
 concurrencyは`gensoko-production-release`、`cancel-in-progress: false`とする。承認待ちや直列待ちの間に`main`が進んだ古いrunは、live head再確認でprovider mutation前に停止する。stagingのEnvironment、Secret、URL、project、Worker、DB、concurrencyは共有しない。
