@@ -345,13 +345,13 @@ jobs:
             echo "production frontend build契約が不正です"
             exit 1
           fi
-          if ! npx --yes vercel@56.3.2 deploy --yes --non-interactive --no-color --prebuilt --prod --skip-domain --scope "$VERCEL_TEAM_SLUG" --meta githubCommitSha="$EXPECTED_SHA" --meta githubCommitRef=main --token="$VERCEL_TOKEN" >"$candidate_ref" 2>"$provider_log"; then
+          if ! npx --yes vercel@58.9.0 deploy --yes --non-interactive --no-color --prebuilt --prod --skip-domain --project "$VERCEL_PROJECT_ID" --scope "$VERCEL_TEAM_SLUG" --meta githubCommitSha="$EXPECTED_SHA" --meta githubCommitRef=main --token="$VERCEL_TOKEN" >"$candidate_ref" 2>"$provider_log"; then
             category=$(classify_vercel_failure "$provider_log")
             echo "vercel_failure_category=$category"
             echo "production frontend候補deployに失敗しました"
             exit 1
           fi
-          if ! npx --yes vercel@56.3.2 list --yes --non-interactive --no-color --scope "$VERCEL_TEAM_SLUG" --meta "githubCommitSha=$EXPECTED_SHA" --status READY --environment production --format=json --token="$VERCEL_TOKEN" >"$candidate_state" 2>"$provider_log"; then
+          if ! npx --yes vercel@58.9.0 list "$VERCEL_PROJECT_ID" --yes --non-interactive --no-color --scope "$VERCEL_TEAM_SLUG" --meta "githubCommitSha=$EXPECTED_SHA" --status READY --environment production --format=json --token="$VERCEL_TOKEN" >"$candidate_state" 2>"$provider_log"; then
             category=$(classify_vercel_failure "$provider_log")
             echo "vercel_failure_category=$category"
             echo "production frontend候補metadataを確認できません"
@@ -412,7 +412,7 @@ jobs:
             echo "production Vercel team scopeが不正です"
             exit 1
           fi
-          if ! npx --yes vercel@56.3.2 promote --yes --non-interactive --no-color --scope "$VERCEL_TEAM_SLUG" "$(tr -d '\r\n' < "$CANDIDATE_REF")" --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+          if ! npx --yes vercel@58.9.0 promote --yes --non-interactive --no-color --scope "$VERCEL_TEAM_SLUG" "$(tr -d '\r\n' < "$CANDIDATE_REF")" --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
             echo "production frontend promoteに失敗しました"
             exit 1
           fi

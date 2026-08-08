@@ -272,6 +272,13 @@ Vercel HobbyのStandard Protectionではproduction custom domain以外のdeploym
 - run 31259602415のcandidate deployは`project_not_found`で安全停止し、promote・read-only smokeは未実行だった。safe evidenceとcleanupは成功し、APIは同SHAへ更新済み、公開frontendは直前版を維持した。
 - Vercel CLIの`--scope`はTeam slugを受け取り、CI project bindingの`VERCEL_ORG_ID`はTeam IDである。read-only preflightでTeam ID完全一致を確認したresponseからslugを抽出・形式検証し、mode `0600`の一時参照へ保存する。deploy/list/promoteだけがこのslugを読み取り、raw response・Team ID・slugをlog、step output、Artifactへ出力しない。
 
+### 11回目production runのfail-closed記録（2026-08-08）
+
+- PDA-25とrelease PR #227を含むmain SHA `e6ffe5b0b5baf3b3cbaa9acffad3465b447a9b77`でrun [31260704440](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31260704440)を開始した。
+- branch・SHA・backend/frontend quality・production DB target・migration current・provider credential・Team slugを含むVercel team/project read-only preflight・production API deploy・API health・repository build・Build Output contractは同じSHAで成功した。
+- candidate deployは`project_not_found`で安全停止し、promote・read-only smokeは未実行だった。safe evidence・cleanupは成功し、APIは同SHAへ更新済み、公開frontendは直前版を維持した。
+- Vercel現行CLIは`--project`でproject name/IDを明示できる。安定版`58.9.0`へ固定し、deployの`--project`とlistのproject位置引数へread-only preflight済みproduction project IDを渡す。Team slug scope、projectId完全一致、raw非出力、staged deploy境界は維持し、review・develop/main昇格前にrunを再実行しない。
+
 ### 通常release
 
 1. `develop`でstaging確認を完了し、`develop`から`main`へのPRを作成する。mainへの自動mergeは使わない。
@@ -284,7 +291,7 @@ Vercel HobbyのStandard Protectionではproduction custom domain以外のdeploym
 8. `prisma migrate status`をread-only実行し、`current`だけを許可する。`pending`または`unknown`はAPI deploy前に停止する。
 9. Vercel production tokenからproduction team・projectをread-only参照できることをresponse body非出力・HTTP status allowlistでpreflightする。clear以外は固定categoryだけを出してAPI deploy前に停止する。その後provider mutation直前にもlive `main`を再確認し、production専用一時Wrangler configをbackend working directory内へmode `0600`で生成してAPIをdeployする。相対`main`と`$schema`の解決基準を維持し、provider出力とstateだけを`RUNNER_TEMP`へ隔離する。deployment metadataのexact SHAが一致しない場合はfrontendへ進まない。
 10. API health、CORS、security headerをGETだけで確認する。失敗時はfrontend build/deployを行わない。
-11. Git未接続のproduction専用Vercel projectはproduction Environmentの`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`環境変数だけで固定し、Vercel CLI `56.3.2`へ`--yes --non-interactive --no-color`を明示する。read-only preflight responseのTeam ID完全一致を確認後、形式検証済みTeam slugをmode `0600`の一時参照へ保存し、deploy/list/promoteの`--scope`にはこのslugだけを渡す。Team IDを`--scope`へ渡さず、deployの`--project`やlistのproject位置引数も重ねない。provider env pullは行わず、`VERCEL_ENV=production`、`VERCEL_GIT_COMMIT_REF=main`、exact SHA、明示したproduction API公開URLでrepositoryの`npm run build`を実行する。Vercel Build Output contractを検証後、`deploy --prebuilt --prod --skip-domain`で候補をdeployし、list結果の`projectId`がproduction専用`VERCEL_PROJECT_ID`と完全一致する単一候補について、SHA、ref=`main`、target=`production`、READY、candidate URL、automation bypass header経由のmarker・immutable assetを検証する。不一致・欠落・複数一致はfail-closed停止する。失敗時はraw provider outputを出さず、許可リストの固定categoryだけを記録する。
+11. Git未接続のproduction専用Vercel projectはproduction Environmentの`VERCEL_ORG_ID`と`VERCEL_PROJECT_ID`環境変数で固定し、Vercel CLI `58.9.0`へ`--yes --non-interactive --no-color`を明示する。read-only preflight responseのTeam ID完全一致を確認後、形式検証済みTeam slugをmode `0600`の一時参照へ保存し、deploy/list/promoteの`--scope`にはこのslugだけを渡す。deployは`--project`、listはproject位置引数へ同じproduction project IDを明示し、provider env pullは行わない。`VERCEL_ENV=production`、`VERCEL_GIT_COMMIT_REF=main`、exact SHA、明示したproduction API公開URLでrepositoryの`npm run build`を実行する。Vercel Build Output contractを検証後、`deploy --prebuilt --prod --skip-domain`で候補をdeployし、list結果の`projectId`がproduction専用`VERCEL_PROJECT_ID`と完全一致する単一候補について、SHA、ref=`main`、target=`production`、READY、candidate URL、automation bypass header経由のmarker・immutable assetを検証する。不一致・欠落・複数一致はfail-closed停止する。失敗時はraw provider outputを出さず、許可リストの固定categoryだけを記録する。
 12. 検証済みcandidateだけを`vercel promote`し、custom domainが同じasset集合とmarkerを参照するまで有限回pollする。
 13. production frontendとAPIをread-only smokeし、SHA、run ID、run attempt、固定status、UTC時刻だけのJSON Artifactを7日保持する。
 
