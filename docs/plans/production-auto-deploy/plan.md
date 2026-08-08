@@ -476,6 +476,7 @@ export async function verifyProductionFrontendContent(options) {}
 | PDA-23   | candidate project境界とworkflow contractをTDD補強                   | `.github/workflows/production-deploy.yml`、workflow test | 高     | projectId完全一致、引数単位contract test             |
 | PDA-24   | Vercel CLI owner lookupを既存Team IDで安全に解決                    | `.github/workflows/production-deploy.yml`、workflow test | 高     | deploy/list/promoteの明示scope、Secret追加なし       |
 | PDA-25   | Vercel CLI scopeを検証済みTeam slugで解決                           | `.github/workflows/production-deploy.yml`、workflow test | 高     | Team IDはbinding専用、slugは一時参照・raw非出力      |
+| PDA-26   | 現行Vercel CLIでproduction projectを明示解決                        | `.github/workflows/production-deploy.yml`、workflow test | 高     | CLI 58.9.0、project ID・Team slugを明示              |
 
 - [x] PDA-01: production workflow境界のRed contract test
 - [x] PDA-02: backend/frontend共有quality actionをTDD実装
@@ -502,6 +503,7 @@ export async function verifyProductionFrontendContent(options) {}
 - [x] PDA-23: candidate project境界とworkflow contractをTDD補強
 - [x] PDA-24: Vercel CLI owner lookupを既存Team IDで安全に解決
 - [x] PDA-25: Vercel CLI scopeを検証済みTeam slugで解決
+- [x] PDA-26: 現行Vercel CLIでproduction projectを明示解決
 
 ## Repository実装時の計画差分
 
@@ -540,6 +542,8 @@ export async function verifyProductionFrontendContent(options) {}
 - PR #224のUI変更を含むrelease PR #225のmerge SHA `543b3850c068577dca858f67bbfad9769a43a096`から起動したrun [31258867516](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31258867516)は、Vercel team preflightで`team_access_denied`となりAPI mutation前に安全停止した。production project限定tokenへ更新したrun [31259360381](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31259360381)も同じ境界で停止し、いずれもDB・provider mutationはなく旧productionを維持した。
 - Vercel tokenをAll Projects scopeへ更新したrun [31259602415](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31259602415)は、team/project preflight、production API deploy、API health、repository build、Build Output contractまで成功した。candidate deployは`project_not_found`で安全停止し、promote・smokeは未実行、旧production frontendを維持した。
 - Vercel CLIの`--scope`はTeam IDではなくTeam slugを受け取る一方、`VERCEL_ORG_ID`はCI project binding用のTeam IDである。PDA-25ではread-only team responseの`id`完全一致を確認してからslugを検証し、mode `0600`の一時参照へだけ保存する。deploy/list/promoteはこのslugを`--scope`へ渡し、raw response・Team ID・slugをlog、step output、Artifactへ出力しない。
+- PDA-25とrelease PR #227を含むmain SHA `e6ffe5b0b5baf3b3cbaa9acffad3465b447a9b77`のrun [31260704440](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31260704440)は、Team slug preflight、production API deploy、API health、repository build、Build Output contractまで成功した。candidate deployは引き続き`project_not_found`で安全停止し、promote・smokeは未実行、旧production frontendを維持した。
+- Vercel公式の現行CLIは`--project`によるproject name/ID明示をサポートし、CIでは`VERCEL_ORG_ID`・`VERCEL_PROJECT_ID`も利用できる。PDA-26では安定版`58.9.0`へ固定し、deployの`--project`とlistのproject位置引数で、read-only preflight済みproduction project IDを明示する。Team slug scope、projectId完全一致、raw非出力、staged deploy→promote境界は維持する。
 
 ### スプレッドシート貼り付け用（v4確定）
 
@@ -570,6 +574,7 @@ PDA-22	production Vercel CI project bindingをTDD修正	.github/workflows/produc
 PDA-23	candidate project境界とworkflow contractをTDD補強	.github/workflows/production-deploy.yml、workflow test	高
 PDA-24	Vercel CLI owner lookupを既存Team IDで安全に解決	.github/workflows/production-deploy.yml、workflow test	高
 PDA-25	Vercel CLI scopeを検証済みTeam slugで解決	.github/workflows/production-deploy.yml、workflow test	高
+PDA-26	現行Vercel CLIでproduction projectを明示解決	.github/workflows/production-deploy.yml、workflow test	高
 ```
 
 ## テストケース一覧
@@ -742,6 +747,14 @@ repository品質gateではproduction/staging provider、DB、URLへ接続せず�
 
 - Red: preflightがTeam IDとslugの対応を検証して一時参照へ保存し、deploy/list/promoteがTeam IDではなくslugを`--scope`へ渡す契約を追加した。意図した3 testsのfailureを確認した。
 - Green / Refactor: Team responseの`id`完全一致とslug形式を検証し、mode `0600`の一時参照へ保存する。候補deploy・list・promoteだけが参照を読み、final cleanupでresponseとslugを削除する実装により対象9 tests、直接影響7 files・39 testsが成功した。
+- backend通常testは137 files・1362 tests成功（4 files・10 tests skip）、Workersは4 files・32 tests成功。TypeScript build、Workers staging/production dry-run、ESLint、Prettier、Prisma validateが成功した。
+- frontendは68 files・692 tests、ESLint、Svelte check（error 0 / warning 0）、Prettier、非実在URLによるPreview形状buildとVercel Build Output contractが成功した。
+- production workflowのYAML parse、埋め込みBash 13 blockの`bash -n`、`git diff --check`が成功した。外部provider・DB・production URLへの接続、workflow dispatch、Environment・Secret変更、実deploymentは追加実行していない。
+
+### Production Vercel explicit project follow-up品質ゲート実績（2026-08-08）
+
+- Red: Vercel CLI `58.9.0`、deployの`--project`、listのproject位置引数を要求し、意図した2 testsのfailureを確認した。
+- Green / Refactor: 現行安定版へ固定し、read-only preflight済みproduction project IDをdeploy/listへ明示した。Team slug scope、projectId完全一致、raw非出力、staged deploy→promote境界を維持し、対象9 tests、直接影響7 files・39 testsが成功した。
 - backend通常testは137 files・1362 tests成功（4 files・10 tests skip）、Workersは4 files・32 tests成功。TypeScript build、Workers staging/production dry-run、ESLint、Prettier、Prisma validateが成功した。
 - frontendは68 files・692 tests、ESLint、Svelte check（error 0 / warning 0）、Prettier、非実在URLによるPreview形状buildとVercel Build Output contractが成功した。
 - production workflowのYAML parse、埋め込みBash 13 blockの`bash -n`、`git diff --check`が成功した。外部provider・DB・production URLへの接続、workflow dispatch、Environment・Secret変更、実deploymentは追加実行していない。
