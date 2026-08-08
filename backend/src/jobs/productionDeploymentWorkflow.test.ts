@@ -20,13 +20,6 @@ function liveMainAction(): string {
   return readFileSync(LIVE_MAIN_ACTION_PATH, "utf8");
 }
 
-function commandContaining(source: string, marker: string): string {
-  const normalized = source.replace(/\\\r?\n\s*/g, " ");
-  const command = normalized.split(/\r?\n/).find((line) => line.includes(marker));
-  expect(command).toBeDefined();
-  return command ?? "";
-}
-
 describe("production deployment workflow", () => {
   it("deploy対象のmain pushと入力なしmanual再開だけを許可する", () => {
     const source = workflow();
@@ -69,7 +62,7 @@ describe("production deployment workflow", () => {
       "Preflight production Vercel credential scope",
       "Deploy exact production API",
       "Validate production API health",
-      "Deploy staged production frontend",
+      "Wait for exact staged production frontend",
       "Promote verified production frontend",
       "Run read-only production smoke",
       "Build safe production release evidence",
@@ -82,11 +75,8 @@ describe("production deployment workflow", () => {
     }
     expect(source).not.toContain("prisma migrate deploy");
     expect(source).toContain("Production Database Operations");
-    expect(source).toContain("--skip-domain");
-    const promoteCommand = commandContaining(source, "vercel@58.9.0 promote");
-    expect(promoteCommand).toContain('--scope "$VERCEL_TEAM_SLUG"');
-    expect(promoteCommand).not.toContain('--scope "$VERCEL_ORG_ID"');
-    expect(source).not.toContain("vercel@56.3.2");
+    expect(source).not.toMatch(/npx --yes vercel@\S+ (deploy|list|promote)/);
+    expect(source).toContain("/v10/projects/$VERCEL_PROJECT_ID/promote/$DEPLOYMENT_ID");
   });
 
   it("stagingとproductionのcredential・target・concurrencyを分離する", () => {
@@ -140,11 +130,9 @@ describe("production deployment workflow", () => {
     expect(preflight).toContain("/v2/teams/$VERCEL_ORG_ID");
     expect(preflight).toContain("/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID");
     expect(preflight).toContain('team_state="$RUNNER_TEMP/production-vercel-team.json"');
-    expect(preflight).toContain('team_slug_ref="$RUNNER_TEMP/production-vercel-team-slug"');
     expect(preflight).toContain("state.id !== process.env.VERCEL_ORG_ID");
-    expect(preflight).toContain('typeof state.slug !== "string"');
-    expect(preflight).toContain("process.stdout.write(state.slug)");
-    expect(preflight).toContain('chmod 600 "$team_slug_ref"');
+    expect(preflight).not.toContain("state.slug");
+    expect(preflight).not.toContain("production-vercel-team-slug");
     expect(preflight).toContain('--output "$output_path"');
     expect(preflight).toContain('request_vercel_status "$team_url" "$team_state"');
     expect(preflight).toContain('request_vercel_status "$project_url" /dev/null');
@@ -172,79 +160,54 @@ describe("production deployment workflow", () => {
     expect(preflight).not.toContain('echo "$VERCEL_TEAM_SLUG"');
   });
 
-  it("Git未接続production projectでprovider envをpullせずprebuilt成果物とexact SHA metadataを使う", () => {
+  it("Git Integration由来のexact main STAGED productionだけを選択する", () => {
     const source = workflow();
-    const frontendCandidateStart = source.indexOf("Deploy staged production frontend");
+    const frontendCandidateStart = source.indexOf("Wait for exact staged production frontend");
     const frontendCandidateEnd = source.indexOf("Revalidate live main before frontend promotion");
 
     expect(frontendCandidateStart).toBeGreaterThanOrEqual(0);
     expect(frontendCandidateEnd).toBeGreaterThan(frontendCandidateStart);
     const frontendCandidate = source.slice(frontendCandidateStart, frontendCandidateEnd);
-    expect(frontendCandidate).not.toMatch(/vercel@\S+ pull/);
-    expect(frontendCandidate).not.toMatch(/vercel@\S+ build/);
-    expect(frontendCandidate).toContain("VERCEL_ENV: production");
+    expect(frontendCandidate).not.toMatch(/vercel@\S+ (pull|build|deploy|list)/);
     expect(frontendCandidate).toContain("VERCEL_ORG_ID: ${{ secrets.PRODUCTION_VERCEL_ORG_ID }}");
     expect(frontendCandidate).toContain(
       "VERCEL_PROJECT_ID: ${{ secrets.PRODUCTION_VERCEL_PROJECT_ID }}",
     );
-    expect(frontendCandidate).toContain("npm run build");
-    expect(frontendCandidate).toContain("node scripts/check-vercel-build-output.mjs");
-    const deployCommand = commandContaining(frontendCandidate, "vercel@58.9.0 deploy");
-    for (const argument of [
-      "--yes",
-      "--non-interactive",
-      "--no-color",
-      "--prebuilt",
-      "--prod",
-      "--skip-domain",
-      '--project "$VERCEL_PROJECT_ID"',
-      '--scope "$VERCEL_TEAM_SLUG"',
-      '--meta githubCommitSha="$EXPECTED_SHA"',
-      "--meta githubCommitRef=main",
-    ]) {
-      expect(deployCommand).toContain(argument);
-    }
-    expect(deployCommand).not.toContain('--scope "$VERCEL_ORG_ID"');
-
-    const listCommand = commandContaining(frontendCandidate, "vercel@58.9.0 list");
-    for (const argument of [
-      "--yes",
-      "--non-interactive",
-      "--no-color",
-      '--meta "githubCommitSha=$EXPECTED_SHA"',
-      "--status READY",
-      "--environment production",
-      "--format=json",
-      '--scope "$VERCEL_TEAM_SLUG"',
-    ]) {
-      expect(listCommand).toContain(argument);
-    }
-    expect(listCommand).not.toContain('--scope "$VERCEL_ORG_ID"');
-    expect(listCommand).toContain('list "$VERCEL_PROJECT_ID"');
-
-    expect(frontendCandidate).toContain('VERCEL_PROJECT_ID="$VERCEL_PROJECT_ID"');
-    expect(frontendCandidate).toContain('team_slug_ref="$RUNNER_TEMP/production-vercel-team-slug"');
-    expect(frontendCandidate).toContain('VERCEL_TEAM_SLUG="$(tr -d');
+    expect(frontendCandidate).toContain("https://api.vercel.com/v7/deployments");
+    expect(frontendCandidate).toContain("projectId=$VERCEL_PROJECT_ID");
+    expect(frontendCandidate).toContain("sha=$EXPECTED_SHA");
+    expect(frontendCandidate).toContain("branch=main");
+    expect(frontendCandidate).toContain("target=production");
+    expect(frontendCandidate).toContain("state=READY");
+    expect(frontendCandidate).toContain("for attempt in $(seq 1 60)");
     expect(frontendCandidate).toMatch(
       /deployment\.projectId\s*===\s*process\.env\.VERCEL_PROJECT_ID/,
     );
+    expect(frontendCandidate).toContain('deployment.readyState === "READY"');
+    expect(frontendCandidate).toContain('deployment.readySubstate === "STAGED"');
+    expect(frontendCandidate).toContain('deployment.source === "git"');
+    expect(frontendCandidate).toContain(
+      "deployment.meta?.githubCommitSha === process.env.EXPECTED_SHA",
+    );
+    expect(frontendCandidate).toContain('deployment.meta?.githubCommitRef === "main"');
+    expect(frontendCandidate).toContain("matches.length !== 1");
   });
 
-  it("classifies Vercel CLI failures without printing raw provider output", () => {
+  it("検証済みdeployment IDだけをREST promoteしprovider rawを出力しない", () => {
     const source = workflow();
-    const frontendCandidateStart = source.indexOf("Deploy staged production frontend");
-    const frontendCandidateEnd = source.indexOf("Revalidate live main before frontend promotion");
-    const frontendCandidate = source.slice(frontendCandidateStart, frontendCandidateEnd);
+    const promoteStart = source.indexOf("Promote verified production frontend");
+    const promoteEnd = source.indexOf("Run read-only production smoke");
+    const promote = source.slice(promoteStart, promoteEnd);
 
-    expect(frontendCandidate).toContain("classify_vercel_failure()");
-    expect(frontendCandidate).toContain("project_access_denied");
-    expect(frontendCandidate).toContain("project_not_found");
-    expect(frontendCandidate).toContain("prebuilt_contract_rejected");
-    expect(frontendCandidate).toContain("deployment_api_rejected");
-    expect(frontendCandidate).toContain("unknown");
-    expect(frontendCandidate).toContain('category=$(classify_vercel_failure "$provider_log")');
-    expect(frontendCandidate).toContain('echo "vercel_failure_category=$category"');
-    expect(frontendCandidate).not.toMatch(/cat\s+"?\$provider_log/);
+    expect(promote).toContain('deployment_id_ref="$RUNNER_TEMP/production-vercel-candidate-id"');
+    expect(promote).toContain('DEPLOYMENT_ID="$(tr -d');
+    expect(promote).toContain('[[ ! "$DEPLOYMENT_ID" =~ ^dpl_[A-Za-z0-9]+$ ]]');
+    expect(promote).toContain("/v10/projects/$VERCEL_PROJECT_ID/promote/$DEPLOYMENT_ID");
+    expect(promote).toContain("Authorization: Bearer $VERCEL_TOKEN");
+    expect(promote).toContain(
+      'if [ "$promote_status" != "201" ] && [ "$promote_status" != "202" ]',
+    );
+    expect(promote).not.toMatch(/cat\s+|response[_ -]?body|provider raw/i);
   });
 
   it("provider raw responseを一時fileへ閉じtrap cleanupしsafe evidenceだけを短期保存する", () => {
