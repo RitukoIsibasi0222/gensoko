@@ -5,6 +5,15 @@
     'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic UI', 'Yu Gothic',
     'Meiryo', sans-serif;
 
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.25rem;
+  --radius-2xl: 0.25rem;
+  --radius-3xl: 0.25rem;
+  --radius-4xl: 0.25rem;
+
   --color-canvas: light-dark(#f7f8fa, #0b1210);
   --color-surface: light-dark(#ffffff, #111a17);
   --color-elevated: light-dark(#ffffff, #17211d);

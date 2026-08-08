@@ -256,7 +256,7 @@
                 登録日 {new Date(user.createdAt).toLocaleDateString('ja-JP')}
               </p>
             </div>
-            <span class="bg-surface-subtle text-text rounded-full px-2 py-1 text-xs font-semibold">
+            <span class="bg-surface-subtle text-text rounded px-2 py-1 text-xs font-semibold">
               {user.role}
             </span>
           </div>
