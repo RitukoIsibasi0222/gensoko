@@ -23,21 +23,24 @@ export const HOME_HERO_TITLE = '元素を、遊んで覚える。';
 export const HOME_HERO_DESCRIPTION =
   'アプリ概要を確認してから、ゲーム学習に進めます。ランキング導線もここからすぐに辿れます。';
 
+export const HOME_OVERVIEW_DESCRIPTION =
+  'ゲーム形式の問題を通して、元素記号と名称を楽しく学べるアプリです。';
+
 export const HOME_OVERVIEW_ITEMS: readonly {
   title: string;
   description: string;
 }[] = [
   {
-    title: '4択でテンポよく定着',
-    description: '元素記号と名称を素早く往復しながら覚えられるよう、ゲーム形式で出題します。'
+    title: '4択形式で気軽に学べる',
+    description: '4つの選択肢から答えを選ぶシンプルな形式で、気軽に学習を始められます。'
   },
   {
-    title: '学習導線がシンプル',
-    description: 'トップからゲーム開始まで迷わないよう、主要アクションを明確に配置します。'
+    title: '繰り返し挑戦して身につく',
+    description: '問題を繰り返し解くことで、元素記号と名称を少しずつ覚えられます。'
   },
   {
-    title: 'ランキングで継続しやすい',
-    description: 'ランキング導線を常に見える位置に置き、学習のモチベーション維持を支えます。'
+    title: 'ランキングで成果を確認できる',
+    description: 'ゲームの結果をランキングで確認でき、次の挑戦や学習を続ける励みになります。'
   }
 ];
 

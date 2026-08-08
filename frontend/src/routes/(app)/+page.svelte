@@ -11,6 +11,7 @@
     getTopPageAudience,
     HOME_HERO_DESCRIPTION,
     HOME_HERO_TITLE,
+    HOME_OVERVIEW_DESCRIPTION,
     HOME_OVERVIEW_ITEMS,
     selectRankingPreviewEntries,
     toHomeRankingPreviewEntries,
@@ -132,7 +133,7 @@
     {secondaryCta}
   />
 
-  <AppOverviewSection items={HOME_OVERVIEW_ITEMS} />
+  <AppOverviewSection description={HOME_OVERVIEW_DESCRIPTION} items={HOME_OVERVIEW_ITEMS} />
 
   <RankingPreviewSection
     entries={rankingPreviewEntries}

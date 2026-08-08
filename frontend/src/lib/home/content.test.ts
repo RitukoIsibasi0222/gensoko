@@ -4,10 +4,34 @@ import {
   getPrimaryCta,
   getSecondaryCta,
   getTopPageAudience,
+  HOME_OVERVIEW_DESCRIPTION,
+  HOME_OVERVIEW_ITEMS,
   selectRankingPreviewEntries,
   toHomeRankingPreviewEntries,
   type HomeRankingPreviewEntry
 } from './content';
+
+describe('home overview copy', () => {
+  it('指定されたリード文と3つの学習価値を表示する', () => {
+    expect(HOME_OVERVIEW_DESCRIPTION).toBe(
+      'ゲーム形式の問題を通して、元素記号と名称を楽しく学べるアプリです。'
+    );
+    expect(HOME_OVERVIEW_ITEMS).toEqual([
+      {
+        title: '4択形式で気軽に学べる',
+        description: '4つの選択肢から答えを選ぶシンプルな形式で、気軽に学習を始められます。'
+      },
+      {
+        title: '繰り返し挑戦して身につく',
+        description: '問題を繰り返し解くことで、元素記号と名称を少しずつ覚えられます。'
+      },
+      {
+        title: 'ランキングで成果を確認できる',
+        description: 'ゲームの結果をランキングで確認でき、次の挑戦や学習を続ける励みになります。'
+      }
+    ]);
+  });
+});
 
 describe('getTopPageAudience', () => {
   it('初期化中はログイン状態に関係なく initializing', () => {
