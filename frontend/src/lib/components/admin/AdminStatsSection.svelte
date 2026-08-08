@@ -18,7 +18,7 @@
 <section
   aria-labelledby="admin-stats-heading"
   aria-busy={isLoading}
-  class="border-border-muted bg-surface rounded-2xl border p-5 shadow-sm"
+  class="border-border-muted bg-surface rounded-2xl border p-5"
 >
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div>

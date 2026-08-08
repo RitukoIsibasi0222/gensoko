@@ -34,7 +34,7 @@
     {#each items as item (item.index)}
       <li>
         <span
-          class={`block h-2.5 rounded-full ${
+          class={`block h-2.5 rounded ${
             item.isCurrent
               ? 'bg-action'
               : item.isAnswered

@@ -49,7 +49,7 @@
   </figcaption>
 
   {#if hasTrend}
-    <div class="border-border-muted bg-surface overflow-x-auto rounded border p-4 shadow-sm">
+    <div class="border-border-muted bg-surface overflow-x-auto rounded border p-4">
       <svg
         viewBox={'0 0 ' + chartWidth + ' ' + chartHeight}
         class="text-action h-56 min-w-[520px]"

@@ -87,7 +87,7 @@
 </script>
 
 <form
-  class="border-border-muted bg-surface rounded-2xl border p-5 shadow-sm"
+  class="border-border-muted bg-surface rounded-2xl border p-5"
   aria-busy={isLoading}
   onsubmit={handleSubmit}
 >

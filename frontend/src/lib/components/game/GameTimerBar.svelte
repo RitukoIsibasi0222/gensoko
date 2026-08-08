@@ -27,10 +27,10 @@
     aria-valuemax={timeLimitSec}
     aria-valuenow={remainingSec}
     aria-label={`残り${remainingSec}秒`}
-    class="bg-surface-disabled h-3 overflow-hidden rounded-full"
+    class="bg-surface-disabled h-3 overflow-hidden rounded"
   >
     <div
-      class={`h-full rounded-full transition-all duration-300 ${barClass}`}
+      class={`h-full rounded transition-all duration-300 ${barClass}`}
       style={`width: ${timerPercent}%`}
     ></div>
   </div>
