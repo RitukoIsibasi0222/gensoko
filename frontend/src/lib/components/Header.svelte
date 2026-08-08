@@ -92,7 +92,10 @@
       {#if authStore.isInitializing}
         <!-- 初期化中は非表示（refresh 結果が出る前にフリッカーするのを防ぐ） -->
       {:else if authStore.isLoggedIn}
-        <span class="text-text-muted">こんにちは、{authStore.user?.username} さん</span>
+        <span class="text-text-muted leading-tight" data-user-greeting>
+          <span class="block">こんにちは</span>
+          <span class="block">{authStore.user?.username}さん</span>
+        </span>
         <a href="/settings" class="hover:text-brand text-text-muted rounded px-3 py-1.5">設定</a>
         <button
           type="button"
@@ -153,7 +156,10 @@
           {#if authStore.isInitializing}
             <!-- 初期化中は非表示（refresh 結果が出る前にフリッカーするのを防ぐ） -->
           {:else if authStore.isLoggedIn}
-            <p class="text-text-muted px-3">こんにちは、{authStore.user?.username} さん</p>
+            <p class="text-text-muted px-3 leading-tight" data-user-greeting>
+              <span class="block">こんにちは</span>
+              <span class="block">{authStore.user?.username}さん</span>
+            </p>
             <div class="mt-3 grid gap-2">
               <a
                 href="/settings"
