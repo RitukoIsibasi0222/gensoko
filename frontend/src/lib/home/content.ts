@@ -20,8 +20,7 @@ export type TopPageCta = {
 const DEFAULT_PREVIEW_LIMIT = 3;
 
 export const HOME_HERO_TITLE = '元素を、遊んで覚える。';
-export const HOME_HERO_DESCRIPTION =
-  'アプリ概要を確認してから、ゲーム学習に進めます。ランキング導線もここからすぐに辿れます。';
+export const HOME_HERO_DESCRIPTION = '遊んで覚えて、由来を知る。元素がもっと面白くなる。';
 
 export const HOME_OVERVIEW_DESCRIPTION =
   'ゲーム形式の問題を通して、元素記号と名称を楽しく学べるアプリです。';

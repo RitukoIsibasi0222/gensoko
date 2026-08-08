@@ -4,12 +4,19 @@ import {
   getPrimaryCta,
   getSecondaryCta,
   getTopPageAudience,
+  HOME_HERO_DESCRIPTION,
   HOME_OVERVIEW_DESCRIPTION,
   HOME_OVERVIEW_ITEMS,
   selectRankingPreviewEntries,
   toHomeRankingPreviewEntries,
   type HomeRankingPreviewEntry
 } from './content';
+
+describe('home hero copy', () => {
+  it('由来の小話を取り入れたキャッチコピーを表示する', () => {
+    expect(HOME_HERO_DESCRIPTION).toBe('遊んで覚えて、由来を知る。元素がもっと面白くなる。');
+  });
+});
 
 describe('home overview copy', () => {
   it('指定されたリード文と3つの学習価値を表示する', () => {
