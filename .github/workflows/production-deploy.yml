@@ -189,6 +189,10 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.PRODUCTION_VERCEL_PROJECT_ID }}
         run: |
           set -euo pipefail
+          team_state="$RUNNER_TEMP/production-vercel-team.json"
+          team_slug_ref="$RUNNER_TEMP/production-vercel-team-slug"
+          trap 'rm -f "$team_state"' EXIT
+          rm -f "$team_state" "$team_slug_ref"
           classify_vercel_http_status() {
             local resource="$1"
             local status="$2"
@@ -203,9 +207,10 @@ jobs:
           }
           request_vercel_status() {
             local url="$1"
+            local output_path="$2"
             curl \
               --silent \
-              --output /dev/null \
+              --output "$output_path" \
               --write-out "%{http_code}" \
               --connect-timeout 10 \
               --max-time 20 \
@@ -213,7 +218,8 @@ jobs:
               "$url" 2>/dev/null
           }
 
-          if ! team_status="$(request_vercel_status "https://api.vercel.com/v2/teams/$VERCEL_ORG_ID")"; then
+          team_url="https://api.vercel.com/v2/teams/$VERCEL_ORG_ID"
+          if ! team_status="$(request_vercel_status "$team_url" "$team_state")"; then
             echo "vercel_preflight_category=network_unknown"
             exit 1
           fi
@@ -222,8 +228,22 @@ jobs:
             echo "vercel_preflight_category=$category"
             exit 1
           fi
+          if ! VERCEL_ORG_ID="$VERCEL_ORG_ID" TEAM_STATE="$team_state" node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const state = JSON.parse(readFileSync(process.env.TEAM_STATE, "utf8"));
+            if (state.id !== process.env.VERCEL_ORG_ID
+              || typeof state.slug !== "string"
+              || !/^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/.test(state.slug)) process.exit(1);
+            process.stdout.write(state.slug);
+          ' >"$team_slug_ref" 2>/dev/null; then
+            rm -f "$team_slug_ref"
+            echo "vercel_preflight_category=team_metadata_invalid"
+            exit 1
+          fi
+          chmod 600 "$team_slug_ref"
 
-          if ! project_status="$(request_vercel_status "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID")"; then
+          project_url="https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID"
+          if ! project_status="$(request_vercel_status "$project_url" /dev/null)"; then
             echo "vercel_preflight_category=network_unknown"
             exit 1
           fi
@@ -303,6 +323,16 @@ jobs:
           }
           trap cleanup_release_files EXIT
           rm -f "$provider_log" "$candidate_ref" "$candidate_state"
+          team_slug_ref="$RUNNER_TEMP/production-vercel-team-slug"
+          if [ ! -f "$team_slug_ref" ]; then
+            echo "production Vercel team scope参照がありません"
+            exit 1
+          fi
+          VERCEL_TEAM_SLUG="$(tr -d '\r\n' < "$team_slug_ref")"
+          if [[ ! "$VERCEL_TEAM_SLUG" =~ ^[a-z0-9]([a-z0-9-]{0,98}[a-z0-9])?$ ]]; then
+            echo "production Vercel team scopeが不正です"
+            exit 1
+          fi
 
           export VERCEL_GIT_COMMIT_SHA="$EXPECTED_SHA"
           export VERCEL_GIT_COMMIT_REF="main"
@@ -315,13 +345,13 @@ jobs:
             echo "production frontend build契約が不正です"
             exit 1
           fi
-          if ! npx --yes vercel@56.3.2 deploy --yes --non-interactive --no-color --prebuilt --prod --skip-domain --scope "$VERCEL_ORG_ID" --meta githubCommitSha="$EXPECTED_SHA" --meta githubCommitRef=main --token="$VERCEL_TOKEN" >"$candidate_ref" 2>"$provider_log"; then
+          if ! npx --yes vercel@56.3.2 deploy --yes --non-interactive --no-color --prebuilt --prod --skip-domain --scope "$VERCEL_TEAM_SLUG" --meta githubCommitSha="$EXPECTED_SHA" --meta githubCommitRef=main --token="$VERCEL_TOKEN" >"$candidate_ref" 2>"$provider_log"; then
             category=$(classify_vercel_failure "$provider_log")
             echo "vercel_failure_category=$category"
             echo "production frontend候補deployに失敗しました"
             exit 1
           fi
-          if ! npx --yes vercel@56.3.2 list --yes --non-interactive --no-color --scope "$VERCEL_ORG_ID" --meta "githubCommitSha=$EXPECTED_SHA" --status READY --environment production --format=json --token="$VERCEL_TOKEN" >"$candidate_state" 2>"$provider_log"; then
+          if ! npx --yes vercel@56.3.2 list --yes --non-interactive --no-color --scope "$VERCEL_TEAM_SLUG" --meta "githubCommitSha=$EXPECTED_SHA" --status READY --environment production --format=json --token="$VERCEL_TOKEN" >"$candidate_state" 2>"$provider_log"; then
             category=$(classify_vercel_failure "$provider_log")
             echo "vercel_failure_category=$category"
             echo "production frontend候補metadataを確認できません"
@@ -372,7 +402,17 @@ jobs:
             echo "production frontend候補参照がありません"
             exit 1
           fi
-          if ! npx --yes vercel@56.3.2 promote --yes --non-interactive --no-color --scope "$VERCEL_ORG_ID" "$(tr -d '\r\n' < "$CANDIDATE_REF")" --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
+          team_slug_ref="$RUNNER_TEMP/production-vercel-team-slug"
+          if [ ! -f "$team_slug_ref" ]; then
+            echo "production Vercel team scope参照がありません"
+            exit 1
+          fi
+          VERCEL_TEAM_SLUG="$(tr -d '\r\n' < "$team_slug_ref")"
+          if [[ ! "$VERCEL_TEAM_SLUG" =~ ^[a-z0-9]([a-z0-9-]{0,98}[a-z0-9])?$ ]]; then
+            echo "production Vercel team scopeが不正です"
+            exit 1
+          fi
+          if ! npx --yes vercel@56.3.2 promote --yes --non-interactive --no-color --scope "$VERCEL_TEAM_SLUG" "$(tr -d '\r\n' < "$CANDIDATE_REF")" --token="$VERCEL_TOKEN" >"$provider_log" 2>&1; then
             echo "production frontend promoteに失敗しました"
             exit 1
           fi
@@ -444,5 +484,7 @@ jobs:
         run: |
           rm -f \
             "$RUNNER_TEMP/production-vercel-candidate-url" \
+            "$RUNNER_TEMP/production-vercel-team.json" \
+            "$RUNNER_TEMP/production-vercel-team-slug" \
             "$RUNNER_TEMP/production-release-evidence.json"
           rm -rf "$GITHUB_WORKSPACE/frontend/.vercel"
