@@ -83,9 +83,10 @@ describe("production deployment workflow", () => {
     expect(source).not.toContain("prisma migrate deploy");
     expect(source).toContain("Production Database Operations");
     expect(source).toContain("--skip-domain");
-    const promoteCommand = commandContaining(source, "vercel@56.3.2 promote");
+    const promoteCommand = commandContaining(source, "vercel@58.9.0 promote");
     expect(promoteCommand).toContain('--scope "$VERCEL_TEAM_SLUG"');
     expect(promoteCommand).not.toContain('--scope "$VERCEL_ORG_ID"');
+    expect(source).not.toContain("vercel@56.3.2");
   });
 
   it("stagingとproductionのcredential・target・concurrencyを分離する", () => {
@@ -188,7 +189,7 @@ describe("production deployment workflow", () => {
     );
     expect(frontendCandidate).toContain("npm run build");
     expect(frontendCandidate).toContain("node scripts/check-vercel-build-output.mjs");
-    const deployCommand = commandContaining(frontendCandidate, "vercel@56.3.2 deploy");
+    const deployCommand = commandContaining(frontendCandidate, "vercel@58.9.0 deploy");
     for (const argument of [
       "--yes",
       "--non-interactive",
@@ -196,6 +197,7 @@ describe("production deployment workflow", () => {
       "--prebuilt",
       "--prod",
       "--skip-domain",
+      '--project "$VERCEL_PROJECT_ID"',
       '--scope "$VERCEL_TEAM_SLUG"',
       '--meta githubCommitSha="$EXPECTED_SHA"',
       "--meta githubCommitRef=main",
@@ -203,9 +205,8 @@ describe("production deployment workflow", () => {
       expect(deployCommand).toContain(argument);
     }
     expect(deployCommand).not.toContain('--scope "$VERCEL_ORG_ID"');
-    expect(deployCommand).not.toContain("--project");
 
-    const listCommand = commandContaining(frontendCandidate, "vercel@56.3.2 list");
+    const listCommand = commandContaining(frontendCandidate, "vercel@58.9.0 list");
     for (const argument of [
       "--yes",
       "--non-interactive",
@@ -219,8 +220,7 @@ describe("production deployment workflow", () => {
       expect(listCommand).toContain(argument);
     }
     expect(listCommand).not.toContain('--scope "$VERCEL_ORG_ID"');
-    expect(listCommand).not.toContain("--project");
-    expect(listCommand).not.toContain('list "$VERCEL_PROJECT_ID"');
+    expect(listCommand).toContain('list "$VERCEL_PROJECT_ID"');
 
     expect(frontendCandidate).toContain('VERCEL_PROJECT_ID="$VERCEL_PROJECT_ID"');
     expect(frontendCandidate).toContain('team_slug_ref="$RUNNER_TEMP/production-vercel-team-slug"');
