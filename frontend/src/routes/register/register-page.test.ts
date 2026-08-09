@@ -100,6 +100,18 @@ describe('/register password byte limit UI/A11Y', () => {
 });
 
 describe('/register privacy navigation contract', () => {
+  it('ログイン画面と同じ認証パネルとトップページへのロゴ導線を表示する', () => {
+    const target = renderPage();
+    const layout = target.querySelector('[data-auth-layout]');
+    const panel = target.querySelector('[data-auth-panel]');
+    const logoLink = panel?.querySelector<HTMLAnchorElement>('a[href="/"]');
+
+    expect(layout).not.toBeNull();
+    expect(panel).not.toBeNull();
+    expect(logoLink?.getAttribute('aria-label')).toBe('Gensokoトップページへ戻る');
+    expect(logoLink?.querySelector('img')?.getAttribute('src')).toBe('/logo.png');
+  });
+
   it('登録前に識別できる/privacy導線をform内へ表示する', () => {
     const target = renderPage();
     const form = target.querySelector<HTMLFormElement>('form');

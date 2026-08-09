@@ -2,6 +2,8 @@
   import { tick } from 'svelte';
   import { API_BASE_URL } from '$lib/api/config';
   import { ApiError, parseErrorResponse } from '$lib/api/errors';
+  import AuthPanel from '$lib/components/AuthPanel.svelte';
+  import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import { PASSWORD_BYTE_LIMIT_HINT } from '$lib/validation/password';
   import { validateUsername, validateEmail, validatePassword } from './validation';
@@ -119,7 +121,7 @@
   }
 </script>
 
-<div class="mx-auto max-w-md px-4 py-8">
+<AuthPanel>
   <h1 class="text-text text-2xl font-bold">ユーザー登録</h1>
 
   {#if !isSuccess}
@@ -279,4 +281,8 @@
     <span class="text-text-muted">すでにアカウントをお持ちの方は</span>
     <a href="/login" class="text-link text-action-text">ログイン</a>
   </div>
-</div>
+
+  <div class="mt-8 flex justify-center">
+    <BrandLogoLink accessibleLabel="Gensokoトップページへ戻る" />
+  </div>
+</AuthPanel>
