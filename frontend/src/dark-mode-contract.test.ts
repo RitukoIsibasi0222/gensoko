@@ -72,9 +72,7 @@ describe('dark mode bootstrap contract', () => {
   it('ロゴ画像を全ページ共通のfaviconに使う', () => {
     const appHtml = readSource('src/app.html');
 
-    expect(appHtml).toContain(
-      '<link rel="icon" type="image/png" href="%sveltekit.assets%/logo.png" />'
-    );
+    expect(appHtml).toContain('<link rel="icon" type="image/png" href="/logo.png" />');
   });
 
   it('CSP nonce付きbootstrapをSvelteKit headより前に実行する', () => {
