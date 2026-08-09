@@ -277,6 +277,6 @@
   <!-- ログインページへの導線 -->
   <div class="mt-4 text-center text-sm">
     <span class="text-text-muted">すでにアカウントをお持ちの方は</span>
-    <a href="/login" class="text-action hover:underline">ログイン</a>
+    <a href="/login" class="text-action-text hover:underline">ログイン</a>
   </div>
 </div>

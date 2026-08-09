@@ -32,7 +32,7 @@
           <tr class="text-text">
             <td class="text-text px-4 py-3 font-bold">{entry.rank}位</td>
             <th scope="row" class="text-text px-4 py-3 font-semibold">{entry.username}</th>
-            <td class="text-action px-4 py-3 text-right font-semibold">
+            <td class="text-action-text px-4 py-3 text-right font-semibold">
               {formatRankingScore(entry.score)}
             </td>
             <td class="px-4 py-3 text-right">{entry.totalGames}回</td>

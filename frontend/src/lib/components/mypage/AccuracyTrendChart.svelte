@@ -52,7 +52,7 @@
     <div class="border-border-muted bg-surface overflow-x-auto rounded border p-4">
       <svg
         viewBox={'0 0 ' + chartWidth + ' ' + chartHeight}
-        class="text-action h-56 min-w-[520px]"
+        class="text-action-text h-56 min-w-[520px]"
         role="img"
         aria-labelledby={chartTitleId + ' ' + chartDescriptionId}
       >

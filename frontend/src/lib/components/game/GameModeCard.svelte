@@ -34,7 +34,7 @@
 
 <div class="border-border-muted bg-surface flex h-full flex-col rounded border p-5">
   <div class="flex flex-wrap gap-2">
-    <span class="bg-info-surface text-action rounded px-2 py-1 text-xs font-semibold">
+    <span class="bg-info-surface text-action-text rounded px-2 py-1 text-xs font-semibold">
       {config.formatLabel}
     </span>
     <span class="bg-surface-subtle text-text rounded px-2 py-1 text-xs font-semibold">

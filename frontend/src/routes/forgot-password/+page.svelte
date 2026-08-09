@@ -148,6 +148,6 @@
   {/if}
 
   <div class="mt-4 text-center text-sm">
-    <a href="/login" class="text-action hover:underline">ログイン画面へ戻る</a>
+    <a href="/login" class="text-action-text hover:underline">ログイン画面へ戻る</a>
   </div>
 </div>

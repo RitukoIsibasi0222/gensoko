@@ -388,7 +388,9 @@
               <li class="border-border-muted bg-surface rounded border p-4">
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div class="min-w-0 space-y-1">
-                    <p class="text-action text-sm font-semibold">{getModeLabel(session.mode)}</p>
+                    <p class="text-action-text text-sm font-semibold">
+                      {getModeLabel(session.mode)}
+                    </p>
                     <p class="text-text text-lg font-bold">{session.totalScore}点</p>
                     <p class="text-text-muted text-sm">
                       {session.correctCount}/{session.totalCount}問正解・正答率{getGameSessionAccuracy(

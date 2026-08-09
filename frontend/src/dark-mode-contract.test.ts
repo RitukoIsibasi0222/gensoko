@@ -145,6 +145,14 @@ describe('dark mode source contract', () => {
     expect(appCss).toContain('@media (prefers-reduced-motion: reduce)');
   });
 
+  it('ライトテーマのブランド・主要アクション・リンクにメインカラーを使う', () => {
+    const appCss = readSource('src/app.css');
+
+    expect(getTokenColors(appCss, '--color-brand')[0]).toBe('#014c2d');
+    expect(getTokenColors(appCss, '--color-action')).toEqual(['#014c2d', '#014c2d']);
+    expect(getTokenColors(appCss, '--color-action-text')[0]).toBe('#014c2d');
+  });
+
   it('Svelte UIと元素分類styleに固定light paletteを残さない', () => {
     const sourceFiles = [
       ...collectFiles(sourceRoot, '.svelte'),
@@ -188,6 +196,7 @@ describe('dark mode source contract', () => {
     const contrastPairs = [
       { foreground: '--color-text', background: '--color-canvas', minimum: 4.5 },
       { foreground: '--color-text-muted', background: '--color-surface', minimum: 4.5 },
+      { foreground: '--color-brand', background: '--color-surface', minimum: 4.5 },
       { foreground: '--color-action-text', background: '--color-canvas', minimum: 4.5 },
       { foreground: '--color-action-text', background: '--color-surface', minimum: 4.5 },
       { foreground: '--color-text-inverse', background: '--color-action', minimum: 4.5 },
