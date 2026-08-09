@@ -5,7 +5,7 @@
   import AuthPanel from '$lib/components/AuthPanel.svelte';
   import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
-  import { PASSWORD_BYTE_LIMIT_HINT } from '$lib/validation/password';
+  import { PASSWORD_REQUIREMENTS_HINT } from '$lib/validation/password';
   import { validateUsername, validateEmail, validatePassword } from './validation';
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/stores/auth.svelte';
@@ -235,7 +235,7 @@
           </button>
         </div>
         <p id="password-hint" class="text-text-muted mt-1 text-sm">
-          {PASSWORD_BYTE_LIMIT_HINT}
+          {PASSWORD_REQUIREMENTS_HINT}
         </p>
         {#if passwordError}
           <p id="password-error" class="text-danger-text mt-1 text-sm">{passwordError}</p>

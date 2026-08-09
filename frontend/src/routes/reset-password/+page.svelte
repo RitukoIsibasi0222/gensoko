@@ -8,7 +8,7 @@
   import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
-  import { PASSWORD_BYTE_LIMIT_HINT, validatePassword } from '$lib/validation/password';
+  import { PASSWORD_REQUIREMENTS_HINT, validatePassword } from '$lib/validation/password';
 
   // フォーム入力値
   let password = $state('');
@@ -221,7 +221,7 @@
           </button>
         </div>
         <p id="password-hint" class="text-text-muted mt-1 text-sm">
-          {PASSWORD_BYTE_LIMIT_HINT}
+          {PASSWORD_REQUIREMENTS_HINT}
         </p>
         {#if passwordError}
           <p id="password-error" class="text-danger-text mt-1 text-sm">{passwordError}</p>

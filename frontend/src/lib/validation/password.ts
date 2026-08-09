@@ -1,7 +1,7 @@
 export const MAX_PASSWORD_UTF8_BYTES = 72;
 export const PASSWORD_TOO_LONG_MESSAGE = 'パスワードはUTF-8で72バイト以内にしてください';
-export const PASSWORD_BYTE_LIMIT_HINT =
-  'UTF-8で72バイト以内（日本語や絵文字は1文字で複数バイトになります）';
+export const PASSWORD_REQUIREMENTS_HINT =
+  '英大文字・英小文字・数字・記号を各1文字以上含む8文字以上（スペース不可・UTF-8で72バイト以内）';
 
 export function getUtf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;

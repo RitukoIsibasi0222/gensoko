@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '$lib/api/errors';
 import { mount, tick, unmount } from '$lib/test/svelte-client';
 import { STRONG_PASSWORD_73_BYTES } from '$lib/test/password-byte-boundary-fixtures';
-import { PASSWORD_BYTE_LIMIT_HINT, PASSWORD_TOO_LONG_MESSAGE } from '$lib/validation/password';
+import { PASSWORD_REQUIREMENTS_HINT, PASSWORD_TOO_LONG_MESSAGE } from '$lib/validation/password';
 
 const mocks = vi.hoisted(() => ({
   changeCurrentPassword: vi.fn(),
@@ -147,7 +147,7 @@ describe('/settings password field error ownership', () => {
     const newPasswordInput = target.querySelector('#new-password') as HTMLInputElement;
     const hint = target.querySelector('#new-password-hint');
 
-    expect(hint?.textContent).toContain(PASSWORD_BYTE_LIMIT_HINT);
+    expect(hint?.textContent).toContain(PASSWORD_REQUIREMENTS_HINT);
     expect(newPasswordInput.getAttribute('aria-describedby')).toBe('new-password-hint');
     expect(newPasswordInput.hasAttribute('maxlength')).toBe(false);
   });

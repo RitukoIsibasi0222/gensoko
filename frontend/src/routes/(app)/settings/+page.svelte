@@ -11,7 +11,7 @@
   } from '$lib/api/users';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
-  import { PASSWORD_BYTE_LIMIT_HINT, validatePassword } from '$lib/validation/password';
+  import { PASSWORD_REQUIREMENTS_HINT, validatePassword } from '$lib/validation/password';
   import { validateUsername } from '$lib/validation/username';
   import {
     validateConfirmPassword,
@@ -499,7 +499,7 @@
             class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
           />
           <p id="new-password-hint" class="text-text-muted mt-1 text-sm">
-            {PASSWORD_BYTE_LIMIT_HINT}
+            {PASSWORD_REQUIREMENTS_HINT}
           </p>
           {#if newPasswordError}
             <p id="new-password-error" class="text-danger-text mt-1 text-sm">
