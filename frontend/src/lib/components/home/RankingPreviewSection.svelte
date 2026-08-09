@@ -41,7 +41,7 @@
     <a
       href={moreHref}
       aria-label={moreAriaLabel}
-      class="text-brand focus-visible:outline-focus text-sm font-semibold underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+      class="text-link text-brand focus-visible:outline-focus text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       もっと見る
     </a>

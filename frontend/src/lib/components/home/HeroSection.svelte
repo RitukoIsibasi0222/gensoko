@@ -11,9 +11,11 @@
   let { title, description, primaryCta, secondaryCta }: Props = $props();
 </script>
 
-<section class="border-border-muted bg-surface rounded-2xl border p-6 sm:p-8">
-  <p class="text-text-subtle text-sm font-semibold tracking-wide">Gensoko</p>
-  <h1 class="text-text mt-2 text-3xl font-bold sm:text-4xl">{title}</h1>
+<section
+  class="border-border-muted border-t-brand bg-surface rounded-2xl border border-t-[3px] p-6 sm:p-8"
+>
+  <p class="page-eyebrow text-sm font-semibold">Gensoko</p>
+  <h1 class="text-text mt-2 text-3xl font-bold tracking-[1px] sm:text-4xl">{title}</h1>
   <p class="text-text mt-4 w-full text-base leading-relaxed">{description}</p>
 
   <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">

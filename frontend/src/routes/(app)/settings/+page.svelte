@@ -9,9 +9,10 @@
     updateCurrentUsername,
     type CurrentUserProfile
   } from '$lib/api/users';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
-  import { PASSWORD_BYTE_LIMIT_HINT, validatePassword } from '$lib/validation/password';
+  import { PASSWORD_REQUIREMENTS_HINT, validatePassword } from '$lib/validation/password';
   import { validateUsername } from '$lib/validation/username';
   import {
     validateConfirmPassword,
@@ -362,6 +363,8 @@
   }
 </script>
 
+<NoIndexPageMetadata title="プロフィール設定｜Gensoko" />
+
 <div class="mx-auto max-w-3xl space-y-8">
   <section>
     <h1 class="text-text text-2xl font-bold">プロフィール設定</h1>
@@ -499,7 +502,7 @@
             class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
           />
           <p id="new-password-hint" class="text-text-muted mt-1 text-sm">
-            {PASSWORD_BYTE_LIMIT_HINT}
+            {PASSWORD_REQUIREMENTS_HINT}
           </p>
           {#if newPasswordError}
             <p id="new-password-error" class="text-danger-text mt-1 text-sm">
@@ -539,16 +542,16 @@
       </form>
     </section>
 
-    <section class="border-danger-border bg-danger-surface rounded-lg border p-6">
-      <h2 class="text-danger-text text-lg font-semibold">アカウント削除</h2>
-      <p id="delete-warning" class="text-danger-text mt-1 text-sm">
+    <section class="border-secondary bg-surface rounded-lg border p-6">
+      <h2 class="text-text text-lg font-semibold">アカウント削除</h2>
+      <p id="delete-warning" class="text-text mt-1 text-sm">
         この操作は取り消せません。プロフィール情報・認証情報・学習データを稼働DBから物理削除します。
       </p>
-      <p class="text-danger-text mt-2 text-sm">
+      <p class="text-text mt-2 text-sm">
         削除時のデータの取扱いは
         <a
           href="/privacy#account-deletion"
-          class="text-action-text focus:ring-focus rounded-sm underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+          class="text-link text-action-text focus:ring-focus rounded-sm focus:ring-2 focus:ring-offset-2 focus:outline-none"
         >
           プライバシーポリシーのアカウント削除
         </a>
@@ -567,9 +570,8 @@
         {/if}
 
         <div>
-          <label
-            for="delete-current-password"
-            class="text-danger-text-strong block text-sm font-medium">現在のパスワード</label
+          <label for="delete-current-password" class="text-text block text-sm font-medium"
+            >現在のパスワード</label
           >
           <input
             id="delete-current-password"
@@ -581,7 +583,7 @@
             aria-describedby={deleteCurrentPasswordError
               ? 'delete-current-password-error'
               : undefined}
-            class="border-danger-border-strong bg-surface focus:border-danger-border-strong focus:ring-danger-border-strong mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
+            class="border-secondary bg-surface focus:border-secondary focus:ring-secondary mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
           />
           {#if deleteCurrentPasswordError}
             <p id="delete-current-password-error" class="text-danger-text mt-1 text-sm">
@@ -590,7 +592,7 @@
           {/if}
         </div>
 
-        <label class="text-danger-text-strong flex items-start gap-2 text-sm">
+        <label class="text-text flex items-start gap-2 text-sm font-medium">
           <input
             type="checkbox"
             bind:checked={deleteAcknowledged}
@@ -612,7 +614,7 @@
         <button
           type="submit"
           disabled={isDeleting}
-          class="bg-danger-solid text-text-inverse hover:bg-danger-solid-hover focus:ring-danger-border-strong rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          class="bg-danger-action text-text-inverse hover:bg-danger-action-hover focus:ring-danger-border-strong rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isDeleting ? '削除中...' : 'アカウントを削除する'}
         </button>

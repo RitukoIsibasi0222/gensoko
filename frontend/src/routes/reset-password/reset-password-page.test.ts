@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount, tick, unmount } from '$lib/test/svelte-client';
 import { STRONG_PASSWORD_73_BYTES } from '$lib/test/password-byte-boundary-fixtures';
-import { PASSWORD_BYTE_LIMIT_HINT, PASSWORD_TOO_LONG_MESSAGE } from '$lib/validation/password';
+import { PASSWORD_REQUIREMENTS_HINT, PASSWORD_TOO_LONG_MESSAGE } from '$lib/validation/password';
 
 const VALID_TOKEN = 'a'.repeat(64);
 const mocks = vi.hoisted(() => ({
@@ -82,6 +82,23 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+describe('/reset-password top page navigation', () => {
+  it('共通認証パネル内にトップページへ戻るブランドロゴリンクを表示する', async () => {
+    const target = await renderPage();
+
+    const layout = target.querySelector<HTMLElement>('[data-auth-layout]');
+    const panel = target.querySelector<HTMLElement>('[data-auth-panel]');
+
+    expect(layout?.classList.contains('items-center')).toBe(true);
+    expect(layout?.classList.contains('justify-center')).toBe(true);
+    expect(panel?.classList.contains('border-border-panel')).toBe(true);
+    expect(panel?.classList.contains('rounded')).toBe(true);
+    expect(
+      panel?.querySelector('a[href="/"][aria-label="Gensokoトップページへ戻る"]')
+    ).not.toBeNull();
+  });
+});
+
 describe('/reset-password password byte limit UI/A11Y', () => {
   it('上限hintを常時関連付け、文字数maxlengthは設定しない', async () => {
     const target = await renderPage();
@@ -89,7 +106,7 @@ describe('/reset-password password byte limit UI/A11Y', () => {
     const hint = target.querySelector('#password-hint');
 
     expect(hint).not.toBeNull();
-    expect(hint?.textContent).toContain(PASSWORD_BYTE_LIMIT_HINT);
+    expect(hint?.textContent).toContain(PASSWORD_REQUIREMENTS_HINT);
     expect(passwordInput.getAttribute('aria-describedby')).toBe('password-hint');
     expect(passwordInput.hasAttribute('maxlength')).toBe(false);
   });

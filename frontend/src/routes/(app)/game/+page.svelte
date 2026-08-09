@@ -3,6 +3,7 @@
   import { ApiError } from '$lib/api/errors';
   import { getWeakElements } from '$lib/api/weak';
   import GameModeCard from '$lib/components/game/GameModeCard.svelte';
+  import PublicPageMetadata from '$lib/components/seo/PublicPageMetadata.svelte';
   import { MIN_WEAK_ELEMENTS_FOR_GAME } from '$lib/game/constants';
   import { GAME_MODE_CONFIGS } from '$lib/game/modes';
   import type { GameMode } from '$lib/game/types';
@@ -146,9 +147,14 @@
   }
 </script>
 
+<PublicPageMetadata
+  title="4択クイズ｜Gensoko"
+  description="元素記号と名前を4択クイズで練習できます。初級・上級などからモードを選んで、楽しく理解を深めましょう。"
+/>
+
 <div class="space-y-6">
   <section class="space-y-2">
-    <p class="text-text-subtle text-sm font-semibold">4択クイズ</p>
+    <p class="page-eyebrow text-sm font-semibold">4択クイズ</p>
     <h1 class="text-text text-2xl font-bold">ゲーム</h1>
     <p class="text-text-muted max-w-2xl text-sm leading-6">
       元素記号と名前を、初級・上級・苦手リストのモードから選んで練習できます。

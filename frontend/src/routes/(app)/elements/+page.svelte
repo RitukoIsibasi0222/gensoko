@@ -5,6 +5,7 @@
   import ElementDetailModal from '$lib/components/elements/ElementDetailModal.svelte';
   import ElementMasteryBadge from '$lib/components/elements/ElementMasteryBadge.svelte';
   import ElementSearchFilters from '$lib/components/elements/ElementSearchFilters.svelte';
+  import PublicPageMetadata from '$lib/components/seo/PublicPageMetadata.svelte';
   import { getElements } from '$lib/api/elements';
   import { ApiError } from '$lib/api/errors';
   import { getElementCategoryStyle } from '$lib/elements/category-style';
@@ -197,6 +198,11 @@
     applyFilters(DEFAULT_ELEMENT_SEARCH_FILTERS);
   }
 </script>
+
+<PublicPageMetadata
+  title="元素一覧｜Gensoko"
+  description="118種類の元素を分類ごとに一覧表示。元素記号や名前を検索し、それぞれの元素の特徴を確認できます。"
+/>
 
 <div class="space-y-6">
   <section>

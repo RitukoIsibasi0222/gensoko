@@ -5,12 +5,12 @@
   );
 </script>
 
-<footer class="border-border-muted bg-surface border-t">
-  <div class="text-text-muted mx-auto max-w-5xl px-4 py-4 text-center text-sm">
+<footer class="bg-action">
+  <div class="text-text-inverse mx-auto max-w-5xl px-4 py-4 text-center text-sm">
     <div>&copy; {year} Gensoko</div>
     <a
       href="/privacy"
-      class="text-action-text focus:ring-focus mt-2 inline-block rounded-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+      class="text-link text-text-inverse focus:ring-focus mt-2 inline-block rounded-sm focus:ring-2 focus:ring-offset-2 focus:outline-none"
     >
       プライバシーポリシー
     </a>

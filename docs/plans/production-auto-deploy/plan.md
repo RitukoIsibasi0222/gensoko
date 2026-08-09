@@ -497,7 +497,7 @@ export async function verifyProductionFrontendContent(options) {}
 - [x] PDA-13: feature PRを作成しCopilot reviewへ対応
 - [x] PDA-14: production外部設定を直前承認後に分離
 - [x] PDA-15: develop→main release PRをreview・merge
-- [ ] PDA-16: same main SHAのproduction runを検証
+- [x] PDA-16: same main SHAのproduction runを検証
 - [x] PDA-17: production Worker一時configの相対path基準をTDD修正
 - [x] PDA-18: Git未接続production Vercel設定取得scopeをTDD修正
 - [x] PDA-19: production frontendをprovider env pullなしのprebuilt buildへTDD修正
@@ -511,7 +511,7 @@ export async function verifyProductionFrontendContent(options) {}
 - [x] PDA-27: Git Integration由来STAGED候補のexact SHA待機をTDD実装
 - [x] PDA-28: 検証済みcandidateのVercel REST promoteをTDD実装
 - [x] PDA-29: production Git接続の安全な外部設定順序をrunbookへ同期
-- [ ] PDA-30: develop staging確認・PR・production実runを検証
+- [x] PDA-30: develop staging確認・PR・production実runを検証
 
 ## Repository実装時の計画差分
 
@@ -554,6 +554,8 @@ export async function verifyProductionFrontendContent(options) {}
 - Vercel公式の現行CLIは`--project`によるproject name/ID明示をサポートし、CIでは`VERCEL_ORG_ID`・`VERCEL_PROJECT_ID`も利用できる。PDA-26では安定版`58.9.0`へ固定し、deployの`--project`とlistのproject位置引数で、read-only preflight済みproduction project IDを明示する。Team slug scope、projectId完全一致、raw非出力、staged deploy→promote境界は維持する。
 - PDA-26を含むPR #228とrelease PR #229のmain SHA `86d5d2625ed0158dfd0b2cf42f2bbe1a8246fc6c`で起動したrun [31261605275](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31261605275)も、Vercel preflight、production API、API health、repository build、Build Output contractまで成功し、CLI candidate deployだけが`project_not_found`で安全停止した。
 - 同じmain SHAはVercel DashboardのGit reference指定による手動Production deploymentでbuild成功し、custom domainのCurrentへ切替後にトップページ文言、2行の挨拶、4px radius、shadow削除を確認した。API・DBの追加mutationは行っていない。手動成功とCLI失敗の差から、PDA-27〜PDA-30ではproduction projectのGit IntegrationをSTAGED build専用として利用し、GitHub Actionsがexact SHA候補をREST取得・検証・promoteする方式へ移行する。
+- PR #230をdevelopへmerge後、固定staging画面とAPI healthを確認した。production Auto-assignをOFFで保存し、Root Directory=`frontend`、main-only Ignored Build Step、Git接続、Production Branch=`main`の順に設定した。release PR #231のmain SHA `e413d83170bd776e05afc24f4f453a5dff9f84eb`はEnvironment承認前に`Ready / Staged`かつcustom domain未割当だった。
+- production run [31265196631](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31265196631)はexact SHA quality、migration current、provider preflight、API deploy/health、STAGED候補content、REST promote、custom domain/API smoke、safe evidence、cleanupをすべて成功した。Vercel詳細で同SHAの`Ready / Current`と`www.gensoko.app`割当を確認し、PDA-16とPDA-30の完了条件を満たした。
 
 ### スプレッドシート貼り付け用（v4確定）
 
@@ -784,6 +786,38 @@ repository品質gateではproduction/staging provider、DB、URLへ接続せず�
 - frontendは68 files・692 tests、ESLint、Svelte check（error 0 / warning 0）、Prettier、非実在URLによるPreview形状buildとVercel Build Output contractが成功した。
 - production workflowのYAML parse、埋め込みBash 13 blockの`bash -n`、`git diff --check`が成功した。production専用Ignored Build Stepのexact commandとAuto-assign OFF確認順序をrunbookへ同期した。
 - 外部provider・DB・production URLへの追加接続、workflow dispatch、Vercel Git接続、Environment・Secret変更、実deploymentは実行していない。PDA-30とPDA-16はdevelop/staging確認とproduction実runが完了するまで未完了を維持する。
+
+### Production Git STAGED実run完了実績（2026-08-09）
+
+- develop向けPR #230とrelease PR #231はbackend/frontend/repository integrity/Vercel checkをすべて通過し、main SHA `e413d83170bd776e05afc24f4f453a5dff9f84eb`へ昇格した。
+- Auto-assign OFF、Root Directory=`frontend`、main-only Ignored Build Step、Git接続、Production Branch=`main`を画面で保存・再確認した。Environment承認前の候補はGit由来、exact SHA、`main`、Production、`Ready / Staged`、custom domain未割当だった。
+- run [31265196631](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31265196631)は全job・全release stepが成功し、safe evidence Artifactを生成した。promote後は同SHAが`Ready / Current`となり、`www.gensoko.app`とAPI health、更新済みUIを確認した。
+- Node.js 20 actionのdeprecation warningは非blockingであり、今回のrelease結果へ影響しなかった。actions v4からNode.js 24対応版への更新は別の保守タスクで扱う。
+
+## 実装完了
+
+- 完了日: 2026-08-09
+- 実装ブランチ: `fix/production-vercel-staged-git-release`
+- 実装PR: [#230](https://github.com/RitukoIsibasi0222/gensoko/pull/230)
+- release PR: [#231](https://github.com/RitukoIsibasi0222/gensoko/pull/231)
+- production run: [31265196631](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31265196631)
+- main SHA: `e413d83170bd776e05afc24f4f453a5dff9f84eb`
+
+### 計画からの変更点
+
+- Vercel CLIによるcandidate deployはread-only preflightが成功しても`project_not_found`となるため、production Git IntegrationのSTAGED buildとVercel REST APIによる候補取得・promoteへ移行した。
+- Git接続前にAuto-assign Custom Production DomainsをOFFで保存し、検証前のdeploymentがcustom domainへ自動公開されない境界を追加した。
+- REST APIではTeam slugが不要なため、PDA-25で追加したslug一時参照を削除し、Team IDとproject IDのread-only preflightだけを維持した。
+
+### 実際の変更ファイル
+
+| ファイル                                                | 変更種別 | 内容                                                              |
+| ------------------------------------------------------- | -------- | ----------------------------------------------------------------- |
+| `.github/workflows/production-deploy.yml`               | 修正     | Git STAGED候補待機・exact metadata検証・REST promoteへ移行        |
+| `backend/src/jobs/productionDeploymentWorkflow.test.ts` | 修正     | CLI禁止、Git/READY/STAGED、deployment ID、raw非出力contractを追加 |
+| `docs/05_progress.md`                                   | 修正     | PDA-16/PDA-30とproduction自動公開完了証拠を同期                   |
+| `docs/11_deployment.md`                                 | 修正     | 外部設定順序・通常release・実run・rollback記録を同期              |
+| `docs/plans/production-auto-deploy/plan.md`             | 修正     | 計画差分、品質gate、実run、完了記録を実態へ同期                   |
 
 ## コミット方針
 

@@ -136,7 +136,7 @@
       data-confirm
       disabled={!canConfirm}
       class={action.type === 'delete'
-        ? 'bg-danger-solid text-text-inverse hover:bg-danger-solid-hover focus-visible:outline-danger-border-strong disabled:bg-disabled-solid rounded-lg px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed'
+        ? 'bg-danger-action text-text-inverse hover:bg-danger-action-hover focus-visible:outline-danger-border-strong disabled:bg-disabled-solid rounded-lg px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed'
         : 'bg-action hover:bg-action-hover text-text-inverse focus-visible:outline-focus disabled:bg-disabled-solid rounded-lg px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed'}
       onclick={handleConfirm}
     >

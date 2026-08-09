@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('$app/state', () => ({
+  page: { url: new URL('https://gensoko.example/') }
+}));
 vi.mock('svelte', async () => await import('$lib/test/svelte-client'));
 vi.mock('$lib/api/ranking', () => ({
   getRanking: vi.fn()

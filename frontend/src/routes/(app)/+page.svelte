@@ -5,6 +5,7 @@
   import AppOverviewSection from '$lib/components/home/AppOverviewSection.svelte';
   import HeroSection from '$lib/components/home/HeroSection.svelte';
   import RankingPreviewSection from '$lib/components/home/RankingPreviewSection.svelte';
+  import PublicPageMetadata from '$lib/components/seo/PublicPageMetadata.svelte';
   import {
     getPrimaryCta,
     getSecondaryCta,
@@ -124,6 +125,11 @@
   const secondaryCta = $derived(getSecondaryCta(audience));
   const isRankingPreviewLoading = $derived(rankingPreviewLoadStatus === 'loading');
 </script>
+
+<PublicPageMetadata
+  title="Gensoko｜元素を遊んで覚える"
+  description="遊んで覚えて、由来を知る。元素がもっと面白くなる。"
+/>
 
 <div class="space-y-8">
   <HeroSection

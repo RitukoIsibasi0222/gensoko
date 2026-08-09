@@ -2,7 +2,6 @@
   import { browser } from '$app/environment';
   import { tick } from 'svelte';
   import '../app.css';
-  import favicon from '$lib/assets/favicon.svg';
   import { authStore } from '$lib/stores/auth.svelte';
   import { themeStore } from '$lib/stores/theme.svelte';
   import Toaster from '$lib/components/toast/Toaster.svelte';
@@ -38,10 +37,6 @@
     void authStore.initialize();
   }
 </script>
-
-<svelte:head>
-  <link rel="icon" href={favicon} />
-</svelte:head>
 
 {#if authStore.isUnavailable}
   <main class="mx-auto max-w-xl px-4 py-12">

@@ -7,6 +7,7 @@
   import { getMyStats, type MyStatsResponse } from '$lib/api/users';
   import AccuracyTrendChart from '$lib/components/mypage/AccuracyTrendChart.svelte';
   import StatsSummaryCards from '$lib/components/mypage/StatsSummaryCards.svelte';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { GAME_MODE_CONFIGS, getGameModeConfig } from '$lib/game/modes';
   import {
     DEFAULT_GAME_SESSION_HISTORY_LIMIT,
@@ -258,9 +259,11 @@
   }
 </script>
 
+<NoIndexPageMetadata title="マイページ｜Gensoko" />
+
 <div class="space-y-6">
   <section class="space-y-2">
-    <p class="text-text-subtle text-sm font-semibold">学習記録</p>
+    <p class="page-eyebrow text-sm font-semibold">学習記録</p>
     <h1 class="text-text text-2xl font-bold">マイページ</h1>
     <p class="text-text-muted max-w-2xl text-sm leading-6">
       統計サマリーと保存されたゲーム履歴を確認できます。
@@ -388,7 +391,9 @@
               <li class="border-border-muted bg-surface rounded border p-4">
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div class="min-w-0 space-y-1">
-                    <p class="text-action text-sm font-semibold">{getModeLabel(session.mode)}</p>
+                    <p class="text-action-text text-sm font-semibold">
+                      {getModeLabel(session.mode)}
+                    </p>
                     <p class="text-text text-lg font-bold">{session.totalScore}点</p>
                     <p class="text-text-muted text-sm">
                       {session.correctCount}/{session.totalCount}問正解・正答率{getGameSessionAccuracy(

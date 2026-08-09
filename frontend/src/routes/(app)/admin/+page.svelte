@@ -30,6 +30,7 @@
   import AdminUserDetailComponent from '$lib/components/admin/AdminUserDetail.svelte';
   import AdminUserFilters from '$lib/components/admin/AdminUserFilters.svelte';
   import AdminUserList from '$lib/components/admin/AdminUserList.svelte';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { authStore, type AuthenticatedRequest } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
 
@@ -688,6 +689,8 @@
   });
 </script>
 
+<NoIndexPageMetadata title="管理者ダッシュボード｜Gensoko" />
+
 <div use:managePageLifecycle>
   <p aria-live="polite" class="sr-only">{liveMessage}</p>
 
@@ -743,7 +746,7 @@
   {:else}
     <main class="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:px-8">
       <header>
-        <p class="text-brand text-sm font-semibold">Administration</p>
+        <p class="page-eyebrow text-sm font-semibold">Administration</p>
         <h1 bind:this={pageHeading} tabindex="-1" class="text-text mt-1 text-3xl font-bold">
           管理者ダッシュボード
         </h1>

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount, tick, unmount } from '$lib/test/svelte-client';
-import { PASSWORD_BYTE_LIMIT_HINT, PASSWORD_TOO_LONG_MESSAGE } from '$lib/validation/password';
+import { PASSWORD_REQUIREMENTS_HINT, PASSWORD_TOO_LONG_MESSAGE } from '$lib/validation/password';
 import { STRONG_PASSWORD_73_BYTES } from '$lib/test/password-byte-boundary-fixtures';
 
 const mocks = vi.hoisted(() => ({
@@ -74,7 +74,7 @@ describe('/register password byte limit UI/A11Y', () => {
     const hint = target.querySelector('#password-hint');
 
     expect(hint).not.toBeNull();
-    expect(hint?.textContent).toContain(PASSWORD_BYTE_LIMIT_HINT);
+    expect(hint?.textContent).toContain(PASSWORD_REQUIREMENTS_HINT);
     expect(passwordInput.getAttribute('aria-describedby')).toBe('password-hint');
     expect(passwordInput.hasAttribute('maxlength')).toBe(false);
   });
@@ -100,6 +100,18 @@ describe('/register password byte limit UI/A11Y', () => {
 });
 
 describe('/register privacy navigation contract', () => {
+  it('ログイン画面と同じ認証パネルとトップページへのロゴ導線を表示する', () => {
+    const target = renderPage();
+    const layout = target.querySelector('[data-auth-layout]');
+    const panel = target.querySelector('[data-auth-panel]');
+    const logoLink = panel?.querySelector<HTMLAnchorElement>('a[href="/"]');
+
+    expect(layout).not.toBeNull();
+    expect(panel).not.toBeNull();
+    expect(logoLink?.getAttribute('aria-label')).toBe('Gensokoトップページへ戻る');
+    expect(logoLink?.querySelector('img')?.getAttribute('src')).toBe('/logo.png');
+  });
+
   it('登録前に識別できる/privacy導線をform内へ表示する', () => {
     const target = renderPage();
     const form = target.querySelector<HTMLFormElement>('form');
@@ -118,6 +130,9 @@ describe('/register privacy navigation contract', () => {
     }
 
     expect(link.textContent).toContain('プライバシーポリシー');
+    expect(link.closest('p')?.textContent?.replace(/\s+/g, '')).toBe(
+      '登録することで、プライバシーポリシーに同意したものとみなされます。'
+    );
     expect(link.classList.contains('text-action-text')).toBe(true);
     expect(
       Boolean(link.compareDocumentPosition(submitButton) & Node.DOCUMENT_POSITION_FOLLOWING)

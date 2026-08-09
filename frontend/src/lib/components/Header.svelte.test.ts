@@ -70,6 +70,38 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
+describe('Header branding', () => {
+  it('Gensokoテキストの前に装飾ロゴ画像を表示する', () => {
+    const target = renderHeader();
+    const logoLink = target.querySelector<HTMLAnchorElement>('a[href="/"]');
+    const logoImage = logoLink?.querySelector<HTMLImageElement>('img');
+
+    expect(logoLink?.textContent?.trim()).toBe('Gensoko');
+    expect(logoImage?.getAttribute('src')).toBe('/logo.png');
+    expect(logoImage?.getAttribute('alt')).toBe('');
+    expect(logoImage?.classList.contains('w-[30px]')).toBe(true);
+    expect(logoImage?.classList.contains('h-auto')).toBe(true);
+    expect(logoLink?.firstElementChild).toBe(logoImage);
+  });
+
+  it('テキストリンクをメインカラーにして共通の下線アニメーションを使う', async () => {
+    const target = renderHeader();
+    await tick();
+
+    const navigationLinks = target.querySelectorAll<HTMLAnchorElement>(
+      'a[href="/elements"], a[href="/game"], a[href="/ranking"], a[href="/weak"], a[href="/mypage"], a[href="/admin"], a[href="/settings"]'
+    );
+
+    for (const link of navigationLinks) {
+      expect(link.classList.contains('text-link')).toBe(true);
+      expect(
+        link.classList.contains('text-brand') ||
+          link.closest('ul')?.classList.contains('text-brand')
+      ).toBe(true);
+    }
+  });
+});
+
 describe('Header admin navigation', () => {
   it('ログイン済みの挨拶をdesktopとmobileの両方で句読点なしの2段表示にする', async () => {
     const target = await renderFor('authenticated', 'USER');

@@ -19,7 +19,7 @@ export type TopPageCta = {
 
 const DEFAULT_PREVIEW_LIMIT = 3;
 
-export const HOME_HERO_TITLE = '元素を、遊んで覚える。';
+export const HOME_HERO_TITLE = '元素を遊んで覚える。';
 export const HOME_HERO_DESCRIPTION = '遊んで覚えて、由来を知る。元素がもっと面白くなる。';
 
 export const HOME_OVERVIEW_DESCRIPTION =
