@@ -315,6 +315,16 @@ describe('/settings account deletion A11Y contract', () => {
     expect(link.classList.contains('text-action-text')).toBe(true);
     expect(link.classList.contains('text-action')).toBe(false);
 
+    expect(deletionSection.classList.contains('border-secondary')).toBe(true);
+    expect(deletionSection.classList.contains('bg-surface')).toBe(true);
+    expect(warning.classList.contains('text-text')).toBe(true);
+
+    const acknowledgement = [...deletionSection.querySelectorAll('label')].find((label) =>
+      label.textContent?.includes('アカウントを削除することに同意します。')
+    );
+    expect(acknowledgement?.classList.contains('text-text')).toBe(true);
+    expect(acknowledgement?.classList.contains('font-medium')).toBe(true);
+
     link.focus();
     expect(document.activeElement).toBe(link);
   });

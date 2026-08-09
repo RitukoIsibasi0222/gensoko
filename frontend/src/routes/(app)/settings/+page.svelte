@@ -539,12 +539,12 @@
       </form>
     </section>
 
-    <section class="border-danger-border bg-danger-surface rounded-lg border p-6">
-      <h2 class="text-danger-text text-lg font-semibold">アカウント削除</h2>
-      <p id="delete-warning" class="text-danger-text mt-1 text-sm">
+    <section class="border-secondary bg-surface rounded-lg border p-6">
+      <h2 class="text-text text-lg font-semibold">アカウント削除</h2>
+      <p id="delete-warning" class="text-text mt-1 text-sm">
         この操作は取り消せません。プロフィール情報・認証情報・学習データを稼働DBから物理削除します。
       </p>
-      <p class="text-danger-text mt-2 text-sm">
+      <p class="text-text mt-2 text-sm">
         削除時のデータの取扱いは
         <a
           href="/privacy#account-deletion"
@@ -569,7 +569,7 @@
         <div>
           <label
             for="delete-current-password"
-            class="text-danger-text-strong block text-sm font-medium">現在のパスワード</label
+            class="text-text block text-sm font-medium">現在のパスワード</label
           >
           <input
             id="delete-current-password"
@@ -581,7 +581,7 @@
             aria-describedby={deleteCurrentPasswordError
               ? 'delete-current-password-error'
               : undefined}
-            class="border-danger-border-strong bg-surface focus:border-danger-border-strong focus:ring-danger-border-strong mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
+            class="border-secondary bg-surface focus:border-secondary focus:ring-secondary mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
           />
           {#if deleteCurrentPasswordError}
             <p id="delete-current-password-error" class="text-danger-text mt-1 text-sm">
@@ -590,7 +590,7 @@
           {/if}
         </div>
 
-        <label class="text-danger-text-strong flex items-start gap-2 text-sm">
+        <label class="text-text flex items-start gap-2 text-sm font-medium">
           <input
             type="checkbox"
             bind:checked={deleteAcknowledged}
