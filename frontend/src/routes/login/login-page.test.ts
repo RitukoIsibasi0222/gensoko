@@ -94,6 +94,29 @@ describe('/login top page navigation', () => {
   });
 });
 
+describe('/login centered panel layout', () => {
+  it('全コンテンツをメインカラーの1px枠・4px角丸内にまとめて中央配置する', () => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    mounted = mount(LoginPage, { target });
+
+    const layout = target.querySelector<HTMLElement>('[data-login-layout]');
+    const panel = target.querySelector<HTMLElement>('[data-login-panel]');
+
+    expect(layout?.classList.contains('min-h-screen')).toBe(true);
+    expect(layout?.classList.contains('items-center')).toBe(true);
+    expect(layout?.classList.contains('justify-center')).toBe(true);
+    expect(panel?.classList.contains('border')).toBe(true);
+    expect(panel?.classList.contains('border-brand')).toBe(true);
+    expect(panel?.classList.contains('rounded')).toBe(true);
+    expect(panel?.querySelector('h1')?.textContent).toBe('ログイン');
+    expect(panel?.querySelector('form')).not.toBeNull();
+    expect(
+      panel?.querySelector('a[href="/"][aria-label="Gensokoトップページへ戻る"]')
+    ).not.toBeNull();
+  });
+});
+
 describe('/login existing-password compatibility', () => {
   it('sends the complete normalized 73-byte password without a client max limit', async () => {
     const target = document.createElement('div');
