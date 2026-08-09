@@ -180,6 +180,7 @@ describe('dark mode source contract', () => {
 
     expect(getTokenColors(appCss, '--color-secondary')).toEqual(['#ffb600', '#ffb600']);
     expect(myRankPanel).toContain('border-secondary bg-surface text-text');
+    expect(myRankPanel).toContain('class="text-link text-action-text');
     expect(myRankPanel).not.toContain('text-info-text');
   });
 

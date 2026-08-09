@@ -24,7 +24,7 @@
     </p>
     <a
       href="/login"
-      class="bg-action text-text-inverse hover:bg-action-hover focus-visible:outline-focus mt-3 inline-flex rounded px-3 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
+      class="text-link text-action-text focus-visible:outline-focus mt-3 inline-block rounded text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       ログインへ
     </a>
