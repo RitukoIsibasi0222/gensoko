@@ -82,6 +82,18 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+describe('/login top page navigation', () => {
+  it('画面下部にトップページへ戻るブランドロゴリンクを表示する', () => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    mounted = mount(LoginPage, { target });
+
+    expect(
+      target.querySelector('a[href="/"][aria-label="Gensokoトップページへ戻る"]')
+    ).not.toBeNull();
+  });
+});
+
 describe('/login existing-password compatibility', () => {
   it('sends the complete normalized 73-byte password without a client max limit', async () => {
     const target = document.createElement('div');

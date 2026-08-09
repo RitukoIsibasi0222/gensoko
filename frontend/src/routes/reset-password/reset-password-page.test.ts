@@ -82,6 +82,16 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+describe('/reset-password top page navigation', () => {
+  it('画面下部にトップページへ戻るブランドロゴリンクを表示する', async () => {
+    const target = await renderPage();
+
+    expect(
+      target.querySelector('a[href="/"][aria-label="Gensokoトップページへ戻る"]')
+    ).not.toBeNull();
+  });
+});
+
 describe('/reset-password password byte limit UI/A11Y', () => {
   it('上限hintを常時関連付け、文字数maxlengthは設定しない', async () => {
     const target = await renderPage();

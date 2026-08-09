@@ -4,6 +4,7 @@
   import { goto, replaceState } from '$app/navigation';
   import { API_BASE_URL } from '$lib/api/config';
   import { ApiError, parseErrorResponse } from '$lib/api/errors';
+  import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import { PASSWORD_BYTE_LIMIT_HINT, validatePassword } from '$lib/validation/password';
@@ -273,4 +274,8 @@
       </a>
     </div>
   {/if}
+
+  <div class="mt-8 flex justify-center">
+    <BrandLogoLink accessibleLabel="Gensokoトップページへ戻る" />
+  </div>
 </div>

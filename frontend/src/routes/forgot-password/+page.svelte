@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { API_BASE_URL } from '$lib/api/config';
   import { ApiError, parseErrorResponse } from '$lib/api/errors';
+  import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import { isValidEmailFormat } from '$lib/validation/email';
@@ -149,5 +150,9 @@
 
   <div class="mt-4 text-center text-sm">
     <a href="/login" class="text-action-text hover:underline">ログイン画面へ戻る</a>
+  </div>
+
+  <div class="mt-8 flex justify-center">
+    <BrandLogoLink accessibleLabel="Gensokoトップページへ戻る" />
   </div>
 </div>

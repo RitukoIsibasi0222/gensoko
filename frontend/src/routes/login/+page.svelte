@@ -5,6 +5,7 @@
   import { goto } from '$app/navigation';
   import { ApiError, parseErrorBody } from '$lib/api/errors';
   import { API_BASE_URL } from '$lib/api/config';
+  import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
   import { isValidEmailFormat } from '$lib/validation/email';
 
   // フォーム入力値
@@ -252,5 +253,9 @@
     <a href="/forgot-password" class="text-action-text hover:underline">
       パスワードを忘れた方はこちら
     </a>
+  </div>
+
+  <div class="mt-8 flex justify-center">
+    <BrandLogoLink accessibleLabel="Gensokoトップページへ戻る" />
   </div>
 </div>

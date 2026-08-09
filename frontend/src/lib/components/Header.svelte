@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
 
@@ -46,20 +47,7 @@
 <nav class="border-border-muted bg-surface border-b">
   <div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
     <!-- ロゴ -->
-    <a
-      href="/"
-      class="text-brand inline-flex items-center gap-2 text-xl font-bold"
-      onclick={closeMobileMenu}
-    >
-      <img
-        src="/logo.png"
-        alt=""
-        width="262"
-        height="235"
-        class="h-auto w-[30px] shrink-0"
-      />
-      <span>Gensoko</span>
-    </a>
+    <BrandLogoLink onclick={closeMobileMenu} />
 
     <button
       type="button"
