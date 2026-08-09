@@ -60,11 +60,14 @@ describe('HeroSection', () => {
       }
     });
 
+    const section = target.querySelector('section');
     const heading = target.querySelector('h1');
     const eyebrow = [...target.querySelectorAll('p')].find(
       (paragraph) => paragraph.textContent === 'Gensoko'
     );
 
+    expect(section?.classList.contains('border-t-brand')).toBe(true);
+    expect(section?.classList.contains('border-t-[3px]')).toBe(true);
     expect(heading?.textContent).toBe('元素を遊んで覚える。');
     expect(heading?.classList.contains('tracking-[1px]')).toBe(true);
     expect(eyebrow?.classList.contains('page-eyebrow')).toBe(true);
