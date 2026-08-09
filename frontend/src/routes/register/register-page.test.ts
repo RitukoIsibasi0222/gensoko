@@ -130,6 +130,9 @@ describe('/register privacy navigation contract', () => {
     }
 
     expect(link.textContent).toContain('プライバシーポリシー');
+    expect(link.closest('p')?.textContent?.replace(/\s+/g, '')).toBe(
+      '登録することで、プライバシーポリシーに同意したものとみなされます。'
+    );
     expect(link.classList.contains('text-action-text')).toBe(true);
     expect(
       Boolean(link.compareDocumentPosition(submitButton) & Node.DOCUMENT_POSITION_FOLLOWING)

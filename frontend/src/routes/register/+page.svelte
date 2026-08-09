@@ -243,14 +243,14 @@
       </div>
 
       <p class="text-text-muted text-sm">
-        登録前に
+        登録することで、
         <a
           href="/privacy"
           class="text-link text-action-text focus:ring-focus rounded-sm focus:ring-2 focus:ring-offset-2 focus:outline-none"
         >
           プライバシーポリシー
         </a>
-        をご確認ください。
+        に同意したものとみなされます。
       </p>
 
       <!-- 登録ボタン -->
