@@ -14,7 +14,7 @@
   --radius-3xl: 0.25rem;
   --radius-4xl: 0.25rem;
 
-  --color-canvas: light-dark(#f7f8fa, #0b1210);
+  --color-canvas: light-dark(#fffdf2, #0b1210);
   --color-surface: light-dark(#ffffff, #111a17);
   --color-elevated: light-dark(#ffffff, #17211d);
   --color-surface-muted: light-dark(#f3f4f6, #1d2823);
