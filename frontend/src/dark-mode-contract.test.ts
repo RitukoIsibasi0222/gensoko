@@ -171,6 +171,7 @@ describe('dark mode source contract', () => {
     expect(appOverview).toContain('bg-surface-muted');
     expect(rankingPreview).toContain('bg-surface-muted');
     expect(rankingTable).toContain('bg-surface-muted');
+    expect(rankingTable).toContain('scope="row" class="text-text px-4 py-3 text-left');
   });
 
   it('自分の順位カードにセカンダリーボーダーと基本面色を使う', () => {

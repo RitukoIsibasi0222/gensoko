@@ -31,7 +31,9 @@
         {#each entries as entry (entry.rank + '-' + entry.username)}
           <tr class="text-text">
             <td class="text-text px-4 py-3 font-bold">{entry.rank}位</td>
-            <th scope="row" class="text-text px-4 py-3 font-semibold">{entry.username}</th>
+            <th scope="row" class="text-text px-4 py-3 text-left font-semibold">
+              {entry.username}
+            </th>
             <td class="text-action-text px-4 py-3 text-right font-semibold">
               {formatRankingScore(entry.score)}
             </td>
