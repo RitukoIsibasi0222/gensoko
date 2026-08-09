@@ -27,6 +27,7 @@
   --color-text-disabled: light-dark(#9ca3af, #77837d);
   --color-text-inverse: #ffffff;
   --color-border: light-dark(#d1d5db, #43574e);
+  --color-border-panel: #b3c1bb;
   --color-border-muted: light-dark(#e5e7eb, #26342e);
   --color-border-strong: light-dark(#9ca3af, #60756b);
   --color-focus: light-dark(#2563eb, #60a5fa);

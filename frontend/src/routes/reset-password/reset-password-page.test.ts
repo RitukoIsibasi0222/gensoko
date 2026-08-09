@@ -83,11 +83,18 @@ afterEach(async () => {
 });
 
 describe('/reset-password top page navigation', () => {
-  it('画面下部にトップページへ戻るブランドロゴリンクを表示する', async () => {
+  it('共通認証パネル内にトップページへ戻るブランドロゴリンクを表示する', async () => {
     const target = await renderPage();
 
+    const layout = target.querySelector<HTMLElement>('[data-auth-layout]');
+    const panel = target.querySelector<HTMLElement>('[data-auth-panel]');
+
+    expect(layout?.classList.contains('items-center')).toBe(true);
+    expect(layout?.classList.contains('justify-center')).toBe(true);
+    expect(panel?.classList.contains('border-border-panel')).toBe(true);
+    expect(panel?.classList.contains('rounded')).toBe(true);
     expect(
-      target.querySelector('a[href="/"][aria-label="Gensokoトップページへ戻る"]')
+      panel?.querySelector('a[href="/"][aria-label="Gensokoトップページへ戻る"]')
     ).not.toBeNull();
   });
 });

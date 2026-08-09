@@ -153,6 +153,12 @@ describe('dark mode source contract', () => {
     expect(getTokenColors(appCss, '--color-action-text')[0]).toBe('#014c2d');
   });
 
+  it('認証パネルの枠色を共通トークンで定義する', () => {
+    const appCss = readSource('src/app.css');
+
+    expect(getTokenColors(appCss, '--color-border-panel')).toEqual(['#b3c1bb', '#b3c1bb']);
+  });
+
   it('Svelte UIと元素分類styleに固定light paletteを残さない', () => {
     const sourceFiles = [
       ...collectFiles(sourceRoot, '.svelte'),

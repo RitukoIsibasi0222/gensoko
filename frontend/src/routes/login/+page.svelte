@@ -5,6 +5,7 @@
   import { goto } from '$app/navigation';
   import { ApiError, parseErrorBody } from '$lib/api/errors';
   import { API_BASE_URL } from '$lib/api/config';
+  import AuthPanel from '$lib/components/AuthPanel.svelte';
   import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
   import { isValidEmailFormat } from '$lib/validation/email';
 
@@ -188,14 +189,7 @@
   }
 </script>
 
-<div
-  class="flex min-h-screen items-center justify-center px-4 py-8"
-  data-login-layout
->
-  <div
-    class="border-brand bg-surface w-full max-w-md rounded border p-6"
-    data-login-panel
-  >
+<AuthPanel>
     <h1 class="text-text text-2xl font-bold">ログイン</h1>
 
     <!-- novalidate でネイティブバリデーションを無効化し、カスタムバリデーションの日本語メッセージを優先する -->
@@ -265,5 +259,4 @@
     <div class="mt-8 flex justify-center">
       <BrandLogoLink accessibleLabel="Gensokoトップページへ戻る" />
     </div>
-  </div>
-</div>
+</AuthPanel>

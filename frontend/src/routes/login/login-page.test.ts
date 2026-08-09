@@ -100,14 +100,14 @@ describe('/login centered panel layout', () => {
     document.body.appendChild(target);
     mounted = mount(LoginPage, { target });
 
-    const layout = target.querySelector<HTMLElement>('[data-login-layout]');
-    const panel = target.querySelector<HTMLElement>('[data-login-panel]');
+    const layout = target.querySelector<HTMLElement>('[data-auth-layout]');
+    const panel = target.querySelector<HTMLElement>('[data-auth-panel]');
 
     expect(layout?.classList.contains('min-h-screen')).toBe(true);
     expect(layout?.classList.contains('items-center')).toBe(true);
     expect(layout?.classList.contains('justify-center')).toBe(true);
     expect(panel?.classList.contains('border')).toBe(true);
-    expect(panel?.classList.contains('border-brand')).toBe(true);
+    expect(panel?.classList.contains('border-border-panel')).toBe(true);
     expect(panel?.classList.contains('rounded')).toBe(true);
     expect(panel?.querySelector('h1')?.textContent).toBe('ログイン');
     expect(panel?.querySelector('form')).not.toBeNull();

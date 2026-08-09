@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { API_BASE_URL } from '$lib/api/config';
   import { ApiError, parseErrorResponse } from '$lib/api/errors';
+  import AuthPanel from '$lib/components/AuthPanel.svelte';
   import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
@@ -90,7 +91,7 @@
   }
 </script>
 
-<div class="mx-auto max-w-md px-4 py-8">
+<AuthPanel>
   <h1 class="text-text text-2xl font-bold">パスワードリセット申請</h1>
 
   {#if !isSuccess}
@@ -155,4 +156,4 @@
   <div class="mt-8 flex justify-center">
     <BrandLogoLink accessibleLabel="Gensokoトップページへ戻る" />
   </div>
-</div>
+</AuthPanel>
