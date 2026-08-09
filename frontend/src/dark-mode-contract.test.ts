@@ -182,6 +182,13 @@ describe('dark mode source contract', () => {
     expect(myRankPanel).not.toContain('text-info-text');
   });
 
+  it('ゲーム回答詳細を正誤に応じたブランド配色で表示する', () => {
+    const gameResultPage = readSource('src/routes/(app)/game/result/+page.svelte');
+
+    expect(gameResultPage).toContain("'border-brand bg-surface text-brand'");
+    expect(gameResultPage).toContain("'border-secondary bg-surface text-danger-text-strong'");
+  });
+
   it('削除ボタンに専用の危険操作カラーを使う', () => {
     const appCss = readSource('src/app.css');
     const weakPage = readSource('src/routes/(app)/weak/+page.svelte');

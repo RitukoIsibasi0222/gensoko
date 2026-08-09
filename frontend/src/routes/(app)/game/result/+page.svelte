@@ -198,8 +198,8 @@
 
   function getResultClass(item: GameSessionResultItem): string {
     return item.isCorrect
-      ? 'border-success-border bg-success-surface text-success-text'
-      : 'border-danger-border bg-danger-surface text-danger-text-strong';
+      ? 'border-brand bg-surface text-brand'
+      : 'border-secondary bg-surface text-danger-text-strong';
   }
 
   function getChosenChoiceLabel(item: GameSessionResultItem): string {
