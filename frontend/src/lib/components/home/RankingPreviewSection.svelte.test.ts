@@ -64,7 +64,7 @@ describe('RankingPreviewSection', () => {
 
     const section = target.querySelector('section');
     expect(section?.getAttribute('aria-labelledby')).toBe('home-ranking-preview-heading');
-    expect(section?.classList.contains('bg-home-card')).toBe(true);
+    expect(section?.classList.contains('bg-surface-muted')).toBe(true);
     expect(target.querySelector('#home-ranking-preview-heading')?.textContent).toContain(
       'ランキングプレビュー'
     );

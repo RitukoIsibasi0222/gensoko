@@ -160,14 +160,16 @@ describe('dark mode source contract', () => {
     expect(getTokenColors(appCss, '--color-canvas')).toEqual(['#F6FAF9', '#0b1210']);
   });
 
-  it('トップページの概要カードとランキングプレビューに専用背景色を使う', () => {
+  it('グレー背景をsurface-mutedの#fafafaに統一する', () => {
     const appCss = readSource('src/app.css');
     const appOverview = readSource('src/lib/components/home/AppOverviewSection.svelte');
     const rankingPreview = readSource('src/lib/components/home/RankingPreviewSection.svelte');
+    const rankingTable = readSource('src/lib/components/ranking/RankingTable.svelte');
 
-    expect(getTokenColors(appCss, '--color-home-card')).toEqual(['#fafafa', '#1d2823']);
-    expect(appOverview).toContain('bg-home-card');
-    expect(rankingPreview).toContain('bg-home-card');
+    expect(getTokenColors(appCss, '--color-surface-muted')).toEqual(['#fafafa', '#1d2823']);
+    expect(appOverview).toContain('bg-surface-muted');
+    expect(rankingPreview).toContain('bg-surface-muted');
+    expect(rankingTable).toContain('bg-surface-muted');
   });
 
   it('テキストリンクの下線を文字色で上から下へ表示する', () => {

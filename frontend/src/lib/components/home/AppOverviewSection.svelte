@@ -18,7 +18,7 @@
 
   <ul class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-label="トップページ概要一覧">
     {#each items as item (item.title)}
-      <li class="border-border-muted bg-home-card rounded-xl border p-4">
+      <li class="border-border-muted bg-surface-muted rounded-xl border p-4">
         <h3 class="text-text text-base font-semibold">{item.title}</h3>
         <p class="text-text mt-2 text-sm leading-relaxed">{item.description}</p>
       </li>
