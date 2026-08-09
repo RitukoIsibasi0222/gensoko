@@ -46,7 +46,20 @@
 <nav class="border-border-muted bg-surface border-b">
   <div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
     <!-- ロゴ -->
-    <a href="/" class="text-brand text-xl font-bold" onclick={closeMobileMenu}>Gensoko</a>
+    <a
+      href="/"
+      class="text-brand inline-flex items-center gap-2 text-xl font-bold"
+      onclick={closeMobileMenu}
+    >
+      <img
+        src="/logo.png"
+        alt=""
+        width="262"
+        height="235"
+        class="h-8 w-auto shrink-0"
+      />
+      <span>Gensoko</span>
+    </a>
 
     <button
       type="button"

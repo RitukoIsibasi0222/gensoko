@@ -70,6 +70,19 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
+describe('Header branding', () => {
+  it('Gensokoテキストの前に装飾ロゴ画像を表示する', () => {
+    const target = renderHeader();
+    const logoLink = target.querySelector<HTMLAnchorElement>('a[href="/"]');
+    const logoImage = logoLink?.querySelector<HTMLImageElement>('img');
+
+    expect(logoLink?.textContent?.trim()).toBe('Gensoko');
+    expect(logoImage?.getAttribute('src')).toBe('/logo.png');
+    expect(logoImage?.getAttribute('alt')).toBe('');
+    expect(logoLink?.firstElementChild).toBe(logoImage);
+  });
+});
+
 describe('Header admin navigation', () => {
   it('ログイン済みの挨拶をdesktopとmobileの両方で句読点なしの2段表示にする', async () => {
     const target = await renderFor('authenticated', 'USER');
