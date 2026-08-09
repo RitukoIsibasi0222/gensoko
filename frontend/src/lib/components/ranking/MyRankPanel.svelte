@@ -13,13 +13,13 @@
 </script>
 
 <aside
-  class="border-info-border bg-info-surface text-info-text-strong rounded border p-4"
+  class="border-secondary bg-surface text-text rounded border p-4"
   aria-labelledby="my-rank-heading"
 >
   <h2 id="my-rank-heading" class="text-sm font-bold">自分の順位</h2>
 
   {#if !isLoggedIn}
-    <p class="text-info-text mt-2 text-sm leading-6">
+    <p class="text-text mt-2 text-sm leading-6">
       ログインすると、{periodLabel}ランキングでの自分の順位を確認できます。
     </p>
     <a
@@ -29,7 +29,7 @@
       ログインへ
     </a>
   {:else if myRank === null}
-    <p class="text-info-text mt-2 text-sm leading-6">
+    <p class="text-text mt-2 text-sm leading-6">
       まだランキング対象のプレイ記録がありません。ゲームを保存すると順位に反映されます。
     </p>
     <a
@@ -40,6 +40,6 @@
     </a>
   {:else}
     <p class="mt-2 text-3xl font-bold">{myRank}位</p>
-    <p class="text-info-text mt-1 text-sm">{periodLabel}ランキングでの現在の順位です。</p>
+    <p class="text-text mt-1 text-sm">{periodLabel}ランキングでの現在の順位です。</p>
   {/if}
 </aside>

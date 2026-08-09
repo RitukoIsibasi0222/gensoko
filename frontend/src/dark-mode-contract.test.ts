@@ -172,6 +172,15 @@ describe('dark mode source contract', () => {
     expect(rankingTable).toContain('bg-surface-muted');
   });
 
+  it('自分の順位カードにセカンダリーボーダーと基本面色を使う', () => {
+    const appCss = readSource('src/app.css');
+    const myRankPanel = readSource('src/lib/components/ranking/MyRankPanel.svelte');
+
+    expect(getTokenColors(appCss, '--color-secondary')).toEqual(['#ffb600', '#ffb600']);
+    expect(myRankPanel).toContain('border-secondary bg-surface text-text');
+    expect(myRankPanel).not.toContain('text-info-text');
+  });
+
   it('テキストリンクの下線を文字色で上から下へ表示する', () => {
     const appCss = readSource('src/app.css');
 
@@ -211,7 +220,7 @@ describe('dark mode source contract', () => {
       ...collectFiles(sourceRoot, '.ts').filter((path) => !path.endsWith('.test.ts'))
     ];
     const semanticUtility =
-      /\b(?:bg|text|border|divide|outline|ring|stroke|fill)-((?:action|brand|category|danger|disabled|info|success|surface|text|warning|border|focus|overlay|chart)(?:-[a-z0-9]+)*)\b/g;
+      /\b(?:bg|text|border|divide|outline|ring|stroke|fill)-((?:action|brand|category|danger|disabled|info|secondary|success|surface|text|warning|border|focus|overlay|chart)(?:-[a-z0-9]+)*)\b/g;
     const usedTokens = new Set<string>();
 
     for (const path of sourceFiles) {
