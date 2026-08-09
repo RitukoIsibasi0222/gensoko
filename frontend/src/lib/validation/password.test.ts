@@ -22,6 +22,11 @@ describe('validatePassword bcrypt 72バイト境界', () => {
     );
   });
 
+  it('上限超過時は技術用語を避けた利用者向けメッセージを返す', () => {
+    expect(PASSWORD_TOO_LONG_MESSAGE).toBe('パスワードが長すぎます。文字数を減らしてください');
+    expect(PASSWORD_TOO_LONG_MESSAGE).not.toMatch(/UTF-8|バイト/);
+  });
+
   it.each(STRONG_PASSWORD_BYTE_BOUNDARY_FIXTURES)(
     '$nameは72バイトを受理し73バイトを共通メッセージで拒否する',
     ({ password72Bytes, password73Bytes }) => {

@@ -1,5 +1,5 @@
 export const MAX_PASSWORD_UTF8_BYTES = 72;
-export const PASSWORD_TOO_LONG_MESSAGE = 'パスワードはUTF-8で72バイト以内にしてください';
+export const PASSWORD_TOO_LONG_MESSAGE = 'パスワードが長すぎます。文字数を減らしてください';
 export const PASSWORD_REQUIREMENTS_HINT =
   '英大文字・英小文字・数字・記号を各1文字以上含む8文字以上';
 
@@ -34,6 +34,9 @@ export function validatePassword(value: string): string | null {
   if (/ /.test(value)) {
     return 'パスワードにスペースは使用できません';
   }
+  if (getUtf8ByteLength(value) > MAX_PASSWORD_UTF8_BYTES) {
+    return PASSWORD_TOO_LONG_MESSAGE;
+  }
   if (value.length < 8) {
     return 'パスワードは8文字以上にしてください';
   }
@@ -48,9 +51,6 @@ export function validatePassword(value: string): string | null {
   }
   if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(value)) {
     return 'パスワードには記号を1文字以上含めてください';
-  }
-  if (getUtf8ByteLength(value) > MAX_PASSWORD_UTF8_BYTES) {
-    return PASSWORD_TOO_LONG_MESSAGE;
   }
   return null;
 }
