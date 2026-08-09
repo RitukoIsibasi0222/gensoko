@@ -17,6 +17,7 @@
   --color-canvas: light-dark(#F6FAF9, #0b1210);
   --color-surface: light-dark(#ffffff, #111a17);
   --color-elevated: light-dark(#ffffff, #17211d);
+  --color-home-card: light-dark(#fafafa, #1d2823);
   --color-surface-muted: light-dark(#f3f4f6, #1d2823);
   --color-surface-subtle: light-dark(#e5e7eb, #26342e);
   --color-surface-disabled: light-dark(#e5e7eb, #2d3a35);

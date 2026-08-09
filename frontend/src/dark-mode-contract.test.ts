@@ -160,6 +160,16 @@ describe('dark mode source contract', () => {
     expect(getTokenColors(appCss, '--color-canvas')).toEqual(['#F6FAF9', '#0b1210']);
   });
 
+  it('トップページの概要カードとランキングプレビューに専用背景色を使う', () => {
+    const appCss = readSource('src/app.css');
+    const appOverview = readSource('src/lib/components/home/AppOverviewSection.svelte');
+    const rankingPreview = readSource('src/lib/components/home/RankingPreviewSection.svelte');
+
+    expect(getTokenColors(appCss, '--color-home-card')).toEqual(['#fafafa', '#1d2823']);
+    expect(appOverview).toContain('bg-home-card');
+    expect(rankingPreview).toContain('bg-home-card');
+  });
+
   it('テキストリンクの下線を文字色で上から下へ表示する', () => {
     const appCss = readSource('src/app.css');
 
