@@ -16,9 +16,9 @@ describe('validatePassword bcrypt 72バイト境界', () => {
     expect(MAX_PASSWORD_UTF8_BYTES).toBe(72);
   });
 
-  it('入力ヒントにパスワードの全条件を表示する', () => {
+  it('入力ヒントに利用者向けの主な条件を表示する', () => {
     expect(PASSWORD_REQUIREMENTS_HINT).toBe(
-      '英大文字・英小文字・数字・記号を各1文字以上含む8文字以上（スペース不可・UTF-8で72バイト以内）'
+      '英大文字・英小文字・数字・記号を各1文字以上含む8文字以上'
     );
   });
 
