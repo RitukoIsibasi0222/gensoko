@@ -163,15 +163,23 @@ describe('dark mode source contract', () => {
 
   it('グレー背景をsurface-mutedの#fafafaに統一する', () => {
     const appCss = readSource('src/app.css');
-    const appOverview = readSource('src/lib/components/home/AppOverviewSection.svelte');
     const rankingPreview = readSource('src/lib/components/home/RankingPreviewSection.svelte');
     const rankingTable = readSource('src/lib/components/ranking/RankingTable.svelte');
 
     expect(getTokenColors(appCss, '--color-surface-muted')).toEqual(['#fafafa', '#1d2823']);
-    expect(appOverview).toContain('bg-surface-muted');
     expect(rankingPreview).toContain('bg-surface-muted');
     expect(rankingTable).toContain('bg-surface-muted');
     expect(rankingTable).toContain('scope="row" class="text-text px-4 py-3 text-left');
+  });
+
+  it('アプリ概要にセカンダリーの上辺と淡色カードを使う', () => {
+    const appCss = readSource('src/app.css');
+    const appOverview = readSource('src/lib/components/home/AppOverviewSection.svelte');
+
+    expect(appCss).toContain('--color-secondary-soft: rgb(255 181 0 / 5%)');
+    expect(appOverview).toContain('border-t-secondary');
+    expect(appOverview).toContain('border-t-[3px]');
+    expect(appOverview).toContain('border-secondary bg-secondary-soft');
   });
 
   it('自分の順位カードにセカンダリーボーダーと基本面色を使う', () => {
