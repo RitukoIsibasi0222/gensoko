@@ -78,7 +78,7 @@
   --color-info-solid: light-dark(#2563eb, #2563eb);
 
   --color-overlay: light-dark(rgb(0 0 0 / 50%), rgb(0 0 0 / 72%));
-  --color-chart-line: light-dark(#2563eb, #60a5fa);
+  --color-chart-line: light-dark(#014c2d, #6ee7b7);
   --color-chart-grid: light-dark(#d1d5db, #43574e);
   --color-chart-grid-muted: light-dark(#f3f4f6, #26342e);
   --color-chart-label: light-dark(#4b5563, #cbd5d1);

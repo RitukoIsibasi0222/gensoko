@@ -149,6 +149,7 @@ describe('dark mode source contract', () => {
     const appCss = readSource('src/app.css');
 
     expect(getTokenColors(appCss, '--color-brand')[0]).toBe('#014c2d');
+    expect(getTokenColors(appCss, '--color-chart-line')).toEqual(['#014c2d', '#6ee7b7']);
     expect(getTokenColors(appCss, '--color-focus')).toEqual(['#014c2d', '#6ee7b7']);
     expect(getTokenColors(appCss, '--color-action')).toEqual(['#014c2d', '#014c2d']);
     expect(getTokenColors(appCss, '--color-action-text')[0]).toBe('#014c2d');
