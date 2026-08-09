@@ -234,6 +234,15 @@ describe('dark mode source contract', () => {
     expect(appCss).toContain('text-underline-offset: 0.2em');
   });
 
+  it('PCのリンクと有効なボタンだけにポインターカーソルを表示する', () => {
+    const appCss = readSource('src/app.css');
+
+    expect(appCss).toContain('@media (hover: hover) and (pointer: fine)');
+    expect(appCss).toContain('a[href]');
+    expect(appCss).toContain('button:not(:disabled)');
+    expect(appCss).toContain('cursor: pointer');
+  });
+
   it('認証パネルの枠色を共通トークンで定義する', () => {
     const appCss = readSource('src/app.css');
 

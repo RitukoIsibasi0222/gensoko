@@ -179,6 +179,13 @@ textarea {
   }
 }
 
+@media (hover: hover) and (pointer: fine) {
+  a[href],
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
