@@ -7,6 +7,7 @@
   import { API_BASE_URL } from '$lib/api/config';
   import AuthPanel from '$lib/components/AuthPanel.svelte';
   import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { isValidEmailFormat } from '$lib/validation/email';
 
   // フォーム入力値
@@ -188,6 +189,8 @@
     }
   }
 </script>
+
+<NoIndexPageMetadata title="ログイン｜Gensoko" />
 
 <AuthPanel>
     <h1 class="text-text text-2xl font-bold">ログイン</h1>

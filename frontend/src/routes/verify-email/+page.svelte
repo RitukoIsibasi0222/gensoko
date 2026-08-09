@@ -4,6 +4,7 @@
   import { goto, replaceState } from '$app/navigation';
   import { API_BASE_URL } from '$lib/api/config';
   import { ApiError, parseErrorResponse } from '$lib/api/errors';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
 
   type VerifyStatus = 'verifying' | 'success' | 'error';
@@ -231,6 +232,8 @@
     };
   });
 </script>
+
+<NoIndexPageMetadata title="メール認証｜Gensoko" />
 
 <div class="mx-auto max-w-md px-4 py-8">
   <h1 class="text-text text-2xl font-bold">メール認証</h1>

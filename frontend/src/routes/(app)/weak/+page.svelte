@@ -4,6 +4,7 @@
   import { onDestroy } from 'svelte';
   import { ApiError } from '$lib/api/errors';
   import { deleteWeakElement, getWeakElements, type WeakElement } from '$lib/api/weak';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import {
@@ -231,6 +232,8 @@
     activeAbortController?.abort();
   });
 </script>
+
+<NoIndexPageMetadata title="苦手リスト｜Gensoko" />
 
 <div class="space-y-6">
   <section class="space-y-2">

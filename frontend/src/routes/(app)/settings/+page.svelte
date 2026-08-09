@@ -9,6 +9,7 @@
     updateCurrentUsername,
     type CurrentUserProfile
   } from '$lib/api/users';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import { PASSWORD_REQUIREMENTS_HINT, validatePassword } from '$lib/validation/password';
@@ -361,6 +362,8 @@
     }
   }
 </script>
+
+<NoIndexPageMetadata title="プロフィール設定｜Gensoko" />
 
 <div class="mx-auto max-w-3xl space-y-8">
   <section>

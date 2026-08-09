@@ -7,6 +7,7 @@
   import { getMyStats, type MyStatsResponse } from '$lib/api/users';
   import AccuracyTrendChart from '$lib/components/mypage/AccuracyTrendChart.svelte';
   import StatsSummaryCards from '$lib/components/mypage/StatsSummaryCards.svelte';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { GAME_MODE_CONFIGS, getGameModeConfig } from '$lib/game/modes';
   import {
     DEFAULT_GAME_SESSION_HISTORY_LIMIT,
@@ -257,6 +258,8 @@
     return config.formatLabel + '・' + config.difficultyLabel;
   }
 </script>
+
+<NoIndexPageMetadata title="マイページ｜Gensoko" />
 
 <div class="space-y-6">
   <section class="space-y-2">

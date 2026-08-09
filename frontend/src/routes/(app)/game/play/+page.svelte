@@ -7,6 +7,7 @@
   import GameChoiceButton from '$lib/components/game/GameChoiceButton.svelte';
   import GameProgressIndicator from '$lib/components/game/GameProgressIndicator.svelte';
   import GameTimerBar from '$lib/components/game/GameTimerBar.svelte';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import {
     ANSWER_FEEDBACK_MS,
     GAME_SESSION_DURATION_LIMIT_SEC,
@@ -408,6 +409,10 @@
     abortSubmit();
   });
 </script>
+
+<NoIndexPageMetadata
+  title={modeConfig ? `${modeConfig.title}｜Gensoko` : '4択クイズ｜Gensoko'}
+/>
 
 <div class="space-y-6">
   {#if authStore.isInitializing}

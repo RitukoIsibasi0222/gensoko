@@ -4,6 +4,7 @@
   import { ApiError, parseErrorResponse } from '$lib/api/errors';
   import AuthPanel from '$lib/components/AuthPanel.svelte';
   import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import { isValidEmailFormat } from '$lib/validation/email';
@@ -90,6 +91,8 @@
     }
   }
 </script>
+
+<NoIndexPageMetadata title="パスワードリセット申請｜Gensoko" />
 
 <AuthPanel>
   <h1 class="text-text text-2xl font-bold">パスワードリセット申請</h1>

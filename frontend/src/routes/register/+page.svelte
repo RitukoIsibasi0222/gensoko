@@ -4,6 +4,7 @@
   import { ApiError, parseErrorResponse } from '$lib/api/errors';
   import AuthPanel from '$lib/components/AuthPanel.svelte';
   import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import { PASSWORD_REQUIREMENTS_HINT } from '$lib/validation/password';
   import { validateUsername, validateEmail, validatePassword } from './validation';
@@ -120,6 +121,8 @@
     }
   }
 </script>
+
+<NoIndexPageMetadata title="ユーザー登録｜Gensoko" />
 
 <AuthPanel>
   <h1 class="text-text text-2xl font-bold">ユーザー登録</h1>

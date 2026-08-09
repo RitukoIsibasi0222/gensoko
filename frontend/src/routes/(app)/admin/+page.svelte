@@ -30,6 +30,7 @@
   import AdminUserDetailComponent from '$lib/components/admin/AdminUserDetail.svelte';
   import AdminUserFilters from '$lib/components/admin/AdminUserFilters.svelte';
   import AdminUserList from '$lib/components/admin/AdminUserList.svelte';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { authStore, type AuthenticatedRequest } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
 
@@ -687,6 +688,8 @@
     void authorizeAndLoadUsers(accessToken, location.query, loadMode);
   });
 </script>
+
+<NoIndexPageMetadata title="管理者ダッシュボード｜Gensoko" />
 
 <div use:managePageLifecycle>
   <p aria-live="polite" class="sr-only">{liveMessage}</p>

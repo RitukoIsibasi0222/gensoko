@@ -2,6 +2,7 @@
   import { page } from '$app/state';
   import { ApiError } from '$lib/api/errors';
   import { getGameSession } from '$lib/api/game';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { getGameModeConfig } from '$lib/game/modes';
   import { normalizeGameSessionIdParam } from '$lib/game/session-result';
   import { authStore } from '$lib/stores/auth.svelte';
@@ -210,6 +211,10 @@
     return item.correctAnswer;
   }
 </script>
+
+<NoIndexPageMetadata
+  title={modeConfig ? `${modeConfig.title}の結果｜Gensoko` : 'ゲーム結果｜Gensoko'}
+/>
 
 <div class="space-y-6">
   {#if result === null || modeConfig === null}
