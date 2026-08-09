@@ -154,6 +154,24 @@ textarea {
   color: var(--color-text);
 }
 
+@layer components {
+  .text-link {
+    text-decoration-line: underline;
+    text-decoration-color: transparent;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0;
+    transition:
+      text-decoration-color 180ms ease-out,
+      text-underline-offset 180ms ease-out;
+  }
+
+  .text-link:hover,
+  .text-link:focus-visible {
+    text-decoration-color: currentColor;
+    text-underline-offset: 0.2em;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

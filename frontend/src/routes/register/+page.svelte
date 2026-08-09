@@ -244,7 +244,7 @@
         登録前に
         <a
           href="/privacy"
-          class="text-action-text focus:ring-focus rounded-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+          class="text-link text-action-text focus:ring-focus rounded-sm focus:ring-2 focus:ring-offset-2 focus:outline-none"
         >
           プライバシーポリシー
         </a>
@@ -277,6 +277,6 @@
   <!-- ログインページへの導線 -->
   <div class="mt-4 text-center text-sm">
     <span class="text-text-muted">すでにアカウントをお持ちの方は</span>
-    <a href="/login" class="text-action-text hover:underline">ログイン</a>
+    <a href="/login" class="text-link text-action-text">ログイン</a>
   </div>
 </div>

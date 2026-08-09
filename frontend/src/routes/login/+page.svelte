@@ -251,7 +251,7 @@
 
     <!-- パスワードリセットリンク -->
     <div class="mt-4 text-center text-sm">
-      <a href="/forgot-password" class="text-action-text hover:underline">
+      <a href="/forgot-password" class="text-link text-action-text">
         パスワードを忘れた方はこちら
       </a>
     </div>

@@ -31,6 +31,7 @@ describe('Footer privacy navigation contract', () => {
     expect(footer?.classList.contains('border-border-muted')).toBe(false);
     expect(link).not.toBeNull();
     expect(link?.textContent).toContain('プライバシーポリシー');
+    expect(link?.classList.contains('text-link')).toBe(true);
     expect(link?.classList.contains('text-text-inverse')).toBe(true);
 
     link?.focus();

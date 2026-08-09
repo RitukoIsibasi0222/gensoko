@@ -83,6 +83,22 @@ describe('Header branding', () => {
     expect(logoImage?.classList.contains('h-auto')).toBe(true);
     expect(logoLink?.firstElementChild).toBe(logoImage);
   });
+
+  it('テキストリンクをメインカラーにして共通の下線アニメーションを使う', async () => {
+    const target = renderHeader();
+    await tick();
+
+    const navigationLinks = target.querySelectorAll<HTMLAnchorElement>(
+      'a[href="/elements"], a[href="/game"], a[href="/ranking"], a[href="/weak"], a[href="/mypage"], a[href="/admin"], a[href="/settings"]'
+    );
+
+    for (const link of navigationLinks) {
+      expect(link.classList.contains('text-link')).toBe(true);
+      expect(
+        link.classList.contains('text-brand') || link.closest('ul')?.classList.contains('text-brand')
+      ).toBe(true);
+    }
+  });
 });
 
 describe('Header admin navigation', () => {

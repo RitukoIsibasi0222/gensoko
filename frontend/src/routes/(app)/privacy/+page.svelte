@@ -75,7 +75,7 @@
       {#each tableOfContents as item (item.href)}
         <li>
           <a
-            class="text-action-text focus:ring-focus inline-block rounded-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+            class="text-link text-action-text focus:ring-focus inline-block rounded-sm focus:ring-2 focus:ring-offset-2 focus:outline-none"
             href={item.href}
           >
             {item.label}
@@ -199,7 +199,7 @@
           <p class="text-text-muted mt-1 text-sm leading-6">{provider.data}</p>
           <a
             href={provider.privacyUrl}
-            class="text-action-text focus:ring-focus mt-3 inline-block rounded-sm text-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+            class="text-link text-action-text focus:ring-focus mt-3 inline-block rounded-sm text-sm focus:ring-2 focus:ring-offset-2 focus:outline-none"
           >
             {provider.name}のプライバシーポリシー（外部サイト）
           </a>
@@ -255,7 +255,7 @@
       本ポリシーやデータの取扱いに関するお問い合わせは、
       <a
         href="mailto:isibasiwork@gmail.com"
-        class="text-action-text focus:ring-focus rounded-sm break-all hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+        class="text-link text-action-text focus:ring-focus rounded-sm break-all focus:ring-2 focus:ring-offset-2 focus:outline-none"
       >
         isibasiwork@gmail.com
       </a>
