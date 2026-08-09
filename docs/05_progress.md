@@ -1,6 +1,6 @@
 # Gensoko 実装タスク一覧
 
-> 更新日: 2026-08-08
+> 更新日: 2026-08-09
 > ステータス: `[ ]` 未実装 / `[-]` 実装中 / `[x]` 完了
 
 ---
@@ -89,6 +89,7 @@
 
 - [x] トップページ `/`（アプリ概要・ゲーム開始CTA・ランキングプレビュー）
 - [x] フロントエンドUI調整（トップページ文言・Hero説明文幅・ヘッダー挨拶・角丸4px統一・カード影削除）
+- [x] サイトブランドカラー調整（メイン `#014c2d`・ロゴ・全主要ボタン・認証リンク）
 - [x] トップページ ランキングプレビュー実データ対応（週間ランキング上位3件・loading/error/empty表示） — Issue #72 / 計画書: [`docs/plans/home-ranking-preview/plan.md`](plans/home-ranking-preview/plan.md)
 - [x] 元素一覧ページ `/elements`（118枚カードグリッド・分類色分け）
 - [x] 元素詳細モーダルコンポーネント（カードクリックで開く） — 計画書: [`docs/plans/elements-detail-modal/plan.md`](plans/elements-detail-modal/plan.md)
