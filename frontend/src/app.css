@@ -65,7 +65,8 @@
   --color-danger-text: light-dark(#991b1b, #fecaca);
   --color-danger-text-strong: light-dark(#7f1d1d, #fee2e2);
   --color-danger-solid: light-dark(#dc2626, #dc2626);
-  --color-danger-solid-hover: light-dark(#b91c1c, #b91c1c);
+  --color-danger-action: #c10202;
+  --color-danger-action-hover: #9b0202;
   --color-danger-icon: light-dark(#ef4444, #fca5a5);
 
   --color-info-surface: light-dark(#eff6ff, #172554);

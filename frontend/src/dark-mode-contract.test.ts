@@ -181,6 +181,20 @@ describe('dark mode source contract', () => {
     expect(myRankPanel).not.toContain('text-info-text');
   });
 
+  it('削除ボタンに専用の危険操作カラーを使う', () => {
+    const appCss = readSource('src/app.css');
+    const weakPage = readSource('src/routes/(app)/weak/+page.svelte');
+    const settingsPage = readSource('src/routes/(app)/settings/+page.svelte');
+    const adminConfirmation = readSource('src/lib/components/admin/AdminActionConfirmation.svelte');
+
+    expect(getTokenColors(appCss, '--color-danger-action')).toEqual(['#c10202', '#c10202']);
+    expect(getTokenColors(appCss, '--color-danger-action-hover')).toEqual(['#9b0202', '#9b0202']);
+    for (const source of [weakPage, settingsPage, adminConfirmation]) {
+      expect(source).toContain('bg-danger-action');
+      expect(source).toContain('hover:bg-danger-action-hover');
+    }
+  });
+
   it('テキストリンクの下線を文字色で上から下へ表示する', () => {
     const appCss = readSource('src/app.css');
 
@@ -243,6 +257,7 @@ describe('dark mode source contract', () => {
       { foreground: '--color-action-text', background: '--color-surface', minimum: 4.5 },
       { foreground: '--color-text-inverse', background: '--color-action', minimum: 4.5 },
       { foreground: '--color-text-inverse', background: '--color-danger-solid', minimum: 4.5 },
+      { foreground: '--color-text-inverse', background: '--color-danger-action', minimum: 4.5 },
       { foreground: '--color-success-text', background: '--color-success-surface', minimum: 4.5 },
       { foreground: '--color-warning-text', background: '--color-warning-surface', minimum: 4.5 },
       { foreground: '--color-danger-text', background: '--color-danger-surface', minimum: 4.5 },

@@ -612,7 +612,7 @@
         <button
           type="submit"
           disabled={isDeleting}
-          class="bg-danger-solid text-text-inverse hover:bg-danger-solid-hover focus:ring-danger-border-strong rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          class="bg-danger-action text-text-inverse hover:bg-danger-action-hover focus:ring-danger-border-strong rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isDeleting ? '削除中...' : 'アカウントを削除する'}
         </button>

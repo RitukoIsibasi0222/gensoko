@@ -370,7 +370,7 @@
                       aria-label={element.nameJa + 'を苦手リストから削除する'}
                       disabled={isDeleting}
                       onclick={() => confirmDelete(element)}
-                      class="bg-danger-solid text-text-inverse hover:bg-danger-solid-hover focus-visible:outline-danger-border-strong rounded px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                      class="bg-danger-action text-text-inverse hover:bg-danger-action-hover focus-visible:outline-danger-border-strong rounded px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isDeleting ? '削除中...' : '削除する'}
                     </button>
