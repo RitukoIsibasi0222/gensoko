@@ -56,7 +56,7 @@
         alt=""
         width="262"
         height="235"
-        class="h-8 w-auto shrink-0"
+        class="h-auto w-[30px] shrink-0"
       />
       <span>Gensoko</span>
     </a>

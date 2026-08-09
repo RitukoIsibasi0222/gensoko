@@ -79,6 +79,8 @@ describe('Header branding', () => {
     expect(logoLink?.textContent?.trim()).toBe('Gensoko');
     expect(logoImage?.getAttribute('src')).toBe('/logo.png');
     expect(logoImage?.getAttribute('alt')).toBe('');
+    expect(logoImage?.classList.contains('w-[30px]')).toBe(true);
+    expect(logoImage?.classList.contains('h-auto')).toBe(true);
     expect(logoLink?.firstElementChild).toBe(logoImage);
   });
 });
