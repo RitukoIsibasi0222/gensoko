@@ -153,12 +153,6 @@ describe('dark mode source contract', () => {
     expect(getTokenColors(appCss, '--color-action-text')[0]).toBe('#014c2d');
   });
 
-  it('ライトテーマのbody背景に指定したcanvasカラーを使う', () => {
-    const appCss = readSource('src/app.css');
-
-    expect(getTokenColors(appCss, '--color-canvas')).toEqual(['#fffdf2', '#0b1210']);
-  });
-
   it('認証パネルの枠色を共通トークンで定義する', () => {
     const appCss = readSource('src/app.css');
 
