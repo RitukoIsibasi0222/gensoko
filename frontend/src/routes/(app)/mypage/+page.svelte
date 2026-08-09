@@ -260,7 +260,7 @@
 
 <div class="space-y-6">
   <section class="space-y-2">
-    <p class="text-text-subtle text-sm font-semibold">学習記録</p>
+    <p class="page-eyebrow text-sm font-semibold">学習記録</p>
     <h1 class="text-text text-2xl font-bold">マイページ</h1>
     <p class="text-text-muted max-w-2xl text-sm leading-6">
       統計サマリーと保存されたゲーム履歴を確認できます。

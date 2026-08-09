@@ -67,7 +67,6 @@ describe('HeroSection', () => {
 
     expect(heading?.textContent).toBe('元素を遊んで覚える。');
     expect(heading?.classList.contains('tracking-[1px]')).toBe(true);
-    expect(eyebrow?.classList.contains('text-action-text')).toBe(true);
-    expect(eyebrow?.classList.contains('tracking-[1px]')).toBe(true);
+    expect(eyebrow?.classList.contains('page-eyebrow')).toBe(true);
   });
 });

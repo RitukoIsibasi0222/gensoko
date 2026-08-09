@@ -743,7 +743,7 @@
   {:else}
     <main class="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:px-8">
       <header>
-        <p class="text-brand text-sm font-semibold">Administration</p>
+        <p class="page-eyebrow text-sm font-semibold">Administration</p>
         <h1 bind:this={pageHeading} tabindex="-1" class="text-text mt-1 text-3xl font-bold">
           管理者ダッシュボード
         </h1>

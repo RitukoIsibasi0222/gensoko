@@ -138,7 +138,7 @@
 
 <div class="space-y-6">
   <section class="space-y-2">
-    <p class="text-text-subtle text-sm font-semibold">ランキング</p>
+    <p class="page-eyebrow text-sm font-semibold">ランキング</p>
     <h1 class="text-text text-2xl font-bold">週間・全期間ランキング</h1>
     <p class="text-text-muted max-w-2xl text-sm leading-6">
       保存されたゲーム結果のスコアをもとに、上位50件を表示します。

@@ -148,7 +148,7 @@
 
 <div class="space-y-6">
   <section class="space-y-2">
-    <p class="text-text-subtle text-sm font-semibold">4択クイズ</p>
+    <p class="page-eyebrow text-sm font-semibold">4択クイズ</p>
     <h1 class="text-text text-2xl font-bold">ゲーム</h1>
     <p class="text-text-muted max-w-2xl text-sm leading-6">
       元素記号と名前を、初級・上級・苦手リストのモードから選んで練習できます。

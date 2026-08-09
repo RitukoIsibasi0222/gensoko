@@ -157,6 +157,11 @@ textarea {
 }
 
 @layer components {
+  .page-eyebrow {
+    color: var(--color-action-text);
+    letter-spacing: 1px;
+  }
+
   .text-link {
     text-decoration-line: underline;
     text-decoration-color: transparent;

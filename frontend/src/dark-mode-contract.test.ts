@@ -195,6 +195,27 @@ describe('dark mode source contract', () => {
     }
   });
 
+  it('各ページのh1直上ラベルをメインカラーと1pxの文字間隔に統一する', () => {
+    const appCss = readSource('src/app.css');
+    const pageEyebrowSources = [
+      ['src/lib/components/home/HeroSection.svelte', 1],
+      ['src/routes/(app)/ranking/+page.svelte', 1],
+      ['src/routes/(app)/admin/+page.svelte', 1],
+      ['src/routes/(app)/game/+page.svelte', 1],
+      ['src/routes/(app)/mypage/+page.svelte', 1],
+      ['src/routes/(app)/weak/+page.svelte', 1],
+      ['src/routes/(app)/game/play/+page.svelte', 3],
+      ['src/routes/(app)/game/result/+page.svelte', 2]
+    ] as const;
+
+    expect(appCss).toContain('.page-eyebrow');
+    expect(appCss).toContain('color: var(--color-action-text)');
+    expect(appCss).toContain('letter-spacing: 1px');
+    for (const [path, expectedCount] of pageEyebrowSources) {
+      expect(readSource(path).match(/page-eyebrow/g)).toHaveLength(expectedCount);
+    }
+  });
+
   it('テキストリンクの下線を文字色で上から下へ表示する', () => {
     const appCss = readSource('src/app.css');
 

@@ -234,7 +234,7 @@
 
 <div class="space-y-6">
   <section class="space-y-2">
-    <p class="text-text-subtle text-sm font-semibold">苦手元素</p>
+    <p class="page-eyebrow text-sm font-semibold">苦手元素</p>
     <h1 class="text-text text-2xl font-bold">苦手リスト</h1>
     <p class="text-text-muted max-w-2xl text-sm leading-6">
       間違えた元素を見直し、必要なくなったものはリストから削除できます。

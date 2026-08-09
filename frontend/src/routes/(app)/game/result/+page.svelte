@@ -220,7 +220,7 @@
       role={unavailableRole}
     >
       <div>
-        <p class="text-text-subtle text-sm font-semibold">4択クイズ</p>
+        <p class="page-eyebrow text-sm font-semibold">4択クイズ</p>
         <div class="mt-2 flex items-center gap-3">
           {#if isRestoreLoading}
             <span
@@ -269,7 +269,7 @@
   {:else}
     <section class="space-y-5">
       <div class="space-y-2">
-        <p class="text-text-subtle text-sm font-semibold">4択クイズ</p>
+        <p class="page-eyebrow text-sm font-semibold">4択クイズ</p>
         <h1 class="text-text text-2xl font-bold">ゲーム結果</h1>
         <p class="text-text-muted text-sm">
           {modeConfig.title} / {modeConfig.difficultyLabel} / {formatPlayedAt(result.playedAt)}
