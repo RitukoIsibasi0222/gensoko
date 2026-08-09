@@ -32,7 +32,7 @@ describe('HeroSection', () => {
     mounted = mount(HeroSection, {
       target,
       props: {
-        title: '元素を、遊んで覚える。',
+        title: '元素を遊んで覚える。',
         description: '説明文',
         primaryCta,
         secondaryCta
@@ -45,5 +45,29 @@ describe('HeroSection', () => {
 
     expect(description?.classList.contains('w-full')).toBe(true);
     expect(description?.className).not.toContain('max-w-');
+  });
+
+  it('見出しと直上ラベルに指定された文字組みを使う', () => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    mounted = mount(HeroSection, {
+      target,
+      props: {
+        title: '元素を遊んで覚える。',
+        description: '説明文',
+        primaryCta,
+        secondaryCta
+      }
+    });
+
+    const heading = target.querySelector('h1');
+    const eyebrow = [...target.querySelectorAll('p')].find(
+      (paragraph) => paragraph.textContent === 'Gensoko'
+    );
+
+    expect(heading?.textContent).toBe('元素を遊んで覚える。');
+    expect(heading?.classList.contains('tracking-[1px]')).toBe(true);
+    expect(eyebrow?.classList.contains('text-action-text')).toBe(true);
+    expect(eyebrow?.classList.contains('tracking-[1px]')).toBe(true);
   });
 });
