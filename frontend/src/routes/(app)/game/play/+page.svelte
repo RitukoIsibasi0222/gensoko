@@ -410,9 +410,7 @@
   });
 </script>
 
-<NoIndexPageMetadata
-  title={modeConfig ? `${modeConfig.title}｜Gensoko` : '4択クイズ｜Gensoko'}
-/>
+<NoIndexPageMetadata title={modeConfig ? `${modeConfig.title}｜Gensoko` : '4択クイズ｜Gensoko'} />
 
 <div class="space-y-6">
   {#if authStore.isInitializing}

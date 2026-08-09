@@ -193,73 +193,71 @@
 <NoIndexPageMetadata title="ログイン｜Gensoko" />
 
 <AuthPanel>
-    <h1 class="text-text text-2xl font-bold">ログイン</h1>
+  <h1 class="text-text text-2xl font-bold">ログイン</h1>
 
-    <!-- novalidate でネイティブバリデーションを無効化し、カスタムバリデーションの日本語メッセージを優先する -->
-    <form class="mt-6 space-y-4" novalidate onsubmit={handleSubmit}>
-      <!-- エラーメッセージ表示 -->
-      {#if errorMessage}
-        <div
-          bind:this={errorAlert}
-          id="login-error"
-          role="alert"
-          tabindex="-1"
-          class="border-danger-border bg-danger-surface text-danger-text rounded-md border px-4 py-3 text-sm"
-        >
-          {errorMessage}
-        </div>
-      {/if}
-
-      <!-- メールアドレス入力 -->
-      <div>
-        <label for="email" class="text-text block text-sm font-medium"> メールアドレス </label>
-        <input
-          bind:this={emailInput}
-          id="email"
-          type="email"
-          bind:value={email}
-          autocomplete="email"
-          required
-          aria-invalid={errorTarget === 'email' ? 'true' : undefined}
-          aria-describedby={errorMessage && errorTarget !== 'password' ? 'login-error' : undefined}
-          class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
-        />
-      </div>
-
-      <!-- パスワード入力 -->
-      <div>
-        <label for="password" class="text-text block text-sm font-medium"> パスワード </label>
-        <input
-          bind:this={passwordInput}
-          id="password"
-          type="password"
-          bind:value={password}
-          autocomplete="current-password"
-          required
-          aria-invalid={errorTarget === 'password' ? 'true' : undefined}
-          aria-describedby={errorMessage && errorTarget !== 'email' ? 'login-error' : undefined}
-          class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
-        />
-      </div>
-
-      <!-- ログインボタン -->
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        class="bg-action text-text-inverse hover:bg-action-hover focus:ring-focus w-full rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+  <!-- novalidate でネイティブバリデーションを無効化し、カスタムバリデーションの日本語メッセージを優先する -->
+  <form class="mt-6 space-y-4" novalidate onsubmit={handleSubmit}>
+    <!-- エラーメッセージ表示 -->
+    {#if errorMessage}
+      <div
+        bind:this={errorAlert}
+        id="login-error"
+        role="alert"
+        tabindex="-1"
+        class="border-danger-border bg-danger-surface text-danger-text rounded-md border px-4 py-3 text-sm"
       >
-        {isSubmitting ? 'ログイン中...' : 'ログイン'}
-      </button>
-    </form>
+        {errorMessage}
+      </div>
+    {/if}
 
-    <!-- パスワードリセットリンク -->
-    <div class="mt-4 text-center text-sm">
-      <a href="/forgot-password" class="text-link text-action-text">
-        パスワードを忘れた方はこちら
-      </a>
+    <!-- メールアドレス入力 -->
+    <div>
+      <label for="email" class="text-text block text-sm font-medium"> メールアドレス </label>
+      <input
+        bind:this={emailInput}
+        id="email"
+        type="email"
+        bind:value={email}
+        autocomplete="email"
+        required
+        aria-invalid={errorTarget === 'email' ? 'true' : undefined}
+        aria-describedby={errorMessage && errorTarget !== 'password' ? 'login-error' : undefined}
+        class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
+      />
     </div>
 
-    <div class="mt-8 flex justify-center">
-      <BrandLogoLink accessibleLabel="Gensokoトップページへ戻る" />
+    <!-- パスワード入力 -->
+    <div>
+      <label for="password" class="text-text block text-sm font-medium"> パスワード </label>
+      <input
+        bind:this={passwordInput}
+        id="password"
+        type="password"
+        bind:value={password}
+        autocomplete="current-password"
+        required
+        aria-invalid={errorTarget === 'password' ? 'true' : undefined}
+        aria-describedby={errorMessage && errorTarget !== 'email' ? 'login-error' : undefined}
+        class="border-border focus:border-focus focus:ring-focus mt-1 w-full rounded-md border px-3 py-2 focus:ring-1 focus:outline-none"
+      />
     </div>
+
+    <!-- ログインボタン -->
+    <button
+      type="submit"
+      disabled={isSubmitting}
+      class="bg-action text-text-inverse hover:bg-action-hover focus:ring-focus w-full rounded-md px-4 py-2 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {isSubmitting ? 'ログイン中...' : 'ログイン'}
+    </button>
+  </form>
+
+  <!-- パスワードリセットリンク -->
+  <div class="mt-4 text-center text-sm">
+    <a href="/forgot-password" class="text-link text-action-text"> パスワードを忘れた方はこちら </a>
+  </div>
+
+  <div class="mt-8 flex justify-center">
+    <BrandLogoLink accessibleLabel="Gensokoトップページへ戻る" />
+  </div>
 </AuthPanel>

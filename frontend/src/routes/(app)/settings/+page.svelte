@@ -570,9 +570,8 @@
         {/if}
 
         <div>
-          <label
-            for="delete-current-password"
-            class="text-text block text-sm font-medium">現在のパスワード</label
+          <label for="delete-current-password" class="text-text block text-sm font-medium"
+            >現在のパスワード</label
           >
           <input
             id="delete-current-password"

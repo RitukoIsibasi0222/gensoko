@@ -164,7 +164,7 @@ describe('dark mode source contract', () => {
   it('ライトテーマのbody背景に指定したcanvasカラーを使う', () => {
     const appCss = readSource('src/app.css');
 
-    expect(getTokenColors(appCss, '--color-canvas')).toEqual(['#F6FAF9', '#0b1210']);
+    expect(getTokenColors(appCss, '--color-canvas')).toEqual(['#f6faf9', '#0b1210']);
   });
 
   it('グレー背景をsurface-mutedの#fafafaに統一する', () => {

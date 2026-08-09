@@ -39,8 +39,6 @@ describe('BrandLogoLink', () => {
   it('画面用途に応じた読み上げ名を設定できる', () => {
     const target = renderBrandLogoLink('Gensokoトップページへ戻る');
 
-    expect(target.querySelector('a')?.getAttribute('aria-label')).toBe(
-      'Gensokoトップページへ戻る'
-    );
+    expect(target.querySelector('a')?.getAttribute('aria-label')).toBe('Gensokoトップページへ戻る');
   });
 });

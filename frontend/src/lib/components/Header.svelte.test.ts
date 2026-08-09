@@ -95,7 +95,8 @@ describe('Header branding', () => {
     for (const link of navigationLinks) {
       expect(link.classList.contains('text-link')).toBe(true);
       expect(
-        link.classList.contains('text-brand') || link.closest('ul')?.classList.contains('text-brand')
+        link.classList.contains('text-brand') ||
+          link.closest('ul')?.classList.contains('text-brand')
       ).toBe(true);
     }
   });
