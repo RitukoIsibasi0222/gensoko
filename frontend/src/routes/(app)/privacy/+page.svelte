@@ -1,4 +1,6 @@
 <script lang="ts">
+  import PublicPageMetadata from '$lib/components/seo/PublicPageMetadata.svelte';
+
   const providers = [
     {
       name: 'Vercel',
@@ -50,13 +52,10 @@
     'scroll-mt-24 space-y-3 rounded-sm focus:ring-2 focus:ring-focus focus:ring-offset-4 focus:outline-none';
 </script>
 
-<svelte:head>
-  <title>プライバシーポリシー | Gensoko</title>
-  <meta
-    name="description"
-    content="Gensokoにおける個人情報、認証情報、学習データの取扱いを説明するプライバシーポリシーです。"
-  />
-</svelte:head>
+<PublicPageMetadata
+  title="プライバシーポリシー｜Gensoko"
+  description="Gensokoにおける個人情報、認証情報、学習データの取扱いを説明するプライバシーポリシーです。"
+/>
 
 <article class="mx-auto max-w-3xl space-y-10">
   <header class="space-y-3">

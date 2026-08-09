@@ -6,6 +6,7 @@
   import { getRanking, type RankingPeriod, type RankingResponse } from '$lib/api/ranking';
   import MyRankPanel from '$lib/components/ranking/MyRankPanel.svelte';
   import RankingTable from '$lib/components/ranking/RankingTable.svelte';
+  import PublicPageMetadata from '$lib/components/seo/PublicPageMetadata.svelte';
   import {
     isRankingPeriodActivationKey,
     normalizeRankingPeriod,
@@ -136,12 +137,10 @@
   }
 </script>
 
-<svelte:head>
-  <meta
-    name="description"
-    content="Gensokoで保存されたゲーム結果をもとに、週間・全期間のスコアランキングを確認できます。"
-  />
-</svelte:head>
+<PublicPageMetadata
+  title="週間・全期間ランキング｜Gensoko"
+  description="Gensokoで保存されたゲーム結果をもとに、週間・全期間のスコアランキングを確認できます。"
+/>
 
 <div class="space-y-6">
   <section class="space-y-2">
