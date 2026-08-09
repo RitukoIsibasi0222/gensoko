@@ -2,6 +2,7 @@
   import { page } from '$app/state';
   import { ApiError } from '$lib/api/errors';
   import { getGameSession } from '$lib/api/game';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { getGameModeConfig } from '$lib/game/modes';
   import { normalizeGameSessionIdParam } from '$lib/game/session-result';
   import { authStore } from '$lib/stores/auth.svelte';
@@ -198,8 +199,8 @@
 
   function getResultClass(item: GameSessionResultItem): string {
     return item.isCorrect
-      ? 'border-success-border bg-success-surface text-success-text'
-      : 'border-danger-border bg-danger-surface text-danger-text-strong';
+      ? 'border-brand bg-surface text-brand'
+      : 'border-secondary bg-surface text-danger-text-strong';
   }
 
   function getChosenChoiceLabel(item: GameSessionResultItem): string {
@@ -211,6 +212,10 @@
   }
 </script>
 
+<NoIndexPageMetadata
+  title={modeConfig ? `${modeConfig.title}の結果｜Gensoko` : 'ゲーム結果｜Gensoko'}
+/>
+
 <div class="space-y-6">
   {#if result === null || modeConfig === null}
     <section
@@ -220,7 +225,7 @@
       role={unavailableRole}
     >
       <div>
-        <p class="text-text-subtle text-sm font-semibold">4択クイズ</p>
+        <p class="page-eyebrow text-sm font-semibold">4択クイズ</p>
         <div class="mt-2 flex items-center gap-3">
           {#if isRestoreLoading}
             <span
@@ -269,7 +274,7 @@
   {:else}
     <section class="space-y-5">
       <div class="space-y-2">
-        <p class="text-text-subtle text-sm font-semibold">4択クイズ</p>
+        <p class="page-eyebrow text-sm font-semibold">4択クイズ</p>
         <h1 class="text-text text-2xl font-bold">ゲーム結果</h1>
         <p class="text-text-muted text-sm">
           {modeConfig.title} / {modeConfig.difficultyLabel} / {formatPlayedAt(result.playedAt)}

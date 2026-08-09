@@ -5,6 +5,7 @@ import {
   getSecondaryCta,
   getTopPageAudience,
   HOME_HERO_DESCRIPTION,
+  HOME_HERO_TITLE,
   HOME_OVERVIEW_DESCRIPTION,
   HOME_OVERVIEW_ITEMS,
   selectRankingPreviewEntries,
@@ -14,6 +15,7 @@ import {
 
 describe('home hero copy', () => {
   it('由来の小話を取り入れたキャッチコピーを表示する', () => {
+    expect(HOME_HERO_TITLE).toBe('元素を遊んで覚える。');
     expect(HOME_HERO_DESCRIPTION).toBe('遊んで覚えて、由来を知る。元素がもっと面白くなる。');
   });
 });

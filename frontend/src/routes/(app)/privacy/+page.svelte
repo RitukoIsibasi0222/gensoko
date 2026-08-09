@@ -1,4 +1,6 @@
 <script lang="ts">
+  import PublicPageMetadata from '$lib/components/seo/PublicPageMetadata.svelte';
+
   const providers = [
     {
       name: 'Vercel',
@@ -50,13 +52,10 @@
     'scroll-mt-24 space-y-3 rounded-sm focus:ring-2 focus:ring-focus focus:ring-offset-4 focus:outline-none';
 </script>
 
-<svelte:head>
-  <title>プライバシーポリシー | Gensoko</title>
-  <meta
-    name="description"
-    content="Gensokoにおける個人情報、認証情報、学習データの取扱いを説明するプライバシーポリシーです。"
-  />
-</svelte:head>
+<PublicPageMetadata
+  title="プライバシーポリシー｜Gensoko"
+  description="Gensokoにおける個人情報、認証情報、学習データの取扱いを説明するプライバシーポリシーです。"
+/>
 
 <article class="mx-auto max-w-3xl space-y-10">
   <header class="space-y-3">
@@ -75,7 +74,7 @@
       {#each tableOfContents as item (item.href)}
         <li>
           <a
-            class="text-action-text focus:ring-focus inline-block rounded-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+            class="text-link text-action-text focus:ring-focus inline-block rounded-sm focus:ring-2 focus:ring-offset-2 focus:outline-none"
             href={item.href}
           >
             {item.label}
@@ -199,7 +198,7 @@
           <p class="text-text-muted mt-1 text-sm leading-6">{provider.data}</p>
           <a
             href={provider.privacyUrl}
-            class="text-action-text focus:ring-focus mt-3 inline-block rounded-sm text-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+            class="text-link text-action-text focus:ring-focus mt-3 inline-block rounded-sm text-sm focus:ring-2 focus:ring-offset-2 focus:outline-none"
           >
             {provider.name}のプライバシーポリシー（外部サイト）
           </a>
@@ -255,7 +254,7 @@
       本ポリシーやデータの取扱いに関するお問い合わせは、
       <a
         href="mailto:isibasiwork@gmail.com"
-        class="text-action-text focus:ring-focus rounded-sm break-all hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+        class="text-link text-action-text focus:ring-focus rounded-sm break-all focus:ring-2 focus:ring-offset-2 focus:outline-none"
       >
         isibasiwork@gmail.com
       </a>

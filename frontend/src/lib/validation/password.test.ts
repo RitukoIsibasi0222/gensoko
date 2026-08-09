@@ -6,6 +6,7 @@ import {
 import {
   getUtf8ByteLength,
   MAX_PASSWORD_UTF8_BYTES,
+  PASSWORD_REQUIREMENTS_HINT,
   PASSWORD_TOO_LONG_MESSAGE,
   validatePassword
 } from './password';
@@ -13,6 +14,17 @@ import {
 describe('validatePassword bcrypt 72バイト境界', () => {
   it('上限定数はbcrypt仕様の72バイトである', () => {
     expect(MAX_PASSWORD_UTF8_BYTES).toBe(72);
+  });
+
+  it('入力ヒントに利用者向けの主な条件を表示する', () => {
+    expect(PASSWORD_REQUIREMENTS_HINT).toBe(
+      '英大文字・英小文字・数字・記号を各1文字以上含む8文字以上'
+    );
+  });
+
+  it('上限超過時は技術用語を避けた利用者向けメッセージを返す', () => {
+    expect(PASSWORD_TOO_LONG_MESSAGE).toBe('パスワードが長すぎます。文字数を減らしてください');
+    expect(PASSWORD_TOO_LONG_MESSAGE).not.toMatch(/UTF-8|バイト/);
   });
 
   it.each(STRONG_PASSWORD_BYTE_BOUNDARY_FIXTURES)(

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
 
@@ -46,7 +47,7 @@
 <nav class="border-border-muted bg-surface border-b">
   <div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
     <!-- ロゴ -->
-    <a href="/" class="text-brand text-xl font-bold" onclick={closeMobileMenu}>Gensoko</a>
+    <BrandLogoLink onclick={closeMobileMenu} />
 
     <button
       type="button"
@@ -77,12 +78,12 @@
     </button>
 
     <!-- メインナビ -->
-    <ul class="text-text hidden gap-6 text-sm font-medium md:flex">
+    <ul class="text-brand hidden gap-6 text-sm font-medium md:flex">
       {#each primaryNavItems as item (item.href)}
-        <li><a href={item.href} class="hover:text-brand">{item.label}</a></li>
+        <li><a href={item.href} class="text-link">{item.label}</a></li>
       {/each}
       {#each visibleAuthenticatedNavItems as item (item.href)}
-        <li><a href={item.href} class="hover:text-brand">{item.label}</a></li>
+        <li><a href={item.href} class="text-link">{item.label}</a></li>
       {/each}
     </ul>
 
@@ -96,7 +97,7 @@
           <span class="block">こんにちは</span>
           <span class="block">{authStore.user?.username}さん</span>
         </span>
-        <a href="/settings" class="hover:text-brand text-text-muted rounded px-3 py-1.5">設定</a>
+        <a href="/settings" class="text-link text-brand rounded px-3 py-1.5">設定</a>
         <button
           type="button"
           onclick={handleLogout}
@@ -105,7 +106,7 @@
           ログアウト
         </button>
       {:else}
-        <a href="/login" class="hover:text-brand text-text-muted rounded px-3 py-1.5">ログイン</a>
+        <a href="/login" class="text-link text-brand rounded px-3 py-1.5">ログイン</a>
         <a
           href="/register"
           class="bg-action hover:bg-action-hover text-text-inverse rounded px-3 py-1.5"
@@ -127,12 +128,12 @@
     <div class="overflow-hidden">
       <div class="mx-auto max-w-5xl space-y-4 px-4 py-4">
         <ThemeToggle />
-        <ul class="text-text grid gap-1 text-sm font-medium">
+        <ul class="text-brand grid gap-1 text-sm font-medium">
           {#each primaryNavItems as item (item.href)}
             <li>
               <a
                 href={item.href}
-                class="hover:text-brand hover:bg-surface-muted block rounded px-3 py-2"
+                class="text-link hover:bg-surface-muted block rounded px-3 py-2"
                 onclick={closeMobileMenu}
               >
                 {item.label}
@@ -143,7 +144,7 @@
             <li>
               <a
                 href={item.href}
-                class="hover:text-brand hover:bg-surface-muted block rounded px-3 py-2"
+                class="text-link hover:bg-surface-muted block rounded px-3 py-2"
                 onclick={closeMobileMenu}
               >
                 {item.label}
@@ -163,7 +164,7 @@
             <div class="mt-3 grid gap-2">
               <a
                 href="/settings"
-                class="hover:text-brand text-text-muted hover:bg-surface-muted block rounded px-3 py-2"
+                class="text-link text-brand hover:bg-surface-muted block rounded px-3 py-2"
                 onclick={closeMobileMenu}
               >
                 設定
@@ -180,7 +181,7 @@
             <div class="grid gap-2">
               <a
                 href="/login"
-                class="hover:text-brand text-text-muted hover:bg-surface-muted block rounded px-3 py-2"
+                class="text-link text-brand hover:bg-surface-muted block rounded px-3 py-2"
                 onclick={closeMobileMenu}
               >
                 ログイン

@@ -2,8 +2,11 @@
   import { tick } from 'svelte';
   import { API_BASE_URL } from '$lib/api/config';
   import { ApiError, parseErrorResponse } from '$lib/api/errors';
+  import AuthPanel from '$lib/components/AuthPanel.svelte';
+  import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
-  import { PASSWORD_BYTE_LIMIT_HINT } from '$lib/validation/password';
+  import { PASSWORD_REQUIREMENTS_HINT } from '$lib/validation/password';
   import { validateUsername, validateEmail, validatePassword } from './validation';
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/stores/auth.svelte';
@@ -119,7 +122,9 @@
   }
 </script>
 
-<div class="mx-auto max-w-md px-4 py-8">
+<NoIndexPageMetadata title="ユーザー登録｜Gensoko" />
+
+<AuthPanel>
   <h1 class="text-text text-2xl font-bold">ユーザー登録</h1>
 
   {#if !isSuccess}
@@ -233,7 +238,7 @@
           </button>
         </div>
         <p id="password-hint" class="text-text-muted mt-1 text-sm">
-          {PASSWORD_BYTE_LIMIT_HINT}
+          {PASSWORD_REQUIREMENTS_HINT}
         </p>
         {#if passwordError}
           <p id="password-error" class="text-danger-text mt-1 text-sm">{passwordError}</p>
@@ -241,14 +246,14 @@
       </div>
 
       <p class="text-text-muted text-sm">
-        登録前に
+        登録することで、
         <a
           href="/privacy"
-          class="text-action-text focus:ring-focus rounded-sm hover:underline focus:ring-2 focus:ring-offset-2 focus:outline-none"
+          class="text-link text-action-text focus:ring-focus rounded-sm focus:ring-2 focus:ring-offset-2 focus:outline-none"
         >
           プライバシーポリシー
         </a>
-        をご確認ください。
+        に同意したものとみなされます。
       </p>
 
       <!-- 登録ボタン -->
@@ -277,6 +282,10 @@
   <!-- ログインページへの導線 -->
   <div class="mt-4 text-center text-sm">
     <span class="text-text-muted">すでにアカウントをお持ちの方は</span>
-    <a href="/login" class="text-action hover:underline">ログイン</a>
+    <a href="/login" class="text-link text-action-text">ログイン</a>
   </div>
-</div>
+
+  <div class="mt-8 flex justify-center">
+    <BrandLogoLink accessibleLabel="Gensokoトップページへ戻る" />
+  </div>
+</AuthPanel>

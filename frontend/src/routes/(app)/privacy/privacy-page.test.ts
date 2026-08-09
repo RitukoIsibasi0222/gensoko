@@ -1,5 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, tick, unmount } from '$lib/test/svelte-client';
+
+vi.mock('$app/state', () => ({
+  page: { url: new URL('https://gensoko.example/privacy') }
+}));
 
 import PrivacyPage from './+page.svelte';
 

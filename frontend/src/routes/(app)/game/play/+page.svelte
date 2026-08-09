@@ -7,6 +7,7 @@
   import GameChoiceButton from '$lib/components/game/GameChoiceButton.svelte';
   import GameProgressIndicator from '$lib/components/game/GameProgressIndicator.svelte';
   import GameTimerBar from '$lib/components/game/GameTimerBar.svelte';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import {
     ANSWER_FEEDBACK_MS,
     GAME_SESSION_DURATION_LIMIT_SEC,
@@ -409,6 +410,8 @@
   });
 </script>
 
+<NoIndexPageMetadata title={modeConfig ? `${modeConfig.title}｜Gensoko` : '4択クイズ｜Gensoko'} />
+
 <div class="space-y-6">
   {#if authStore.isInitializing}
     <section class="border-border-muted bg-surface rounded border p-5" aria-busy="true">
@@ -417,7 +420,7 @@
   {:else if !authStore.isLoggedIn}
     <section class="border-border-muted bg-surface space-y-4 rounded border p-6">
       <div>
-        <p class="text-text-subtle text-sm font-semibold">4択クイズ</p>
+        <p class="page-eyebrow text-sm font-semibold">4択クイズ</p>
         <h1 class="text-text mt-2 text-2xl font-bold">ログインが必要です</h1>
         <p class="text-text-muted mt-2 text-sm leading-6">
           ゲームを開始するにはログインしてください。
@@ -503,7 +506,7 @@
       role={submitStatus === 'error' ? 'alert' : 'status'}
     >
       <div>
-        <p class="text-text-subtle text-sm font-semibold">4択クイズ</p>
+        <p class="page-eyebrow text-sm font-semibold">4択クイズ</p>
         <h1 class="text-text mt-2 text-2xl font-bold">
           {submitStatus === 'error' ? '結果を保存できませんでした' : '結果を保存しています'}
         </h1>
@@ -563,7 +566,7 @@
   {:else if currentQuestion}
     <section class="space-y-5" aria-labelledby="game-play-heading">
       <div class="space-y-2">
-        <p class="text-text-subtle text-sm font-semibold">4択クイズ</p>
+        <p class="page-eyebrow text-sm font-semibold">4択クイズ</p>
         <h1 id="game-play-heading" class="text-text text-2xl font-bold">
           {modeConfig.title}
         </h1>

@@ -5,6 +5,9 @@
   import { goto } from '$app/navigation';
   import { ApiError, parseErrorBody } from '$lib/api/errors';
   import { API_BASE_URL } from '$lib/api/config';
+  import AuthPanel from '$lib/components/AuthPanel.svelte';
+  import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { isValidEmailFormat } from '$lib/validation/email';
 
   // フォーム入力値
@@ -187,7 +190,9 @@
   }
 </script>
 
-<div class="mx-auto max-w-md px-4 py-8">
+<NoIndexPageMetadata title="ログイン｜Gensoko" />
+
+<AuthPanel>
   <h1 class="text-text text-2xl font-bold">ログイン</h1>
 
   <!-- novalidate でネイティブバリデーションを無効化し、カスタムバリデーションの日本語メッセージを優先する -->
@@ -249,8 +254,10 @@
 
   <!-- パスワードリセットリンク -->
   <div class="mt-4 text-center text-sm">
-    <a href="/forgot-password" class="text-action hover:underline">
-      パスワードを忘れた方はこちら
-    </a>
+    <a href="/forgot-password" class="text-link text-action-text"> パスワードを忘れた方はこちら </a>
   </div>
-</div>
+
+  <div class="mt-8 flex justify-center">
+    <BrandLogoLink accessibleLabel="Gensokoトップページへ戻る" />
+  </div>
+</AuthPanel>

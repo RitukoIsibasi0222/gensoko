@@ -4,9 +4,12 @@
   import { goto, replaceState } from '$app/navigation';
   import { API_BASE_URL } from '$lib/api/config';
   import { ApiError, parseErrorResponse } from '$lib/api/errors';
+  import AuthPanel from '$lib/components/AuthPanel.svelte';
+  import BrandLogoLink from '$lib/components/BrandLogoLink.svelte';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
-  import { PASSWORD_BYTE_LIMIT_HINT, validatePassword } from '$lib/validation/password';
+  import { PASSWORD_REQUIREMENTS_HINT, validatePassword } from '$lib/validation/password';
 
   // フォーム入力値
   let password = $state('');
@@ -147,7 +150,9 @@
   }
 </script>
 
-<div class="mx-auto max-w-md px-4 py-8">
+<NoIndexPageMetadata title="パスワードリセット｜Gensoko" />
+
+<AuthPanel>
   <h1 class="text-text text-2xl font-bold">パスワードリセット</h1>
   <p class="text-text-muted mt-2">新しいパスワードを入力して再設定してください。</p>
 
@@ -219,7 +224,7 @@
           </button>
         </div>
         <p id="password-hint" class="text-text-muted mt-1 text-sm">
-          {PASSWORD_BYTE_LIMIT_HINT}
+          {PASSWORD_REQUIREMENTS_HINT}
         </p>
         {#if passwordError}
           <p id="password-error" class="text-danger-text mt-1 text-sm">{passwordError}</p>
@@ -273,4 +278,8 @@
       </a>
     </div>
   {/if}
-</div>
+
+  <div class="mt-8 flex justify-center">
+    <BrandLogoLink accessibleLabel="Gensokoトップページへ戻る" />
+  </div>
+</AuthPanel>

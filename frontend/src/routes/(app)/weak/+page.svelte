@@ -4,6 +4,7 @@
   import { onDestroy } from 'svelte';
   import { ApiError } from '$lib/api/errors';
   import { deleteWeakElement, getWeakElements, type WeakElement } from '$lib/api/weak';
+  import NoIndexPageMetadata from '$lib/components/seo/NoIndexPageMetadata.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import {
@@ -232,9 +233,11 @@
   });
 </script>
 
+<NoIndexPageMetadata title="苦手リスト｜Gensoko" />
+
 <div class="space-y-6">
   <section class="space-y-2">
-    <p class="text-text-subtle text-sm font-semibold">苦手元素</p>
+    <p class="page-eyebrow text-sm font-semibold">苦手元素</p>
     <h1 class="text-text text-2xl font-bold">苦手リスト</h1>
     <p class="text-text-muted max-w-2xl text-sm leading-6">
       間違えた元素を見直し、必要なくなったものはリストから削除できます。
@@ -370,7 +373,7 @@
                       aria-label={element.nameJa + 'を苦手リストから削除する'}
                       disabled={isDeleting}
                       onclick={() => confirmDelete(element)}
-                      class="bg-danger-solid text-text-inverse hover:bg-danger-solid-hover focus-visible:outline-danger-border-strong rounded px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                      class="bg-danger-action text-text-inverse hover:bg-danger-action-hover focus-visible:outline-danger-border-strong rounded px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isDeleting ? '削除中...' : '削除する'}
                     </button>

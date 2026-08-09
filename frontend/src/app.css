@@ -14,10 +14,10 @@
   --radius-3xl: 0.25rem;
   --radius-4xl: 0.25rem;
 
-  --color-canvas: light-dark(#f7f8fa, #0b1210);
+  --color-canvas: light-dark(#f6faf9, #0b1210);
   --color-surface: light-dark(#ffffff, #111a17);
   --color-elevated: light-dark(#ffffff, #17211d);
-  --color-surface-muted: light-dark(#f3f4f6, #1d2823);
+  --color-surface-muted: light-dark(#fafafa, #1d2823);
   --color-surface-subtle: light-dark(#e5e7eb, #26342e);
   --color-surface-disabled: light-dark(#e5e7eb, #2d3a35);
   --color-disabled-solid: light-dark(#9ca3af, #60756b);
@@ -27,17 +27,20 @@
   --color-text-disabled: light-dark(#9ca3af, #77837d);
   --color-text-inverse: #ffffff;
   --color-border: light-dark(#d1d5db, #43574e);
+  --color-border-panel: #b3c1bb;
   --color-border-muted: light-dark(#e5e7eb, #26342e);
   --color-border-strong: light-dark(#9ca3af, #60756b);
-  --color-focus: light-dark(#2563eb, #60a5fa);
+  --color-focus: light-dark(#014c2d, #6ee7b7);
 
-  --color-brand: light-dark(#013220, #6ee7b7);
-  --color-brand-hover: light-dark(#01501a, #a7f3d0);
-  --color-action: light-dark(#2563eb, #2563eb);
-  --color-action-hover: light-dark(#1d4ed8, #1d4ed8);
+  --color-brand: light-dark(#014c2d, #6ee7b7);
+  --color-brand-hover: light-dark(#013d24, #a7f3d0);
+  --color-secondary: #ffb600;
+  --color-secondary-soft: rgb(255 181 0 / 5%);
+  --color-action: light-dark(#014c2d, #014c2d);
+  --color-action-hover: light-dark(#013d24, #013d24);
   --color-action-soft: light-dark(#eff6ff, #172554);
   --color-action-soft-hover: light-dark(#dbeafe, #1e3a8a);
-  --color-action-text: light-dark(#1d4ed8, #bfdbfe);
+  --color-action-text: light-dark(#014c2d, #6ee7b7);
 
   --color-success-surface: light-dark(#f0fdf4, #052e16);
   --color-success-surface-strong: light-dark(#dcfce7, #14532d);
@@ -63,7 +66,8 @@
   --color-danger-text: light-dark(#991b1b, #fecaca);
   --color-danger-text-strong: light-dark(#7f1d1d, #fee2e2);
   --color-danger-solid: light-dark(#dc2626, #dc2626);
-  --color-danger-solid-hover: light-dark(#b91c1c, #b91c1c);
+  --color-danger-action: #c10202;
+  --color-danger-action-hover: #9b0202;
   --color-danger-icon: light-dark(#ef4444, #fca5a5);
 
   --color-info-surface: light-dark(#eff6ff, #172554);
@@ -75,7 +79,7 @@
   --color-info-solid: light-dark(#2563eb, #2563eb);
 
   --color-overlay: light-dark(rgb(0 0 0 / 50%), rgb(0 0 0 / 72%));
-  --color-chart-line: light-dark(#2563eb, #60a5fa);
+  --color-chart-line: light-dark(#014c2d, #6ee7b7);
   --color-chart-grid: light-dark(#d1d5db, #43574e);
   --color-chart-grid-muted: light-dark(#f3f4f6, #26342e);
   --color-chart-label: light-dark(#4b5563, #cbd5d1);
@@ -151,6 +155,36 @@ select,
 textarea {
   background-color: var(--color-surface);
   color: var(--color-text);
+}
+
+@layer components {
+  .page-eyebrow {
+    color: var(--color-action-text);
+    letter-spacing: 1px;
+  }
+
+  .text-link {
+    text-decoration-line: underline;
+    text-decoration-color: transparent;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0;
+    transition:
+      text-decoration-color 180ms ease-out,
+      text-underline-offset 180ms ease-out;
+  }
+
+  .text-link:hover,
+  .text-link:focus-visible {
+    text-decoration-color: currentColor;
+    text-underline-offset: 0.2em;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  a[href],
+  button:not(:disabled) {
+    cursor: pointer;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
