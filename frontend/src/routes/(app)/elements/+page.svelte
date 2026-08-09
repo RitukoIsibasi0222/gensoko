@@ -198,6 +198,13 @@
   }
 </script>
 
+<svelte:head>
+  <meta
+    name="description"
+    content="118種類の元素を分類ごとに一覧表示。元素記号や名前を検索し、それぞれの元素の特徴を確認できます。"
+  />
+</svelte:head>
+
 <div class="space-y-6">
   <section>
     <h1 class="text-text text-2xl font-bold">元素一覧</h1>

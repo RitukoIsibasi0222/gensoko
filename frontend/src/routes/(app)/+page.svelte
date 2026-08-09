@@ -125,6 +125,13 @@
   const isRankingPreviewLoading = $derived(rankingPreviewLoadStatus === 'loading');
 </script>
 
+<svelte:head>
+  <meta
+    name="description"
+    content="Gensokoは、4択クイズや元素一覧を通して、118種類の元素記号と名前を楽しく学べるWebアプリです。"
+  />
+</svelte:head>
+
 <div class="space-y-8">
   <HeroSection
     title={HOME_HERO_TITLE}

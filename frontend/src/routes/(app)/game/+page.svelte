@@ -146,6 +146,13 @@
   }
 </script>
 
+<svelte:head>
+  <meta
+    name="description"
+    content="元素記号と名前を4択クイズで練習できます。初級・上級などからモードを選んで、楽しく理解を深めましょう。"
+  />
+</svelte:head>
+
 <div class="space-y-6">
   <section class="space-y-2">
     <p class="page-eyebrow text-sm font-semibold">4択クイズ</p>

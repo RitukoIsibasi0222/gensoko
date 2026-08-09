@@ -136,6 +136,13 @@
   }
 </script>
 
+<svelte:head>
+  <meta
+    name="description"
+    content="Gensokoで保存されたゲーム結果をもとに、週間・全期間のスコアランキングを確認できます。"
+  />
+</svelte:head>
+
 <div class="space-y-6">
   <section class="space-y-2">
     <p class="page-eyebrow text-sm font-semibold">ランキング</p>
