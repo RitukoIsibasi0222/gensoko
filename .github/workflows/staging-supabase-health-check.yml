@@ -1,0 +1,60 @@
+name: Staging Supabase Health Check
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 0,8,16 * * *"
+
+permissions: {}
+
+concurrency:
+  group: gensoko-staging-supabase-health-check
+  cancel-in-progress: false
+
+jobs:
+  staging-supabase-health-check:
+    name: Query staging database through API
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      STAGING_HEALTH_CHECK_URL: https://gensoko-api-staging.rituko-labs.workers.dev/api/v1/elements/1
+
+    steps:
+      - name: Validate workflow branch
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "staging health checkはmain branchから実行してください"
+            exit 1
+          fi
+
+      - name: Query staging database through the API
+        run: |
+          set -uo pipefail
+
+          curl_options=(
+            --silent
+            --show-error
+            --header "Cache-Control: no-cache"
+            --fail-with-body
+            --connect-timeout 15
+            --max-time 30
+            --retry 2
+            --retry-delay 5
+            --retry-all-errors
+            --output /dev/null
+            --write-out "%{http_code}"
+          )
+
+          set +e
+          http_status="$(curl "${curl_options[@]}" "$STAGING_HEALTH_CHECK_URL")"
+          curl_exit=$?
+          set -e
+
+          if [ "$curl_exit" -ne 0 ] || [ "$http_status" != "200" ]; then
+            echo "staging Supabaseヘルスチェックに失敗しました（HTTP ${http_status:-unavailable}）"
+            exit 1
+          fi
+
+          echo "staging Supabaseヘルスチェックに成功しました"
