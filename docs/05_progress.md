@@ -268,7 +268,7 @@
   - [x] PDA-26 Vercel CLI explicit projectをTDD修正 — run [31260704440](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31260704440)はTeam slug preflightとAPI health後、candidate deployだけが`project_not_found`となった。現行安定版`58.9.0`へ固定し、deployの`--project`とlistのproject位置引数へpreflight済みproduction project IDを明示するRed→Greenと全local品質gateを完了した
   - [x] PDA-27〜PDA-29 Vercel Git STAGED候補・REST promoteをTDD実装 — exact project/SHA/ref/target/source/`READY / STAGED`の単一候補だけを最大10分待機し、content検証後のdeployment IDだけをREST promoteする。Auto-assign OFF確認後だけproduction Git接続するrunbookへ同期した。provider raw response・内部ID・固有URLは出力しない
   - [x] PDA-30 develop staging確認・外部設定・production実run検証 — PR #230の全check、固定staging画面とAPI healthを確認後、production Auto-assign OFF → main-only build → Git接続 → Production Branch=`main`を保存した。release PR #231のmain SHA `e413d83170bd776e05afc24f4f453a5dff9f84eb`でSTAGED候補がcustom domain未割当であることを確認してEnvironment承認し、run [31265196631](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/31265196631)のAPI → health → REST promote → smokeとCurrent昇格を確認した
-- [x] npm audit・本番環境動作確認（M3でproduction依存監査、M6で登録・メール・認証・ゲーム・本人退会を確認）
+- [x] npm audit・本番環境動作確認（M3でproduction依存監査、M6で登録・メール・認証・ゲーム・本人退会を確認） — 2026-08-18のmain SHA `d515f1e043ad895874919b95a599ca28d7fecd55`のProduction Deployは、新規公開された`nanoid < 3.3.18`のHigh advisoryをfrontend品質gateが検出し、protected production job前に安全停止したためproduction API・frontend・DBは未変更。`fix/frontend-nanoid-audit`でtransitive dev dependencyを`3.3.18`へ更新し、Node 22.23.1 / npm 10.9.8でHigh・Moderate 0、frontend 70 files・716 tests、lint、Svelte check、format、Preview buildを確認した。残る`cookie` 3件はLowかつ修正にbreaking downgradeを要求するため継続監視し、修正版をdevelop/mainへ再昇格する
 
 ## ポートフォリオ版 v0.1 公開計画
 

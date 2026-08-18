@@ -322,6 +322,13 @@ pending Prisma migrationがある場合は`migrate-deploy`のdispatchと承認�
 - 全依存監査の残余: backendのdev-only transitive `esbuild@0.27.7`にLow 1件。`tsx@4.21.0`経由でproduction treeには含まれず、Windows開発serverを公開しないことを回避策とする。WSL/Linuxのtest・buildだけで利用し、2026-08-31または`tsx`が`esbuild >=0.28.1`対応を公開した時点の早い方で再確認する。
 - SHA境界: `7a6979761428759c744ba3bf9c1ed16527c7b33d..fbb10efc9e122e96a46e098e26149bc4e878d036`は`docs/**`だけだったが、M3修正後はbackend dependency/lockfile差分がある。M1を再実行せずに再利用する条件を満たさないため、M5前に新しいrelease候補でM1Rを再確認する。
 
+### 2026-08-18 M3 follow-up実行記録
+
+- main SHA `d515f1e043ad895874919b95a599ca28d7fecd55`のProduction Deploy run [32103928220](https://github.com/RitukoIsibasi0222/gensoko/actions/runs/32103928220)は、exact main SHAとbackend品質を確認した後、frontendの`npm audit --audit-level=moderate`が新規公開された`nanoid < 3.3.18`のHigh advisoryを検出して失敗した。protected production jobはskipされ、API・frontend・DB・provider設定は変更されていない。
+- 原因は`eslint-plugin-svelte → postcss → nanoid@3.3.17`のtransitive dev dependencyであり、applicationからの直接利用はない。`fix/frontend-nanoid-audit`でlockfileの`nanoid`だけを`3.3.18`へ更新し、直接依存やSvelteKitのversionは変更していない。
+- Node 22.23.1 / npm 10.9.8でclean install、依存tree、High・Moderate 0を確認した。残る`cookie` 3件はLowで、npmが提示する自動修正は`@sveltejs/kit@0.0.30`へのbreaking downgradeになるため適用せず、upstreamの非破壊修正を継続監視する。
+- frontend 70 files・716 tests、ESLint、Prettier check、Svelte check 0 errors / 0 warnings、production-mode Vercel Preview buildと成果物contractが成功した。review済み修正版をdevelop/mainへ再昇格し、同じProduction Deployを新しいmain SHAで実行する。
+
 ## テストケース一覧
 
 | ケース                | 期待結果                                                           |
