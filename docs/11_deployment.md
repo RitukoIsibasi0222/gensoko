@@ -59,6 +59,24 @@
 
 ---
 
+## Staging Supabase Free Plan自動停止防止
+
+Supabase Free Planは直近7日間の利用が少ないprojectを自動停止する場合がある。公式文書では、通常は1日に数回のuser database queryで自動停止を回避できるとしているが、無料運用での回避はbest effortであり、保証される対策はPro Planへの変更である。
+
+`.github/workflows/staging-supabase-health-check.yml`の`Staging Supabase Health Check`は、UTC `00:17`、`08:17`、`16:17`（JST `09:17`、`17:17`、翌日`01:17`）に固定staging APIの`GET /api/v1/elements/1`を呼ぶ。このendpointは認証不要のread-only Prisma queryであり、workflow側で`Cache-Control: no-cache`を指定し、Cloudflare Workers経由でstaging DBへ到達することを確認する。
+
+- GitHub Actions権限は空にし、checkout、Environment、Secret、DB URLを使わない。
+- request先はrepository固定のstaging URLとし、dispatch inputや任意URLを受け付けない。
+- 接続と実行時間を制限し、retryは2回までとする。
+- HTTP 200だけを成功とし、レスポンス本文をlogへ出さない。
+- scheduled workflowはdefault branchの定義だけが実行されるため、この変更を`main`へ昇格するまで自動実行されない。
+
+projectが停止済みの場合は、Supabase Dashboardで対象projectを開き、`Resume project`を実行する。復旧後、変更が`main`へ反映済みであることを確認し、Actionsの`Staging Supabase Health Check`を`main`から1回だけ手動実行する。失敗した場合はrunを重ねず、Supabaseのproject状態、固定staging APIのHTTP status、Cloudflare Workerの配備状態を順に確認する。DB URLやproviderのraw responseはlogへ出さない。
+
+Supabaseの現行条件は[Project Pausing](https://supabase.com/docs/guides/platform/free-project-pausing)で実行前に再確認する。
+
+---
+
 ## ドメイン設計
 
 ### 開発環境（ローカル）

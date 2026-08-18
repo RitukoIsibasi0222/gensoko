@@ -1,6 +1,6 @@
 # Gensoko 実装タスク一覧
 
-> 更新日: 2026-08-09
+> 更新日: 2026-08-18
 > ステータス: `[ ]` 未実装 / `[-]` 実装中 / `[x]` 完了
 
 ---
@@ -369,6 +369,7 @@
 - [ ] 管理画面Playwright網羅
 - [ ] 複数screen reader/browserの高度検証
 - [ ] 本番公開後の追加運用自動化
+- [x] staging Supabase無料枠の自動停止防止ヘルスチェック — 固定read-only APIを1日3回呼ぶ最小権限Workflow、main branch guard、bounded retry、response非出力、契約テスト6件、staging APIのHTTP 200を確認済み。Free Planではbest effortであり、main昇格後にscheduleが有効になる
 
 ### 条件付きで v0.1 対象外
 
