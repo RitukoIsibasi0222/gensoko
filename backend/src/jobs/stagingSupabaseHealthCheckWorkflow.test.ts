@@ -59,6 +59,7 @@ describe("staging Supabase health check GitHub Actions workflow", () => {
     expect(workflow).toContain("group: gensoko-staging-supabase-health-check");
     expect(workflow).toContain("cancel-in-progress: false");
     expect(workflow).not.toContain("actions/checkout");
+    expect(healthCheckStep).toContain("set -euo pipefail");
     expect(healthCheckStep).toContain('--header "Cache-Control: no-cache"');
     expect(healthCheckStep).toContain("--fail-with-body");
     expect(healthCheckStep).toContain("--connect-timeout 15");
@@ -83,5 +84,9 @@ describe("staging Supabase health check GitHub Actions workflow", () => {
     expect(deploymentGuide).toContain("Staging Supabase Health Check");
     expect(deploymentGuide).toContain("Resume project");
     expect(deploymentGuide).toContain("レスポンス本文をlogへ出さない");
+    expect(deploymentGuide).toContain(
+      "workflow側で`Cache-Control: no-cache`を指定し、Cloudflare Workers経由でstaging DBへ到達することを確認する",
+    );
+    expect(deploymentGuide).not.toContain("API responseは`Cache-Control: no-store`で返る");
   });
 });

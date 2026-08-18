@@ -31,7 +31,7 @@ jobs:
 
       - name: Query staging database through the API
         run: |
-          set -uo pipefail
+          set -euo pipefail
 
           curl_options=(
             --silent
