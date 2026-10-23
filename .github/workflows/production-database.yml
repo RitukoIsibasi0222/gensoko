@@ -671,7 +671,7 @@ jobs:
         if: env.OPERATION == 'migrate-deploy' || env.OPERATION == 'account-deletion-dry-run' || env.OPERATION == 'account-deletion-execute' || env.OPERATION == 'seed-elements'
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: backend/package-lock.json
 

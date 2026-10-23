@@ -4,6 +4,7 @@ on:
   pull_request:
     branches: [develop, main]
     paths:
+      - ".node-version"
       - "frontend/**"
       - ".github/actions/frontend-quality/**"
       - ".github/workflows/frontend-pr-quality.yml"
