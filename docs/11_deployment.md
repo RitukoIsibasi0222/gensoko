@@ -61,6 +61,12 @@
 
 ## Staging Supabase Free Plan自動停止防止
 
+2026-10-23修正: workflow名を`Supabase Health Check`へ変更し、既存stagingに加えてproductionの公開API `GET /api/v1/elements/1`も同じ時刻に確認する。matrixの`fail-fast: false`で環境ごとの結果を独立させる。Secret・Environment・DB管理権限は不要で、既存の本番batchスイッチはfalseのまま維持する。main反映後から本番の定期チェックが有効になる。
+
+GitHub公開repositoryでは60日間活動がないとscheduleが`disabled_inactivity`になる。Actions一覧で最終実行時刻も確認し、停止時はこのworkflowだけをEnable workflowし、mainからRun workflowを1回実行する。定期実行自身は非活動停止を防がない。無料枠の停止回避は保証されない。
+
+2026-10-23にstagingのworkflowを再有効化し、手動run 39902352536の成功を確認した。本番backup用Secret未登録のためProduction Database OperationsとBatch Jobsの無効状態は維持した。
+
 Supabase Free Planは直近7日間の利用が少ないprojectを自動停止する場合がある。公式文書では、通常は1日に数回のuser database queryで自動停止を回避できるとしているが、無料運用での回避はbest effortであり、保証される対策はPro Planへの変更である。
 
 `.github/workflows/staging-supabase-health-check.yml`の`Staging Supabase Health Check`は、UTC `00:17`、`08:17`、`16:17`（JST `09:17`、`17:17`、翌日`01:17`）に固定staging APIの`GET /api/v1/elements/1`を呼ぶ。このendpointは認証不要のread-only Prisma queryであり、workflow側で`Cache-Control: no-cache`を指定し、Cloudflare Workers経由でstaging DBへ到達することを確認する。

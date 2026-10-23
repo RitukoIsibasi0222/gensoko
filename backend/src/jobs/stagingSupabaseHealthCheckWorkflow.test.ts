@@ -28,6 +28,14 @@ function getWorkflowStep(stepName: string): string {
 }
 
 describe("staging Supabase health check GitHub Actions workflow", () => {
+  it("checks production independently using the same bounded read-only request", () => {
+    expect(workflow).toContain("fail-fast: false");
+    expect(workflow).toContain("url: https://api.gensoko.app/api/v1/elements/1");
+    expect(workflow).toContain(
+      "url: https://gensoko-api-staging.rituko-labs.workers.dev/api/v1/elements/1",
+    );
+    expect(workflow).toContain("HEALTH_CHECK_URL: ${{ matrix.url }}");
+  });
   it("runs three times daily and supports an explicit manual check", () => {
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow.match(/- cron: "17 0,8,16 \* \* \*"/g)).toHaveLength(1);
@@ -38,12 +46,12 @@ describe("staging Supabase health check GitHub Actions workflow", () => {
     const branchValidationStep = getWorkflowStep("Validate workflow branch");
 
     expect(branchValidationStep).toContain('if [ "$GITHUB_REF_NAME" != "main" ]; then');
-    expect(branchValidationStep).toContain("staging health checkはmain branchから実行してください");
+    expect(branchValidationStep).toContain("health checkはmain branchから実行してください");
   });
 
   it("uses the fixed staging element detail endpoint without credentials", () => {
     expect(workflow).toContain(
-      "STAGING_HEALTH_CHECK_URL: https://gensoko-api-staging.rituko-labs.workers.dev/api/v1/elements/1",
+      "url: https://gensoko-api-staging.rituko-labs.workers.dev/api/v1/elements/1",
     );
     expect(workflow).not.toContain("environment:");
     expect(workflow).not.toContain("secrets.");
@@ -52,7 +60,7 @@ describe("staging Supabase health check GitHub Actions workflow", () => {
   });
 
   it("uses minimum permissions, bounded retries, and never prints the response body", () => {
-    const healthCheckStep = getWorkflowStep("Query staging database through the API");
+    const healthCheckStep = getWorkflowStep("Query database through the API");
 
     expect(workflow).toContain("permissions: {}");
     expect(workflow).toContain("timeout-minutes: 5");

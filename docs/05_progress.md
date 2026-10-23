@@ -369,7 +369,8 @@
 - [ ] 管理画面Playwright網羅
 - [ ] 複数screen reader/browserの高度検証
 - [ ] 本番公開後の追加運用自動化
-- [x] staging Supabase無料枠の自動停止防止ヘルスチェック — 固定read-only APIを1日3回呼ぶ最小権限Workflow、main branch guard、bounded retry、response非出力、契約テスト6件、staging APIのHTTP 200を確認済み。Free Planではbest effortであり、main昇格後にscheduleが有効になる
+- [x] staging Supabase無料枠の自動停止防止ヘルスチェック — 2026-10-23に非活動停止から再有効化、run 39902352536成功。
+- [-] 本番Supabase無料枠の自動停止防止 — 既存チェックを本番・stagingのmatrixへ拡張。実装・契約テスト済み。develop→main反映と本番Actions実行確認は未完了。無料枠とGitHubの非活動停止には保証なし。
 
 ### 条件付きで v0.1 対象外
 
