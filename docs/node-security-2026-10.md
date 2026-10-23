@@ -22,6 +22,10 @@ CI変更はPRのマージ後に有効。古いSHAのworkflowは旧設定を使�
 
 ## 検証結果
 
+- 初回PR CIでfrontend npm auditが13件（High5、Moderate5、Low3）を検出。互換範囲のlock更新とVitest/UI 4.1.12への同期でHigh/Moderateを解消。cookie→SvelteKit由来のLow3件は残り、メジャー移行は行わない。
+- npm 10.9.9のaudit fix/updateはedgesOut内部エラーで失敗。変更がないことを確認後、npm 11.6.2で依存解決した。生成lockはCIと同じnpm 10.9.9のnpm ciで再検証した。
+- 依存更新後もfrontend716件・型・lint・format・build:preview成功、npm audit --audit-level=moderate成功。
+
 - Node 22.23.4上でbackend 1371件、Workers 32件、frontend 716件成功。外部DB統合テスト10件は通常設定によりskip。
 - backend build/lint/format、frontend check/lint/format/build:preview成功。
 - 再作成したDockerのhono/sveltekit両方で22.23.4を確認し、localhost:3000/api/v1/elements/1とlocalhost:5174はHTTP 200。
