@@ -1,5 +1,8 @@
 # Gensoko 実装タスク一覧
 
+- [x] Node.js 2026-10セキュリティ修正版への更新実装 — WSL・Dockerは22.23.4、全setup-nodeを共通version fileへ統一。backend1371件・Workers32件・frontend716件成功。記録: [Node更新](node-security-2026-10.md)。
+- [-] Node更新のCI反映・本番provider確認 — PRマージ後のCI実行と、Vercel managed runtimeへのパッチ展開完了確認が残る。
+
 > 更新日: 2026-08-18
 > ステータス: `[ ]` 未実装 / `[-]` 実装中 / `[x]` 完了
 

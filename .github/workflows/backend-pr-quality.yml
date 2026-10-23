@@ -4,6 +4,7 @@ on:
   pull_request:
     branches: [develop, main]
     paths:
+      - ".node-version"
       - "backend/**"
       - ".github/actions/backend-quality/**"
       - ".github/workflows/backend-pr-quality.yml"

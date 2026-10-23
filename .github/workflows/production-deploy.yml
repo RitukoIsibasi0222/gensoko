@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - ".node-version"
       - "backend/**"
       - "frontend/**"
       - ".github/actions/backend-quality/**"
@@ -107,7 +108,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: |
             backend/package-lock.json
