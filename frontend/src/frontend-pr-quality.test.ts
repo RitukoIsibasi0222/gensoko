@@ -25,7 +25,7 @@ describe('frontend pull request quality workflow', () => {
     expect(workflow).toContain('".github/actions/frontend-quality/**"');
     expect(workflow).toContain('".github/workflows/production-deploy.yml"');
     expect(workflow).toContain('uses: ./.github/actions/frontend-quality');
-    expect(qualityContract).toContain('node-version: 22');
+    expect(qualityContract).toContain('node-version-file: .node-version');
     expect(qualityContract).toContain('npm ci');
     expect(qualityContract).toContain('npm run test:run');
     expect(qualityContract).toContain('npm run lint');
