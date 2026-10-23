@@ -1,4 +1,4 @@
-name: Staging Supabase Health Check
+name: Supabase Health Check
 
 on:
   workflow_dispatch:
@@ -13,11 +13,19 @@ concurrency:
 
 jobs:
   staging-supabase-health-check:
-    name: Query staging database through API
+    name: Query ${{ matrix.target }} database through API
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: staging
+            url: https://gensoko-api-staging.rituko-labs.workers.dev/api/v1/elements/1
+          - target: production
+            url: https://api.gensoko.app/api/v1/elements/1
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      STAGING_HEALTH_CHECK_URL: https://gensoko-api-staging.rituko-labs.workers.dev/api/v1/elements/1
+      HEALTH_CHECK_URL: ${{ matrix.url }}
 
     steps:
       - name: Validate workflow branch
@@ -25,11 +33,11 @@ jobs:
           set -euo pipefail
 
           if [ "$GITHUB_REF_NAME" != "main" ]; then
-            echo "staging health checkはmain branchから実行してください"
+            echo "health checkはmain branchから実行してください"
             exit 1
           fi
 
-      - name: Query staging database through the API
+      - name: Query database through the API
         run: |
           set -euo pipefail
 
@@ -48,13 +56,13 @@ jobs:
           )
 
           set +e
-          http_status="$(curl "${curl_options[@]}" "$STAGING_HEALTH_CHECK_URL")"
+          http_status="$(curl "${curl_options[@]}" "$HEALTH_CHECK_URL")"
           curl_exit=$?
           set -e
 
           if [ "$curl_exit" -ne 0 ] || [ "$http_status" != "200" ]; then
-            echo "staging Supabaseヘルスチェックに失敗しました（HTTP ${http_status:-unavailable}）"
+            echo "Supabaseヘルスチェックに失敗しました（HTTP ${http_status:-unavailable}）"
             exit 1
           fi
 
-          echo "staging Supabaseヘルスチェックに成功しました"
+          echo "Supabaseヘルスチェックに成功しました"
